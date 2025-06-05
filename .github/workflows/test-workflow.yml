@@ -1,0 +1,18 @@
+name: Test Workflow
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Test basic functionality
+        run: |
+          echo "✅ GitHub Actions is working!"
+          echo "📊 Repository: ${{ github.repository }}"
+          echo "🔧 Workflow: ${{ github.workflow }}"
+          ls -la .github/workflows/ 
