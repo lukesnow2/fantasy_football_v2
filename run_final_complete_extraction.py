@@ -29,7 +29,7 @@ def main():
     
     # Run full extraction with all data types
     logger.info("📊 Starting comprehensive data extraction...")
-    logger.info("🔥 This will extract: Leagues, Teams, Rosters, Matchups, Transactions")
+    logger.info("🔥 This will extract: Leagues, Teams, Rosters, Matchups, Transactions, Draft Picks")
     logger.info("🔥 From all 26 postdraft leagues spanning 2005-2024 (20 years)")
     
     extracted_data = extractor.extract_all_data()
@@ -55,6 +55,7 @@ def main():
     rosters = extracted_data.get('rosters', [])
     matchups = extracted_data.get('matchups', [])
     transactions = extracted_data.get('transactions', [])
+    draft_picks = extracted_data.get('draft_picks', [])
     
     logger.info(f"📅 Total Runtime: {runtime}")
     logger.info(f"📅 Time Period: 2005-2024 (20 years)")
@@ -63,9 +64,10 @@ def main():
     logger.info(f"📋 Total Roster Entries: {len(rosters)}")
     logger.info(f"🏆 Total Matchups: {len(matchups)}")
     logger.info(f"💰 Total Transactions: {len(transactions)}")
+    logger.info(f"🎯 Total Draft Picks: {len(draft_picks)}")
     
     # Calculate totals
-    total_records = len(leagues) + len(teams) + len(rosters) + len(matchups) + len(transactions)
+    total_records = len(leagues) + len(teams) + len(rosters) + len(matchups) + len(transactions) + len(draft_picks)
     logger.info(f"📈 TOTAL DATABASE RECORDS: {total_records:,}")
     
     if teams:
@@ -109,6 +111,24 @@ def main():
         logger.info(f"💰 Trades: {trade_count:,}")
         logger.info(f"💰 Adds: {add_count:,}")
         logger.info(f"💰 Drops: {drop_count:,}")
+    
+    # Draft analysis
+    if draft_picks:
+        auction_drafts = sum(1 for d in draft_picks if d.get('is_auction_draft', False))
+        snake_drafts = len(draft_picks) - auction_drafts
+        unique_players_drafted = len(set(d.get('player_id') for d in draft_picks if d.get('player_id')))
+        
+        logger.info(f"🎯 Snake draft picks: {snake_drafts:,}")
+        logger.info(f"🎯 Auction draft picks: {auction_drafts:,}")
+        logger.info(f"🎯 Unique players drafted: {unique_players_drafted:,}")
+        
+        if auction_drafts > 0:
+            auction_picks = [d for d in draft_picks if d.get('is_auction_draft', False) and d.get('cost')]
+            if auction_picks:
+                total_spent = sum(d.get('cost', 0) for d in auction_picks)
+                avg_cost = total_spent / len(auction_picks)
+                logger.info(f"🎯 Total auction spend: ${total_spent:,.0f}")
+                logger.info(f"🎯 Average auction cost: ${avg_cost:.1f}")
     
     # Year breakdown
     year_stats = {}

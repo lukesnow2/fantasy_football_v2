@@ -135,6 +135,33 @@ CREATE TABLE transactions (
     INDEX idx_faab_bids (faab_bid)
 );
 
+-- Draft picks table (draft history and results)
+CREATE TABLE draft_picks (
+    draft_pick_id VARCHAR(100) PRIMARY KEY,
+    league_id VARCHAR(50) NOT NULL,
+    pick_number INTEGER NOT NULL,
+    round_number INTEGER NOT NULL,
+    team_id VARCHAR(50) NOT NULL,
+    player_id VARCHAR(50) NOT NULL,
+    player_name VARCHAR(255) NOT NULL,
+    position VARCHAR(20),
+    cost DECIMAL(10,2),
+    is_keeper BOOLEAN DEFAULT FALSE,
+    is_auction_draft BOOLEAN DEFAULT FALSE,
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (league_id) REFERENCES leagues(league_id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
+    INDEX idx_league_draft (league_id),
+    INDEX idx_draft_round (league_id, round_number),
+    INDEX idx_draft_pick_order (league_id, pick_number),
+    INDEX idx_player_draft (player_id),
+    INDEX idx_team_draft (team_id),
+    INDEX idx_position_draft (position),
+    INDEX idx_auction_draft (is_auction_draft),
+    INDEX idx_keeper_picks (is_keeper)
+);
+
 
 
 -- Views for common queries
@@ -235,22 +262,84 @@ FROM transactions tr
 JOIN leagues l ON tr.league_id = l.league_id
 GROUP BY tr.league_id, l.name, l.season, tr.type;
 
+-- Draft analysis view
+CREATE VIEW draft_analysis AS
+SELECT 
+    dp.league_id,
+    l.name as league_name,
+    l.season,
+    dp.round_number,
+    dp.position,
+    COUNT(*) as picks_count,
+    AVG(dp.cost) as avg_cost,
+    MIN(dp.cost) as min_cost,
+    MAX(dp.cost) as max_cost,
+    COUNT(CASE WHEN dp.is_keeper THEN 1 END) as keeper_picks,
+    dp.is_auction_draft
+FROM draft_picks dp
+JOIN leagues l ON dp.league_id = l.league_id
+GROUP BY dp.league_id, l.name, l.season, dp.round_number, dp.position, dp.is_auction_draft;
+
+-- Team draft summary view
+CREATE VIEW team_draft_summary AS
+SELECT 
+    dp.team_id,
+    t.name as team_name,
+    t.manager_name,
+    l.name as league_name,
+    l.season,
+    COUNT(*) as total_picks,
+    COUNT(CASE WHEN dp.position = 'QB' THEN 1 END) as qb_picks,
+    COUNT(CASE WHEN dp.position = 'RB' THEN 1 END) as rb_picks,
+    COUNT(CASE WHEN dp.position = 'WR' THEN 1 END) as wr_picks,
+    COUNT(CASE WHEN dp.position = 'TE' THEN 1 END) as te_picks,
+    COUNT(CASE WHEN dp.position IN ('K', 'DEF') THEN 1 END) as special_picks,
+    SUM(dp.cost) as total_draft_cost,
+    AVG(dp.cost) as avg_pick_cost,
+    COUNT(CASE WHEN dp.is_keeper THEN 1 END) as keeper_count
+FROM draft_picks dp
+JOIN teams t ON dp.team_id = t.team_id
+JOIN leagues l ON dp.league_id = l.league_id
+GROUP BY dp.team_id, t.name, t.manager_name, l.name, l.season;
+
+-- Player draft history view
+CREATE VIEW player_draft_history AS
+SELECT 
+    dp.player_id,
+    dp.player_name,
+    dp.position,
+    COUNT(*) as times_drafted,
+    AVG(dp.pick_number) as avg_pick_position,
+    MIN(dp.pick_number) as highest_pick,
+    MAX(dp.pick_number) as lowest_pick,
+    AVG(dp.round_number) as avg_round,
+    MIN(l.season) as first_drafted_season,
+    MAX(l.season) as last_drafted_season,
+    AVG(dp.cost) as avg_auction_cost,
+    MAX(dp.cost) as max_auction_cost
+FROM draft_picks dp
+JOIN leagues l ON dp.league_id = l.league_id
+GROUP BY dp.player_id, dp.player_name, dp.position;
+
 -- Comments and documentation
 -- This schema supports:
 -- 1. Complete league hierarchy (leagues -> teams -> rosters)
 -- 2. Full season tracking (matchups by week)
 -- 3. Transaction history (trades, waivers, adds/drops)
--- 4. Manager performance analysis across seasons
--- 5. Statistical analysis capabilities
--- 6. Playoff and championship tracking
--- 7. FAAB (Free Agent Auction Budget) tracking
--- 8. Extensible for additional statistics
+-- 4. Draft history and analysis (snake and auction drafts)
+-- 5. Manager performance analysis across seasons
+-- 6. Statistical analysis capabilities
+-- 7. Playoff and championship tracking
+-- 8. FAAB (Free Agent Auction Budget) tracking
+-- 9. Keeper league support
+-- 10. Extensible for additional statistics
 
 -- Indexes are optimized for:
 -- - League-based queries (most common)
 -- - Weekly data analysis
 -- - Manager performance lookups
 -- - Transaction history searches
+-- - Draft analysis and player tracking
 -- - Cross-season comparisons
 """
     
