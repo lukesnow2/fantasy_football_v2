@@ -116,6 +116,22 @@ class ExtractedTransaction:
     status: str
     extracted_at: datetime = datetime.now()
 
+@dataclass
+class ExtractedDraftPick:
+    """Draft pick data structure for database storage"""
+    draft_pick_id: str
+    league_id: str
+    pick_number: int
+    round_number: int
+    team_id: str
+    player_id: str
+    player_name: str
+    position: str
+    cost: Optional[float]  # For auction drafts
+    is_keeper: bool
+    is_auction_draft: bool
+    extracted_at: datetime = datetime.now()
+
 
 
 class YahooFantasyExtractor:
@@ -130,6 +146,7 @@ class YahooFantasyExtractor:
             'rosters': [],
             'matchups': [],
             'transactions': [],
+            'draft_picks': [],
             'statistics': []
         }
         
@@ -680,6 +697,106 @@ class YahooFantasyExtractor:
             logger.error(f"Error extracting transactions for league {league_id}: {e}")
             return []
     
+    def extract_draft_for_league(self, league_id: str) -> List[ExtractedDraftPick]:
+        """Extract draft data for a specific league"""
+        logger.info(f"🎯 Extracting draft data for league {league_id}...")
+        
+        try:
+            # Get the league object
+            league = self.game.to_league(league_id)
+            
+            # Get league settings to check if it's auction
+            settings = league.settings()
+            is_auction_draft = settings.get('is_auction_draft', '0') == '1'
+            
+            # Get draft results
+            draft_results = league.draft_results()
+            
+            if not draft_results:
+                logger.info(f"  🎯 No draft results found for league {league_id}")
+                return []
+            
+            draft_picks = []
+            
+            # Get player details in batches to get player names and positions
+            player_ids = [pick['player_id'] for pick in draft_results if 'player_id' in pick]
+            player_details_map = {}
+            
+            if player_ids:
+                try:
+                    # Get player details in batches of 25 (API limit)
+                    for i in range(0, len(player_ids), 25):
+                        batch = player_ids[i:i+25]
+                        player_details = league.player_details(batch)
+                        
+                        for player in player_details:
+                            player_id = player.get('player_id', '')
+                            player_details_map[player_id] = {
+                                'name': player.get('name', {}).get('full', 'Unknown Player'),
+                                'position': player.get('display_position', 'Unknown')
+                            }
+                        
+                        # Rate limiting
+                        time.sleep(0.1)
+                        
+                except Exception as e:
+                    logger.warning(f"Error getting player details for draft: {e}")
+            
+            # Process draft picks
+            for pick_data in draft_results:
+                try:
+                    pick_number = pick_data.get('pick', 0)
+                    round_number = pick_data.get('round', 0)
+                    team_key = pick_data.get('team_key', '')
+                    player_id = str(pick_data.get('player_id', ''))
+                    cost = pick_data.get('cost')
+                    
+                    # Extract team ID from team key (format: game.l.league_id.t.team_id)
+                    team_id = team_key.split('.')[-1] if '.' in team_key else team_key
+                    
+                    # Get player details
+                    player_info = player_details_map.get(player_id, {})
+                    player_name = player_info.get('name', 'Unknown Player')
+                    position = player_info.get('position', 'Unknown')
+                    
+                    # Convert cost to float for auction drafts
+                    cost_float = None
+                    if cost is not None:
+                        try:
+                            cost_float = float(cost)
+                        except (ValueError, TypeError):
+                            cost_float = None
+                    
+                    # Check if it's a keeper (this is tricky - might need additional API calls)
+                    # For now, we'll assume all picks are regular draft picks
+                    is_keeper = False
+                    
+                    draft_pick = ExtractedDraftPick(
+                        draft_pick_id=f"{league_id}_{pick_number}",
+                        league_id=league_id,
+                        pick_number=pick_number,
+                        round_number=round_number,
+                        team_id=team_id,
+                        player_id=player_id,
+                        player_name=player_name,
+                        position=position,
+                        cost=cost_float,
+                        is_keeper=is_keeper,
+                        is_auction_draft=is_auction_draft
+                    )
+                    
+                    draft_picks.append(draft_pick)
+                    
+                except Exception as e:
+                    logger.warning(f"Error processing draft pick: {e}")
+                    continue
+            
+            logger.info(f"  🎯 Found {len(draft_picks)} draft picks in league {league_id}")
+            return draft_picks
+            
+        except Exception as e:
+            logger.error(f"Error extracting draft data for league {league_id}: {e}")
+            return []
 
     
     def extract_all_data(self) -> Dict[str, List[Any]]:
@@ -727,6 +844,11 @@ class YahooFantasyExtractor:
                 for transaction in transactions:
                     self.extracted_data['transactions'].append(asdict(transaction))
                 
+                # Extract draft picks
+                draft_picks = self.extract_draft_for_league(league_id)
+                for draft_pick in draft_picks:
+                    self.extracted_data['draft_picks'].append(asdict(draft_pick))
+                
                 # Rate limiting between leagues
                 time.sleep(0.5)
                 
@@ -742,6 +864,7 @@ class YahooFantasyExtractor:
         logger.info(f"  - Rosters: {len(self.extracted_data['rosters'])}")
         logger.info(f"  - Matchups: {len(self.extracted_data['matchups'])}")
         logger.info(f"  - Transactions: {len(self.extracted_data['transactions'])}")
+        logger.info(f"  - Draft Picks: {len(self.extracted_data['draft_picks'])}")
         
         return self.extracted_data
     

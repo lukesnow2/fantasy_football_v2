@@ -127,7 +127,7 @@ class HerokuPostgresDeployer:
             logger.info("📤 Uploading data to database...")
             
             # Define table order (to handle foreign key constraints)
-            table_order = ['leagues', 'teams', 'rosters', 'matchups', 'transactions']
+            table_order = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
             
             total_records = 0
             
@@ -183,13 +183,13 @@ class HerokuPostgresDeployer:
             df['acquisition_date'] = pd.to_datetime(df['acquisition_date'], errors='coerce')
         
         # Handle boolean fields
-        bool_fields = ['is_pro_league', 'is_cash_league', 'is_starter', 'is_playoffs', 'is_championship', 'is_consolation']
+        bool_fields = ['is_pro_league', 'is_cash_league', 'is_starter', 'is_playoffs', 'is_championship', 'is_consolation', 'is_keeper', 'is_auction_draft']
         for field in bool_fields:
             if field in df.columns:
                 df[field] = df[field].astype(bool)
         
         # Handle numeric fields
-        numeric_fields = ['wins', 'losses', 'ties', 'points_for', 'points_against', 'team1_score', 'team2_score', 'faab_bid', 'faab_balance']
+        numeric_fields = ['wins', 'losses', 'ties', 'points_for', 'points_against', 'team1_score', 'team2_score', 'faab_bid', 'faab_balance', 'pick_number', 'round_number', 'cost']
         for field in numeric_fields:
             if field in df.columns:
                 df[field] = pd.to_numeric(df[field], errors='coerce')
@@ -203,7 +203,7 @@ class HerokuPostgresDeployer:
             
             with self.engine.connect() as conn:
                 # Check each table
-                for table_name in ['leagues', 'teams', 'rosters', 'matchups', 'transactions']:
+                for table_name in ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']:
                     try:
                         result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
                         count = result.fetchone()[0]
@@ -257,7 +257,7 @@ class HerokuPostgresDeployer:
                 logger.info(f"\nTOTAL: {total_leagues} leagues, {total_teams} teams")
                 
                 # Get overall record counts
-                tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions']
+                tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
                 logger.info("\nRECORD COUNTS:")
                 grand_total = 0
                 
@@ -282,20 +282,34 @@ def main():
     
     parser = argparse.ArgumentParser(description='Deploy Yahoo Fantasy data to Heroku Postgres')
     parser.add_argument('--data-file', 
-                       default='yahoo_fantasy_FINAL_complete_data_20250605_101225.json',
-                       help='Path to extracted data JSON file')
+                       default='yahoo_fantasy_COMPLETE_with_drafts_*.json',
+                       help='Path to extracted data JSON file (use most recent with draft data)')
     parser.add_argument('--database-url', 
                        help='Heroku DATABASE_URL (or set DATABASE_URL env var)')
     
     args = parser.parse_args()
     
+    # Auto-detect the most recent draft data file if wildcard is used
+    data_file = args.data_file
+    if '*' in data_file:
+        import glob
+        matching_files = glob.glob(data_file)
+        if matching_files:
+            # Get the most recent file
+            data_file = max(matching_files, key=lambda x: x.split('_')[-1])
+            logger.info(f"🔍 Auto-detected most recent file: {data_file}")
+        else:
+            # Fall back to original final data file
+            data_file = 'yahoo_fantasy_FINAL_complete_data_20250605_101225.json'
+            logger.warning(f"⚠️ No draft data files found, using: {data_file}")
+    
     start_time = datetime.now()
     logger.info(f"🚀 Starting Heroku Postgres deployment at {start_time}")
-    logger.info(f"📊 Data file: {args.data_file}")
+    logger.info(f"📊 Data file: {data_file}")
     
     try:
         # Create deployer
-        deployer = HerokuPostgresDeployer(args.data_file, args.database_url)
+        deployer = HerokuPostgresDeployer(data_file, args.database_url)
         
         # Step 1: Connect to database
         if not deployer.connect_to_database():

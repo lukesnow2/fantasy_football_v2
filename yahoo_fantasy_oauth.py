@@ -88,7 +88,7 @@ class YahooFantasyOAuth:
         self.token_file = token_file
         self.oauth_session = None
         self.game = None
-    
+        
     def authenticate(self):
         """
         Perform OAuth authentication following the official pattern
@@ -98,7 +98,7 @@ class YahooFantasyOAuth:
         """
         print("Starting Yahoo Fantasy API OAuth authentication...")
         
-        try:
+                try:
             # Create OAuth2 session using the official pattern
             # Pass None, None and use from_file parameter as shown in documentation
             self.oauth_session = OAuth2(None, None, from_file=self.token_file)
@@ -276,7 +276,7 @@ def main():
                     print(f"  Name: {settings.get('name', 'N/A')}")
                     print(f"  Season: {settings.get('season', 'N/A')}")
                     print(f"  Teams: {settings.get('num_teams', 'N/A')}")
-                except Exception as e:
+        except Exception as e:
                     print(f"\nLeague: {league_id} - Error: {e}")
         else:
             print("\n❌ No leagues found.")

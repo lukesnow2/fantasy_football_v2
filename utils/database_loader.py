@@ -65,7 +65,7 @@ class YahooFantasyDatabaseLoader:
         
         logger.info("🔍 Validating data structure...")
         
-        expected_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions']
+        expected_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
         
         for table in expected_tables:
             if table not in self.data:
@@ -280,10 +280,11 @@ class YahooFantasyDatabaseLoader:
                 f.write("The data is structured for relational database storage with the following tables:\n\n")
                 f.write("- **leagues**: League information and settings\n")
                 f.write("- **teams**: Team information and standings\n")
-                f.write("- **rosters**: Player assignments to teams (future)\n")
-                f.write("- **matchups**: Weekly matchup results (future)\n")
-                f.write("- **transactions**: Player transactions (future)\n")
-                f.write("- **statistics**: Player statistics (future)\n\n")
+                f.write("- **rosters**: Player assignments to teams\n")
+                f.write("- **matchups**: Weekly matchup results\n")
+                f.write("- **transactions**: Player transactions\n")
+                f.write("- **draft_picks**: Draft history and results\n")
+                f.write("- **statistics**: Player statistics\n\n")
                 
                 f.write("See `yahoo_fantasy_schema.sql` for complete database schema.\n")
             
