@@ -4,7 +4,7 @@ on:
   schedule:
     # Run every Sunday at 6 AM PST during fantasy season (Aug 18 - Jan 18)
     # This captures all weekend games and gives time for Yahoo to finalize stats
-    - cron: '0 14 * 8-12,1 0'  # 6 AM PST = 14 UTC, Sundays only
+    - cron: '0 14 * 8,9,10,11,12,1 0'  # 6 AM PST = 14 UTC, Sundays only
   
   # Allow manual triggering for testing/emergency runs
   workflow_dispatch:
