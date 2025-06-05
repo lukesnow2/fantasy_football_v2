@@ -1,274 +1,59 @@
-2025-06-05 14:09:41,043 - INFO - 🎯 Testing draft data extraction...
-2025-06-05 14:09:41,044 - DEBUG - Checking 
-2025-06-05 14:09:41,046 - DEBUG - ELAPSED TIME : 5186.976426124573
-2025-06-05 14:09:41,046 - DEBUG - TOKEN HAS EXPIRED
-2025-06-05 14:09:41,046 - DEBUG - REFRESHING TOKEN
-2025-06-05 14:09:41,258 - DEBUG - ELAPSED TIME : 0.21201586723327637
-2025-06-05 14:09:41,258 - DEBUG - TOKEN IS STILL VALID
-2025-06-05 14:09:42,676 - INFO - ✅ Authentication successful! Game ID: 461
-2025-06-05 14:09:42,676 - INFO - 🔍 Checking leagues for 2004...
-2025-06-05 14:09:55,054 - INFO -   No leagues found for 2004
-2025-06-05 14:09:55,054 - INFO - 🔍 Checking leagues for 2005...
-2025-06-05 14:10:05,429 - INFO -   Found 3 leagues for 2005
-2025-06-05 14:10:05,747 - INFO -   Added postdraft league: Oakdale Park (postdraft)
-2025-06-05 14:10:06,515 - INFO - 🔍 Checking leagues for 2006...
-2025-06-05 14:10:19,645 - INFO -   Found 2 leagues for 2006
-2025-06-05 14:10:20,354 - INFO -   Added postdraft league: Oakdale Park (postdraft)
-2025-06-05 14:10:20,457 - INFO - 🔍 Checking leagues for 2007...
-2025-06-05 14:10:34,859 - INFO -   Found 2 leagues for 2007
-2025-06-05 14:10:35,093 - INFO -   Added postdraft league: Oakdale Park (postdraft)
-2025-06-05 14:10:35,592 - INFO -   Added postdraft league: Oakdale 2 (postdraft)
-2025-06-05 14:10:35,696 - INFO - 🔍 Checking leagues for 2008...
-2025-06-05 14:10:49,757 - INFO -   Found 1 leagues for 2008
-2025-06-05 14:10:49,985 - INFO -   Added postdraft league: The Draft (postdraft)
-2025-06-05 14:10:50,088 - INFO - 🔍 Checking leagues for 2009...
-2025-06-05 14:11:00,389 - INFO -   Found 1 leagues for 2009
-2025-06-05 14:11:00,599 - INFO -   Added postdraft league: Engaged (postdraft)
-2025-06-05 14:11:00,704 - INFO - 🔍 Checking leagues for 2010...
-2025-06-05 14:11:01,778 - INFO -   Found 3 leagues for 2010
-2025-06-05 14:11:01,965 - INFO -   Added postdraft league: Christian Fellowship League (postdraft)
-2025-06-05 14:11:02,299 - INFO -   Added postdraft league: Football Gods 15 (postdraft)
-2025-06-05 14:11:02,639 - INFO -   Added postdraft league: Round 6 (postdraft)
-2025-06-05 14:11:02,739 - INFO - 🔍 Checking leagues for 2011...
-2025-06-05 14:11:13,092 - INFO -   Found 2 leagues for 2011
-2025-06-05 14:11:13,282 - INFO -   Added postdraft league: Power House League (postdraft)
-2025-06-05 14:11:13,673 - INFO -   Added postdraft league: Lock It Up (postdraft)
-2025-06-05 14:11:13,773 - INFO - 🔍 Checking leagues for 2012...
-2025-06-05 14:11:25,652 - INFO -   Found 1 leagues for 2012
-2025-06-05 14:11:25,911 - INFO -   Added postdraft league: The League About Nothing (postdraft)
-2025-06-05 14:11:26,014 - INFO - 🔍 Checking leagues for 2013...
-2025-06-05 14:11:37,566 - INFO -   Found 1 leagues for 2013
-2025-06-05 14:11:37,775 - INFO -   Added postdraft league: Rosterbaters Anonymous (postdraft)
-2025-06-05 14:11:37,878 - INFO - 🔍 Checking leagues for 2014...
-2025-06-05 14:11:50,945 - INFO -   Found 2 leagues for 2014
-2025-06-05 14:11:51,159 - INFO -   Added postdraft league: 10 Years 10 Assholes (postdraft)
-2025-06-05 14:11:51,516 - INFO -   Added postdraft league: Concussion Factory (postdraft)
-2025-06-05 14:11:51,618 - INFO - 🔍 Checking leagues for 2015...
-2025-06-05 14:12:03,289 - INFO -   Found 1 leagues for 2015
-2025-06-05 14:12:03,496 - INFO -   Added postdraft league: Luke's Kingdom (postdraft)
-2025-06-05 14:12:03,596 - INFO - 🔍 Checking leagues for 2016...
-2025-06-05 14:12:14,929 - INFO -   Found 1 leagues for 2016
-2025-06-05 14:12:15,131 - INFO -   Added postdraft league: The Great SF Draft (postdraft)
-2025-06-05 14:12:15,235 - INFO - 🔍 Checking leagues for 2017...
-2025-06-05 14:12:29,869 - INFO -   Found 2 leagues for 2017
-2025-06-05 14:12:30,072 - INFO -   Added postdraft league: Go Fuck Yourself San Diego (postdraft)
-2025-06-05 14:12:30,490 - INFO -   Skipping predraft league: The Great SF Draft (371.l.722293)
-2025-06-05 14:12:30,510 - INFO - 🔍 Checking leagues for 2018...
-2025-06-05 14:12:46,194 - INFO -   Found 2 leagues for 2018
-2025-06-05 14:12:46,400 - INFO -   Added postdraft league: Sleepless In Seattle (postdraft)
-2025-06-05 14:12:46,783 - INFO -   Skipping predraft league: Go Fuck Yourself San Diego (380.l.888945)
-2025-06-05 14:12:46,783 - INFO - 🔍 Checking leagues for 2019...
-2025-06-05 14:12:58,029 - INFO -   Found 2 leagues for 2019
-2025-06-05 14:12:58,231 - INFO -   Skipping predraft league: Sleepless In Seattle (390.l.567043)
-2025-06-05 14:12:58,444 - INFO -   Added postdraft league: Women & Women First (postdraft)
-2025-06-05 14:12:58,545 - INFO - 🔍 Checking leagues for 2020...
-2025-06-05 14:13:15,409 - INFO -   Found 2 leagues for 2020
-2025-06-05 14:13:15,812 - INFO -   Skipping predraft league: Women & Women First (399.l.440905)
-2025-06-05 14:13:16,117 - INFO -   Added postdraft league: The Lost Year (postdraft)
-2025-06-05 14:13:16,220 - INFO - 🔍 Checking leagues for 2021...
-2025-06-05 14:13:27,414 - INFO -   Found 2 leagues for 2021
-2025-06-05 14:13:27,649 - INFO -   Added postdraft league: Rocky Mountain High (postdraft)
-2025-06-05 14:13:27,941 - INFO -   Skipping predraft league: Women & Women First (406.l.735025)
-2025-06-05 14:13:27,942 - INFO - 🔍 Checking leagues for 2022...
-2025-06-05 14:13:44,711 - INFO -   Found 3 leagues for 2022
-2025-06-05 14:13:44,964 - INFO -   Skipping predraft league: Rocky Mountain High (414.l.1088817)
-2025-06-05 14:13:45,150 - INFO -   Added postdraft league: Wet Hot Tahoe Summer (postdraft)
-2025-06-05 14:13:45,436 - INFO -   Skipping predraft league: Women & Women First (414.l.527650)
-2025-06-05 14:13:45,436 - INFO - 🔍 Checking leagues for 2023...
-2025-06-05 14:13:55,271 - INFO -   Found 3 leagues for 2023
-2025-06-05 14:13:57,201 - INFO -   Skipping predraft league: Wet Hot Tahoe Summer (423.l.367879)
-2025-06-05 14:13:57,567 - INFO -   Added postdraft league: Move the Raiders to PDX (postdraft)
-2025-06-05 14:13:58,110 - INFO -   Added postdraft league: Sequoiabowl I (postdraft)
-2025-06-05 14:13:58,214 - INFO - 🔍 Checking leagues for 2024...
-2025-06-05 14:13:59,248 - INFO -   Found 1 leagues for 2024
-2025-06-05 14:13:59,506 - INFO -   Added postdraft league: Idaho's DEI Quota (postdraft)
-2025-06-05 14:13:59,607 - INFO - 🔍 Checking leagues for 2025...
-2025-06-05 14:14:10,924 - INFO -   No leagues found for 2025
-2025-06-05 14:14:10,925 - INFO - 📋 Found 26 non-public leagues across all years
-2025-06-05 14:14:10,925 - INFO - 🧪 Testing draft extraction on: Oakdale Park (124.l.109785)
-2025-06-05 14:14:10,925 - INFO - 🎯 Extracting draft data for league 124.l.109785...
-2025-06-05 14:14:35,859 - INFO -   🎯 Found 200 draft picks in league 124.l.109785
-2025-06-05 14:14:35,860 - INFO - ✅ Successfully extracted 200 draft picks!
-2025-06-05 14:14:35,860 - INFO - 📋 First 10 draft picks:
-2025-06-05 14:14:35,860 - INFO -   1. Round 1: Peyton Manning (QB) -> Team 1
-2025-06-05 14:14:35,861 - INFO -   2. Round 1: Randy Moss (WR) -> Team 5
-2025-06-05 14:14:35,861 - INFO -   3. Round 1: LaDainian Tomlinson (RB) -> Team 7
-2025-06-05 14:14:35,861 - INFO -   4. Round 1: Daunte Culpepper (QB) -> Team 2
-2025-06-05 14:14:35,861 - INFO -   5. Round 1: Shaun Alexander (RB) -> Team 4
-2025-06-05 14:14:35,861 - INFO -   6. Round 1: Tom Brady (QB) -> Team 6
-2025-06-05 14:14:35,861 - INFO -   7. Round 1: Priest Holmes (RB) -> Team 3
-2025-06-05 14:14:35,861 - INFO -   8. Round 1: Edgerrin James (RB) -> Team 9
-2025-06-05 14:14:35,861 - INFO -   9. Round 2: Willis McGahee (RB) -> Team 9
-2025-06-05 14:14:35,861 - INFO -   10. Round 2: Corey Dillon (RB) -> Team 3
-2025-06-05 14:14:35,861 - INFO - 
-📊 Draft Summary:
-2025-06-05 14:14:35,861 - INFO -   Total picks: 200
-2025-06-05 14:14:35,861 - INFO -   Rounds: 25
-2025-06-05 14:14:35,862 - INFO -   Teams: 8
-2025-06-05 14:14:35,862 - INFO -   Auction picks: 0
-2025-06-05 14:14:35,862 - INFO -   Snake picks: 200
-2025-06-05 15:28:21,406 - INFO - 🎯 Starting draft data extraction at 2025-06-05 15:28:21.406364
-2025-06-05 15:28:21,407 - INFO - 📂 Loading existing dataset: yahoo_fantasy_FINAL_complete_data_20250605_101225.json
-2025-06-05 15:28:21,467 - INFO - ✅ Successfully loaded existing dataset
-2025-06-05 15:28:21,467 - INFO - 🔑 Authenticating...
-2025-06-05 15:28:21,467 - DEBUG - Checking 
-2025-06-05 15:28:21,469 - DEBUG - ELAPSED TIME : 4720.422612905502
-2025-06-05 15:28:21,469 - DEBUG - TOKEN HAS EXPIRED
-2025-06-05 15:28:21,469 - DEBUG - REFRESHING TOKEN
-2025-06-05 15:28:21,645 - DEBUG - ELAPSED TIME : 0.17628002166748047
-2025-06-05 15:28:21,645 - DEBUG - TOKEN IS STILL VALID
-2025-06-05 15:28:22,070 - INFO - ✅ Authentication successful! Game ID: 461
-2025-06-05 15:28:22,071 - INFO - 📋 Found 26 leagues to extract draft data from
-2025-06-05 15:28:22,071 - INFO - 🎯 Processing league 1/26: Oakdale Park (2005)
-2025-06-05 15:28:22,071 - INFO - 🎯 Extracting draft data for league 124.l.109785...
-2025-06-05 15:28:46,914 - INFO -   🎯 Found 200 draft picks in league 124.l.109785
-2025-06-05 15:28:46,917 - INFO -   ✅ Extracted 200 draft picks
-2025-06-05 15:28:47,221 - INFO - 🎯 Processing league 2/26: Oakdale Park (2006)
-2025-06-05 15:28:47,221 - INFO - 🎯 Extracting draft data for league 153.l.76788...
-2025-06-05 15:29:15,589 - INFO -   🎯 Found 250 draft picks in league 153.l.76788
-2025-06-05 15:29:15,592 - INFO -   ✅ Extracted 250 draft picks
-2025-06-05 15:29:15,896 - INFO - 🎯 Processing league 3/26: Oakdale Park (2007)
-2025-06-05 15:29:15,896 - INFO - 🎯 Extracting draft data for league 175.l.658531...
-2025-06-05 15:29:39,937 - INFO -   🎯 Found 192 draft picks in league 175.l.658531
-2025-06-05 15:29:39,940 - INFO -   ✅ Extracted 192 draft picks
-2025-06-05 15:29:40,242 - INFO - 🎯 Processing league 4/26: Oakdale 2 (2007)
-2025-06-05 15:29:40,242 - INFO - 🎯 Extracting draft data for league 175.l.86092...
-2025-06-05 15:29:55,885 - INFO -   🎯 Found 150 draft picks in league 175.l.86092
-2025-06-05 15:29:55,886 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:29:56,188 - INFO - 🎯 Processing league 5/26: The Draft (2008)
-2025-06-05 15:29:56,188 - INFO - 🎯 Extracting draft data for league 199.l.42364...
-2025-06-05 15:30:16,551 - INFO -   🎯 Found 150 draft picks in league 199.l.42364
-2025-06-05 15:30:16,553 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:30:16,857 - INFO - 🎯 Processing league 6/26: Engaged (2009)
-2025-06-05 15:30:16,858 - INFO - 🎯 Extracting draft data for league 222.l.222935...
-2025-06-05 15:30:34,847 - INFO -   🎯 Found 150 draft picks in league 222.l.222935
-2025-06-05 15:30:34,849 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:30:35,153 - INFO - 🎯 Processing league 7/26: Christian Fellowship League (2010)
-2025-06-05 15:30:35,153 - INFO - 🎯 Extracting draft data for league 242.l.10035622710...
-2025-06-05 15:30:35,552 - INFO -   🎯 No draft results found for league 242.l.10035622710
-2025-06-05 15:30:35,552 - INFO -   ⚠️ No draft picks found (likely older league)
-2025-06-05 15:30:35,858 - INFO - 🎯 Processing league 8/26: Football Gods 15 (2010)
-2025-06-05 15:30:35,858 - INFO - 🎯 Extracting draft data for league 242.l.245298...
-2025-06-05 15:31:08,635 - INFO -   🎯 Found 240 draft picks in league 242.l.245298
-2025-06-05 15:31:08,638 - INFO -   ✅ Extracted 240 draft picks
-2025-06-05 15:31:08,943 - INFO - 🎯 Processing league 9/26: Round 6 (2010)
-2025-06-05 15:31:08,944 - INFO - 🎯 Extracting draft data for league 242.l.413666...
-2025-06-05 15:31:26,355 - INFO -   🎯 Found 150 draft picks in league 242.l.413666
-2025-06-05 15:31:26,357 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:31:26,659 - INFO - 🎯 Processing league 10/26: Power House League (2011)
-2025-06-05 15:31:26,659 - INFO - 🎯 Extracting draft data for league 257.l.656437...
-2025-06-05 15:31:30,796 - INFO -   🎯 Found 90 draft picks in league 257.l.656437
-2025-06-05 15:31:30,798 - INFO -   ✅ Extracted 90 draft picks
-2025-06-05 15:31:31,102 - INFO - 🎯 Processing league 11/26: Lock It Up (2011)
-2025-06-05 15:31:31,102 - INFO - 🎯 Extracting draft data for league 257.l.89145...
-2025-06-05 15:31:58,303 - INFO -   🎯 Found 150 draft picks in league 257.l.89145
-2025-06-05 15:31:58,305 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:31:58,609 - INFO - 🎯 Processing league 12/26: The League About Nothing (2012)
-2025-06-05 15:31:58,609 - INFO - 🎯 Extracting draft data for league 273.l.107980...
-2025-06-05 15:32:24,658 - INFO -   🎯 Found 150 draft picks in league 273.l.107980
-2025-06-05 15:32:24,660 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:32:24,962 - INFO - 🎯 Processing league 13/26: Rosterbaters Anonymous (2013)
-2025-06-05 15:32:24,962 - INFO - 🎯 Extracting draft data for league 314.l.319572...
-2025-06-05 15:32:51,709 - INFO -   🎯 Found 150 draft picks in league 314.l.319572
-2025-06-05 15:32:51,722 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:32:52,045 - INFO - 🎯 Processing league 14/26: 10 Years 10 Assholes (2014)
-2025-06-05 15:32:52,045 - INFO - 🎯 Extracting draft data for league 331.l.355899...
-2025-06-05 15:33:14,398 - INFO -   🎯 Found 150 draft picks in league 331.l.355899
-2025-06-05 15:33:14,401 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:33:14,703 - INFO - 🎯 Processing league 15/26: Concussion Factory (2014)
-2025-06-05 15:33:14,703 - INFO - 🎯 Extracting draft data for league 331.l.947050...
-2025-06-05 15:33:19,370 - INFO -   🎯 Found 96 draft picks in league 331.l.947050
-2025-06-05 15:33:19,371 - INFO -   ✅ Extracted 96 draft picks
-2025-06-05 15:33:19,675 - INFO - 🎯 Processing league 16/26: Luke's Kingdom (2015)
-2025-06-05 15:33:19,675 - INFO - 🎯 Extracting draft data for league 348.l.655822...
-2025-06-05 15:33:48,483 - INFO -   🎯 Found 150 draft picks in league 348.l.655822
-2025-06-05 15:33:48,485 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:33:48,789 - INFO - 🎯 Processing league 17/26: The Great SF Draft (2016)
-2025-06-05 15:33:48,789 - INFO - 🎯 Extracting draft data for league 359.l.696366...
-2025-06-05 15:34:18,557 - INFO -   🎯 Found 150 draft picks in league 359.l.696366
-2025-06-05 15:34:18,561 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:34:18,863 - INFO - 🎯 Processing league 18/26: Go Fuck Yourself San Diego (2017)
-2025-06-05 15:34:18,864 - INFO - 🎯 Extracting draft data for league 371.l.1025465...
-2025-06-05 15:34:47,555 - INFO -   🎯 Found 150 draft picks in league 371.l.1025465
-2025-06-05 15:34:47,558 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:34:47,863 - INFO - 🎯 Processing league 19/26: Sleepless In Seattle (2018)
-2025-06-05 15:34:47,863 - INFO - 🎯 Extracting draft data for league 380.l.1143665...
-2025-06-05 15:35:09,790 - INFO -   🎯 Found 150 draft picks in league 380.l.1143665
-2025-06-05 15:35:09,792 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:35:10,094 - INFO - 🎯 Processing league 20/26: Women & Women First (2019)
-2025-06-05 15:35:10,094 - INFO - 🎯 Extracting draft data for league 390.l.777720...
-2025-06-05 15:35:36,944 - INFO -   🎯 Found 150 draft picks in league 390.l.777720
-2025-06-05 15:35:36,946 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:35:37,251 - INFO - 🎯 Processing league 21/26: The Lost Year (2020)
-2025-06-05 15:35:37,251 - INFO - 🎯 Extracting draft data for league 399.l.837311...
-2025-06-05 15:36:06,339 - INFO -   🎯 Found 150 draft picks in league 399.l.837311
-2025-06-05 15:36:06,342 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:36:06,646 - INFO - 🎯 Processing league 22/26: Rocky Mountain High (2021)
-2025-06-05 15:36:06,646 - INFO - 🎯 Extracting draft data for league 406.l.1065326...
-2025-06-05 15:36:37,197 - INFO -   🎯 Found 150 draft picks in league 406.l.1065326
-2025-06-05 15:36:37,200 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:36:37,501 - INFO - 🎯 Processing league 23/26: Wet Hot Tahoe Summer (2022)
-2025-06-05 15:36:37,502 - INFO - 🎯 Extracting draft data for league 414.l.1194955...
-2025-06-05 15:37:07,914 - INFO -   🎯 Found 150 draft picks in league 414.l.1194955
-2025-06-05 15:37:07,917 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:37:08,218 - INFO - 🎯 Processing league 24/26: Move the Raiders to PDX (2023)
-2025-06-05 15:37:08,219 - INFO - 🎯 Extracting draft data for league 423.l.841006...
-2025-06-05 15:37:37,043 - INFO -   🎯 Found 150 draft picks in league 423.l.841006
-2025-06-05 15:37:37,045 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:37:37,350 - INFO - 🎯 Processing league 25/26: Sequoiabowl I (2023)
-2025-06-05 15:37:37,351 - INFO - 🎯 Extracting draft data for league 423.l.951488...
-2025-06-05 15:38:02,683 - INFO -   🎯 Found 120 draft picks in league 423.l.951488
-2025-06-05 15:38:02,685 - INFO -   ✅ Extracted 120 draft picks
-2025-06-05 15:38:02,989 - INFO - 🎯 Processing league 26/26: Idaho's DEI Quota (2024)
-2025-06-05 15:38:02,989 - INFO - 🎯 Extracting draft data for league 449.l.674707...
-2025-06-05 15:38:18,218 - INFO -   🎯 Found 150 draft picks in league 449.l.674707
-2025-06-05 15:38:18,221 - INFO -   ✅ Extracted 150 draft picks
-2025-06-05 15:38:18,525 - INFO - 💾 Saving updated dataset to yahoo_fantasy_COMPLETE_with_drafts_20250605_153818.json...
-2025-06-05 15:38:18,799 - INFO - ✅ Successfully saved updated dataset
-2025-06-05 15:38:18,799 - INFO - 
-================================================================================
-2025-06-05 15:38:18,799 - INFO - 🎯 DRAFT DATA EXTRACTION COMPLETE!
-2025-06-05 15:38:18,799 - INFO - ================================================================================
-2025-06-05 15:38:18,799 - INFO - ⏱️ Total Runtime: 0:09:57.393180
-2025-06-05 15:38:18,799 - INFO - 🏆 Leagues processed: 26
-2025-06-05 15:38:18,800 - INFO - ✅ Successful extractions: 25
-2025-06-05 15:38:18,800 - INFO - 🎯 Total draft picks extracted: 3,888
-2025-06-05 15:38:18,801 - INFO - 🎯 Snake draft picks: 3,888
-2025-06-05 15:38:18,801 - INFO - 🎯 Auction draft picks: 0
-2025-06-05 15:38:18,801 - INFO - 🎯 Unique players drafted: 951
-2025-06-05 15:38:18,802 - INFO - 
-📊 Position breakdown:
-2025-06-05 15:38:18,802 - INFO -   WR: 1,262 picks
-2025-06-05 15:38:18,802 - INFO -   RB: 1,145 picks
-2025-06-05 15:38:18,802 - INFO -   QB: 464 picks
-2025-06-05 15:38:18,802 - INFO -   TE: 404 picks
-2025-06-05 15:38:18,802 - INFO -   DEF: 301 picks
-2025-06-05 15:38:18,802 - INFO -   K: 257 picks
-2025-06-05 15:38:18,802 - INFO -   DL: 17 picks
-2025-06-05 15:38:18,802 - INFO -   LB: 12 picks
-2025-06-05 15:38:18,802 - INFO -   DB: 8 picks
-2025-06-05 15:38:18,802 - INFO -   S: 8 picks
-2025-06-05 15:38:18,802 - INFO -   DE: 4 picks
-2025-06-05 15:38:18,802 - INFO -   CB: 3 picks
-2025-06-05 15:38:18,803 - INFO -   WR,RB: 2 picks
-2025-06-05 15:38:18,803 - INFO -   S,CB: 1 picks
-2025-06-05 15:38:18,803 - INFO - 
-📊 Top 5 rounds by pick count:
-2025-06-05 15:38:18,803 - INFO -   Round 1: 234 picks
-2025-06-05 15:38:18,803 - INFO -   Round 2: 234 picks
-2025-06-05 15:38:18,803 - INFO -   Round 3: 234 picks
-2025-06-05 15:38:18,803 - INFO -   Round 4: 234 picks
-2025-06-05 15:38:18,803 - INFO -   Round 5: 234 picks
-2025-06-05 15:38:18,803 - INFO - 
-📈 UPDATED DATASET SUMMARY:
-2025-06-05 15:38:18,803 - INFO -   - Leagues: 26
-2025-06-05 15:38:18,804 - INFO -   - Teams: 215
-2025-06-05 15:38:18,804 - INFO -   - Rosters: 10,395
-2025-06-05 15:38:18,804 - INFO -   - Matchups: 268
-2025-06-05 15:38:18,804 - INFO -   - Transactions: 1,256
-2025-06-05 15:38:18,804 - INFO -   - Draft Picks: 3,888
-2025-06-05 15:38:18,804 - INFO - 📈 TOTAL RECORDS: 16,048
-2025-06-05 15:38:18,853 - INFO - 
-💾 Updated dataset saved to: yahoo_fantasy_COMPLETE_with_drafts_20250605_153818.json
-2025-06-05 15:38:18,856 - INFO - 💾 File size: 5.2 MB
-2025-06-05 15:38:18,857 - INFO - 🚀 Ready for Heroku deployment with draft data!
+2025-06-05 16:43:06,821 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:43:06.821362
+2025-06-05 16:43:06,821 - INFO - ⏸️ Not currently in fantasy season (Aug 18 - Jan 18) - skipping extraction
+2025-06-05 16:47:43,973 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:47:43.973288
+2025-06-05 16:47:43,973 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:47:43,973 - INFO - 🔑 Authenticating...
+2025-06-05 16:47:43,973 - DEBUG - Checking 
+2025-06-05 16:47:43,973 - ERROR - ❌ Authentication failed: [Errno 2] No such file or directory: 'oauth2.json'
+2025-06-05 16:47:43,973 - ERROR - Make sure oauth2.json file exists with valid tokens
+2025-06-05 16:47:43,974 - ERROR - ❌ Authentication failed
+2025-06-05 16:47:58,567 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:47:58.567514
+2025-06-05 16:47:58,567 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:47:58,567 - INFO - 🔑 Authenticating...
+2025-06-05 16:47:58,568 - DEBUG - Checking 
+2025-06-05 16:47:58,569 - DEBUG - ELAPSED TIME : 4777.099720001221
+2025-06-05 16:47:58,569 - DEBUG - TOKEN HAS EXPIRED
+2025-06-05 16:47:58,569 - DEBUG - REFRESHING TOKEN
+2025-06-05 16:47:58,709 - DEBUG - ELAPSED TIME : 0.1399691104888916
+2025-06-05 16:47:58,709 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:48:00,145 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-05 16:48:00,145 - INFO - 📋 Getting active leagues for 2024 season...
+2025-06-05 16:48:00,145 - INFO - 🔍 Checking leagues for 2004...
+2025-06-05 16:48:10,069 - INFO -   No leagues found for 2004
+2025-06-05 16:48:10,069 - INFO - 🔍 Checking leagues for 2005...
+2025-06-05 16:56:14,107 - INFO - 📈 Starting INCREMENTAL fantasy football data extraction at 2025-06-05 16:56:14.107550
+2025-06-05 16:56:14,108 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:56:14,108 - INFO - 📂 Loading previous extraction: data/current/yahoo_fantasy_COMPLETE_with_drafts_20250605_153818.json
+2025-06-05 16:56:14,173 - INFO - 📊 Baseline data loaded: 16,048 total records
+2025-06-05 16:56:14,173 - INFO - 🔑 Authenticating...
+2025-06-05 16:56:14,173 - DEBUG - Checking 
+2025-06-05 16:56:14,175 - DEBUG - ELAPSED TIME : 495.605669260025
+2025-06-05 16:56:14,175 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:56:14,176 - DEBUG - ELAPSED TIME : 495.60696029663086
+2025-06-05 16:56:14,176 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:56:14,411 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-05 16:56:14,411 - INFO - 📋 Getting active leagues for 2024 season...
+2025-06-05 16:56:14,411 - INFO - 🔍 Checking leagues for 2004...
+2025-06-05 16:56:24,320 - INFO -   No leagues found for 2004
+2025-06-05 16:56:24,320 - INFO - 🔍 Checking leagues for 2005...
+2025-06-05 16:56:37,209 - INFO -   Found 3 leagues for 2005
+2025-06-05 16:56:37,402 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-05 16:56:38,098 - INFO - 🔍 Checking leagues for 2006...
+2025-06-05 16:56:38,814 - INFO -   Found 2 leagues for 2006
+2025-06-05 16:56:39,294 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-05 16:56:39,395 - INFO - 🔍 Checking leagues for 2007...
+2025-06-05 16:57:36,005 - INFO - 📈 Starting INCREMENTAL fantasy football data extraction at 2025-06-05 16:57:36.005843
+2025-06-05 16:57:36,006 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:57:36,006 - INFO - 📂 Loading previous extraction: data/current/yahoo_fantasy_COMPLETE_with_drafts_20250605_153818.json
+2025-06-05 16:57:36,075 - INFO - 📊 Baseline data loaded: 16,048 total records
+2025-06-05 16:57:36,075 - INFO - 🔑 Authenticating...
+2025-06-05 16:57:36,075 - DEBUG - Checking 
+2025-06-05 16:57:36,076 - DEBUG - ELAPSED TIME : 577.5071322917938
+2025-06-05 16:57:36,076 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:57:36,077 - DEBUG - ELAPSED TIME : 577.5078792572021
+2025-06-05 16:57:36,077 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:57:36,312 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-05 16:57:36,312 - INFO - 📋 Getting active leagues for 2024 season ONLY (incremental)...
+2025-06-05 16:57:48,209 - INFO - 📊 Found 1 leagues for 2024
+2025-06-05 16:57:48,426 - ERROR -   ❌ Error getting league 449.l.674707: 'League' object has no attribute 'name'
+2025-06-05 16:57:48,426 - INFO - 📊 Found 0 ACTIVE leagues for 2024

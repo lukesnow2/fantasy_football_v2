@@ -1,18 +1,25 @@
-# OAuth tokens and credentials
+# OAuth tokens and credentials - NEVER COMMIT THESE
 oauth_token.json
 oauth2.json
+**/oauth2.json
 secrets.json
 tokens.json
 temp_oauth.json
 *.token
+*.oauth
+*secret*
+*token*
+
+# Configuration files with secrets - NEVER COMMIT THESE
+config.json
+**/config.json
 
 # Environment variables
 .env
 .env.local
 .env.production
 
-# Configuration files with secrets
-config.json
+
 
 # Python
 __pycache__/

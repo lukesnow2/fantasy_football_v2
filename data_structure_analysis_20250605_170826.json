@@ -1,0 +1,377 @@
+{
+  "leagues": {
+    "structure": {
+      "record_count": 26,
+      "fields": [
+        "current_week",
+        "draft_status",
+        "end_week",
+        "extracted_at",
+        "game_code",
+        "game_id",
+        "is_cash_league",
+        "is_pro_league",
+        "league_id",
+        "league_type",
+        "logo_url",
+        "name",
+        "num_teams",
+        "season",
+        "start_week",
+        "url"
+      ],
+      "field_types": {
+        "league_id": "{'str'}",
+        "name": "{'str'}",
+        "season": "{'str'}",
+        "game_code": "{'str'}",
+        "game_id": "{'str'}",
+        "num_teams": "{'int'}",
+        "current_week": "{'str', 'int'}",
+        "start_week": "{'str'}",
+        "end_week": "{'str'}",
+        "league_type": "{'str'}",
+        "draft_status": "{'str'}",
+        "is_pro_league": "{'str'}",
+        "is_cash_league": "{'str'}",
+        "url": "{'str'}",
+        "logo_url": "{'bool'}",
+        "extracted_at": "{'str'}"
+      },
+      "field_examples": {
+        "league_id": "124.l.109785",
+        "name": "Oakdale Park",
+        "season": "2005",
+        "game_code": "nfl",
+        "game_id": "",
+        "num_teams": 8,
+        "current_week": 17,
+        "start_week": "1",
+        "end_week": "17",
+        "league_type": "private",
+        "draft_status": "postdraft",
+        "is_pro_league": "0",
+        "is_cash_league": "0",
+        "url": "https://football.fantasysports.yahoo.com/2005/f1/109785",
+        "logo_url": false,
+        "extracted_at": "2025-06-05T10:05:41.201367"
+      },
+      "potential_primary_keys": [
+        "url",
+        "league_id"
+      ],
+      "composite_key_candidates": []
+    },
+    "duplicates": {
+      "duplicates_found": false,
+      "exact_duplicates": [],
+      "exact_duplicate_count": 0,
+      "primary_key_duplicates": {},
+      "total_records": 26
+    },
+    "strategy": {
+      "strategy": "UPSERT",
+      "rationale": "League data changes infrequently, UPSERT on league_id",
+      "key_field": "league_id",
+      "update_fields": [
+        "name",
+        "current_week",
+        "draft_status",
+        "extracted_at"
+      ]
+    }
+  },
+  "teams": {
+    "structure": {
+      "record_count": 215,
+      "fields": [
+        "extracted_at",
+        "faab_balance",
+        "league_id",
+        "losses",
+        "manager_name",
+        "name",
+        "playoff_seed",
+        "points_against",
+        "points_for",
+        "team_id",
+        "team_logo_url",
+        "ties",
+        "waiver_priority",
+        "wins"
+      ],
+      "field_types": {
+        "team_id": "{'str'}",
+        "league_id": "{'str'}",
+        "name": "{'str'}",
+        "manager_name": "{'str'}",
+        "wins": "{'int'}",
+        "losses": "{'int'}",
+        "ties": "{'int'}",
+        "points_for": "{'float'}",
+        "points_against": "{'float'}",
+        "playoff_seed": "{'NoneType', 'int'}",
+        "waiver_priority": "{'int'}",
+        "faab_balance": "{'NoneType'}",
+        "team_logo_url": "{'NoneType'}",
+        "extracted_at": "{'str'}"
+      },
+      "field_examples": {
+        "team_id": "124.l.109785.t.4",
+        "league_id": "124.l.109785",
+        "name": "mustangs",
+        "manager_name": "Justin",
+        "wins": 11,
+        "losses": 3,
+        "ties": 0,
+        "points_for": 1879.0,
+        "points_against": 1402.0,
+        "playoff_seed": 1,
+        "waiver_priority": 8,
+        "faab_balance": null,
+        "team_logo_url": null,
+        "extracted_at": "2025-06-05T10:05:41.202577"
+      },
+      "potential_primary_keys": [
+        "team_id"
+      ],
+      "composite_key_candidates": []
+    },
+    "duplicates": {
+      "duplicates_found": false,
+      "exact_duplicates": [],
+      "exact_duplicate_count": 0,
+      "primary_key_duplicates": {},
+      "total_records": 215
+    },
+    "strategy": {
+      "strategy": "UPSERT",
+      "rationale": "Team data changes occasionally (standings), UPSERT on team_id",
+      "key_field": "team_id",
+      "update_fields": [
+        "wins",
+        "losses",
+        "ties",
+        "points_for",
+        "points_against",
+        "playoff_seed",
+        "faab_balance",
+        "extracted_at"
+      ]
+    }
+  },
+  "rosters": {
+    "structure": {
+      "record_count": 10395,
+      "fields": [
+        "acquisition_date",
+        "acquisition_type",
+        "eligible_positions",
+        "extracted_at",
+        "is_starter",
+        "league_id",
+        "player_id",
+        "player_name",
+        "position",
+        "roster_id",
+        "status",
+        "team_id",
+        "week"
+      ],
+      "field_types": {
+        "roster_id": "{'str'}",
+        "team_id": "{'str'}",
+        "league_id": "{'str'}",
+        "week": "{'int'}",
+        "player_id": "{'str'}",
+        "player_name": "{'str'}",
+        "position": "{'str'}",
+        "eligible_positions": "{'str'}",
+        "status": "{'str'}",
+        "is_starter": "{'bool'}",
+        "acquisition_date": "{'NoneType'}",
+        "acquisition_type": "{'NoneType'}",
+        "extracted_at": "{'str'}"
+      },
+      "field_examples": {
+        "roster_id": "124.l.109785.t.4_w8_6337",
+        "team_id": "124.l.109785.t.4",
+        "league_id": "124.l.109785",
+        "week": 8,
+        "player_id": "6337",
+        "player_name": "Carson Palmer",
+        "position": "QB",
+        "eligible_positions": "QB",
+        "status": "",
+        "is_starter": true,
+        "acquisition_date": null,
+        "acquisition_type": null,
+        "extracted_at": "2025-06-05T10:05:41.203423"
+      },
+      "potential_primary_keys": [
+        "roster_id"
+      ],
+      "composite_key_candidates": []
+    },
+    "duplicates": {
+      "duplicates_found": false,
+      "exact_duplicates": [],
+      "exact_duplicate_count": 0,
+      "primary_key_duplicates": {},
+      "total_records": 10395
+    },
+    "strategy": {
+      "strategy": "INCREMENTAL_APPEND",
+      "rationale": "Roster data is time-series (weekly), append new weeks only",
+      "key_field": [
+        "team_id",
+        "week",
+        "player_id"
+      ],
+      "filter_field": "week",
+      "description": "Delete existing records for current week, then append new data"
+    }
+  },
+  "matchups": {
+    "structure": {
+      "record_count": 268,
+      "fields": [
+        "extracted_at",
+        "is_championship",
+        "is_consolation",
+        "is_playoffs",
+        "league_id",
+        "matchup_id",
+        "team1_id",
+        "team1_score",
+        "team2_id",
+        "team2_score",
+        "week",
+        "winner_team_id"
+      ],
+      "field_types": {
+        "matchup_id": "{'str'}",
+        "league_id": "{'str'}",
+        "week": "{'int'}",
+        "team1_id": "{'str'}",
+        "team2_id": "{'str'}",
+        "team1_score": "{'float'}",
+        "team2_score": "{'float'}",
+        "winner_team_id": "{'str'}",
+        "is_playoffs": "{'bool'}",
+        "is_championship": "{'bool'}",
+        "is_consolation": "{'bool'}",
+        "extracted_at": "{'str'}"
+      },
+      "field_examples": {
+        "matchup_id": "124.l.109785_week8_124.l.109785.t.1_124.l.109785.t.2",
+        "league_id": "124.l.109785",
+        "week": 8,
+        "team1_id": "124.l.109785.t.1",
+        "team2_id": "124.l.109785.t.2",
+        "team1_score": 115.0,
+        "team2_score": 99.0,
+        "winner_team_id": "124.l.109785.t.1",
+        "is_playoffs": false,
+        "is_championship": false,
+        "is_consolation": false,
+        "extracted_at": "2025-06-05T10:05:41.204226"
+      },
+      "potential_primary_keys": [
+        "matchup_id"
+      ],
+      "composite_key_candidates": []
+    },
+    "duplicates": {
+      "duplicates_found": false,
+      "exact_duplicates": [],
+      "exact_duplicate_count": 0,
+      "primary_key_duplicates": {},
+      "total_records": 268
+    },
+    "strategy": {
+      "strategy": "INCREMENTAL_APPEND",
+      "rationale": "Matchup data is time-series (weekly), append new weeks only",
+      "key_field": [
+        "league_id",
+        "week"
+      ],
+      "filter_field": "week",
+      "description": "Delete existing records for current week, then append new data"
+    }
+  },
+  "transactions": {
+    "structure": {
+      "record_count": 1256,
+      "fields": [
+        "destination_team_id",
+        "extracted_at",
+        "faab_bid",
+        "league_id",
+        "player_id",
+        "player_name",
+        "source_team_id",
+        "status",
+        "timestamp",
+        "transaction_id",
+        "type"
+      ],
+      "field_types": {
+        "transaction_id": "{'str'}",
+        "league_id": "{'str'}",
+        "type": "{'str'}",
+        "timestamp": "{'str'}",
+        "player_id": "{'str'}",
+        "player_name": "{'str'}",
+        "source_team_id": "{'NoneType', 'str'}",
+        "destination_team_id": "{'NoneType', 'str'}",
+        "faab_bid": "{'NoneType'}",
+        "status": "{'str'}",
+        "extracted_at": "{'str'}"
+      },
+      "field_examples": {
+        "transaction_id": "124.l.109785.tr.226_124.p.5994",
+        "league_id": "124.l.109785",
+        "type": "add/drop",
+        "timestamp": "2005-12-31T02:26:03",
+        "player_id": "124.p.5994",
+        "player_name": "David Garrard",
+        "source_team_id": null,
+        "destination_team_id": "124.l.109785.t.4",
+        "faab_bid": null,
+        "status": "successful",
+        "extracted_at": "2025-06-05T10:05:41.204981"
+      },
+      "potential_primary_keys": [
+        "transaction_id"
+      ],
+      "composite_key_candidates": []
+    },
+    "duplicates": {
+      "duplicates_found": false,
+      "exact_duplicates": [],
+      "exact_duplicate_count": 0,
+      "primary_key_duplicates": {},
+      "total_records": 1256
+    },
+    "strategy": {
+      "strategy": "APPEND_ONLY",
+      "rationale": "Transaction data is immutable historical events",
+      "key_field": "transaction_id",
+      "description": "Append new transactions, skip duplicates based on transaction_id"
+    }
+  },
+  "statistics": {
+    "structure": {
+      "error": "No records to analyze"
+    },
+    "duplicates": {
+      "duplicates_found": false
+    },
+    "strategy": {
+      "strategy": "REPLACE",
+      "rationale": "Unknown table, use safe REPLACE strategy",
+      "description": "Full table replacement for unknown data pattern"
+    }
+  }
+}
