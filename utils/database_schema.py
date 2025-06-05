@@ -67,11 +67,11 @@ CREATE TABLE rosters (
     player_id VARCHAR(50) NOT NULL,
     player_name VARCHAR(255) NOT NULL,
     position VARCHAR(20),
-    selected_position VARCHAR(20),
+    eligible_positions TEXT,
+    status VARCHAR(50),
     is_starter BOOLEAN DEFAULT FALSE,
-    is_bench BOOLEAN DEFAULT FALSE,
-    is_injured BOOLEAN DEFAULT FALSE,
-    bye_week INTEGER,
+    acquisition_date DATE,
+    acquisition_type VARCHAR(50),
     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
@@ -80,7 +80,9 @@ CREATE TABLE rosters (
     INDEX idx_player (player_id),
     INDEX idx_league_week (league_id, week),
     INDEX idx_position (position),
-    INDEX idx_starters (is_starter)
+    INDEX idx_starters (is_starter),
+    INDEX idx_status (status),
+    INDEX idx_acquisition (acquisition_type)
 );
 
 -- Matchups/Schedule table
@@ -133,23 +135,7 @@ CREATE TABLE transactions (
     INDEX idx_faab_bids (faab_bid)
 );
 
--- Player statistics table (for future enhancement)
-CREATE TABLE statistics (
-    stat_id VARCHAR(100) PRIMARY KEY,
-    league_id VARCHAR(50) NOT NULL,
-    team_id VARCHAR(50) NOT NULL,
-    player_id VARCHAR(50) NOT NULL,
-    week INTEGER NOT NULL,
-    stat_type VARCHAR(50) NOT NULL,
-    stat_value DECIMAL(10,2) NOT NULL,
-    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (league_id) REFERENCES leagues(league_id) ON DELETE CASCADE,
-    FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE CASCADE,
-    INDEX idx_league_week_stats (league_id, week),
-    INDEX idx_player_stats (player_id),
-    INDEX idx_stat_type (stat_type)
-);
+
 
 -- Views for common queries
 

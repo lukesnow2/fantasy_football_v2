@@ -65,7 +65,7 @@ class YahooFantasyDatabaseLoader:
         
         logger.info("🔍 Validating data structure...")
         
-        expected_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'statistics']
+        expected_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions']
         
         for table in expected_tables:
             if table not in self.data:
