@@ -24,6 +24,9 @@ the-league/
 ├── query_database.py             # Database query interface
 ├── deploy_to_heroku_postgres.py  # Heroku deployment script
 ├── get_heroku_db_url.py          # Heroku database URL retrieval
+├── database_explorer.py          # Flask web-based database explorer
+├── deploy_database_explorer.py   # Database explorer Heroku deployment
+├── Procfile                      # Heroku process configuration
 │
 ├── utils/                        # Utility modules
 ├── database_schema.py            # Database schema definitions
@@ -149,6 +152,24 @@ the-league/
   - Connection testing
   - Environment variable management
 
+#### `database_explorer.py`
+- **Purpose**: Web-based database exploration and query interface
+- **Features**:
+  - Interactive SQL query execution
+  - Pre-built analytics queries
+  - Table browsing and data viewing
+  - Database schema exploration
+  - Safety checks for destructive operations
+  - Health monitoring endpoints
+
+#### `deploy_database_explorer.py`
+- **Purpose**: Deploy database explorer web app to Heroku
+- **Features**:
+  - Automated Heroku app creation
+  - PostgreSQL addon setup
+  - Environment configuration
+  - Git deployment automation
+
 ## Data Pipeline Flow
 
 ### 1. Authentication Flow
@@ -244,10 +265,15 @@ Template for environment variables including database connections
 2. Run: `python deploy_to_heroku_postgres.py`
 3. Verify deployment with `python get_heroku_db_url.py`
 
+### Database Explorer Deployment
+1. Deploy web interface: `python deploy_database_explorer.py`
+2. Access via web browser at the provided URL
+3. Use predefined queries or create custom ones
+
 ### Data Analysis
-1. Connect to database: `python query_database.py`
-2. Execute queries interactively
-3. Export results as needed
+1. **Web Interface**: Use the deployed database explorer for interactive queries
+2. **Command Line**: Connect locally with `python query_database.py`
+3. **Direct Database**: Connect with any PostgreSQL client using Heroku credentials
 
 ## Development and Debug Tools
 
