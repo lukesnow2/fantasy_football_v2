@@ -1,0 +1,102 @@
+[
+  {
+    "transaction_key": "449.l.674707.tr.403",
+    "transaction_id": "403",
+    "type": "drop",
+    "status": "successful",
+    "timestamp": "1735433889",
+    "players": {
+      "0": {
+        "player": [
+          [
+            {
+              "player_key": "449.p.31833"
+            },
+            {
+              "player_id": "31833"
+            },
+            {
+              "name": {
+                "full": "Kyler Murray",
+                "first": "Kyler",
+                "last": "Murray",
+                "ascii_first": "Kyler",
+                "ascii_last": "Murray"
+              }
+            },
+            {
+              "editorial_team_abbr": "Ari"
+            },
+            {
+              "display_position": "QB"
+            },
+            {
+              "position_type": "O"
+            }
+          ],
+          {
+            "transaction_data": {
+              "type": "drop",
+              "source_type": "team",
+              "source_team_key": "449.l.674707.t.2",
+              "source_team_name": "Barefoot Rose",
+              "destination_type": "waivers"
+            }
+          }
+        ]
+      },
+      "count": 1
+    }
+  },
+  {
+    "transaction_key": "449.l.674707.tr.402",
+    "transaction_id": "402",
+    "type": "add",
+    "status": "successful",
+    "timestamp": "1735408958",
+    "players": {
+      "0": {
+        "player": [
+          [
+            {
+              "player_key": "449.p.40119"
+            },
+            {
+              "player_id": "40119"
+            },
+            {
+              "name": {
+                "full": "Tyjae Spears",
+                "first": "Tyjae",
+                "last": "Spears",
+                "ascii_first": "Tyjae",
+                "ascii_last": "Spears"
+              }
+            },
+            {
+              "editorial_team_abbr": "Ten"
+            },
+            {
+              "display_position": "RB"
+            },
+            {
+              "position_type": "O"
+            }
+          ],
+          {
+            "transaction_data": [
+              {
+                "type": "add",
+                "source_type": "freeagents",
+                "destination_type": "team",
+                "destination_team_key": "449.l.674707.t.1",
+                "destination_team_name": "Hawktuah Akbar!"
+              }
+            ]
+          }
+        ]
+      },
+      "count": 1
+    }
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "extraction_stats": {
+    "total_leagues": 34,
+    "processed_leagues": 34,
+    "failed_leagues": 0,
+    "total_teams": 323,
+    "total_matchups": 0,
+    "total_transactions": 0,
+    "errors": []
+  },
+  "extraction_time": {
+    "start": "2025-06-05T09:16:18.620672",
+    "end": "2025-06-05T09:18:39.788306",
+    "duration_seconds": 141.167634
+  },
+  "data_summary": {
+    "leagues": 34,
+    "teams": 323,
+    "rosters": 0,
+    "matchups": 0,
+    "transactions": 0
+  }
+}

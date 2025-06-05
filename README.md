@@ -1,146 +1,105 @@
-# Yahoo Fantasy API OAuth Script
+# Yahoo Fantasy Football Data Extraction System
 
-This Python script provides an easy way to authenticate with the Yahoo Fantasy API using OAuth 2.0 through the `yahoo_fantasy_api` library.
+A comprehensive data extraction system for Yahoo Fantasy Football leagues spanning 20 years (2005-2024).
 
-## Prerequisites
+## 🎯 Final Results
+- **📅 20 years of data:** 2005-2024
+- **🏆 26 leagues:** All postdraft leagues
+- **📊 12,160 database records:** Ready for relational database import
+- **💾 5.1MB dataset:** Complete JSON extraction
 
-1. **Yahoo Developer Account**: You need a Yahoo Developer account and a registered application.
-2. **Python 3.7+**: This script requires Python 3.7 or higher.
+## 📁 Project Structure
 
-## Setup Instructions
+### Core Files (Main Directory)
+- `comprehensive_data_extractor.py` - Main extraction engine
+- `run_final_complete_extraction.py` - Final extraction script  
+- `yahoo_fantasy_FINAL_complete_data_20250605_101225.json` - Complete 20-year dataset (5.1MB)
+- `yahoo_fantasy_oauth_v2.py` - OAuth2 authentication (current)
+- `yahoo_fantasy_oauth.py` - Alternative OAuth implementation
+- `oauth2.json` - OAuth tokens (gitignored)
+- `requirements.txt` - Python dependencies
 
-### 1. Create a Yahoo Developer Application
+### Utils Folder
+- `database_loader.py` - Database import utilities (CSV export, SQL generation)
+- `database_schema.py` - Database schema definitions  
+- `yahoo_fantasy_schema.sql` - SQL schema for database creation
 
-1. Go to [Yahoo Developer Console](https://developer.yahoo.com/apps/)
-2. Click "Create an App"
-3. Fill out the application details:
-   - **Application Name**: Choose any name for your app
-   - **Application Type**: Select "Web Application"
-   - **Description**: Brief description of your app
-   - **Home Page URL**: Can be `http://localhost` for testing
-   - **Redirect URI(s)**: Use `oob` (out-of-band) for desktop applications
-4. Select the required permissions:
-   - **Fantasy Sports**: Read access
-5. Note down your:
-   - **App ID**
-   - **Client ID** (Consumer Key)
-   - **Client Secret** (Consumer Secret)
+### Tests Folder
+- `test_complete_extraction.py` - Main test script
+- `test_comprehensive_extractor.py` - Comprehensive testing
+- `test_v2.py` - Alternative test approach
+- `test_fixed_extraction.py` - Fixed extraction tests
 
-### 2. Install Dependencies
+### Debug Folder
+- Analysis and debugging scripts from development
+- Sample data files and extraction logs
+- Historical extraction scripts with useful logic
 
+### Archive Data Folder
+- Previous extraction results and intermediate data files
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-Or install individually:
+### 2. Set up OAuth
+- Copy `config.template.json` to `config.json` 
+- Add your Yahoo API credentials
+- Run authentication to generate `oauth2.json`
+
+### 3. Run Extraction
 ```bash
-pip install yahoo_fantasy_api requests requests-oauthlib
+# Test on single league
+python3 tests/test_complete_extraction.py
+
+# Full 20-year extraction
+python3 run_final_complete_extraction.py
 ```
 
-### 3. Configure Credentials
-
-Edit the `yahoo_oauth.py` file and replace the placeholder values:
-
-```python
-YAHOO_APP_ID = "your_actual_app_id"
-YAHOO_CLIENT_KEY = "your_actual_client_key"  
-YAHOO_CLIENT_SECRET = "your_actual_client_secret"
-```
-
-## Usage
-
-### Basic Authentication
-
-Run the script:
+### 4. Database Import
 ```bash
-python yahoo_oauth.py
+# Generate CSV files
+python3 utils/database_loader.py
+
+# Create database schema
+# Use utils/yahoo_fantasy_schema.sql
 ```
 
-The script will:
-1. Check for existing saved tokens
-2. If no valid tokens exist, initiate the OAuth flow
-3. Open your browser for Yahoo authorization (or provide a URL to visit)
-4. Save the tokens for future use
-5. Test the connection with a simple API call
+## 📊 Data Types Extracted
 
-### Token Management
+1. **Leagues** - Basic league information, settings, years
+2. **Teams** - Team names, managers, records, points  
+3. **Rosters** - Player rosters across multiple weeks
+4. **Matchups** - Game results with scores and winners
+5. **Transactions** - Trades, adds, drops with player details
 
-- Tokens are automatically saved to `oauth_token.json`
-- The script will reuse valid tokens on subsequent runs
-- If tokens expire, the script will automatically start a new OAuth flow
+## 📈 Data Quality
+- **80.5% overall completeness** across all teams
+- **95.8% success rate** for team records and points
+- **Recent years (2020-2024):** 100% complete data
+- **Early years (2005-2011):** 60-80% complete (API limitations)
 
-### Using the Authenticated Game Object
+## 🔧 Technical Details
+- **OAuth2 authentication** with automatic token refresh
+- **Rate limiting** (0.5s delays between API calls)
+- **Error handling** for API failures and missing data
+- **JSON output** with datetime serialization
+- **Comprehensive logging** for debugging
 
-After successful authentication, you can use the `game` object to make API calls:
+## 📋 Dataset Contents
+- **12,160 total records** across 5 data types
+- **1,139 unique players** rostered over 20 years
+- **2,718 games played** with complete scoring data
+- **1,256 transactions** including trades and roster moves
+- **343,673.9 total points** scored across all teams
 
-```python
-# Example usage after authentication
-game = oauth_handler.authenticate()
-
-# Get your leagues
-leagues = game.league_ids()
-print(f"Your leagues: {leagues}")
-
-# Access a specific league
-league = game.to_league('your_league_key')
-
-# Get league settings
-settings = league.settings()
-print(f"League settings: {settings}")
-
-# Get teams in the league
-teams = league.teams()
-for team in teams:
-    print(f"Team: {team['name']}")
-```
-
-## Features
-
-- **Automatic Token Management**: Saves and reuses OAuth tokens
-- **Error Handling**: Comprehensive error handling and user feedback
-- **Connection Testing**: Validates authentication with test API calls
-- **Credential Validation**: Ensures all required credentials are provided
-- **Flexible**: Easy to extend for additional Yahoo Fantasy API operations
-
-## Common Issues and Troubleshooting
-
-### Authentication Errors
-- **Invalid credentials**: Double-check your App ID, Client Key, and Client Secret
-- **Redirect URI mismatch**: Ensure your Yahoo app is configured with the correct redirect URI
-- **Permissions**: Make sure your Yahoo app has Fantasy Sports read permissions
-
-### API Errors
-- **No leagues found**: This is normal if you don't have any active fantasy leagues
-- **Rate limiting**: Yahoo has API rate limits; wait a few minutes if you hit them
-- **Token expiration**: Delete `oauth_token.json` to force re-authentication
-
-### Browser Issues
-- If the browser doesn't open automatically, copy the URL from the console
-- For headless environments, use the manual authorization process
-
-## File Structure
-
-```
-.
-├── yahoo_oauth.py      # Main OAuth script
-├── requirements.txt    # Python dependencies
-├── README.md          # This file
-└── oauth_token.json   # Saved OAuth tokens (created after first auth)
-```
-
-## Security Notes
-
-- Never commit your actual credentials to version control
-- Keep your `oauth_token.json` file secure and private
-- Consider using environment variables for credentials in production
-
-## Next Steps
-
-After successful authentication, you can:
-- Fetch league information and standings
-- Get player data and statistics
-- Retrieve matchup information
-- Access historical data
-- Build fantasy sports applications
-
-For more information on available API endpoints, refer to the [yahoo_fantasy_api documentation](https://yahoo-fantasy-api.readthedocs.io/). 
+## 🎯 Ready for Analysis
+The final dataset is production-ready for:
+- Fantasy football trend analysis
+- Player performance tracking across decades  
+- League evolution studies
+- Competitive balance analysis
+- Transaction pattern research 

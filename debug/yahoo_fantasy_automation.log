@@ -1,0 +1,506 @@
+2025-06-05 08:56:20,340 - __main__ - INFO - ✅ Using credentials from environment variables
+2025-06-05 08:56:20,341 - __main__ - INFO - Starting Yahoo Fantasy API OAuth authentication...
+2025-06-05 08:56:20,341 - yahoo_oauth - DEBUG - Checking 
+2025-06-05 08:56:20,341 - yahoo_oauth - DEBUG - ELAPSED TIME : 391.7918710708618
+2025-06-05 08:56:20,342 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:56:20,342 - __main__ - INFO - ✅ OAuth2 session created successfully!
+2025-06-05 08:56:21,331 - __main__ - INFO - ✅ API connection test successful! Game ID: 461
+2025-06-05 08:56:21,331 - __main__ - INFO - ✅ Authentication completed successfully!
+2025-06-05 08:56:21,331 - __main__ - INFO - 🎉 Authentication completed successfully!
+2025-06-05 08:56:21,332 - __main__ - INFO - 📊 Testing automated data collection...
+2025-06-05 08:56:21,332 - __main__ - INFO - 🚀 Starting task: League Data Collection
+2025-06-05 08:56:21,332 - __main__ - INFO - 📊 Collecting leagues for year 2025
+2025-06-05 08:56:21,332 - yahoo_oauth - DEBUG - ELAPSED TIME : 392.78225684165955
+2025-06-05 08:56:21,332 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:56:29,073 - __main__ - INFO - ✅ Retrieved 0 leagues
+2025-06-05 08:56:29,074 - __main__ - INFO - 📊 Collected data for 0 leagues
+2025-06-05 08:56:29,074 - __main__ - INFO - ✅ Task League Data Collection completed in 7.74s
+2025-06-05 08:56:29,074 - __main__ - INFO - ✅ Data collection successful!
+2025-06-05 08:56:29,074 - __main__ - INFO - 📊 Collected 0 league records
+2025-06-05 08:56:29,074 - __main__ - INFO - ✅ v2 testing completed successfully!
+2025-06-05 08:56:29,074 - __main__ - INFO - 🔄 Ready for automation and database integration!
+2025-06-05 08:57:08,644 - yahoo_fantasy_oauth_v2 - INFO - ✅ Using credentials from environment variables
+2025-06-05 08:57:08,644 - yahoo_fantasy_oauth_v2 - INFO - Starting Yahoo Fantasy API OAuth authentication...
+2025-06-05 08:57:08,644 - yahoo_oauth - DEBUG - Checking 
+2025-06-05 08:57:08,645 - yahoo_oauth - DEBUG - ELAPSED TIME : 440.0955867767334
+2025-06-05 08:57:08,645 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:08,646 - yahoo_fantasy_oauth_v2 - INFO - ✅ OAuth2 session created successfully!
+2025-06-05 08:57:09,136 - yahoo_fantasy_oauth_v2 - INFO - ✅ API connection test successful! Game ID: 461
+2025-06-05 08:57:09,137 - yahoo_fantasy_oauth_v2 - INFO - ✅ Authentication completed successfully!
+2025-06-05 08:57:09,137 - __main__ - INFO - ✅ Authentication successful!
+2025-06-05 08:57:09,137 - yahoo_fantasy_oauth_v2 - INFO - 🚀 Starting task: League Data Collection
+2025-06-05 08:57:09,137 - yahoo_fantasy_oauth_v2 - INFO - 📊 Collecting leagues for year 2024
+2025-06-05 08:57:09,137 - yahoo_oauth - DEBUG - ELAPSED TIME : 440.5872800350189
+2025-06-05 08:57:09,137 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:11,588 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved 1 leagues
+2025-06-05 08:57:11,588 - yahoo_oauth - DEBUG - ELAPSED TIME : 443.0386028289795
+2025-06-05 08:57:11,588 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:11,944 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 449.l.674707: Idaho's DEI Quota
+2025-06-05 08:57:12,046 - yahoo_fantasy_oauth_v2 - INFO - 📊 Collected data for 1 leagues
+2025-06-05 08:57:12,046 - yahoo_fantasy_oauth_v2 - INFO - ✅ Task League Data Collection completed in 2.91s
+2025-06-05 08:57:12,046 - __main__ - INFO - ✅ Found 1 leagues for 2024
+2025-06-05 08:57:12,046 - __main__ - INFO - 📋 Idaho's DEI Quota (2024) - 10 teams
+2025-06-05 08:57:52,136 - yahoo_fantasy_oauth_v2 - INFO - ✅ Using credentials from environment variables
+2025-06-05 08:57:52,137 - yahoo_fantasy_oauth_v2 - INFO - Starting Yahoo Fantasy API OAuth authentication...
+2025-06-05 08:57:52,137 - yahoo_oauth - DEBUG - Checking 
+2025-06-05 08:57:52,138 - yahoo_oauth - DEBUG - ELAPSED TIME : 483.5883729457855
+2025-06-05 08:57:52,138 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:52,139 - yahoo_fantasy_oauth_v2 - INFO - ✅ OAuth2 session created successfully!
+2025-06-05 08:57:52,397 - yahoo_fantasy_oauth_v2 - INFO - ✅ API connection test successful! Game ID: 461
+2025-06-05 08:57:52,397 - yahoo_fantasy_oauth_v2 - INFO - ✅ Authentication completed successfully!
+2025-06-05 08:57:52,397 - __main__ - INFO - ✅ Authentication successful!
+2025-06-05 08:57:52,397 - __main__ - INFO - 🔍 Getting ALL leagues across all years...
+2025-06-05 08:57:52,397 - yahoo_oauth - DEBUG - ELAPSED TIME : 483.8478298187256
+2025-06-05 08:57:52,398 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:53,971 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved 50 leagues
+2025-06-05 08:57:53,972 - __main__ - INFO - ✅ Found 50 total leagues across all years
+2025-06-05 08:57:53,972 - __main__ - INFO - 📋 First 10 leagues:
+2025-06-05 08:57:53,972 - yahoo_oauth - DEBUG - ELAPSED TIME : 485.4222559928894
+2025-06-05 08:57:53,972 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:54,331 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 165.l.46359: Owned In the Face By G.W. Bush
+2025-06-05 08:57:54,332 - __main__ - INFO -  1. Owned In the Face By G.W. Bush (2006) - 10 teams - ID: 165.l.46359
+2025-06-05 08:57:54,332 - yahoo_oauth - DEBUG - ELAPSED TIME : 485.7821547985077
+2025-06-05 08:57:54,332 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:54,579 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.57365: Yahoo Public 57365
+2025-06-05 08:57:54,579 - __main__ - INFO -  2. Yahoo Public 57365 (2006) - 10 teams - ID: 153.l.57365
+2025-06-05 08:57:54,579 - yahoo_oauth - DEBUG - ELAPSED TIME : 486.0297019481659
+2025-06-05 08:57:54,579 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:54,763 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.76788: Oakdale Park
+2025-06-05 08:57:54,763 - __main__ - INFO -  3. Oakdale Park (2006) - 10 teams - ID: 153.l.76788
+2025-06-05 08:57:54,763 - yahoo_oauth - DEBUG - ELAPSED TIME : 486.2133378982544
+2025-06-05 08:57:54,763 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:56,391 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 147.l.14810: oakdale park
+2025-06-05 08:57:56,391 - __main__ - INFO -  4. oakdale park (2006) - 10 teams - ID: 147.l.14810
+2025-06-05 08:57:56,391 - yahoo_oauth - DEBUG - ELAPSED TIME : 487.8417239189148
+2025-06-05 08:57:56,391 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:56,970 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 131.l.40158: Jesse And The McBum de BumBums
+2025-06-05 08:57:56,970 - __main__ - INFO -  5. Jesse And The McBum de BumBums (2005) - 10 teams - ID: 131.l.40158
+2025-06-05 08:57:56,971 - yahoo_oauth - DEBUG - ELAPSED TIME : 488.4210379123688
+2025-06-05 08:57:56,971 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:57,202 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.73267: Yahoo Public 73267
+2025-06-05 08:57:57,202 - __main__ - INFO -  6. Yahoo Public 73267 (2005) - 10 teams - ID: 124.l.73267
+2025-06-05 08:57:57,203 - yahoo_oauth - DEBUG - ELAPSED TIME : 488.6529178619385
+2025-06-05 08:57:57,203 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:57,382 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.109785: Oakdale Park
+2025-06-05 08:57:57,382 - __main__ - INFO -  7. Oakdale Park (2005) - 8 teams - ID: 124.l.109785
+2025-06-05 08:57:57,382 - yahoo_oauth - DEBUG - ELAPSED TIME : 488.8328857421875
+2025-06-05 08:57:57,383 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:57,630 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.220557: Yahoo Public 220557
+2025-06-05 08:57:57,630 - __main__ - INFO -  8. Yahoo Public 220557 (2005) - 10 teams - ID: 124.l.220557
+2025-06-05 08:57:57,630 - yahoo_oauth - DEBUG - ELAPSED TIME : 489.0806739330292
+2025-06-05 08:57:57,630 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:59,398 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.71701: Freezer
+2025-06-05 08:57:59,398 - __main__ - INFO -  9. Freezer (2005) - 6 teams - ID: 113.l.71701
+2025-06-05 08:57:59,398 - yahoo_oauth - DEBUG - ELAPSED TIME : 490.84870982170105
+2025-06-05 08:57:59,398 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:57:59,627 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.281963: Yahoo Public 281963
+2025-06-05 08:57:59,627 - __main__ - INFO - 10. Yahoo Public 281963 (2005) - 12 teams - ID: 113.l.281963
+2025-06-05 08:57:59,627 - __main__ - INFO - 
+📊 Getting detailed data for season summary...
+2025-06-05 08:57:59,627 - yahoo_oauth - DEBUG - ELAPSED TIME : 491.0774579048157
+2025-06-05 08:57:59,627 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:00,141 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 165.l.46359: Owned In the Face By G.W. Bush
+2025-06-05 08:58:00,141 - yahoo_oauth - DEBUG - ELAPSED TIME : 491.5913989543915
+2025-06-05 08:58:00,141 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:00,350 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.57365: Yahoo Public 57365
+2025-06-05 08:58:00,350 - yahoo_oauth - DEBUG - ELAPSED TIME : 491.80061292648315
+2025-06-05 08:58:00,350 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:00,544 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.76788: Oakdale Park
+2025-06-05 08:58:00,544 - yahoo_oauth - DEBUG - ELAPSED TIME : 491.9946599006653
+2025-06-05 08:58:00,544 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:00,778 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 147.l.14810: oakdale park
+2025-06-05 08:58:00,779 - yahoo_oauth - DEBUG - ELAPSED TIME : 492.22889399528503
+2025-06-05 08:58:00,779 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:01,169 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 131.l.40158: Jesse And The McBum de BumBums
+2025-06-05 08:58:01,169 - yahoo_oauth - DEBUG - ELAPSED TIME : 492.6197669506073
+2025-06-05 08:58:01,170 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:01,398 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.73267: Yahoo Public 73267
+2025-06-05 08:58:01,398 - yahoo_oauth - DEBUG - ELAPSED TIME : 492.84889793395996
+2025-06-05 08:58:01,399 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:01,594 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.109785: Oakdale Park
+2025-06-05 08:58:01,595 - yahoo_oauth - DEBUG - ELAPSED TIME : 493.0449171066284
+2025-06-05 08:58:01,595 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:01,829 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.220557: Yahoo Public 220557
+2025-06-05 08:58:01,829 - yahoo_oauth - DEBUG - ELAPSED TIME : 493.2794029712677
+2025-06-05 08:58:01,829 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:02,216 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.71701: Freezer
+2025-06-05 08:58:02,216 - yahoo_oauth - DEBUG - ELAPSED TIME : 493.6662290096283
+2025-06-05 08:58:02,216 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:05,580 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.281963: Yahoo Public 281963
+2025-06-05 08:58:05,580 - yahoo_oauth - DEBUG - ELAPSED TIME : 497.03087997436523
+2025-06-05 08:58:05,581 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:07,423 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.341665: Yahoo Public 341665
+2025-06-05 08:58:07,423 - yahoo_oauth - DEBUG - ELAPSED TIME : 498.873655796051
+2025-06-05 08:58:07,423 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:07,708 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 112.l.289693: Yahoo Public 289693
+2025-06-05 08:58:07,708 - yahoo_oauth - DEBUG - ELAPSED TIME : 499.1582589149475
+2025-06-05 08:58:07,708 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:07,989 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 112.l.292452: Oakdale Park
+2025-06-05 08:58:07,989 - yahoo_oauth - DEBUG - ELAPSED TIME : 499.43937277793884
+2025-06-05 08:58:07,989 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:09,730 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.174937: Oakdale High
+2025-06-05 08:58:09,730 - yahoo_oauth - DEBUG - ELAPSED TIME : 501.1805970668793
+2025-06-05 08:58:09,730 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:13,343 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.306751: Oakdale #1
+2025-06-05 08:58:13,344 - yahoo_oauth - DEBUG - ELAPSED TIME : 504.7941048145294
+2025-06-05 08:58:13,344 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:13,562 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.306762: baseball2
+2025-06-05 08:58:13,563 - yahoo_oauth - DEBUG - ELAPSED TIME : 505.0130178928375
+2025-06-05 08:58:13,563 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:13,753 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 175.l.86092: Oakdale 2
+2025-06-05 08:58:13,753 - yahoo_oauth - DEBUG - ELAPSED TIME : 505.2038879394531
+2025-06-05 08:58:13,754 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:13,968 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 175.l.658531: Oakdale Park
+2025-06-05 08:58:13,968 - yahoo_oauth - DEBUG - ELAPSED TIME : 505.41878294944763
+2025-06-05 08:58:13,968 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:14,573 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 187.l.18319: Oakdale Park
+2025-06-05 08:58:14,573 - yahoo_oauth - DEBUG - ELAPSED TIME : 506.0236837863922
+2025-06-05 08:58:14,573 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:16,372 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 195.l.210951: Oakdale Park
+2025-06-05 08:58:16,372 - yahoo_oauth - DEBUG - ELAPSED TIME : 507.82216000556946
+2025-06-05 08:58:16,372 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:16,554 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 199.l.42364: The Draft
+2025-06-05 08:58:16,554 - yahoo_oauth - DEBUG - ELAPSED TIME : 508.004487991333
+2025-06-05 08:58:16,554 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:16,829 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 222.l.222935: Engaged
+2025-06-05 08:58:16,829 - yahoo_oauth - DEBUG - ELAPSED TIME : 508.27948093414307
+2025-06-05 08:58:16,829 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:17,026 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.245298: Football Gods 15
+2025-06-05 08:58:17,026 - yahoo_oauth - DEBUG - ELAPSED TIME : 508.4761381149292
+2025-06-05 08:58:17,026 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:17,227 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.413666: Round 6
+2025-06-05 08:58:17,227 - yahoo_oauth - DEBUG - ELAPSED TIME : 508.6772918701172
+2025-06-05 08:58:17,227 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:17,416 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.10035622710: Christian Fellowship League
+2025-06-05 08:58:17,416 - yahoo_oauth - DEBUG - ELAPSED TIME : 508.8664309978485
+2025-06-05 08:58:17,416 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:17,623 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 257.l.89145: Lock It Up
+2025-06-05 08:58:17,624 - yahoo_oauth - DEBUG - ELAPSED TIME : 509.07398986816406
+2025-06-05 08:58:17,624 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:17,889 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 257.l.656437: Power House League
+2025-06-05 08:58:17,889 - yahoo_oauth - DEBUG - ELAPSED TIME : 509.33962297439575
+2025-06-05 08:58:17,889 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:18,093 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 273.l.107980: The League About Nothing
+2025-06-05 08:58:18,093 - yahoo_oauth - DEBUG - ELAPSED TIME : 509.5432229042053
+2025-06-05 08:58:18,093 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:18,312 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 314.l.319572: Rosterbaters Anonymous
+2025-06-05 08:58:18,312 - yahoo_oauth - DEBUG - ELAPSED TIME : 509.7623538970947
+2025-06-05 08:58:18,312 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:18,577 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 331.l.355899: 10 Years 10 Assholes
+2025-06-05 08:58:18,577 - yahoo_oauth - DEBUG - ELAPSED TIME : 510.0278859138489
+2025-06-05 08:58:18,578 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:18,766 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 331.l.947050: Concussion Factory
+2025-06-05 08:58:18,767 - yahoo_oauth - DEBUG - ELAPSED TIME : 510.2170379161835
+2025-06-05 08:58:18,767 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:19,154 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 348.l.655822: Luke's Kingdom
+2025-06-05 08:58:19,154 - yahoo_oauth - DEBUG - ELAPSED TIME : 510.604740858078
+2025-06-05 08:58:19,155 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:19,409 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 359.l.696366: The Great SF Draft
+2025-06-05 08:58:19,409 - yahoo_oauth - DEBUG - ELAPSED TIME : 510.8593509197235
+2025-06-05 08:58:19,409 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:19,599 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 371.l.722293: The Great SF Draft
+2025-06-05 08:58:19,600 - yahoo_oauth - DEBUG - ELAPSED TIME : 511.04994797706604
+2025-06-05 08:58:19,600 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:19,791 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 371.l.1025465: Go Fuck Yourself San Diego
+2025-06-05 08:58:19,792 - yahoo_oauth - DEBUG - ELAPSED TIME : 511.2419710159302
+2025-06-05 08:58:19,792 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:19,972 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 380.l.888945: Go Fuck Yourself San Diego
+2025-06-05 08:58:19,973 - yahoo_oauth - DEBUG - ELAPSED TIME : 511.4229419231415
+2025-06-05 08:58:19,973 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:20,158 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 380.l.1143665: Sleepless In Seattle
+2025-06-05 08:58:20,158 - yahoo_oauth - DEBUG - ELAPSED TIME : 511.60812878608704
+2025-06-05 08:58:20,158 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:20,406 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 390.l.567043: Sleepless In Seattle
+2025-06-05 08:58:20,406 - yahoo_oauth - DEBUG - ELAPSED TIME : 511.8564109802246
+2025-06-05 08:58:20,406 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:20,664 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 390.l.777720: Women & Women First
+2025-06-05 08:58:20,664 - yahoo_oauth - DEBUG - ELAPSED TIME : 512.114296913147
+2025-06-05 08:58:20,664 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:20,840 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 399.l.440905: Women & Women First
+2025-06-05 08:58:20,841 - yahoo_oauth - DEBUG - ELAPSED TIME : 512.2910318374634
+2025-06-05 08:58:20,841 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:21,090 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 399.l.837311: The Lost Year
+2025-06-05 08:58:21,090 - yahoo_oauth - DEBUG - ELAPSED TIME : 512.54039311409
+2025-06-05 08:58:21,090 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:21,365 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 406.l.735025: Women & Women First
+2025-06-05 08:58:21,365 - yahoo_oauth - DEBUG - ELAPSED TIME : 512.8157720565796
+2025-06-05 08:58:21,365 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:21,553 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 406.l.1065326: Rocky Mountain High
+2025-06-05 08:58:21,553 - yahoo_oauth - DEBUG - ELAPSED TIME : 513.0034158229828
+2025-06-05 08:58:21,553 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:21,746 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.527650: Women & Women First
+2025-06-05 08:58:21,746 - yahoo_oauth - DEBUG - ELAPSED TIME : 513.1966547966003
+2025-06-05 08:58:21,746 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,015 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.1088817: Rocky Mountain High
+2025-06-05 08:58:22,015 - yahoo_oauth - DEBUG - ELAPSED TIME : 513.465852022171
+2025-06-05 08:58:22,016 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,204 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.1194955: Wet Hot Tahoe Summer
+2025-06-05 08:58:22,204 - yahoo_oauth - DEBUG - ELAPSED TIME : 513.65447473526
+2025-06-05 08:58:22,204 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,391 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.367879: Wet Hot Tahoe Summer
+2025-06-05 08:58:22,391 - yahoo_oauth - DEBUG - ELAPSED TIME : 513.8414568901062
+2025-06-05 08:58:22,391 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,585 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.841006: Move the Raiders to PDX
+2025-06-05 08:58:22,585 - yahoo_oauth - DEBUG - ELAPSED TIME : 514.0351240634918
+2025-06-05 08:58:22,585 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,777 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.951488: Sequoiabowl I
+2025-06-05 08:58:22,777 - yahoo_oauth - DEBUG - ELAPSED TIME : 514.2278769016266
+2025-06-05 08:58:22,778 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:58:22,967 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 449.l.674707: Idaho's DEI Quota
+2025-06-05 08:58:22,968 - __main__ - INFO - 
+📈 League distribution by season:
+2025-06-05 08:58:22,968 - __main__ - INFO -   2004: 2 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2005: 7 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2006: 4 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2007: 6 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2008: 2 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2009: 1 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2010: 3 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2011: 2 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2012: 1 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2013: 1 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2014: 2 leagues
+2025-06-05 08:58:22,968 - __main__ - INFO -   2015: 1 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2016: 1 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2017: 2 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2018: 2 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2019: 2 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2020: 2 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2021: 2 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2022: 3 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2023: 3 leagues
+2025-06-05 08:58:22,969 - __main__ - INFO -   2024: 1 leagues
+2025-06-05 08:59:50,910 - yahoo_fantasy_oauth_v2 - INFO - ✅ Using credentials from environment variables
+2025-06-05 08:59:50,911 - yahoo_fantasy_oauth_v2 - INFO - Starting Yahoo Fantasy API OAuth authentication...
+2025-06-05 08:59:50,911 - yahoo_oauth - DEBUG - Checking 
+2025-06-05 08:59:50,912 - yahoo_oauth - DEBUG - ELAPSED TIME : 602.3619549274445
+2025-06-05 08:59:50,912 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:50,912 - yahoo_fantasy_oauth_v2 - INFO - ✅ OAuth2 session created successfully!
+2025-06-05 08:59:51,143 - yahoo_fantasy_oauth_v2 - INFO - ✅ API connection test successful! Game ID: 461
+2025-06-05 08:59:51,143 - yahoo_fantasy_oauth_v2 - INFO - ✅ Authentication completed successfully!
+2025-06-05 08:59:51,143 - __main__ - INFO - ✅ Authentication successful!
+2025-06-05 08:59:51,143 - __main__ - INFO - 🔍 Getting ALL leagues across all years...
+2025-06-05 08:59:51,143 - yahoo_oauth - DEBUG - ELAPSED TIME : 602.5938279628754
+2025-06-05 08:59:51,144 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:52,685 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved 50 leagues
+2025-06-05 08:59:52,685 - __main__ - INFO - ✅ Found 50 total leagues across all years
+2025-06-05 08:59:52,685 - __main__ - INFO - 🔍 Filtering out Yahoo Public leagues...
+2025-06-05 08:59:52,685 - yahoo_oauth - DEBUG - ELAPSED TIME : 604.135235786438
+2025-06-05 08:59:52,685 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:52,984 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 165.l.46359: Owned In the Face By G.W. Bush
+2025-06-05 08:59:52,985 - yahoo_oauth - DEBUG - ELAPSED TIME : 604.4350218772888
+2025-06-05 08:59:52,985 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:53,164 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.57365: Yahoo Public 57365
+2025-06-05 08:59:53,165 - yahoo_oauth - DEBUG - ELAPSED TIME : 604.6149258613586
+2025-06-05 08:59:53,165 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:53,479 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 153.l.76788: Oakdale Park
+2025-06-05 08:59:53,479 - yahoo_oauth - DEBUG - ELAPSED TIME : 604.9297590255737
+2025-06-05 08:59:53,479 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:55,235 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 147.l.14810: oakdale park
+2025-06-05 08:59:55,235 - yahoo_oauth - DEBUG - ELAPSED TIME : 606.6857650279999
+2025-06-05 08:59:55,235 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:55,429 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 131.l.40158: Jesse And The McBum de BumBums
+2025-06-05 08:59:55,429 - yahoo_oauth - DEBUG - ELAPSED TIME : 606.8795080184937
+2025-06-05 08:59:55,429 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:55,604 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.73267: Yahoo Public 73267
+2025-06-05 08:59:55,604 - yahoo_oauth - DEBUG - ELAPSED TIME : 607.0544619560242
+2025-06-05 08:59:55,604 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:55,802 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.109785: Oakdale Park
+2025-06-05 08:59:55,802 - yahoo_oauth - DEBUG - ELAPSED TIME : 607.2528748512268
+2025-06-05 08:59:55,803 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:55,982 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 124.l.220557: Yahoo Public 220557
+2025-06-05 08:59:55,983 - yahoo_oauth - DEBUG - ELAPSED TIME : 607.4329679012299
+2025-06-05 08:59:55,983 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:56,223 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.71701: Freezer
+2025-06-05 08:59:56,223 - yahoo_oauth - DEBUG - ELAPSED TIME : 607.673485994339
+2025-06-05 08:59:56,223 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:56,450 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.281963: Yahoo Public 281963
+2025-06-05 08:59:56,450 - yahoo_oauth - DEBUG - ELAPSED TIME : 607.9003279209137
+2025-06-05 08:59:56,450 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:58,199 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 113.l.341665: Yahoo Public 341665
+2025-06-05 08:59:58,200 - yahoo_oauth - DEBUG - ELAPSED TIME : 609.6500680446625
+2025-06-05 08:59:58,200 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:58,644 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 112.l.289693: Yahoo Public 289693
+2025-06-05 08:59:58,644 - yahoo_oauth - DEBUG - ELAPSED TIME : 610.0948519706726
+2025-06-05 08:59:58,645 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:59,016 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 112.l.292452: Oakdale Park
+2025-06-05 08:59:59,016 - yahoo_oauth - DEBUG - ELAPSED TIME : 610.4664731025696
+2025-06-05 08:59:59,016 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 08:59:59,255 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.174937: Oakdale High
+2025-06-05 08:59:59,255 - yahoo_oauth - DEBUG - ELAPSED TIME : 610.7057039737701
+2025-06-05 08:59:59,255 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:02,363 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.306751: Oakdale #1
+2025-06-05 09:00:02,363 - yahoo_oauth - DEBUG - ELAPSED TIME : 613.8130819797516
+2025-06-05 09:00:02,363 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:02,589 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 171.l.306762: baseball2
+2025-06-05 09:00:02,589 - yahoo_oauth - DEBUG - ELAPSED TIME : 614.0393397808075
+2025-06-05 09:00:02,589 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:02,846 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 175.l.86092: Oakdale 2
+2025-06-05 09:00:02,846 - yahoo_oauth - DEBUG - ELAPSED TIME : 614.2964470386505
+2025-06-05 09:00:02,846 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:03,035 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 175.l.658531: Oakdale Park
+2025-06-05 09:00:03,035 - yahoo_oauth - DEBUG - ELAPSED TIME : 614.4858918190002
+2025-06-05 09:00:03,036 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:03,284 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 187.l.18319: Oakdale Park
+2025-06-05 09:00:03,284 - yahoo_oauth - DEBUG - ELAPSED TIME : 614.7347948551178
+2025-06-05 09:00:03,285 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:04,958 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 195.l.210951: Oakdale Park
+2025-06-05 09:00:04,958 - yahoo_oauth - DEBUG - ELAPSED TIME : 616.4086117744446
+2025-06-05 09:00:04,958 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:05,152 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 199.l.42364: The Draft
+2025-06-05 09:00:05,152 - yahoo_oauth - DEBUG - ELAPSED TIME : 616.6024699211121
+2025-06-05 09:00:05,152 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:05,353 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 222.l.222935: Engaged
+2025-06-05 09:00:05,353 - yahoo_oauth - DEBUG - ELAPSED TIME : 616.8036937713623
+2025-06-05 09:00:05,353 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:05,545 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.245298: Football Gods 15
+2025-06-05 09:00:05,545 - yahoo_oauth - DEBUG - ELAPSED TIME : 616.9953558444977
+2025-06-05 09:00:05,545 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:05,732 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.413666: Round 6
+2025-06-05 09:00:05,733 - yahoo_oauth - DEBUG - ELAPSED TIME : 617.1829431056976
+2025-06-05 09:00:05,733 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:05,910 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 242.l.10035622710: Christian Fellowship League
+2025-06-05 09:00:05,910 - yahoo_oauth - DEBUG - ELAPSED TIME : 617.3605337142944
+2025-06-05 09:00:05,910 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:06,101 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 257.l.89145: Lock It Up
+2025-06-05 09:00:06,101 - yahoo_oauth - DEBUG - ELAPSED TIME : 617.5516209602356
+2025-06-05 09:00:06,101 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:06,296 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 257.l.656437: Power House League
+2025-06-05 09:00:06,296 - yahoo_oauth - DEBUG - ELAPSED TIME : 617.7468240261078
+2025-06-05 09:00:06,297 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:06,496 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 273.l.107980: The League About Nothing
+2025-06-05 09:00:06,496 - yahoo_oauth - DEBUG - ELAPSED TIME : 617.9467439651489
+2025-06-05 09:00:06,496 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:06,690 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 314.l.319572: Rosterbaters Anonymous
+2025-06-05 09:00:06,690 - yahoo_oauth - DEBUG - ELAPSED TIME : 618.1408529281616
+2025-06-05 09:00:06,691 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:06,887 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 331.l.355899: 10 Years 10 Assholes
+2025-06-05 09:00:06,887 - yahoo_oauth - DEBUG - ELAPSED TIME : 618.3377270698547
+2025-06-05 09:00:06,887 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:07,075 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 331.l.947050: Concussion Factory
+2025-06-05 09:00:07,075 - yahoo_oauth - DEBUG - ELAPSED TIME : 618.5251669883728
+2025-06-05 09:00:07,075 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:07,347 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 348.l.655822: Luke's Kingdom
+2025-06-05 09:00:07,347 - yahoo_oauth - DEBUG - ELAPSED TIME : 618.7977077960968
+2025-06-05 09:00:07,347 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:07,542 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 359.l.696366: The Great SF Draft
+2025-06-05 09:00:07,542 - yahoo_oauth - DEBUG - ELAPSED TIME : 618.9924659729004
+2025-06-05 09:00:07,542 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:07,735 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 371.l.722293: The Great SF Draft
+2025-06-05 09:00:07,735 - yahoo_oauth - DEBUG - ELAPSED TIME : 619.185388803482
+2025-06-05 09:00:07,735 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:07,934 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 371.l.1025465: Go Fuck Yourself San Diego
+2025-06-05 09:00:07,934 - yahoo_oauth - DEBUG - ELAPSED TIME : 619.3846108913422
+2025-06-05 09:00:07,934 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:08,139 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 380.l.888945: Go Fuck Yourself San Diego
+2025-06-05 09:00:08,139 - yahoo_oauth - DEBUG - ELAPSED TIME : 619.5896599292755
+2025-06-05 09:00:08,139 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:08,368 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 380.l.1143665: Sleepless In Seattle
+2025-06-05 09:00:08,368 - yahoo_oauth - DEBUG - ELAPSED TIME : 619.8187620639801
+2025-06-05 09:00:08,368 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:08,561 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 390.l.567043: Sleepless In Seattle
+2025-06-05 09:00:08,561 - yahoo_oauth - DEBUG - ELAPSED TIME : 620.0117599964142
+2025-06-05 09:00:08,561 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:08,768 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 390.l.777720: Women & Women First
+2025-06-05 09:00:08,769 - yahoo_oauth - DEBUG - ELAPSED TIME : 620.2189259529114
+2025-06-05 09:00:08,769 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:08,968 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 399.l.440905: Women & Women First
+2025-06-05 09:00:08,968 - yahoo_oauth - DEBUG - ELAPSED TIME : 620.4183838367462
+2025-06-05 09:00:08,968 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:09,192 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 399.l.837311: The Lost Year
+2025-06-05 09:00:09,192 - yahoo_oauth - DEBUG - ELAPSED TIME : 620.6424238681793
+2025-06-05 09:00:09,192 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:09,386 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 406.l.735025: Women & Women First
+2025-06-05 09:00:09,386 - yahoo_oauth - DEBUG - ELAPSED TIME : 620.8368949890137
+2025-06-05 09:00:09,387 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:09,654 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 406.l.1065326: Rocky Mountain High
+2025-06-05 09:00:09,654 - yahoo_oauth - DEBUG - ELAPSED TIME : 621.1041088104248
+2025-06-05 09:00:09,654 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:09,840 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.527650: Women & Women First
+2025-06-05 09:00:09,840 - yahoo_oauth - DEBUG - ELAPSED TIME : 621.2905371189117
+2025-06-05 09:00:09,840 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:10,096 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.1088817: Rocky Mountain High
+2025-06-05 09:00:10,096 - yahoo_oauth - DEBUG - ELAPSED TIME : 621.5467810630798
+2025-06-05 09:00:10,096 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:10,360 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 414.l.1194955: Wet Hot Tahoe Summer
+2025-06-05 09:00:10,360 - yahoo_oauth - DEBUG - ELAPSED TIME : 621.8106009960175
+2025-06-05 09:00:10,360 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:10,609 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.367879: Wet Hot Tahoe Summer
+2025-06-05 09:00:10,610 - yahoo_oauth - DEBUG - ELAPSED TIME : 622.0600328445435
+2025-06-05 09:00:10,610 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:10,836 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.841006: Move the Raiders to PDX
+2025-06-05 09:00:10,836 - yahoo_oauth - DEBUG - ELAPSED TIME : 622.2867720127106
+2025-06-05 09:00:10,836 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:11,018 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 423.l.951488: Sequoiabowl I
+2025-06-05 09:00:11,018 - yahoo_oauth - DEBUG - ELAPSED TIME : 622.4686968326569
+2025-06-05 09:00:11,018 - yahoo_oauth - DEBUG - TOKEN IS STILL VALID
+2025-06-05 09:00:11,269 - yahoo_fantasy_oauth_v2 - INFO - ✅ Retrieved data for league 449.l.674707: Idaho's DEI Quota
+2025-06-05 09:00:11,270 - __main__ - INFO - ✅ After filtering: 44 leagues (removed 6 Yahoo Public leagues)
+2025-06-05 09:00:11,270 - __main__ - INFO - 📋 ALL non-public leagues:
+2025-06-05 09:00:11,270 - __main__ - INFO -  1. Owned In the Face By G.W. Bush (2006) - 10 teams - ID: 165.l.46359
+2025-06-05 09:00:11,270 - __main__ - INFO -  2. Oakdale Park (2006) - 10 teams - ID: 153.l.76788
+2025-06-05 09:00:11,270 - __main__ - INFO -  3. oakdale park (2006) - 10 teams - ID: 147.l.14810
+2025-06-05 09:00:11,270 - __main__ - INFO -  4. Jesse And The McBum de BumBums (2005) - 10 teams - ID: 131.l.40158
+2025-06-05 09:00:11,270 - __main__ - INFO -  5. Oakdale Park (2005) - 8 teams - ID: 124.l.109785
+2025-06-05 09:00:11,270 - __main__ - INFO -  6. Freezer (2005) - 6 teams - ID: 113.l.71701
+2025-06-05 09:00:11,270 - __main__ - INFO -  7. Oakdale Park (2004) - 6 teams - ID: 112.l.292452
+2025-06-05 09:00:11,270 - __main__ - INFO -  8. Oakdale High (2007) - 8 teams - ID: 171.l.174937
+2025-06-05 09:00:11,270 - __main__ - INFO -  9. Oakdale #1 (2007) - 6 teams - ID: 171.l.306751
+2025-06-05 09:00:11,271 - __main__ - INFO - 10. baseball2 (2007) - 8 teams - ID: 171.l.306762
+2025-06-05 09:00:11,271 - __main__ - INFO - 11. Oakdale 2 (2007) - 6 teams - ID: 175.l.86092
+2025-06-05 09:00:11,271 - __main__ - INFO - 12. Oakdale Park (2007) - 8 teams - ID: 175.l.658531
+2025-06-05 09:00:11,271 - __main__ - INFO - 13. Oakdale Park (2007) - 4 teams - ID: 187.l.18319
+2025-06-05 09:00:11,271 - __main__ - INFO - 14. Oakdale Park (2008) - 8 teams - ID: 195.l.210951
+2025-06-05 09:00:11,271 - __main__ - INFO - 15. The Draft (2008) - 10 teams - ID: 199.l.42364
+2025-06-05 09:00:11,271 - __main__ - INFO - 16. Engaged (2009) - 10 teams - ID: 222.l.222935
+2025-06-05 09:00:11,271 - __main__ - INFO - 17. Football Gods 15 (2010) - 12 teams - ID: 242.l.245298
+2025-06-05 09:00:11,271 - __main__ - INFO - 18. Round 6 (2010) - 10 teams - ID: 242.l.413666
+2025-06-05 09:00:11,271 - __main__ - INFO - 19. Christian Fellowship League (2010) - 9 teams - ID: 242.l.10035622710
+2025-06-05 09:00:11,271 - __main__ - INFO - 20. Lock It Up (2011) - 10 teams - ID: 257.l.89145
+2025-06-05 09:00:11,271 - __main__ - INFO - 21. Power House League (2011) - 6 teams - ID: 257.l.656437
+2025-06-05 09:00:11,271 - __main__ - INFO - 22. The League About Nothing (2012) - 10 teams - ID: 273.l.107980
+2025-06-05 09:00:11,271 - __main__ - INFO - 23. Rosterbaters Anonymous (2013) - 10 teams - ID: 314.l.319572
+2025-06-05 09:00:11,271 - __main__ - INFO - 24. 10 Years 10 Assholes (2014) - 10 teams - ID: 331.l.355899
+2025-06-05 09:00:11,271 - __main__ - INFO - 25. Concussion Factory (2014) - 6 teams - ID: 331.l.947050
+2025-06-05 09:00:11,272 - __main__ - INFO - 26. Luke's Kingdom (2015) - 10 teams - ID: 348.l.655822
+2025-06-05 09:00:11,272 - __main__ - INFO - 27. The Great SF Draft (2016) - 10 teams - ID: 359.l.696366
+2025-06-05 09:00:11,272 - __main__ - INFO - 28. The Great SF Draft (2017) - 10 teams - ID: 371.l.722293
+2025-06-05 09:00:11,272 - __main__ - INFO - 29. Go Fuck Yourself San Diego (2017) - 10 teams - ID: 371.l.1025465
+2025-06-05 09:00:11,272 - __main__ - INFO - 30. Go Fuck Yourself San Diego (2018) - 10 teams - ID: 380.l.888945
+2025-06-05 09:00:11,272 - __main__ - INFO - 31. Sleepless In Seattle (2018) - 10 teams - ID: 380.l.1143665
+2025-06-05 09:00:11,272 - __main__ - INFO - 32. Sleepless In Seattle (2019) - 10 teams - ID: 390.l.567043
+2025-06-05 09:00:11,272 - __main__ - INFO - 33. Women & Women First (2019) - 10 teams - ID: 390.l.777720
+2025-06-05 09:00:11,272 - __main__ - INFO - 34. Women & Women First (2020) - 10 teams - ID: 399.l.440905
+2025-06-05 09:00:11,272 - __main__ - INFO - 35. The Lost Year (2020) - 10 teams - ID: 399.l.837311
+2025-06-05 09:00:11,272 - __main__ - INFO - 36. Women & Women First (2021) - 10 teams - ID: 406.l.735025
+2025-06-05 09:00:11,272 - __main__ - INFO - 37. Rocky Mountain High (2021) - 10 teams - ID: 406.l.1065326
+2025-06-05 09:00:11,273 - __main__ - INFO - 38. Women & Women First (2022) - 10 teams - ID: 414.l.527650
+2025-06-05 09:00:11,273 - __main__ - INFO - 39. Rocky Mountain High (2022) - 10 teams - ID: 414.l.1088817
+2025-06-05 09:00:11,273 - __main__ - INFO - 40. Wet Hot Tahoe Summer (2022) - 10 teams - ID: 414.l.1194955
+2025-06-05 09:00:11,273 - __main__ - INFO - 41. Wet Hot Tahoe Summer (2023) - 10 teams - ID: 423.l.367879
+2025-06-05 09:00:11,273 - __main__ - INFO - 42. Move the Raiders to PDX (2023) - 10 teams - ID: 423.l.841006
+2025-06-05 09:00:11,273 - __main__ - INFO - 43. Sequoiabowl I (2023) - 8 teams - ID: 423.l.951488
+2025-06-05 09:00:11,273 - __main__ - INFO - 44. Idaho's DEI Quota (2024) - 10 teams - ID: 449.l.674707
+2025-06-05 09:00:11,273 - __main__ - INFO - 
+📈 League distribution by season:
+2025-06-05 09:00:11,273 - __main__ - INFO -   2004: 1 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2005: 3 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2006: 3 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2007: 6 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2008: 2 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2009: 1 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2010: 3 leagues
+2025-06-05 09:00:11,273 - __main__ - INFO -   2011: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2012: 1 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2013: 1 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2014: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2015: 1 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2016: 1 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2017: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2018: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2019: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2020: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2021: 2 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2022: 3 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2023: 3 leagues
+2025-06-05 09:00:11,274 - __main__ - INFO -   2024: 1 leagues
