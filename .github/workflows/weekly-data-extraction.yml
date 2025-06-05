@@ -104,23 +104,17 @@ jobs:
           
           if [[ "${{ github.event.inputs.force_full_extraction }}" == "true" ]]; then
             echo "🔄 Running FULL extraction (including draft data)"
-            python3 run_final_complete_extraction.py
-            
-            # Find the most recent complete file
-            latest_file=$(ls -t yahoo_fantasy_FINAL_complete_data_*.json | head -1)
-            
-            # Extract draft data and merge
-            python3 extract_draft_data.py
+            python3 scripts/full_extraction.py
             
             # Find the most recent file with drafts
-            latest_draft_file=$(ls -t yahoo_fantasy_COMPLETE_with_drafts_*.json | head -1)
+            latest_draft_file=$(ls -t data/current/yahoo_fantasy_COMPLETE_with_drafts_*.json | head -1)
             echo "data_file=$latest_draft_file" >> $GITHUB_OUTPUT
           else
             echo "⚡ Running WEEKLY extraction (teams, rosters, matchups, transactions)"
-            python3 weekly_data_extraction.py
+            python3 scripts/weekly_extraction.py
             
             # Find the most recent weekly extraction file
-            latest_file=$(ls -t yahoo_fantasy_weekly_data_*.json | head -1)
+            latest_file=$(ls -t data/current/yahoo_fantasy_weekly_data_*.json | head -1)
             echo "data_file=$latest_file" >> $GITHUB_OUTPUT
           fi
 
@@ -129,7 +123,7 @@ jobs:
           DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
         run: |
           echo "🚀 Deploying data to Heroku Postgres"
-          python3 deploy_to_heroku_postgres.py --data-file "${{ steps.extraction.outputs.data_file }}" --database-url "$DATABASE_URL"
+          python3 scripts/deploy.py --data-file "${{ steps.extraction.outputs.data_file }}" --database-url "$DATABASE_URL"
 
       - name: Archive extraction file
         uses: actions/upload-artifact@v3

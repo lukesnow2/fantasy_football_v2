@@ -1,0 +1,23 @@
+2025-06-05 16:43:06,821 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:43:06.821362
+2025-06-05 16:43:06,821 - INFO - ⏸️ Not currently in fantasy season (Aug 18 - Jan 18) - skipping extraction
+2025-06-05 16:47:43,973 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:47:43.973288
+2025-06-05 16:47:43,973 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:47:43,973 - INFO - 🔑 Authenticating...
+2025-06-05 16:47:43,973 - DEBUG - Checking 
+2025-06-05 16:47:43,973 - ERROR - ❌ Authentication failed: [Errno 2] No such file or directory: 'oauth2.json'
+2025-06-05 16:47:43,973 - ERROR - Make sure oauth2.json file exists with valid tokens
+2025-06-05 16:47:43,974 - ERROR - ❌ Authentication failed
+2025-06-05 16:47:58,567 - INFO - 🗓️ Starting WEEKLY fantasy football data extraction at 2025-06-05 16:47:58.567514
+2025-06-05 16:47:58,567 - INFO - 🧪 FORCE MODE: Running extraction during off-season for testing
+2025-06-05 16:47:58,567 - INFO - 🔑 Authenticating...
+2025-06-05 16:47:58,568 - DEBUG - Checking 
+2025-06-05 16:47:58,569 - DEBUG - ELAPSED TIME : 4777.099720001221
+2025-06-05 16:47:58,569 - DEBUG - TOKEN HAS EXPIRED
+2025-06-05 16:47:58,569 - DEBUG - REFRESHING TOKEN
+2025-06-05 16:47:58,709 - DEBUG - ELAPSED TIME : 0.1399691104888916
+2025-06-05 16:47:58,709 - DEBUG - TOKEN IS STILL VALID
+2025-06-05 16:48:00,145 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-05 16:48:00,145 - INFO - 📋 Getting active leagues for 2024 season...
+2025-06-05 16:48:00,145 - INFO - 🔍 Checking leagues for 2004...
+2025-06-05 16:48:10,069 - INFO -   No leagues found for 2004
+2025-06-05 16:48:10,069 - INFO - 🔍 Checking leagues for 2005...
