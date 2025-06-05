@@ -145,9 +145,78 @@ jobs:
           echo "📊 Data file: ${{ steps.extraction.outputs.data_file }}"
           echo "🗄️ Deployed to Heroku Postgres"
 
+      - name: Send success email
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "✅ Fantasy Football Pipeline Success - ${{ github.run_number }}"
+          to: lukesnow2@gmail.com
+          from: Fantasy Football Bot <${{ secrets.EMAIL_USERNAME }}>
+          html_body: |
+            <h2>🏆 Fantasy Football Data Pipeline Completed Successfully!</h2>
+            
+            <p><strong>📅 Run Date:</strong> ${{ github.event.head_commit.timestamp }}</p>
+            <p><strong>🔢 Run Number:</strong> #${{ github.run_number }}</p>
+            <p><strong>📊 Data File:</strong> ${{ steps.extraction.outputs.data_file }}</p>
+            <p><strong>⚡ Extraction Type:</strong> ${{ github.event.inputs.force_full_extraction == 'true' && 'Full Extraction (with draft data)' || 'Weekly Update' }}</p>
+            
+            <h3>📈 Pipeline Status:</h3>
+            <ul>
+              <li>✅ Data extraction completed</li>
+              <li>✅ Deployed to Heroku Postgres</li>
+              <li>✅ Artifacts archived for 30 days</li>
+            </ul>
+            
+            <p><strong>🔗 View Details:</strong> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">GitHub Actions Run</a></p>
+            
+            <hr>
+            <p><small>🤖 Automated message from Fantasy Football Data Pipeline</small></p>
+
       - name: Send failure notification
         if: failure()
         run: |
           echo "❌ Weekly fantasy football data pipeline failed!"
           echo "🔍 Check the logs for details"
-          exit 1 
+
+      - name: Send failure email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "❌ Fantasy Football Pipeline Failed - ${{ github.run_number }}"
+          to: lukesnow2@gmail.com
+          from: Fantasy Football Bot <${{ secrets.EMAIL_USERNAME }}>
+          html_body: |
+            <h2>⚠️ Fantasy Football Data Pipeline Failed!</h2>
+            
+            <p><strong>📅 Run Date:</strong> ${{ github.event.head_commit.timestamp }}</p>
+            <p><strong>🔢 Run Number:</strong> #${{ github.run_number }}</p>
+            <p><strong>⚡ Extraction Type:</strong> ${{ github.event.inputs.force_full_extraction == 'true' && 'Full Extraction (with draft data)' || 'Weekly Update' }}</p>
+            
+            <h3>❌ Failure Details:</h3>
+            <p>The automated fantasy football data pipeline encountered an error and could not complete successfully.</p>
+            
+            <h3>🔧 Next Steps:</h3>
+            <ol>
+              <li>Check the <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">GitHub Actions logs</a> for detailed error information</li>
+              <li>Common issues to check:
+                <ul>
+                  <li>Yahoo API authentication (OAuth token expired?)</li>
+                  <li>Heroku database connection</li>
+                  <li>Network/rate limiting issues</li>
+                </ul>
+              </li>
+              <li>Retry manually if needed from the Actions tab</li>
+            </ol>
+            
+            <p><strong>🔗 View Logs:</strong> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">GitHub Actions Run</a></p>
+            
+            <hr>
+            <p><small>🤖 Automated message from Fantasy Football Data Pipeline</small></p> 
