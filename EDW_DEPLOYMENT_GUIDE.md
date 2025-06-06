@@ -2,15 +2,16 @@
 
 ## Overview
 
-The Fantasy Football Enterprise Data Warehouse (EDW) provides a comprehensive analytical layer with:
-- **Dimensional modeling** for efficient analytics
+The Fantasy Football Enterprise Data Warehouse (EDW) provides a comprehensive analytical layer with dimensional modeling, automated deployment, and comprehensive testing for advanced analytics.
+
+**Key Features:**
+- **15 tables**: 6 dimensions + 5 facts + 4 marts
+- **5 analytical views** for dashboards
 - **Automated deployment** via GitHub Actions
-- **Comprehensive testing** suite
 - **Cloud-ready** architecture
 
 ## 🚀 Quick Start
 
-### Local Development
 ```bash
 # Deploy complete EDW
 export DATABASE_URL="your_database_url"
@@ -23,10 +24,7 @@ python src/edw_schema/test_edw_deployment.py --verbose
 python scripts/deploy_with_edw.py --data-file "data/current/latest.json"
 ```
 
-### Production (GitHub Actions)
-The EDW automatically deploys after successful data extraction via the existing **Weekly Fantasy Football Data Pipeline** workflow.
-
-**Manual trigger**: Go to Actions → Weekly Fantasy Football Data Pipeline → Run workflow
+**Production**: EDW automatically deploys via GitHub Actions after successful data extraction.
 
 ## 🏛️ EDW Architecture
 
