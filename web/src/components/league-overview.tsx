@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { motion } from "framer-motion";
@@ -24,29 +25,51 @@ interface OverviewData {
     totalMembers: number;
     totalGames: number;
     hallOfFame: number;
+    totalLeagues: number;
+    activeLeagues: number;
   };
   highlights: {
     currentChampion: {
       name: string;
       season: string;
+      totalTitles?: number;
     } | null;
     highestScorer: {
       name: string;
       score: number;
       season: string;
       week: string;
+      winPercentage?: number;
     } | null;
     bestDraftPick: {
       playerName: string;
       pickNumber: number;
+      roundNumber?: number;
       manager: string;
       season: string;
+      valueScore?: number;
     } | null;
     mostChampionships: {
       manager: string;
       count: number;
+      winPercentage?: number;
+      totalSeasons?: number;
     } | null;
   };
+  leagueInsights?: {
+    mostCompetitive: string;
+    competitivenessTier: string;
+    balanceIndex: number;
+    avgMarginOfVictory: number;
+    transactionVolume: number;
+  };
+  topPerformers: Array<{
+    rank: number;
+    name: string;
+    record: string;
+    points: number;
+    winPercentage?: number;
+  }>;
 }
 
 export function LeagueOverview() {
@@ -70,15 +93,29 @@ export function LeagueOverview() {
       });
   }, []);
 
-  const highlights = [
+  interface HighlightItem {
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    description: string;
+    value: string;
+    badge: string;
+    progress: number;
+    color: string;
+    extraInfo?: string;
+  }
+
+  const highlights: HighlightItem[] = [
     {
       icon: Crown,
       title: "Current Champion",
       description: data?.highlights.currentChampion ? `${data.highlights.currentChampion.season} Season Winner` : "Recent Winner",
       value: data?.highlights.currentChampion?.name || (loading ? "Loading..." : "No data"),
-      badge: data?.highlights.currentChampion ? "Champion" : "TBD",
+      badge: data?.highlights.currentChampion ? 
+        (data.highlights.currentChampion.totalTitles && data.highlights.currentChampion.totalTitles > 1 ? 
+          `${data.highlights.currentChampion.totalTitles}x Champion` : "Champion") : "TBD",
       progress: data?.highlights.currentChampion ? 100 : 0,
-      color: "from-yellow-400 to-orange-500"
+      color: "from-yellow-400 to-orange-500",
+      extraInfo: data?.highlights.currentChampion?.totalTitles ? `Career: ${data.highlights.currentChampion.totalTitles} titles` : undefined
     },
     {
       icon: TrendingUp,
@@ -87,16 +124,19 @@ export function LeagueOverview() {
       value: data?.highlights.highestScorer ? `${data.highlights.highestScorer.score.toLocaleString()} pts` : (loading ? "Loading..." : "No data"),
       badge: data?.highlights.highestScorer ? `${data.highlights.highestScorer.season} Record` : "Record",
       progress: data?.highlights.highestScorer ? 95 : 0,
-      color: "from-green-400 to-blue-500"
+      color: "from-green-400 to-blue-500",
+      extraInfo: data?.highlights.highestScorer?.winPercentage ? `${data.highlights.highestScorer.winPercentage}% win rate` : undefined
     },
     {
       icon: Target,
       title: "Best Draft Pick",
       description: "Greatest value selection",
       value: data?.highlights.bestDraftPick?.playerName || (loading ? "Loading..." : "No data"),
-      badge: data?.highlights.bestDraftPick ? `Pick ${data.highlights.bestDraftPick.pickNumber}, ${data.highlights.bestDraftPick.season}` : "Draft Pick",
-      progress: data?.highlights.bestDraftPick ? 88 : 0,
-      color: "from-purple-400 to-pink-500"
+      badge: data?.highlights.bestDraftPick ? 
+        `Pick ${data.highlights.bestDraftPick.pickNumber}${data.highlights.bestDraftPick.roundNumber ? ` (R${data.highlights.bestDraftPick.roundNumber})` : ''}, ${data.highlights.bestDraftPick.season}` : "Draft Pick",
+      progress: data?.highlights.bestDraftPick ? Math.min((data.highlights.bestDraftPick.valueScore || 1) * 30, 100) : 0,
+      color: "from-purple-400 to-pink-500",
+      extraInfo: data?.highlights.bestDraftPick?.valueScore ? `Value Score: ${data.highlights.bestDraftPick.valueScore}x` : undefined
     },
     {
       icon: Award,
@@ -105,7 +145,9 @@ export function LeagueOverview() {
       value: data?.highlights.mostChampionships ? `${data.highlights.mostChampionships.count} Titles` : (loading ? "Loading..." : "No data"),
       badge: data?.highlights.mostChampionships?.manager || "Champion",
       progress: data?.highlights.mostChampionships ? 92 : 0,
-      color: "from-blue-400 to-indigo-500"
+      color: "from-blue-400 to-indigo-500",
+      extraInfo: data?.highlights.mostChampionships?.winPercentage && data?.highlights.mostChampionships?.totalSeasons ? 
+        `${data.highlights.mostChampionships.winPercentage}% career win rate (${data.highlights.mostChampionships.totalSeasons} seasons)` : undefined
     }
   ];
 
@@ -171,6 +213,11 @@ export function LeagueOverview() {
                 <CardContent className="relative">
                   <div className="space-y-4">
                     <div className="text-2xl font-bold">{highlight.value}</div>
+                    {highlight.extraInfo && (
+                      <div className="text-sm text-muted-foreground">
+                        {highlight.extraInfo}
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
                         <span>Performance</span>
