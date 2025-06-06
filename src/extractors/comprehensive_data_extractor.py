@@ -15,6 +15,7 @@ from yahoo_oauth import OAuth2
 import yahoo_fantasy_api as yfa
 import requests
 from dotenv import load_dotenv
+import random
 
 # Load environment variables
 load_dotenv()
@@ -137,9 +138,12 @@ class ExtractedDraftPick:
 class YahooFantasyExtractor:
     """Comprehensive Yahoo Fantasy data extractor"""
     
-    def __init__(self):
+    def __init__(self, resume_from_league=None):
         self.oauth = None
         self.game = None
+        self.resume_from_league = resume_from_league
+        self.request_count = 0
+        self.last_request_time = 0
         self.extracted_data = {
             'leagues': [],
             'teams': [],
@@ -153,16 +157,49 @@ class YahooFantasyExtractor:
     def authenticate(self) -> bool:
         """Authenticate with Yahoo Fantasy API"""
         try:
-            # Initialize OAuth using existing token file (check multiple locations)
-            oauth_file = 'oauth2.json'
-            if not os.path.exists(oauth_file):
-                oauth_file = 'data/current/oauth2.json'
+            # Check for existing oauth file in multiple locations
+            oauth_file = None
+            potential_files = ['oauth2.json', 'data/current/oauth2.json']
             
-            self.oauth = OAuth2(None, None, from_file=oauth_file)
+            for file_path in potential_files:
+                if os.path.exists(file_path):
+                    oauth_file = file_path
+                    logger.info(f"🔑 Found existing OAuth file: {oauth_file}")
+                    break
             
-            if not self.oauth.token_is_valid():
-                logger.info("🔑 Token invalid, refreshing...")
-                self.oauth.refresh_access_token()
+            if oauth_file:
+                # Use existing oauth file
+                self.oauth = OAuth2(None, None, from_file=oauth_file)
+                
+                if not self.oauth.token_is_valid():
+                    logger.info("🔑 Token invalid, refreshing...")
+                    self.oauth.refresh_access_token()
+            else:
+                # No oauth file found - create one from environment variables
+                logger.info("🔑 No OAuth file found, creating from environment variables...")
+                
+                client_key = os.getenv('YAHOO_CLIENT_KEY')
+                client_secret = os.getenv('YAHOO_CLIENT_SECRET')
+                
+                if not client_key or not client_secret:
+                    logger.error("❌ No OAuth file found and YAHOO_CLIENT_KEY/YAHOO_CLIENT_SECRET not set in environment")
+                    logger.error("Please set these environment variables or provide an oauth2.json file")
+                    return False
+                
+                # Create oauth file with credentials
+                oauth_data = {
+                    "consumer_key": client_key,
+                    "consumer_secret": client_secret
+                }
+                
+                oauth_file = 'oauth2.json'
+                with open(oauth_file, 'w') as f:
+                    json.dump(oauth_data, f, indent=2)
+                
+                logger.info(f"✅ Created {oauth_file} with credentials from environment")
+                
+                # Initialize OAuth with new file
+                self.oauth = OAuth2(None, None, from_file=oauth_file)
             
             # Create Game object for NFL
             self.game = yfa.Game(self.oauth, 'nfl')
@@ -174,7 +211,8 @@ class YahooFantasyExtractor:
             
         except Exception as e:
             logger.error(f"❌ Authentication failed: {e}")
-            logger.error("Make sure oauth2.json file exists with valid tokens")
+            if 'oauth2.json' in str(e):
+                logger.error("💡 Tip: Make sure YAHOO_CLIENT_KEY and YAHOO_CLIENT_SECRET are set in your .env file")
             return False
     
     def get_all_leagues(self) -> List[Dict[str, Any]]:
@@ -424,15 +462,14 @@ class YahooFantasyExtractor:
             teams_data = league.teams()
             rosters = []
             
-            # Extract rosters for key weeks (start, middle, current)
-            sample_weeks = [start_week, min(8, end_week), current_week]
-            sample_weeks = list(set([w for w in sample_weeks if w <= end_week]))  # Remove duplicates and invalid weeks
+            # Extract rosters for ALL weeks for complete data
+            all_weeks = list(range(start_week, end_week + 1))
             
             for team_id in teams_data.keys():
                 try:
                     team = league.to_team(team_id)
                     
-                    for week in sample_weeks:
+                    for week in all_weeks:
                         try:
                             roster_data = team.roster(week=week)
                             
@@ -476,11 +513,10 @@ class YahooFantasyExtractor:
             end_week = int(settings.get('end_week', 17))
             current_week = int(settings.get('current_week', 17))
             
-            # Sample key weeks to avoid too many API calls
-            sample_weeks = [start_week, min(8, end_week), current_week]
-            sample_weeks = list(set([w for w in sample_weeks if w <= end_week]))
+            # Extract ALL weeks for complete matchup data
+            all_weeks = list(range(start_week, end_week + 1))
             
-            for week in sample_weeks:
+            for week in all_weeks:
                 try:
                     matchup_data = league.matchups(week=week)
                     
@@ -602,7 +638,7 @@ class YahooFantasyExtractor:
             
             for trans_type in transaction_types:
                 try:
-                    league_transactions = league.transactions(trans_type, 25)  # Limit to 25 per type
+                    league_transactions = league.transactions(trans_type, 500)  # Increased limit for complete data
                     
                     for trans_data in league_transactions:
                         try:
@@ -803,9 +839,10 @@ class YahooFantasyExtractor:
             return []
 
     
-    def extract_all_data(self) -> Dict[str, List[Any]]:
-        """Extract all data from all leagues"""
-        logger.info("🚀 Starting comprehensive data extraction...")
+    def extract_all_data(self, batch_size: int = 5, batch_delay: int = 300) -> Dict[str, List[Any]]:
+        """Extract all data from all leagues using batch processing to avoid rate limits"""
+        logger.info("🚀 Starting comprehensive data extraction with batch processing...")
+        logger.info(f"⚙️ Settings: {batch_size} leagues per batch, {batch_delay}s delay between batches")
         
         if not self.authenticate():
             return self.extracted_data
@@ -817,52 +854,93 @@ class YahooFantasyExtractor:
             logger.error("No leagues found")
             return self.extracted_data
         
-        # Extract data for each league
-        for i, league_info in enumerate(leagues_data, 1):
-            league_id = league_info['league_id']
-            league_name = league_info['name']
-            logger.info(f"📋 Processing league {i}/{len(leagues_data)}: {league_name} ({league_info['season']})")
-            
-            try:
-                # Extract league data
-                league_data = self.extract_league_data(league_info)
-                self.extracted_data['leagues'].append(asdict(league_data))
-                
-                # Extract teams
-                teams = self.extract_teams_for_league(league_id)
-                for team in teams:
-                    self.extracted_data['teams'].append(asdict(team))
-                
-                # Extract rosters
-                rosters = self.extract_rosters_for_league(league_id, teams)
-                for roster in rosters:
-                    self.extracted_data['rosters'].append(asdict(roster))
-                
-                # Extract matchups
-                matchups = self.extract_matchups_for_league(league_id)
-                for matchup in matchups:
-                    self.extracted_data['matchups'].append(asdict(matchup))
-                
-                # Extract transactions
-                transactions = self.extract_transactions_for_league(league_id)
-                for transaction in transactions:
-                    self.extracted_data['transactions'].append(asdict(transaction))
-                
-                # Extract draft picks
-                draft_picks = self.extract_draft_for_league(league_id)
-                for draft_pick in draft_picks:
-                    self.extracted_data['draft_picks'].append(asdict(draft_pick))
-                
-                # Rate limiting between leagues
-                time.sleep(0.5)
-                
-            except Exception as e:
-                logger.error(f"Error processing league {league_name}: {e}")
-                continue
+        total_leagues = len(leagues_data)
+        total_batches = (total_leagues + batch_size - 1) // batch_size  # Ceiling division
         
-        # Log summary
-        logger.info("✅ Data extraction completed!")
-        logger.info(f"📊 Summary:")
+        logger.info(f"📊 Total leagues: {total_leagues}, Batches: {total_batches}")
+        
+        # Process leagues in batches
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, total_leagues)
+            batch_leagues = leagues_data[start_idx:end_idx]
+            
+            logger.info(f"\n🔄 Processing batch {batch_num + 1}/{total_batches} ({len(batch_leagues)} leagues)")
+            
+            # Process each league in the current batch
+            for i, league_info in enumerate(batch_leagues):
+                league_idx = start_idx + i + 1
+                league_id = league_info['league_id']
+                league_name = league_info['name']
+                logger.info(f"📋 League {league_idx}/{total_leagues}: {league_name} ({league_info['season']})")
+                
+                try:
+                    # Extract league data
+                    league_data = self.extract_league_data(league_info)
+                    self.extracted_data['leagues'].append(asdict(league_data))
+                    
+                    # Extract teams
+                    teams = self.extract_teams_for_league(league_id)
+                    for team in teams:
+                        self.extracted_data['teams'].append(asdict(team))
+                    
+                    # Rate limiting after teams
+                    time.sleep(2.0)
+                    
+                    # Extract rosters
+                    rosters = self.extract_rosters_for_league(league_id, teams)
+                    for roster in rosters:
+                        self.extracted_data['rosters'].append(asdict(roster))
+                    
+                    # Rate limiting after rosters (heavy operation)
+                    time.sleep(3.0)
+                    
+                    # Extract matchups
+                    matchups = self.extract_matchups_for_league(league_id)
+                    for matchup in matchups:
+                        self.extracted_data['matchups'].append(asdict(matchup))
+                    
+                    # Rate limiting after matchups
+                    time.sleep(2.0)
+                    
+                    # Extract transactions
+                    transactions = self.extract_transactions_for_league(league_id)
+                    for transaction in transactions:
+                        self.extracted_data['transactions'].append(asdict(transaction))
+                    
+                    # Rate limiting after transactions
+                    time.sleep(2.0)
+                    
+                    # Extract draft picks
+                    draft_picks = self.extract_draft_for_league(league_id)
+                    for draft_pick in draft_picks:
+                        self.extracted_data['draft_picks'].append(asdict(draft_pick))
+                    
+                    # Longer rate limiting between leagues
+                    time.sleep(5.0)
+                    
+                    logger.info(f"✅ Successfully processed {league_name}")
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error processing league {league_name}: {e}")
+                    # Still wait on errors to avoid hammering the API
+                    time.sleep(10.0)
+                    continue
+            
+            # Save progress after each batch
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            progress_filename = f'data/current/yahoo_fantasy_batch_{batch_num + 1}_progress_{timestamp}.json'
+            self.save_to_json(progress_filename)
+            logger.info(f"💾 Batch {batch_num + 1} progress saved: {progress_filename}")
+            
+            # Long delay between batches (except for the last batch)
+            if batch_num < total_batches - 1:
+                logger.info(f"⏰ Waiting {batch_delay}s before next batch to avoid rate limits...")
+                time.sleep(batch_delay)
+        
+        # Log final summary
+        logger.info("🎉 Data extraction completed!")
+        logger.info(f"📊 Final Summary:")
         logger.info(f"  - Leagues: {len(self.extracted_data['leagues'])}")
         logger.info(f"  - Teams: {len(self.extracted_data['teams'])}")
         logger.info(f"  - Rosters: {len(self.extracted_data['rosters'])}")
@@ -900,11 +978,13 @@ def main():
     """Main execution function"""
     extractor = YahooFantasyExtractor()
     
-    # Extract all data
-    data = extractor.extract_all_data()
+    # Extract all data with batch processing (5 leagues per batch, 300s between batches)
+    data = extractor.extract_all_data(batch_size=5, batch_delay=300)
     
-    # Save to JSON
-    extractor.save_to_json()
+    # Save final data
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    final_filename = f'data/current/yahoo_fantasy_COMPLETE_{timestamp}.json'
+    extractor.save_to_json(final_filename)
     
     return data
 

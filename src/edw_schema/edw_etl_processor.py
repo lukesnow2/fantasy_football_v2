@@ -361,10 +361,17 @@ class EdwEtlProcessor:
         # Extract unique players from roster data
         for roster in self.data.get('rosters', []):
             player_id = roster['player_id']
+            player_name = roster['player_name']
+            
+            # Skip test data - filter out any test/sample/mock players
+            if any(test_word in player_name.lower() for test_word in ['test', 'sample', 'mock', 'demo']):
+                logger.warning(f"⚠️ Skipping test player: {player_name} (ID: {player_id})")
+                continue
+            
             if player_id not in players:
                 players[player_id] = {
                     'player_id': player_id,
-                    'player_name': roster['player_name'],
+                    'player_name': player_name,
                     'primary_position': roster.get('position'),
                     'eligible_positions': roster.get('eligible_positions'),
                     'nfl_team': None,  # Not available in operational data
@@ -375,7 +382,297 @@ class EdwEtlProcessor:
                     'valid_to': datetime(9999, 12, 31)
                 }
         
+        logger.info(f"🏈 Transformed {len(players)} real players (filtered out test data)")
         return list(players.values())
+    
+    def transform_fact_roster(self) -> List[Dict]:
+        """Transform roster data into fact_roster format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for roster fact transformation")
+            return facts
+        
+        # Use cached dimension mappings (no database queries in loop)
+        league_keys = self.dim_mappings.get('league_keys', {})
+        team_keys = self.dim_mappings.get('team_keys', {})
+        player_keys = self.dim_mappings.get('player_keys', {})
+        week_keys = self.dim_mappings.get('week_keys', {})
+        
+        for roster in self.data.get('rosters', []):
+            team_key = team_keys.get(roster['team_id'])
+            player_key = player_keys.get(roster['player_id'])
+            league_key = league_keys.get(roster['league_id'])
+            week_key = week_keys.get((roster.get('season', 2024), roster['week']))
+            
+            if not all([team_key, player_key, league_key, week_key]):
+                continue
+                
+            facts.append({
+                'team_key': team_key,
+                'player_key': player_key,
+                'league_key': league_key,
+                'week_key': week_key,
+                'season_year': roster.get('season', 2024),
+                'roster_position': roster.get('position'),
+                'is_starter': roster.get('selected_position') not in ['BN', 'IR'],
+                'weekly_points': float(roster.get('points', 0)),
+                'projected_points': float(roster.get('projected_points', 0)),
+                'ownership_percentage': None,
+                'acquisition_date': None,
+                'acquisition_type': None,
+                'roster_slot_type': roster.get('selected_position')
+            })
+        
+        return facts
+    
+    def transform_fact_matchup(self) -> List[Dict]:
+        """Transform matchup data into fact_matchup format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for matchup fact transformation")
+            return facts
+        
+        # Use cached dimension mappings (no database queries in loop)
+        league_keys = self.dim_mappings.get('league_keys', {})
+        team_keys = self.dim_mappings.get('team_keys', {})
+        week_keys = self.dim_mappings.get('week_keys', {})
+        
+        for matchup in self.data.get('matchups', []):
+            league_key = league_keys.get(matchup['league_id'])
+            team1_key = team_keys.get(matchup['team1_id'])
+            team2_key = team_keys.get(matchup['team2_id'])
+            week_key = week_keys.get((matchup.get('season', 2024), matchup['week']))
+            
+            if not all([league_key, team1_key, team2_key, week_key]):
+                continue
+            
+            team1_points = float(matchup.get('team1_points', 0))
+            team2_points = float(matchup.get('team2_points', 0))
+            
+            facts.append({
+                'league_key': league_key,
+                'week_key': week_key,
+                'season_year': matchup.get('season', 2024),
+                'team1_key': team1_key,
+                'team2_key': team2_key,
+                'team1_points': team1_points,
+                'team2_points': team2_points,
+                'point_difference': abs(team1_points - team2_points),
+                'total_points': team1_points + team2_points,
+                'winner_team_key': team1_key if team1_points > team2_points else team2_key if team2_points > team1_points else None,
+                'is_tie': team1_points == team2_points,
+                'margin_of_victory': abs(team1_points - team2_points),
+                'matchup_type': 'regular',
+                'is_upset': False
+            })
+        
+        return facts
+    
+    def transform_fact_transaction(self) -> List[Dict]:
+        """Transform transaction data into fact_transaction format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for transaction fact transformation")
+            return facts
+        
+        # Use cached dimension mappings (no database queries in loop)
+        league_keys = self.dim_mappings.get('league_keys', {})
+        team_keys = self.dim_mappings.get('team_keys', {})
+        player_keys = self.dim_mappings.get('player_keys', {})
+        
+        for transaction in self.data.get('transactions', []):
+            league_key = league_keys.get(transaction['league_id'])
+            
+            # Extract numeric player ID from Yahoo format (e.g., "124.p.5994" -> "5994")
+            raw_player_id = transaction['player_id']
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+            
+            player_key = player_keys.get(numeric_player_id)
+            
+            if not all([league_key, player_key]):
+                logger.debug(f"⚠️ Missing keys for transaction: league={league_key}, player={player_key} (raw={raw_player_id}, numeric={numeric_player_id})")
+                continue
+            
+            # Parse timestamp properly - handle different formats
+            try:
+                if 'T' in transaction['timestamp']:
+                    # ISO format: 2005-12-31T02:26:03
+                    transaction_date = datetime.fromisoformat(transaction['timestamp'].replace('T', ' ')).date()
+                else:
+                    # Already in datetime format
+                    transaction_date = datetime.strptime(transaction['timestamp'], '%Y-%m-%d %H:%M:%S').date()
+            except (ValueError, KeyError):
+                logger.warning(f"⚠️ Could not parse timestamp for transaction: {transaction.get('timestamp')}")
+                continue
+            
+            # Extract season from the timestamp (assume NFL season starts in September)
+            season_year = transaction_date.year
+            if transaction_date.month >= 9:  # September or later = current NFL season
+                season_year = transaction_date.year
+            else:  # January-August = previous NFL season
+                season_year = transaction_date.year - 1
+            
+            facts.append({
+                'league_key': league_key,
+                'player_key': player_key,
+                'season_year': season_year,
+                'transaction_date': transaction_date,
+                'transaction_week': None,  # Not available in data
+                'transaction_type': transaction['type'],
+                'from_team_key': team_keys.get(transaction.get('source_team_id')),
+                'to_team_key': team_keys.get(transaction.get('destination_team_id')),
+                'faab_bid': float(transaction.get('faab_bid', 0)) if transaction.get('faab_bid') else None,
+                'waiver_priority': None,  # Not available in data
+                'trade_group_id': None,  # Not available in data
+                'transaction_status': transaction.get('status', 'completed')
+            })
+        
+        return facts
+    
+    def transform_fact_draft(self) -> List[Dict]:
+        """Transform draft pick data into fact_draft format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for draft fact transformation")
+            return facts
+        
+        # Use cached dimension mappings (no database queries in loop)
+        league_keys = self.dim_mappings.get('league_keys', {})
+        team_keys = self.dim_mappings.get('team_keys', {})
+        player_keys = self.dim_mappings.get('player_keys', {})
+        
+        for draft_pick in self.data.get('draft_picks', []):
+            league_key = league_keys.get(draft_pick['league_id'])
+            player_key = player_keys.get(draft_pick['player_id'])
+            
+            # Map team_id to full team_id format for lookup
+            raw_team_id = draft_pick['team_id']
+            league_id = draft_pick['league_id']
+            # Construct full team_id: league_id + ".t." + team_id
+            full_team_id = f"{league_id}.t.{raw_team_id}"
+            team_key = team_keys.get(full_team_id)
+            
+            if not all([league_key, team_key, player_key]):
+                logger.debug(f"⚠️ Missing keys for draft pick: league={league_key}, team={team_key} (raw={raw_team_id}, full={full_team_id}), player={player_key}")
+                continue
+            
+            # Extract season from extracted_at timestamp
+            try:
+                if 'extracted_at' in draft_pick:
+                    extracted_date = datetime.fromisoformat(draft_pick['extracted_at'].replace('T', ' ').replace('Z', '')).date()
+                    season_year = extracted_date.year
+                    if extracted_date.month >= 9:  # September or later = current NFL season
+                        season_year = extracted_date.year
+                    else:  # January-August = previous NFL season  
+                        season_year = extracted_date.year - 1
+                else:
+                    season_year = 2024  # Default fallback
+            except (ValueError, KeyError):
+                season_year = 2024  # Default fallback
+            
+            facts.append({
+                'league_key': league_key,
+                'team_key': team_key,
+                'player_key': player_key,
+                'season_year': season_year,
+                'overall_pick': draft_pick['pick_number'],
+                'round_number': draft_pick.get('round_number', 1),
+                'pick_in_round': draft_pick.get('pick_in_round', (draft_pick['pick_number'] - 1) % 12 + 1),
+                'draft_cost': float(draft_pick.get('cost', 0)) if draft_pick.get('cost') else None,
+                'is_keeper_pick': draft_pick.get('is_keeper', False),
+                'season_points': None,  # Will be calculated later
+                'games_played': None,
+                'points_per_game': None
+            })
+        
+        return facts
+    
+    def transform_fact_team_performance(self) -> List[Dict]:
+        """Transform team performance data from matchups and rosters"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for team performance fact transformation")
+            return facts
+        
+        # Calculate team performance metrics from matchups and rosters
+        team_performance = {}
+        
+        # Process matchups for wins/losses/points
+        for matchup in self.data.get('matchups', []):
+            season_year = matchup.get('season', 2024)
+            week = matchup['week']
+            
+            for team_num in [1, 2]:
+                team_id = matchup[f'team{team_num}_id']
+                team_points = float(matchup.get(f'team{team_num}_points', 0))
+                opponent_points = float(matchup.get(f'team{3-team_num}_points', 0))
+                
+                key = (team_id, season_year, week)
+                if key not in team_performance:
+                    team_performance[key] = {
+                        'team_id': team_id,
+                        'league_id': matchup['league_id'],
+                        'season_year': season_year,
+                        'week': week,
+                        'wins': 0,
+                        'losses': 0,
+                        'ties': 0,
+                        'weekly_points': team_points,
+                        'points_against': opponent_points
+                    }
+                
+                if team_points > opponent_points:
+                    team_performance[key]['wins'] = 1
+                elif team_points < opponent_points:
+                    team_performance[key]['losses'] = 1
+                else:
+                    team_performance[key]['ties'] = 1
+        
+        # Convert to fact format with dimension keys (use cached mappings)
+        league_keys = self.dim_mappings.get('league_keys', {})
+        team_keys = self.dim_mappings.get('team_keys', {})
+        week_keys = self.dim_mappings.get('week_keys', {})
+        
+        for perf in team_performance.values():
+            team_key = team_keys.get(perf['team_id'])
+            league_key = league_keys.get(perf['league_id'])
+            week_key = week_keys.get((perf['season_year'], perf['week']))
+            
+            if not all([team_key, league_key, week_key]):
+                continue
+            
+            facts.append({
+                'team_key': team_key,
+                'league_key': league_key,
+                'week_key': week_key,
+                'season_year': perf['season_year'],
+                'wins': perf['wins'],
+                'losses': perf['losses'],
+                'ties': perf['ties'],
+                'points_for': 0,  # Will be calculated
+                'points_against': perf['points_against'],
+                'weekly_points': perf['weekly_points'],
+                'weekly_rank': None,
+                'season_rank': None,
+                'win_percentage': None,
+                'point_differential': perf['weekly_points'] - perf['points_against'],
+                'avg_points_per_game': None,
+                'playoff_probability': None,
+                'is_playoff_team': False,
+                'playoff_seed': None,
+                'waiver_priority': None,
+                'faab_balance': None
+            })
+        
+        return facts
     
     def load_dimensions(self) -> bool:
         """Load all dimension tables"""
@@ -482,11 +779,108 @@ class EdwEtlProcessor:
             
             self.session.commit()
             logger.info("✅ All dimensions loaded successfully")
+            
+            # Cache dimension key mappings for efficient fact processing
+            self.cache_dimension_mappings()
+            
             return True
             
         except Exception as e:
             logger.error(f"❌ Dimension loading failed: {e}")
             self.session.rollback()
+            return False
+    
+    def cache_dimension_mappings(self) -> None:
+        """Cache dimension key mappings for efficient fact processing"""
+        try:
+            logger.info("🗂️ Caching dimension key mappings...")
+            
+            with self.engine.connect() as conn:
+                # Load all dimension mappings once
+                self.dim_mappings['league_keys'] = {
+                    row[0]: row[1] for row in conn.execute(text("SELECT league_id, league_key FROM edw.dim_league")).fetchall()
+                }
+                self.dim_mappings['team_keys'] = {
+                    row[0]: row[1] for row in conn.execute(text("SELECT team_id, team_key FROM edw.dim_team")).fetchall()
+                }
+                self.dim_mappings['player_keys'] = {
+                    row[0]: row[1] for row in conn.execute(text("SELECT player_id, player_key FROM edw.dim_player")).fetchall()
+                }
+                self.dim_mappings['week_keys'] = {
+                    (row[0], row[1]): row[2] for row in conn.execute(text("SELECT season_year, week_number, week_key FROM edw.dim_week")).fetchall()
+                }
+                
+                logger.info(f"✅ Cached {len(self.dim_mappings['league_keys'])} leagues, {len(self.dim_mappings['team_keys'])} teams, {len(self.dim_mappings['player_keys'])} players, {len(self.dim_mappings['week_keys'])} weeks")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to cache dimension mappings: {e}")
+            raise
+    
+    def load_facts(self) -> bool:
+        """Load all fact tables"""
+        try:
+            logger.info("📊 Loading fact tables...")
+            
+            # Load facts in dependency order
+            fact_methods = [
+                ("fact_roster", self.transform_fact_roster),
+                ("fact_matchup", self.transform_fact_matchup),
+                ("fact_transaction", self.transform_fact_transaction),
+                ("fact_draft", self.transform_fact_draft),
+                ("fact_team_performance", self.transform_fact_team_performance)
+            ]
+            
+            for table_name, transform_method in fact_methods:
+                try:
+                    logger.info(f"  📊 Processing {table_name}...")
+                    data = transform_method()
+                    if self.load_fact_table(table_name, data):
+                        logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                    else:
+                        logger.error(f"  ❌ Failed to load {table_name}")
+                        return False
+                except Exception as e:
+                    logger.error(f"  ❌ Error processing {table_name}: {e}")
+                    return False
+            
+            logger.info(f"✅ All facts loaded successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Fact loading failed: {e}")
+            return False
+    
+    def load_marts(self) -> bool:
+        """Load all data mart tables"""
+        try:
+            logger.info("🏪 Loading data mart tables...")
+            
+            # Load marts in dependency order (after facts)
+            mart_methods = [
+                ("mart_league_summary", self.transform_mart_league_summary),
+                ("mart_manager_performance", self.transform_mart_manager_performance),
+                ("mart_player_value", self.transform_mart_player_value),
+                ("mart_weekly_power_rankings", self.transform_mart_weekly_power_rankings)
+            ]
+            
+            for table_name, transform_method in mart_methods:
+                try:
+                    logger.info(f"  🏪 Processing {table_name}...")
+                    data = transform_method()
+                    if self.load_mart_table(table_name, data):
+                        logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                    else:
+                        logger.error(f"  ❌ Failed to load {table_name}")
+                        return False
+                except Exception as e:
+                    logger.error(f"  ❌ Error processing {table_name}: {e}")
+                    return False
+            
+            logger.info(f"✅ All marts loaded successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Mart loading failed: {e}")
             return False
     
     def process_incremental_edw(self, operational_tables_changed: Set[str] = None) -> bool:
@@ -814,7 +1208,9 @@ class EdwEtlProcessor:
             ("Connect to Database", self.connect),
             ("Load Operational Data", self.load_data),
             ("Detect Operational Changes", self.detect_operational_changes),
-            ("Load Dimensions", self.load_dimensions)
+            ("Load Dimensions", self.load_dimensions),
+            ("Load Facts", self.load_facts),
+            ("Load Marts", self.load_marts)
         ]
         
         for step_name, step_func in steps:
@@ -829,6 +1225,102 @@ class EdwEtlProcessor:
         logger.info(f"🗄️ Enterprise Data Warehouse is ready for analytics!")
         
         return True
+    
+    def load_fact_table(self, table_name: str, data: List[Dict]) -> bool:
+        """Load data into fact table using ultra-fast bulk inserts"""
+        try:
+            if not data:
+                logger.info(f"📊 No data to load for {table_name}")
+                return True
+                
+            logger.info(f"📊 Loading {len(data)} records into {table_name}")
+            
+            # Convert to DataFrame for ultra-fast bulk insert
+            df = pd.DataFrame(data)
+            
+            with self.engine.connect() as conn:
+                # Define loading strategy for each fact table
+                if table_name in ['fact_roster', 'fact_matchup', 'fact_team_performance']:
+                    # For weekly refresh tables, use TRUNCATE (much faster than DELETE)
+                    logger.info(f"🗑️ Truncating {table_name}...")
+                    conn.execute(text(f"TRUNCATE TABLE edw.{table_name} RESTART IDENTITY CASCADE"))
+                    
+                    # Ultra-fast bulk insert using pandas
+                    logger.info(f"⚡ Bulk inserting {len(df)} records...")
+                    df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False, method='multi')
+                        
+                elif table_name in ['fact_transaction', 'fact_draft']:
+                    # For append-only tables, use INSERT ON CONFLICT for existing data
+                    # But first, let's try a simpler approach - just truncate and reload all
+                    logger.info(f"🗑️ Truncating {table_name} for full reload...")
+                    conn.execute(text(f"TRUNCATE TABLE edw.{table_name} RESTART IDENTITY CASCADE"))
+                    
+                    # Ultra-fast bulk insert using pandas
+                    logger.info(f"⚡ Bulk inserting {len(df)} records...")
+                    df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False, method='multi')
+                        
+                else:
+                    logger.warning(f"⚠️ No loading logic for {table_name}")
+                    return True
+                
+                conn.commit()
+                logger.info(f"✅ Successfully loaded {len(data)} records into {table_name}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to load {table_name}: {e}")
+            return False
+    
+    def transform_mart_league_summary(self) -> List[Dict]:
+        """Transform data for mart_league_summary"""
+        marts = []
+        
+        # This would aggregate data from fact tables
+        # For now, return empty list as placeholder
+        logger.info("🏪 League summary mart - placeholder implementation")
+        return marts
+    
+    def transform_mart_manager_performance(self) -> List[Dict]:
+        """Transform data for mart_manager_performance"""
+        marts = []
+        
+        # This would aggregate data from fact tables
+        # For now, return empty list as placeholder
+        logger.info("🏪 Manager performance mart - placeholder implementation")
+        return marts
+    
+    def transform_mart_player_value(self) -> List[Dict]:
+        """Transform data for mart_player_value"""
+        marts = []
+        
+        # This would aggregate data from fact tables
+        # For now, return empty list as placeholder
+        logger.info("🏪 Player value mart - placeholder implementation")
+        return marts
+    
+    def transform_mart_weekly_power_rankings(self) -> List[Dict]:
+        """Transform data for mart_weekly_power_rankings"""
+        marts = []
+        
+        # This would aggregate data from fact tables
+        # For now, return empty list as placeholder
+        logger.info("🏪 Weekly power rankings mart - placeholder implementation")
+        return marts
+    
+    def load_mart_table(self, table_name: str, data: List[Dict]) -> bool:
+        """Load data into mart table"""
+        try:
+            if not data:
+                logger.info(f"🏪 No data to load for {table_name} (placeholder)")
+                return True
+                
+            # Placeholder implementation
+            logger.info(f"🏪 Mart loading for {table_name} - to be implemented")
+            return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to load {table_name}: {e}")
+            return False
 
 def main():
     """Main ETL entry point"""

@@ -1,0 +1,879 @@
+2025-06-06 14:29:54,654 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 14:29:54,654 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 14:29:54,654 - DEBUG - Checking 
+2025-06-06 14:29:54,654 - ERROR - ❌ Authentication failed: [Errno 2] No such file or directory: 'data/current/oauth2.json'
+2025-06-06 14:29:54,654 - ERROR - Make sure oauth2.json file exists with valid tokens
+2025-06-06 14:29:54,654 - ERROR - ❌ Authentication failed
+2025-06-06 14:40:53,372 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 14:40:53,372 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 14:40:53,372 - INFO - 🔑 No OAuth file found, creating from environment variables...
+2025-06-06 14:40:53,373 - INFO - ✅ Created oauth2.json with credentials from environment
+2025-06-06 14:40:53,373 - DEBUG - Checking 
+2025-06-06 14:40:53,373 - DEBUG - AUTHORIZATION URL : https://api.login.yahoo.com/oauth2/request_auth?redirect_uri=oob&response_type=code&client_id=your_client_key_here
+2025-06-06 14:41:00,419 - ERROR - ❌ Authentication failed: 'access_token'
+2025-06-06 14:41:00,421 - ERROR - ❌ Authentication failed
+2025-06-06 14:46:33,237 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 14:46:33,238 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 14:46:33,238 - INFO - 🔑 No OAuth file found, creating from environment variables...
+2025-06-06 14:46:33,238 - INFO - ✅ Created oauth2.json with credentials from environment
+2025-06-06 14:46:33,238 - DEBUG - Checking 
+2025-06-06 14:46:33,239 - DEBUG - AUTHORIZATION URL : https://api.login.yahoo.com/oauth2/request_auth?redirect_uri=oob&response_type=code&client_id=dj0yJmk9Q2ZUbUR6SlQ2TW9zJmQ9WVdrOVluRkJSVVE1UWtzbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PWMw
+2025-06-06 14:46:41,656 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 14:46:41,657 - INFO - 🚀 Starting comprehensive data extraction...
+2025-06-06 14:46:41,657 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 14:46:41,657 - DEBUG - Checking 
+2025-06-06 14:46:41,658 - DEBUG - ELAPSED TIME : 0.7848300933837891
+2025-06-06 14:46:41,658 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:46:41,659 - DEBUG - ELAPSED TIME : 0.7857069969177246
+2025-06-06 14:46:41,659 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:46:41,814 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 14:46:41,814 - INFO - 🔍 Checking leagues for 2004...
+2025-06-06 14:46:52,953 - INFO -   No leagues found for 2004
+2025-06-06 14:46:52,953 - INFO - 🔍 Checking leagues for 2005...
+2025-06-06 14:47:04,880 - INFO -   Found 3 leagues for 2005
+2025-06-06 14:47:05,534 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:47:06,447 - INFO - 🔍 Checking leagues for 2006...
+2025-06-06 14:47:18,566 - INFO -   Found 2 leagues for 2006
+2025-06-06 14:47:19,091 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:47:19,195 - INFO - 🔍 Checking leagues for 2007...
+2025-06-06 14:47:31,506 - INFO -   Found 2 leagues for 2007
+2025-06-06 14:47:31,713 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:47:32,131 - INFO -   Added postdraft league: Oakdale 2 (postdraft)
+2025-06-06 14:47:32,236 - INFO - 🔍 Checking leagues for 2008...
+2025-06-06 14:47:42,120 - INFO -   Found 1 leagues for 2008
+2025-06-06 14:47:42,308 - INFO -   Added postdraft league: The Draft (postdraft)
+2025-06-06 14:47:42,412 - INFO - 🔍 Checking leagues for 2009...
+2025-06-06 14:47:54,556 - INFO -   Found 1 leagues for 2009
+2025-06-06 14:47:54,734 - INFO -   Added postdraft league: Engaged (postdraft)
+2025-06-06 14:47:54,838 - INFO - 🔍 Checking leagues for 2010...
+2025-06-06 14:48:07,433 - INFO -   Found 3 leagues for 2010
+2025-06-06 14:48:07,621 - INFO -   Added postdraft league: Christian Fellowship League (postdraft)
+2025-06-06 14:48:07,925 - INFO -   Added postdraft league: Football Gods 15 (postdraft)
+2025-06-06 14:48:08,233 - INFO -   Added postdraft league: Round 6 (postdraft)
+2025-06-06 14:48:08,337 - INFO - 🔍 Checking leagues for 2011...
+2025-06-06 14:48:18,438 - INFO -   Found 2 leagues for 2011
+2025-06-06 14:48:18,625 - INFO -   Added postdraft league: Power House League (postdraft)
+2025-06-06 14:48:18,947 - INFO -   Added postdraft league: Lock It Up (postdraft)
+2025-06-06 14:48:19,050 - INFO - 🔍 Checking leagues for 2012...
+2025-06-06 14:48:29,423 - INFO -   Found 1 leagues for 2012
+2025-06-06 14:48:29,768 - INFO -   Added postdraft league: The League About Nothing (postdraft)
+2025-06-06 14:48:29,871 - INFO - 🔍 Checking leagues for 2013...
+2025-06-06 14:48:39,909 - INFO -   Found 1 leagues for 2013
+2025-06-06 14:48:40,149 - INFO -   Added postdraft league: Rosterbaters Anonymous (postdraft)
+2025-06-06 14:48:40,252 - INFO - 🔍 Checking leagues for 2014...
+2025-06-06 14:48:41,138 - INFO -   Found 2 leagues for 2014
+2025-06-06 14:48:41,335 - INFO -   Added postdraft league: 10 Years 10 Assholes (postdraft)
+2025-06-06 14:48:41,640 - INFO -   Added postdraft league: Concussion Factory (postdraft)
+2025-06-06 14:48:41,743 - INFO - 🔍 Checking leagues for 2015...
+2025-06-06 14:48:58,222 - INFO -   Found 1 leagues for 2015
+2025-06-06 14:48:58,423 - INFO -   Added postdraft league: Luke's Kingdom (postdraft)
+2025-06-06 14:48:58,528 - INFO - 🔍 Checking leagues for 2016...
+2025-06-06 14:49:10,342 - INFO -   Found 1 leagues for 2016
+2025-06-06 14:49:10,521 - INFO -   Added postdraft league: The Great SF Draft (postdraft)
+2025-06-06 14:49:10,624 - INFO - 🔍 Checking leagues for 2017...
+2025-06-06 14:49:20,024 - INFO -   Found 2 leagues for 2017
+2025-06-06 14:49:20,221 - INFO -   Added postdraft league: Go Fuck Yourself San Diego (postdraft)
+2025-06-06 14:49:20,585 - INFO -   Skipping predraft league: The Great SF Draft (371.l.722293)
+2025-06-06 14:49:20,585 - INFO - 🔍 Checking leagues for 2018...
+2025-06-06 14:49:21,555 - INFO -   Found 2 leagues for 2018
+2025-06-06 14:49:21,759 - INFO -   Added postdraft league: Sleepless In Seattle (postdraft)
+2025-06-06 14:49:22,056 - INFO -   Skipping predraft league: Go Fuck Yourself San Diego (380.l.888945)
+2025-06-06 14:49:22,057 - INFO - 🔍 Checking leagues for 2019...
+2025-06-06 14:49:22,999 - INFO -   Found 2 leagues for 2019
+2025-06-06 14:49:23,402 - INFO -   Skipping predraft league: Sleepless In Seattle (390.l.567043)
+2025-06-06 14:49:23,670 - INFO -   Added postdraft league: Women & Women First (postdraft)
+2025-06-06 14:49:23,775 - INFO - 🔍 Checking leagues for 2020...
+2025-06-06 14:49:24,558 - INFO -   Found 2 leagues for 2020
+2025-06-06 14:49:24,748 - INFO -   Skipping predraft league: Women & Women First (399.l.440905)
+2025-06-06 14:49:24,939 - INFO -   Added postdraft league: The Lost Year (postdraft)
+2025-06-06 14:49:25,043 - INFO - 🔍 Checking leagues for 2021...
+2025-06-06 14:49:35,802 - INFO -   Found 2 leagues for 2021
+2025-06-06 14:49:36,073 - INFO -   Added postdraft league: Rocky Mountain High (postdraft)
+2025-06-06 14:49:36,424 - INFO -   Skipping predraft league: Women & Women First (406.l.735025)
+2025-06-06 14:49:36,425 - INFO - 🔍 Checking leagues for 2022...
+2025-06-06 14:49:54,558 - INFO -   Found 3 leagues for 2022
+2025-06-06 14:49:54,809 - INFO -   Skipping predraft league: Rocky Mountain High (414.l.1088817)
+2025-06-06 14:49:55,125 - INFO -   Added postdraft league: Wet Hot Tahoe Summer (postdraft)
+2025-06-06 14:49:55,494 - INFO -   Skipping predraft league: Women & Women First (414.l.527650)
+2025-06-06 14:49:55,494 - INFO - 🔍 Checking leagues for 2023...
+2025-06-06 14:50:06,669 - INFO -   Found 3 leagues for 2023
+2025-06-06 14:50:06,987 - INFO -   Skipping predraft league: Wet Hot Tahoe Summer (423.l.367879)
+2025-06-06 14:50:07,238 - INFO -   Added postdraft league: Move the Raiders to PDX (postdraft)
+2025-06-06 14:50:07,581 - INFO -   Added postdraft league: Sequoiabowl I (postdraft)
+2025-06-06 14:50:07,685 - INFO - 🔍 Checking leagues for 2024...
+2025-06-06 14:50:08,544 - INFO -   Found 1 leagues for 2024
+2025-06-06 14:50:08,817 - INFO -   Added postdraft league: Idaho's DEI Quota (postdraft)
+2025-06-06 14:50:08,924 - INFO - 🔍 Checking leagues for 2025...
+2025-06-06 14:57:31,921 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 14:57:31,922 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 14:57:31,922 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 14:57:31,923 - DEBUG - Checking 
+2025-06-06 14:57:31,923 - DEBUG - ELAPSED TIME : 651.0501551628113
+2025-06-06 14:57:31,923 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:57:31,924 - DEBUG - ELAPSED TIME : 651.0510249137878
+2025-06-06 14:57:31,924 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:57:32,415 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 14:57:32,415 - INFO - 🚀 Starting comprehensive data extraction...
+2025-06-06 14:57:32,415 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 14:57:32,416 - DEBUG - Checking 
+2025-06-06 14:57:32,416 - DEBUG - ELAPSED TIME : 651.5426580905914
+2025-06-06 14:57:32,416 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:57:32,417 - DEBUG - ELAPSED TIME : 651.5436952114105
+2025-06-06 14:57:32,417 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 14:57:32,651 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 14:57:32,651 - INFO - 🔍 Checking leagues for 2004...
+2025-06-06 14:57:45,230 - INFO -   No leagues found for 2004
+2025-06-06 14:57:45,230 - INFO - 🔍 Checking leagues for 2005...
+2025-06-06 14:57:55,613 - INFO -   Found 3 leagues for 2005
+2025-06-06 14:57:55,802 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:57:56,563 - INFO - 🔍 Checking leagues for 2006...
+2025-06-06 14:58:04,646 - INFO -   Found 2 leagues for 2006
+2025-06-06 14:58:05,794 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:58:05,898 - INFO - 🔍 Checking leagues for 2007...
+2025-06-06 14:58:17,700 - INFO -   Found 2 leagues for 2007
+2025-06-06 14:58:17,873 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 14:58:18,178 - INFO -   Added postdraft league: Oakdale 2 (postdraft)
+2025-06-06 14:58:18,278 - INFO - 🔍 Checking leagues for 2008...
+2025-06-06 14:58:30,345 - INFO -   Found 1 leagues for 2008
+2025-06-06 14:58:30,556 - INFO -   Added postdraft league: The Draft (postdraft)
+2025-06-06 14:58:30,658 - INFO - 🔍 Checking leagues for 2009...
+2025-06-06 14:58:31,365 - INFO -   Found 1 leagues for 2009
+2025-06-06 14:58:31,568 - INFO -   Added postdraft league: Engaged (postdraft)
+2025-06-06 14:58:31,671 - INFO - 🔍 Checking leagues for 2010...
+2025-06-06 14:58:32,548 - INFO -   Found 3 leagues for 2010
+2025-06-06 14:58:32,742 - INFO -   Added postdraft league: Christian Fellowship League (postdraft)
+2025-06-06 14:58:33,031 - INFO -   Added postdraft league: Football Gods 15 (postdraft)
+2025-06-06 14:58:33,356 - INFO -   Added postdraft league: Round 6 (postdraft)
+2025-06-06 14:58:33,461 - INFO - 🔍 Checking leagues for 2011...
+2025-06-06 14:58:42,017 - INFO -   Found 2 leagues for 2011
+2025-06-06 14:58:42,213 - INFO -   Added postdraft league: Power House League (postdraft)
+2025-06-06 14:58:42,502 - INFO -   Added postdraft league: Lock It Up (postdraft)
+2025-06-06 14:58:42,606 - INFO - 🔍 Checking leagues for 2012...
+2025-06-06 14:58:55,079 - INFO -   Found 1 leagues for 2012
+2025-06-06 14:58:55,277 - INFO -   Added postdraft league: The League About Nothing (postdraft)
+2025-06-06 14:58:55,380 - INFO - 🔍 Checking leagues for 2013...
+2025-06-06 14:58:56,209 - INFO -   Found 1 leagues for 2013
+2025-06-06 14:58:56,409 - INFO -   Added postdraft league: Rosterbaters Anonymous (postdraft)
+2025-06-06 14:58:56,513 - INFO - 🔍 Checking leagues for 2014...
+2025-06-06 14:59:07,164 - INFO -   Found 2 leagues for 2014
+2025-06-06 14:59:07,359 - INFO -   Added postdraft league: 10 Years 10 Assholes (postdraft)
+2025-06-06 14:59:07,727 - INFO -   Added postdraft league: Concussion Factory (postdraft)
+2025-06-06 14:59:07,831 - INFO - 🔍 Checking leagues for 2015...
+2025-06-06 14:59:19,613 - INFO -   Found 1 leagues for 2015
+2025-06-06 14:59:19,828 - INFO -   Added postdraft league: Luke's Kingdom (postdraft)
+2025-06-06 14:59:19,933 - INFO - 🔍 Checking leagues for 2016...
+2025-06-06 14:59:20,910 - INFO -   Found 1 leagues for 2016
+2025-06-06 14:59:21,182 - INFO -   Added postdraft league: The Great SF Draft (postdraft)
+2025-06-06 14:59:21,286 - INFO - 🔍 Checking leagues for 2017...
+2025-06-06 14:59:22,149 - INFO -   Found 2 leagues for 2017
+2025-06-06 14:59:22,374 - INFO -   Added postdraft league: Go Fuck Yourself San Diego (postdraft)
+2025-06-06 14:59:22,685 - INFO -   Skipping predraft league: The Great SF Draft (371.l.722293)
+2025-06-06 14:59:22,685 - INFO - 🔍 Checking leagues for 2018...
+2025-06-06 14:59:33,785 - INFO -   Found 2 leagues for 2018
+2025-06-06 14:59:33,985 - INFO -   Added postdraft league: Sleepless In Seattle (postdraft)
+2025-06-06 14:59:34,284 - INFO -   Skipping predraft league: Go Fuck Yourself San Diego (380.l.888945)
+2025-06-06 14:59:34,284 - INFO - 🔍 Checking leagues for 2019...
+2025-06-06 14:59:45,999 - INFO -   Found 2 leagues for 2019
+2025-06-06 14:59:46,259 - INFO -   Skipping predraft league: Sleepless In Seattle (390.l.567043)
+2025-06-06 14:59:46,524 - INFO -   Added postdraft league: Women & Women First (postdraft)
+2025-06-06 14:59:46,627 - INFO - 🔍 Checking leagues for 2020...
+2025-06-06 14:59:58,568 - INFO -   Found 2 leagues for 2020
+2025-06-06 14:59:58,772 - INFO -   Skipping predraft league: Women & Women First (399.l.440905)
+2025-06-06 14:59:58,985 - INFO -   Added postdraft league: The Lost Year (postdraft)
+2025-06-06 14:59:59,089 - INFO - 🔍 Checking leagues for 2021...
+2025-06-06 15:00:20,346 - INFO -   Found 2 leagues for 2021
+2025-06-06 15:00:20,556 - INFO -   Added postdraft league: Rocky Mountain High (postdraft)
+2025-06-06 15:00:20,948 - INFO -   Skipping predraft league: Women & Women First (406.l.735025)
+2025-06-06 15:00:20,948 - INFO - 🔍 Checking leagues for 2022...
+2025-06-06 15:00:34,266 - INFO -   Found 3 leagues for 2022
+2025-06-06 15:00:34,463 - INFO -   Skipping predraft league: Rocky Mountain High (414.l.1088817)
+2025-06-06 15:00:34,660 - INFO -   Added postdraft league: Wet Hot Tahoe Summer (postdraft)
+2025-06-06 15:00:34,972 - INFO -   Skipping predraft league: Women & Women First (414.l.527650)
+2025-06-06 15:00:34,972 - INFO - 🔍 Checking leagues for 2023...
+2025-06-06 15:00:49,797 - INFO -   Found 3 leagues for 2023
+2025-06-06 15:00:50,013 - INFO -   Skipping predraft league: Wet Hot Tahoe Summer (423.l.367879)
+2025-06-06 15:00:50,223 - INFO -   Added postdraft league: Move the Raiders to PDX (postdraft)
+2025-06-06 15:00:50,542 - INFO -   Added postdraft league: Sequoiabowl I (postdraft)
+2025-06-06 15:00:50,646 - INFO - 🔍 Checking leagues for 2024...
+2025-06-06 15:01:01,492 - INFO -   Found 1 leagues for 2024
+2025-06-06 15:01:01,685 - INFO -   Added postdraft league: Idaho's DEI Quota (postdraft)
+2025-06-06 15:01:01,791 - INFO - 🔍 Checking leagues for 2025...
+2025-06-06 15:01:02,711 - INFO -   No leagues found for 2025
+2025-06-06 15:01:02,711 - INFO - 📋 Found 26 non-public leagues across all years
+2025-06-06 15:01:02,711 - INFO - 📋 Processing league 1/26: Oakdale Park (2005)
+2025-06-06 15:01:03,333 - INFO -   📊 Found 8 teams in league 124.l.109785
+2025-06-06 15:01:14,054 - INFO -   👥 Found 593 roster entries in league 124.l.109785
+2025-06-06 15:01:17,139 - INFO -   🏆 Found 10 matchups in league 124.l.109785
+2025-06-06 15:01:18,047 - INFO -   💰 Found 103 transactions in league 124.l.109785
+2025-06-06 15:01:18,049 - INFO - 🎯 Extracting draft data for league 124.l.109785...
+2025-06-06 15:01:39,428 - INFO -   🎯 Found 200 draft picks in league 124.l.109785
+2025-06-06 15:01:39,936 - INFO - 📋 Processing league 2/26: Oakdale Park (2006)
+2025-06-06 15:01:40,518 - INFO -   📊 Found 10 teams in league 153.l.76788
+2025-06-06 15:01:52,211 - INFO -   👥 Found 720 roster entries in league 153.l.76788
+2025-06-06 15:01:56,037 - INFO -   🏆 Found 12 matchups in league 153.l.76788
+2025-06-06 15:01:56,706 - INFO -   💰 Found 86 transactions in league 153.l.76788
+2025-06-06 15:01:56,710 - INFO - 🎯 Extracting draft data for league 153.l.76788...
+2025-06-06 15:02:23,486 - INFO -   🎯 Found 250 draft picks in league 153.l.76788
+2025-06-06 15:02:23,996 - INFO - 📋 Processing league 3/26: Oakdale Park (2007)
+2025-06-06 15:02:24,564 - INFO -   📊 Found 8 teams in league 175.l.658531
+2025-06-06 15:02:34,492 - INFO -   👥 Found 572 roster entries in league 175.l.658531
+2025-06-06 15:02:37,404 - INFO -   🏆 Found 12 matchups in league 175.l.658531
+2025-06-06 15:02:38,225 - INFO -   💰 Found 68 transactions in league 175.l.658531
+2025-06-06 15:02:38,226 - INFO - 🎯 Extracting draft data for league 175.l.658531...
+2025-06-06 15:02:59,858 - INFO -   🎯 Found 192 draft picks in league 175.l.658531
+2025-06-06 15:03:00,368 - INFO - 📋 Processing league 4/26: Oakdale 2 (2007)
+2025-06-06 15:03:00,877 - INFO -   📊 Found 6 teams in league 175.l.86092
+2025-06-06 15:03:06,703 - INFO -   👥 Found 450 roster entries in league 175.l.86092
+2025-06-06 15:03:09,577 - INFO -   🏆 Found 8 matchups in league 175.l.86092
+2025-06-06 15:03:10,093 - INFO -   💰 Found 46 transactions in league 175.l.86092
+2025-06-06 15:03:10,094 - INFO - 🎯 Extracting draft data for league 175.l.86092...
+2025-06-06 15:03:25,575 - INFO -   🎯 Found 150 draft picks in league 175.l.86092
+2025-06-06 15:03:26,082 - INFO - 📋 Processing league 5/26: The Draft (2008)
+2025-06-06 15:03:26,807 - INFO -   📊 Found 10 teams in league 199.l.42364
+2025-06-06 15:03:37,492 - INFO -   👥 Found 444 roster entries in league 199.l.42364
+2025-06-06 15:03:39,871 - INFO -   🏆 Found 12 matchups in league 199.l.42364
+2025-06-06 15:03:40,575 - INFO -   💰 Found 49 transactions in league 199.l.42364
+2025-06-06 15:03:40,576 - INFO - 🎯 Extracting draft data for league 199.l.42364...
+2025-06-06 15:03:56,180 - INFO -   🎯 Found 150 draft picks in league 199.l.42364
+2025-06-06 15:03:56,690 - INFO - 📋 Processing league 6/26: Engaged (2009)
+2025-06-06 15:03:57,329 - INFO -   📊 Found 10 teams in league 222.l.222935
+2025-06-06 15:04:08,088 - INFO -   👥 Found 450 roster entries in league 222.l.222935
+2025-06-06 15:04:11,005 - INFO -   🏆 Found 12 matchups in league 222.l.222935
+2025-06-06 15:04:11,579 - INFO -   💰 Found 54 transactions in league 222.l.222935
+2025-06-06 15:04:11,581 - INFO - 🎯 Extracting draft data for league 222.l.222935...
+2025-06-06 15:07:47,864 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 15:07:47,865 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 15:07:47,865 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 15:07:47,865 - DEBUG - Checking 
+2025-06-06 15:07:47,866 - DEBUG - ELAPSED TIME : 1266.9927999973297
+2025-06-06 15:07:47,866 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:07:47,867 - DEBUG - ELAPSED TIME : 1266.9940900802612
+2025-06-06 15:07:47,868 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:07:48,201 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 15:07:48,201 - INFO - 🚀 Starting comprehensive data extraction...
+2025-06-06 15:07:48,201 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 15:07:48,201 - DEBUG - Checking 
+2025-06-06 15:07:48,201 - DEBUG - ELAPSED TIME : 1267.3282840251923
+2025-06-06 15:07:48,202 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:07:48,202 - DEBUG - ELAPSED TIME : 1267.3289000988007
+2025-06-06 15:07:48,202 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:07:48,437 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 15:07:48,437 - INFO - 🔍 Checking leagues for 2004...
+2025-06-06 15:07:49,329 - INFO -   No leagues found for 2004
+2025-06-06 15:07:49,329 - INFO - 🔍 Checking leagues for 2005...
+2025-06-06 15:08:01,105 - INFO -   Found 3 leagues for 2005
+2025-06-06 15:08:01,383 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 15:08:02,085 - INFO - 🔍 Checking leagues for 2006...
+2025-06-06 15:08:14,684 - INFO -   Found 2 leagues for 2006
+2025-06-06 15:08:15,169 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 15:08:15,274 - INFO - 🔍 Checking leagues for 2007...
+2025-06-06 15:08:27,673 - INFO -   Found 2 leagues for 2007
+2025-06-06 15:08:27,856 - INFO -   Added postdraft league: Oakdale Park (postdraft)
+2025-06-06 15:08:28,264 - INFO -   Added postdraft league: Oakdale 2 (postdraft)
+2025-06-06 15:08:28,368 - INFO - 🔍 Checking leagues for 2008...
+2025-06-06 15:08:39,774 - INFO -   Found 1 leagues for 2008
+2025-06-06 15:08:40,088 - INFO -   Added postdraft league: The Draft (postdraft)
+2025-06-06 15:08:40,193 - INFO - 🔍 Checking leagues for 2009...
+2025-06-06 15:08:51,348 - INFO -   Found 1 leagues for 2009
+2025-06-06 15:08:51,549 - INFO -   Added postdraft league: Engaged (postdraft)
+2025-06-06 15:08:51,650 - INFO - 🔍 Checking leagues for 2010...
+2025-06-06 15:09:04,941 - INFO -   Found 3 leagues for 2010
+2025-06-06 15:09:05,123 - INFO -   Added postdraft league: Christian Fellowship League (postdraft)
+2025-06-06 15:09:05,418 - INFO -   Added postdraft league: Football Gods 15 (postdraft)
+2025-06-06 15:09:05,714 - INFO -   Added postdraft league: Round 6 (postdraft)
+2025-06-06 15:09:05,818 - INFO - 🔍 Checking leagues for 2011...
+2025-06-06 15:09:15,708 - INFO -   Found 2 leagues for 2011
+2025-06-06 15:09:15,895 - INFO -   Added postdraft league: Power House League (postdraft)
+2025-06-06 15:09:16,201 - INFO -   Added postdraft league: Lock It Up (postdraft)
+2025-06-06 15:09:16,312 - INFO - 🔍 Checking leagues for 2012...
+2025-06-06 15:09:25,631 - INFO -   Found 1 leagues for 2012
+2025-06-06 15:09:25,833 - INFO -   Added postdraft league: The League About Nothing (postdraft)
+2025-06-06 15:09:25,937 - INFO - 🔍 Checking leagues for 2013...
+2025-06-06 15:09:36,661 - INFO -   Found 1 leagues for 2013
+2025-06-06 15:09:36,867 - INFO -   Added postdraft league: Rosterbaters Anonymous (postdraft)
+2025-06-06 15:09:36,971 - INFO - 🔍 Checking leagues for 2014...
+2025-06-06 15:09:37,902 - INFO -   Found 2 leagues for 2014
+2025-06-06 15:09:38,103 - INFO -   Added postdraft league: 10 Years 10 Assholes (postdraft)
+2025-06-06 15:09:38,389 - INFO -   Added postdraft league: Concussion Factory (postdraft)
+2025-06-06 15:09:38,493 - INFO - 🔍 Checking leagues for 2015...
+2025-06-06 15:09:50,766 - INFO -   Found 1 leagues for 2015
+2025-06-06 15:09:51,034 - INFO -   Added postdraft league: Luke's Kingdom (postdraft)
+2025-06-06 15:09:51,137 - INFO - 🔍 Checking leagues for 2016...
+2025-06-06 15:10:02,866 - INFO -   Found 1 leagues for 2016
+2025-06-06 15:10:03,065 - INFO -   Added postdraft league: The Great SF Draft (postdraft)
+2025-06-06 15:10:03,169 - INFO - 🔍 Checking leagues for 2017...
+2025-06-06 15:10:10,431 - INFO -   Found 2 leagues for 2017
+2025-06-06 15:10:10,631 - INFO -   Added postdraft league: Go Fuck Yourself San Diego (postdraft)
+2025-06-06 15:10:10,928 - INFO -   Skipping predraft league: The Great SF Draft (371.l.722293)
+2025-06-06 15:10:10,928 - INFO - 🔍 Checking leagues for 2018...
+2025-06-06 15:10:12,011 - INFO -   Found 2 leagues for 2018
+2025-06-06 15:10:12,232 - INFO -   Added postdraft league: Sleepless In Seattle (postdraft)
+2025-06-06 15:10:12,520 - INFO -   Skipping predraft league: Go Fuck Yourself San Diego (380.l.888945)
+2025-06-06 15:10:12,520 - INFO - 🔍 Checking leagues for 2019...
+2025-06-06 15:10:13,299 - INFO -   Found 2 leagues for 2019
+2025-06-06 15:10:13,518 - INFO -   Skipping predraft league: Sleepless In Seattle (390.l.567043)
+2025-06-06 15:10:13,718 - INFO -   Added postdraft league: Women & Women First (postdraft)
+2025-06-06 15:10:13,822 - INFO - 🔍 Checking leagues for 2020...
+2025-06-06 15:10:14,598 - INFO -   Found 2 leagues for 2020
+2025-06-06 15:10:14,794 - INFO -   Skipping predraft league: Women & Women First (399.l.440905)
+2025-06-06 15:10:14,983 - INFO -   Added postdraft league: The Lost Year (postdraft)
+2025-06-06 15:10:15,085 - INFO - 🔍 Checking leagues for 2021...
+2025-06-06 15:10:26,685 - INFO -   Found 2 leagues for 2021
+2025-06-06 15:10:26,874 - INFO -   Added postdraft league: Rocky Mountain High (postdraft)
+2025-06-06 15:10:27,178 - INFO -   Skipping predraft league: Women & Women First (406.l.735025)
+2025-06-06 15:10:27,178 - INFO - 🔍 Checking leagues for 2022...
+2025-06-06 15:10:28,212 - INFO -   Found 3 leagues for 2022
+2025-06-06 15:10:28,410 - INFO -   Skipping predraft league: Rocky Mountain High (414.l.1088817)
+2025-06-06 15:10:28,594 - INFO -   Added postdraft league: Wet Hot Tahoe Summer (postdraft)
+2025-06-06 15:10:28,897 - INFO -   Skipping predraft league: Women & Women First (414.l.527650)
+2025-06-06 15:10:28,897 - INFO - 🔍 Checking leagues for 2023...
+2025-06-06 15:10:41,097 - INFO -   Found 3 leagues for 2023
+2025-06-06 15:10:41,384 - INFO -   Skipping predraft league: Wet Hot Tahoe Summer (423.l.367879)
+2025-06-06 15:10:41,611 - INFO -   Added postdraft league: Move the Raiders to PDX (postdraft)
+2025-06-06 15:10:41,903 - INFO -   Added postdraft league: Sequoiabowl I (postdraft)
+2025-06-06 15:10:42,008 - INFO - 🔍 Checking leagues for 2024...
+2025-06-06 15:10:50,748 - INFO -   Found 1 leagues for 2024
+2025-06-06 15:10:50,935 - INFO -   Added postdraft league: Idaho's DEI Quota (postdraft)
+2025-06-06 15:10:51,040 - INFO - 🔍 Checking leagues for 2025...
+2025-06-06 15:11:05,024 - INFO -   No leagues found for 2025
+2025-06-06 15:11:05,024 - INFO - 📋 Found 26 non-public leagues across all years
+2025-06-06 15:11:05,024 - INFO - 📋 Processing league 1/26: Oakdale Park (2005)
+2025-06-06 15:11:05,593 - INFO -   📊 Found 8 teams in league 124.l.109785
+2025-06-06 15:11:49,899 - INFO -   👥 Found 3367 roster entries in league 124.l.109785
+2025-06-06 15:12:02,810 - INFO -   🏆 Found 63 matchups in league 124.l.109785
+2025-06-06 15:12:03,379 - INFO -   💰 Found 336 transactions in league 124.l.109785
+2025-06-06 15:12:03,385 - INFO - 🎯 Extracting draft data for league 124.l.109785...
+2025-06-06 15:12:25,041 - INFO -   🎯 Found 200 draft picks in league 124.l.109785
+2025-06-06 15:12:25,548 - INFO - 📋 Processing league 2/26: Oakdale Park (2006)
+2025-06-06 15:12:26,220 - INFO -   📊 Found 10 teams in league 153.l.76788
+2025-06-06 15:13:13,793 - INFO -   👥 Found 3612 roster entries in league 153.l.76788
+2025-06-06 15:13:26,268 - INFO -   🏆 Found 67 matchups in league 153.l.76788
+2025-06-06 15:13:26,960 - INFO -   💰 Found 202 transactions in league 153.l.76788
+2025-06-06 15:13:26,965 - INFO - 🎯 Extracting draft data for league 153.l.76788...
+2025-06-06 15:13:50,214 - INFO -   🎯 Found 250 draft picks in league 153.l.76788
+2025-06-06 15:13:50,722 - INFO - 📋 Processing league 3/26: Oakdale Park (2007)
+2025-06-06 15:13:51,277 - INFO -   📊 Found 8 teams in league 175.l.658531
+2025-06-06 15:14:28,234 - INFO -   👥 Found 2866 roster entries in league 175.l.658531
+2025-06-06 15:14:38,972 - INFO -   🏆 Found 60 matchups in league 175.l.658531
+2025-06-06 15:14:39,500 - INFO -   💰 Found 326 transactions in league 175.l.658531
+2025-06-06 15:14:39,510 - INFO - 🎯 Extracting draft data for league 175.l.658531...
+2025-06-06 15:14:58,842 - INFO -   🎯 Found 192 draft picks in league 175.l.658531
+2025-06-06 15:14:59,349 - INFO - 📋 Processing league 4/26: Oakdale 2 (2007)
+2025-06-06 15:14:59,866 - INFO -   📊 Found 6 teams in league 175.l.86092
+2025-06-06 15:15:18,751 - INFO -   👥 Found 2250 roster entries in league 175.l.86092
+2025-06-06 15:15:27,596 - INFO -   🏆 Found 43 matchups in league 175.l.86092
+2025-06-06 15:15:28,021 - INFO -   💰 Found 88 transactions in league 175.l.86092
+2025-06-06 15:15:28,023 - INFO - 🎯 Extracting draft data for league 175.l.86092...
+2025-06-06 15:15:39,344 - INFO -   🎯 Found 150 draft picks in league 175.l.86092
+2025-06-06 15:15:39,850 - INFO - 📋 Processing league 5/26: The Draft (2008)
+2025-06-06 15:15:40,728 - INFO -   📊 Found 10 teams in league 199.l.42364
+2025-06-06 15:16:23,674 - INFO -   👥 Found 2532 roster entries in league 199.l.42364
+2025-06-06 15:16:35,773 - INFO -   🏆 Found 77 matchups in league 199.l.42364
+2025-06-06 15:16:36,582 - INFO -   💰 Found 351 transactions in league 199.l.42364
+2025-06-06 15:16:36,589 - INFO - 🎯 Extracting draft data for league 199.l.42364...
+2025-06-06 15:16:51,707 - INFO -   🎯 Found 150 draft picks in league 199.l.42364
+2025-06-06 15:16:52,215 - INFO - 📋 Processing league 6/26: Engaged (2009)
+2025-06-06 15:16:53,007 - INFO -   📊 Found 10 teams in league 222.l.222935
+2025-06-06 15:17:35,612 - INFO -   👥 Found 2550 roster entries in league 222.l.222935
+2025-06-06 15:17:48,518 - INFO -   🏆 Found 77 matchups in league 222.l.222935
+2025-06-06 15:17:49,102 - INFO -   💰 Found 338 transactions in league 222.l.222935
+2025-06-06 15:17:49,114 - INFO - 🎯 Extracting draft data for league 222.l.222935...
+2025-06-06 15:18:03,679 - INFO -   🎯 Found 150 draft picks in league 222.l.222935
+2025-06-06 15:18:04,186 - INFO - 📋 Processing league 7/26: Christian Fellowship League (2010)
+2025-06-06 15:18:04,742 - INFO -   📊 Found 9 teams in league 242.l.10035622710
+2025-06-06 15:18:10,736 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 3: b'Request denied\r\n'
+2025-06-06 15:18:10,794 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 4: b'Request denied\r\n'
+2025-06-06 15:18:10,853 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 5: b'Request denied\r\n'
+2025-06-06 15:18:10,912 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 6: b'Request denied\r\n'
+2025-06-06 15:18:10,972 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 7: b'Request denied\r\n'
+2025-06-06 15:18:11,032 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 8: b'Request denied\r\n'
+2025-06-06 15:18:11,089 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 9: b'Request denied\r\n'
+2025-06-06 15:18:11,147 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 10: b'Request denied\r\n'
+2025-06-06 15:18:11,206 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 11: b'Request denied\r\n'
+2025-06-06 15:18:11,265 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 12: b'Request denied\r\n'
+2025-06-06 15:18:11,329 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 13: b'Request denied\r\n'
+2025-06-06 15:18:11,587 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 14: b'Request denied\r\n'
+2025-06-06 15:18:11,643 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 15: b'Request denied\r\n'
+2025-06-06 15:18:11,702 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 16: b'Request denied\r\n'
+2025-06-06 15:18:11,769 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 17: b'Request denied\r\n'
+2025-06-06 15:18:11,827 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 1: b'Request denied\r\n'
+2025-06-06 15:18:11,890 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 2: b'Request denied\r\n'
+2025-06-06 15:18:11,955 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 3: b'Request denied\r\n'
+2025-06-06 15:18:12,012 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 4: b'Request denied\r\n'
+2025-06-06 15:18:12,071 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 5: b'Request denied\r\n'
+2025-06-06 15:18:12,129 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 6: b'Request denied\r\n'
+2025-06-06 15:18:12,186 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 7: b'Request denied\r\n'
+2025-06-06 15:18:12,243 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 8: b'Request denied\r\n'
+2025-06-06 15:18:12,372 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 9: b'Request denied\r\n'
+2025-06-06 15:18:12,431 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 10: b'Request denied\r\n'
+2025-06-06 15:18:12,490 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 11: b'Request denied\r\n'
+2025-06-06 15:18:12,550 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 12: b'Request denied\r\n'
+2025-06-06 15:18:12,608 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 13: b'Request denied\r\n'
+2025-06-06 15:18:12,667 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 14: b'Request denied\r\n'
+2025-06-06 15:18:12,727 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 15: b'Request denied\r\n'
+2025-06-06 15:18:12,786 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 16: b'Request denied\r\n'
+2025-06-06 15:18:12,844 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 17: b'Request denied\r\n'
+2025-06-06 15:18:12,907 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 1: b'Request denied\r\n'
+2025-06-06 15:18:12,972 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 2: b'Request denied\r\n'
+2025-06-06 15:18:13,029 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 3: b'Request denied\r\n'
+2025-06-06 15:18:13,090 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 4: b'Request denied\r\n'
+2025-06-06 15:18:13,151 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 5: b'Request denied\r\n'
+2025-06-06 15:18:13,209 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 6: b'Request denied\r\n'
+2025-06-06 15:18:13,351 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 7: b'Request denied\r\n'
+2025-06-06 15:18:13,488 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 8: b'Request denied\r\n'
+2025-06-06 15:18:13,547 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 9: b'Request denied\r\n'
+2025-06-06 15:18:13,630 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 10: b'Request denied\r\n'
+2025-06-06 15:18:13,704 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 11: b'Request denied\r\n'
+2025-06-06 15:18:13,795 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 12: b'Request denied\r\n'
+2025-06-06 15:18:13,854 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 13: b'Request denied\r\n'
+2025-06-06 15:18:13,918 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 14: b'Request denied\r\n'
+2025-06-06 15:18:13,979 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 15: b'Request denied\r\n'
+2025-06-06 15:18:14,040 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 16: b'Request denied\r\n'
+2025-06-06 15:18:14,122 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 17: b'Request denied\r\n'
+2025-06-06 15:18:14,195 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 1: b'Request denied\r\n'
+2025-06-06 15:18:14,325 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 2: b'Request denied\r\n'
+2025-06-06 15:18:14,384 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 3: b'Request denied\r\n'
+2025-06-06 15:18:14,443 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 4: b'Request denied\r\n'
+2025-06-06 15:18:14,501 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 5: b'Request denied\r\n'
+2025-06-06 15:18:14,560 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 6: b'Request denied\r\n'
+2025-06-06 15:18:14,619 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 7: b'Request denied\r\n'
+2025-06-06 15:18:14,679 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 8: b'Request denied\r\n'
+2025-06-06 15:18:14,739 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 9: b'Request denied\r\n'
+2025-06-06 15:18:14,869 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 10: b'Request denied\r\n'
+2025-06-06 15:18:14,927 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 11: b'Request denied\r\n'
+2025-06-06 15:18:14,986 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 12: b'Request denied\r\n'
+2025-06-06 15:18:15,045 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 13: b'Request denied\r\n'
+2025-06-06 15:18:15,103 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 14: b'Request denied\r\n'
+2025-06-06 15:18:15,161 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 15: b'Request denied\r\n'
+2025-06-06 15:18:15,219 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 16: b'Request denied\r\n'
+2025-06-06 15:18:15,281 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 17: b'Request denied\r\n'
+2025-06-06 15:18:15,339 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 1: b'Request denied\r\n'
+2025-06-06 15:18:15,401 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 2: b'Request denied\r\n'
+2025-06-06 15:18:15,459 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 3: b'Request denied\r\n'
+2025-06-06 15:18:15,520 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 4: b'Request denied\r\n'
+2025-06-06 15:18:15,577 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 5: b'Request denied\r\n'
+2025-06-06 15:18:15,635 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 6: b'Request denied\r\n'
+2025-06-06 15:18:15,695 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 7: b'Request denied\r\n'
+2025-06-06 15:18:15,819 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 8: b'Request denied\r\n'
+2025-06-06 15:18:15,953 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 9: b'Request denied\r\n'
+2025-06-06 15:18:16,021 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 10: b'Request denied\r\n'
+2025-06-06 15:18:16,084 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 11: b'Request denied\r\n'
+2025-06-06 15:18:16,143 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 12: b'Request denied\r\n'
+2025-06-06 15:18:16,200 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 13: b'Request denied\r\n'
+2025-06-06 15:18:16,259 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 14: b'Request denied\r\n'
+2025-06-06 15:18:16,319 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 15: b'Request denied\r\n'
+2025-06-06 15:18:16,449 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 16: b'Request denied\r\n'
+2025-06-06 15:18:16,508 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 17: b'Request denied\r\n'
+2025-06-06 15:18:16,566 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 1: b'Request denied\r\n'
+2025-06-06 15:18:16,624 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 2: b'Request denied\r\n'
+2025-06-06 15:18:16,681 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 3: b'Request denied\r\n'
+2025-06-06 15:18:16,740 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 4: b'Request denied\r\n'
+2025-06-06 15:18:16,797 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 5: b'Request denied\r\n'
+2025-06-06 15:18:16,860 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 6: b'Request denied\r\n'
+2025-06-06 15:18:16,918 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 7: b'Request denied\r\n'
+2025-06-06 15:18:17,017 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 8: b'Request denied\r\n'
+2025-06-06 15:18:17,076 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 9: b'Request denied\r\n'
+2025-06-06 15:18:17,152 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 10: b'Request denied\r\n'
+2025-06-06 15:18:17,291 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 11: b'Request denied\r\n'
+2025-06-06 15:18:17,349 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 12: b'Request denied\r\n'
+2025-06-06 15:18:17,406 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 13: b'Request denied\r\n'
+2025-06-06 15:18:17,471 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 14: b'Request denied\r\n'
+2025-06-06 15:18:17,531 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 15: b'Request denied\r\n'
+2025-06-06 15:18:17,588 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 16: b'Request denied\r\n'
+2025-06-06 15:18:17,647 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 17: b'Request denied\r\n'
+2025-06-06 15:18:17,648 - INFO -   👥 Found 0 roster entries in league 242.l.10035622710
+2025-06-06 15:18:17,785 - ERROR - Error extracting matchups for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:18:17,842 - ERROR - Error extracting transactions for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:18:17,843 - INFO - 🎯 Extracting draft data for league 242.l.10035622710...
+2025-06-06 15:18:17,904 - ERROR - Error extracting draft data for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:18:18,408 - INFO - 📋 Processing league 8/26: Football Gods 15 (2010)
+2025-06-06 15:18:18,467 - ERROR - Error extracting teams for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:18:18,528 - ERROR - Error extracting rosters for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:18:18,590 - ERROR - Error extracting matchups for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:18:18,651 - ERROR - Error extracting transactions for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:18:18,651 - INFO - 🎯 Extracting draft data for league 242.l.245298...
+2025-06-06 15:18:18,708 - ERROR - Error extracting draft data for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:18:19,212 - INFO - 📋 Processing league 9/26: Round 6 (2010)
+2025-06-06 15:18:19,274 - ERROR - Error extracting teams for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:18:19,328 - ERROR - Error extracting rosters for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:18:19,386 - ERROR - Error extracting matchups for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:18:19,444 - ERROR - Error extracting transactions for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:18:19,445 - INFO - 🎯 Extracting draft data for league 242.l.413666...
+2025-06-06 15:18:19,505 - ERROR - Error extracting draft data for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:18:20,009 - INFO - 📋 Processing league 10/26: Power House League (2011)
+2025-06-06 15:18:20,064 - ERROR - Error extracting teams for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:18:20,122 - ERROR - Error extracting rosters for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:18:20,184 - ERROR - Error extracting matchups for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:18:20,246 - ERROR - Error extracting transactions for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:18:20,246 - INFO - 🎯 Extracting draft data for league 257.l.656437...
+2025-06-06 15:18:20,371 - ERROR - Error extracting draft data for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:18:20,876 - INFO - 📋 Processing league 11/26: Lock It Up (2011)
+2025-06-06 15:18:20,931 - ERROR - Error extracting teams for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:18:21,074 - ERROR - Error extracting rosters for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:18:21,136 - ERROR - Error extracting matchups for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:18:21,195 - ERROR - Error extracting transactions for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:18:21,195 - INFO - 🎯 Extracting draft data for league 257.l.89145...
+2025-06-06 15:18:21,252 - ERROR - Error extracting draft data for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:18:21,754 - INFO - 📋 Processing league 12/26: The League About Nothing (2012)
+2025-06-06 15:18:21,810 - ERROR - Error extracting teams for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:18:21,868 - ERROR - Error extracting rosters for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:18:21,924 - ERROR - Error extracting matchups for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:18:21,985 - ERROR - Error extracting transactions for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:18:21,986 - INFO - 🎯 Extracting draft data for league 273.l.107980...
+2025-06-06 15:18:22,043 - ERROR - Error extracting draft data for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:18:22,547 - INFO - 📋 Processing league 13/26: Rosterbaters Anonymous (2013)
+2025-06-06 15:18:22,604 - ERROR - Error extracting teams for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:18:22,660 - ERROR - Error extracting rosters for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:18:22,719 - ERROR - Error extracting matchups for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:18:22,774 - ERROR - Error extracting transactions for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:18:22,775 - INFO - 🎯 Extracting draft data for league 314.l.319572...
+2025-06-06 15:18:22,830 - ERROR - Error extracting draft data for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:18:23,335 - INFO - 📋 Processing league 14/26: 10 Years 10 Assholes (2014)
+2025-06-06 15:18:23,398 - ERROR - Error extracting teams for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:18:23,452 - ERROR - Error extracting rosters for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:18:23,586 - ERROR - Error extracting matchups for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:18:23,643 - ERROR - Error extracting transactions for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:18:23,644 - INFO - 🎯 Extracting draft data for league 331.l.355899...
+2025-06-06 15:18:23,704 - ERROR - Error extracting draft data for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:18:24,209 - INFO - 📋 Processing league 15/26: Concussion Factory (2014)
+2025-06-06 15:18:24,272 - ERROR - Error extracting teams for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:18:24,334 - ERROR - Error extracting rosters for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:18:24,394 - ERROR - Error extracting matchups for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:18:24,453 - ERROR - Error extracting transactions for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:18:24,453 - INFO - 🎯 Extracting draft data for league 331.l.947050...
+2025-06-06 15:18:24,511 - ERROR - Error extracting draft data for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:18:25,016 - INFO - 📋 Processing league 16/26: Luke's Kingdom (2015)
+2025-06-06 15:18:25,074 - ERROR - Error extracting teams for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:18:25,134 - ERROR - Error extracting rosters for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:18:25,191 - ERROR - Error extracting matchups for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:18:25,251 - ERROR - Error extracting transactions for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:18:25,251 - INFO - 🎯 Extracting draft data for league 348.l.655822...
+2025-06-06 15:18:25,310 - ERROR - Error extracting draft data for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:18:25,812 - INFO - 📋 Processing league 17/26: The Great SF Draft (2016)
+2025-06-06 15:18:25,870 - ERROR - Error extracting teams for league 359.l.696366: b'Request denied\r\n'
+2025-06-06 15:18:25,930 - ERROR - Error extracting rosters for league 359.l.696366: b'Request denied\r\n'
+2025-06-06 15:18:25,990 - ERROR - Error extracting matchups for league 359.l.696366: b'Request denied\r\n'
+2025-06-06 15:18:26,053 - ERROR - Error extracting transactions for league 359.l.696366: b'Request denied\r\n'
+2025-06-06 15:18:26,053 - INFO - 🎯 Extracting draft data for league 359.l.696366...
+2025-06-06 15:18:26,112 - ERROR - Error extracting draft data for league 359.l.696366: b'Request denied\r\n'
+2025-06-06 15:18:26,616 - INFO - 📋 Processing league 18/26: Go Fuck Yourself San Diego (2017)
+2025-06-06 15:18:26,673 - ERROR - Error extracting teams for league 371.l.1025465: b'Request denied\r\n'
+2025-06-06 15:18:26,733 - ERROR - Error extracting rosters for league 371.l.1025465: b'Request denied\r\n'
+2025-06-06 15:18:26,791 - ERROR - Error extracting matchups for league 371.l.1025465: b'Request denied\r\n'
+2025-06-06 15:18:26,852 - ERROR - Error extracting transactions for league 371.l.1025465: b'Request denied\r\n'
+2025-06-06 15:18:26,852 - INFO - 🎯 Extracting draft data for league 371.l.1025465...
+2025-06-06 15:18:26,908 - ERROR - Error extracting draft data for league 371.l.1025465: b'Request denied\r\n'
+2025-06-06 15:18:27,412 - INFO - 📋 Processing league 19/26: Sleepless In Seattle (2018)
+2025-06-06 15:18:27,576 - ERROR - Error extracting teams for league 380.l.1143665: b'Request denied\r\n'
+2025-06-06 15:18:27,637 - ERROR - Error extracting rosters for league 380.l.1143665: b'Request denied\r\n'
+2025-06-06 15:18:27,700 - ERROR - Error extracting matchups for league 380.l.1143665: b'Request denied\r\n'
+2025-06-06 15:18:27,757 - ERROR - Error extracting transactions for league 380.l.1143665: b'Request denied\r\n'
+2025-06-06 15:18:27,758 - INFO - 🎯 Extracting draft data for league 380.l.1143665...
+2025-06-06 15:18:27,818 - ERROR - Error extracting draft data for league 380.l.1143665: b'Request denied\r\n'
+2025-06-06 15:18:28,323 - INFO - 📋 Processing league 20/26: Women & Women First (2019)
+2025-06-06 15:18:28,458 - ERROR - Error extracting teams for league 390.l.777720: b'Request denied\r\n'
+2025-06-06 15:18:28,517 - ERROR - Error extracting rosters for league 390.l.777720: b'Request denied\r\n'
+2025-06-06 15:18:28,577 - ERROR - Error extracting matchups for league 390.l.777720: b'Request denied\r\n'
+2025-06-06 15:18:28,636 - ERROR - Error extracting transactions for league 390.l.777720: b'Request denied\r\n'
+2025-06-06 15:18:28,637 - INFO - 🎯 Extracting draft data for league 390.l.777720...
+2025-06-06 15:18:28,696 - ERROR - Error extracting draft data for league 390.l.777720: b'Request denied\r\n'
+2025-06-06 15:18:29,199 - INFO - 📋 Processing league 21/26: The Lost Year (2020)
+2025-06-06 15:18:29,257 - ERROR - Error extracting teams for league 399.l.837311: b'Request denied\r\n'
+2025-06-06 15:18:29,326 - ERROR - Error extracting rosters for league 399.l.837311: b'Request denied\r\n'
+2025-06-06 15:18:29,386 - ERROR - Error extracting matchups for league 399.l.837311: b'Request denied\r\n'
+2025-06-06 15:18:29,450 - ERROR - Error extracting transactions for league 399.l.837311: b'Request denied\r\n'
+2025-06-06 15:18:29,451 - INFO - 🎯 Extracting draft data for league 399.l.837311...
+2025-06-06 15:18:29,518 - ERROR - Error extracting draft data for league 399.l.837311: b'Request denied\r\n'
+2025-06-06 15:18:30,029 - INFO - 📋 Processing league 22/26: Rocky Mountain High (2021)
+2025-06-06 15:18:30,086 - ERROR - Error extracting teams for league 406.l.1065326: b'Request denied\r\n'
+2025-06-06 15:18:30,144 - ERROR - Error extracting rosters for league 406.l.1065326: b'Request denied\r\n'
+2025-06-06 15:18:30,203 - ERROR - Error extracting matchups for league 406.l.1065326: b'Request denied\r\n'
+2025-06-06 15:18:30,261 - ERROR - Error extracting transactions for league 406.l.1065326: b'Request denied\r\n'
+2025-06-06 15:18:30,261 - INFO - 🎯 Extracting draft data for league 406.l.1065326...
+2025-06-06 15:18:30,321 - ERROR - Error extracting draft data for league 406.l.1065326: b'Request denied\r\n'
+2025-06-06 15:18:30,826 - INFO - 📋 Processing league 23/26: Wet Hot Tahoe Summer (2022)
+2025-06-06 15:18:30,888 - ERROR - Error extracting teams for league 414.l.1194955: b'Request denied\r\n'
+2025-06-06 15:18:30,947 - ERROR - Error extracting rosters for league 414.l.1194955: b'Request denied\r\n'
+2025-06-06 15:18:31,006 - ERROR - Error extracting matchups for league 414.l.1194955: b'Request denied\r\n'
+2025-06-06 15:18:31,069 - ERROR - Error extracting transactions for league 414.l.1194955: b'Request denied\r\n'
+2025-06-06 15:18:31,069 - INFO - 🎯 Extracting draft data for league 414.l.1194955...
+2025-06-06 15:18:31,133 - ERROR - Error extracting draft data for league 414.l.1194955: b'Request denied\r\n'
+2025-06-06 15:18:31,637 - INFO - 📋 Processing league 24/26: Move the Raiders to PDX (2023)
+2025-06-06 15:18:31,699 - ERROR - Error extracting teams for league 423.l.841006: b'Request denied\r\n'
+2025-06-06 15:18:31,757 - ERROR - Error extracting rosters for league 423.l.841006: b'Request denied\r\n'
+2025-06-06 15:18:31,817 - ERROR - Error extracting matchups for league 423.l.841006: b'Request denied\r\n'
+2025-06-06 15:18:31,875 - ERROR - Error extracting transactions for league 423.l.841006: b'Request denied\r\n'
+2025-06-06 15:18:31,875 - INFO - 🎯 Extracting draft data for league 423.l.841006...
+2025-06-06 15:18:31,934 - ERROR - Error extracting draft data for league 423.l.841006: b'Request denied\r\n'
+2025-06-06 15:18:32,439 - INFO - 📋 Processing league 25/26: Sequoiabowl I (2023)
+2025-06-06 15:18:32,496 - ERROR - Error extracting teams for league 423.l.951488: b'Request denied\r\n'
+2025-06-06 15:18:32,556 - ERROR - Error extracting rosters for league 423.l.951488: b'Request denied\r\n'
+2025-06-06 15:18:32,616 - ERROR - Error extracting matchups for league 423.l.951488: b'Request denied\r\n'
+2025-06-06 15:18:32,676 - ERROR - Error extracting transactions for league 423.l.951488: b'Request denied\r\n'
+2025-06-06 15:18:32,676 - INFO - 🎯 Extracting draft data for league 423.l.951488...
+2025-06-06 15:18:32,735 - ERROR - Error extracting draft data for league 423.l.951488: b'Request denied\r\n'
+2025-06-06 15:18:33,239 - INFO - 📋 Processing league 26/26: Idaho's DEI Quota (2024)
+2025-06-06 15:18:33,300 - ERROR - Error extracting teams for league 449.l.674707: b'Request denied\r\n'
+2025-06-06 15:18:33,357 - ERROR - Error extracting rosters for league 449.l.674707: b'Request denied\r\n'
+2025-06-06 15:18:33,415 - ERROR - Error extracting matchups for league 449.l.674707: b'Request denied\r\n'
+2025-06-06 15:18:33,471 - ERROR - Error extracting transactions for league 449.l.674707: b'Request denied\r\n'
+2025-06-06 15:18:33,472 - INFO - 🎯 Extracting draft data for league 449.l.674707...
+2025-06-06 15:18:33,529 - ERROR - Error extracting draft data for league 449.l.674707: b'Request denied\r\n'
+2025-06-06 15:18:34,032 - INFO - ✅ Data extraction completed!
+2025-06-06 15:18:34,033 - INFO - 📊 Summary:
+2025-06-06 15:18:34,033 - INFO -   - Leagues: 26
+2025-06-06 15:18:34,033 - INFO -   - Teams: 61
+2025-06-06 15:18:34,033 - INFO -   - Rosters: 17177
+2025-06-06 15:18:34,033 - INFO -   - Matchups: 387
+2025-06-06 15:18:34,033 - INFO -   - Transactions: 1641
+2025-06-06 15:18:34,033 - INFO -   - Draft Picks: 1092
+2025-06-06 15:18:34,496 - INFO - ✅ Main data saved: data/current/yahoo_fantasy_FINAL_complete_data_20250606_151834.json
+2025-06-06 15:18:34,496 - INFO - 🏈 Step 2: Extracting draft data...
+2025-06-06 15:18:34,496 - INFO - 🎯 Starting draft data extraction at 2025-06-06 15:18:34.496311
+2025-06-06 15:18:34,496 - INFO - 📂 Loading existing dataset: data/current/yahoo_fantasy_FINAL_complete_data_20250605_101225.json
+2025-06-06 15:18:34,548 - INFO - ✅ Successfully loaded existing dataset
+2025-06-06 15:18:34,549 - INFO - 🔑 Authenticating...
+2025-06-06 15:18:34,549 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 15:18:34,549 - DEBUG - Checking 
+2025-06-06 15:18:34,550 - DEBUG - ELAPSED TIME : 1913.6768629550934
+2025-06-06 15:18:34,550 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:18:34,551 - DEBUG - ELAPSED TIME : 1913.6778869628906
+2025-06-06 15:18:34,551 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:18:34,985 - ERROR - ❌ Authentication failed: b'Request denied\r\n'
+2025-06-06 15:18:34,985 - ERROR - ❌ Authentication failed
+2025-06-06 15:18:34,990 - INFO - ✅ Main extraction finished: data/current/yahoo_fantasy_FINAL_complete_data_20250606_151834.json
+2025-06-06 15:22:05,691 - INFO - 🔄 Starting RESUME extraction with enhanced rate limiting...
+2025-06-06 15:22:05,793 - INFO - 📋 Attempting to extract 20 failed leagues...
+2025-06-06 15:22:05,793 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 15:22:05,793 - DEBUG - Checking 
+2025-06-06 15:22:05,794 - DEBUG - ELAPSED TIME : 2124.9208331108093
+2025-06-06 15:22:05,794 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:22:05,796 - DEBUG - ELAPSED TIME : 2124.9230971336365
+2025-06-06 15:22:05,797 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:22:06,043 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-06 15:22:06,043 - INFO - 
+📋 Processing failed league 1/20: Christian Fellowship League (2010)
+2025-06-06 15:22:06,043 - INFO - 🔄 Attempt 1/3: Christian Fellowship League
+2025-06-06 15:22:11,839 - INFO -   📊 Found 9 teams in league 242.l.10035622710
+2025-06-06 15:22:16,988 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 7: b'Request denied\r\n'
+2025-06-06 15:22:18,220 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 8: b'Request denied\r\n'
+2025-06-06 15:22:18,464 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 9: b'Request denied\r\n'
+2025-06-06 15:22:18,520 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 10: b'Request denied\r\n'
+2025-06-06 15:22:18,587 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 11: b'Request denied\r\n'
+2025-06-06 15:22:18,651 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 12: b'Request denied\r\n'
+2025-06-06 15:22:18,714 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 13: b'Request denied\r\n'
+2025-06-06 15:22:18,770 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 14: b'Request denied\r\n'
+2025-06-06 15:22:18,829 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 15: b'Request denied\r\n'
+2025-06-06 15:22:18,887 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 16: b'Request denied\r\n'
+2025-06-06 15:22:18,945 - WARNING - Error getting roster for 242.l.10035622710.t.1 week 17: b'Request denied\r\n'
+2025-06-06 15:22:19,002 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 1: b'Request denied\r\n'
+2025-06-06 15:22:19,059 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 2: b'Request denied\r\n'
+2025-06-06 15:22:19,184 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 3: b'Request denied\r\n'
+2025-06-06 15:22:19,244 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 4: b'Request denied\r\n'
+2025-06-06 15:22:19,310 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 5: b'Request denied\r\n'
+2025-06-06 15:22:19,370 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 6: b'Request denied\r\n'
+2025-06-06 15:22:19,502 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 7: b'Request denied\r\n'
+2025-06-06 15:22:19,565 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 8: b'Request denied\r\n'
+2025-06-06 15:22:19,630 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 9: b'Request denied\r\n'
+2025-06-06 15:22:19,691 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 10: b'Request denied\r\n'
+2025-06-06 15:22:19,754 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 11: b'Request denied\r\n'
+2025-06-06 15:22:19,821 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 12: b'Request denied\r\n'
+2025-06-06 15:22:19,948 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 13: b'Request denied\r\n'
+2025-06-06 15:22:20,013 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 14: b'Request denied\r\n'
+2025-06-06 15:22:20,073 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 15: b'Request denied\r\n'
+2025-06-06 15:22:20,133 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 16: b'Request denied\r\n'
+2025-06-06 15:22:20,195 - WARNING - Error getting roster for 242.l.10035622710.t.2 week 17: b'Request denied\r\n'
+2025-06-06 15:22:20,327 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 1: b'Request denied\r\n'
+2025-06-06 15:22:20,387 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 2: b'Request denied\r\n'
+2025-06-06 15:22:20,448 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 3: b'Request denied\r\n'
+2025-06-06 15:22:20,510 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 4: b'Request denied\r\n'
+2025-06-06 15:22:20,572 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 5: b'Request denied\r\n'
+2025-06-06 15:22:20,633 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 6: b'Request denied\r\n'
+2025-06-06 15:22:20,693 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 7: b'Request denied\r\n'
+2025-06-06 15:22:20,753 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 8: b'Request denied\r\n'
+2025-06-06 15:22:20,808 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 9: b'Request denied\r\n'
+2025-06-06 15:22:20,943 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 10: b'Request denied\r\n'
+2025-06-06 15:22:21,005 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 11: b'Request denied\r\n'
+2025-06-06 15:22:21,065 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 12: b'Request denied\r\n'
+2025-06-06 15:22:21,130 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 13: b'Request denied\r\n'
+2025-06-06 15:22:21,194 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 14: b'Request denied\r\n'
+2025-06-06 15:22:21,260 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 15: b'Request denied\r\n'
+2025-06-06 15:22:21,322 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 16: b'Request denied\r\n'
+2025-06-06 15:22:21,394 - WARNING - Error getting roster for 242.l.10035622710.t.3 week 17: b'Request denied\r\n'
+2025-06-06 15:22:21,470 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 1: b'Request denied\r\n'
+2025-06-06 15:22:21,602 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 2: b'Request denied\r\n'
+2025-06-06 15:22:21,666 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 3: b'Request denied\r\n'
+2025-06-06 15:22:21,727 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 4: b'Request denied\r\n'
+2025-06-06 15:22:21,786 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 5: b'Request denied\r\n'
+2025-06-06 15:22:21,848 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 6: b'Request denied\r\n'
+2025-06-06 15:22:21,907 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 7: b'Request denied\r\n'
+2025-06-06 15:22:21,968 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 8: b'Request denied\r\n'
+2025-06-06 15:22:22,027 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 9: b'Request denied\r\n'
+2025-06-06 15:22:22,088 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 10: b'Request denied\r\n'
+2025-06-06 15:22:22,146 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 11: b'Request denied\r\n'
+2025-06-06 15:22:22,230 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 12: b'Request denied\r\n'
+2025-06-06 15:22:22,374 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 13: b'Request denied\r\n'
+2025-06-06 15:22:22,507 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 14: b'Request denied\r\n'
+2025-06-06 15:22:22,565 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 15: b'Request denied\r\n'
+2025-06-06 15:22:22,626 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 16: b'Request denied\r\n'
+2025-06-06 15:22:22,686 - WARNING - Error getting roster for 242.l.10035622710.t.4 week 17: b'Request denied\r\n'
+2025-06-06 15:22:22,746 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 1: b'Request denied\r\n'
+2025-06-06 15:22:22,808 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 2: b'Request denied\r\n'
+2025-06-06 15:22:22,871 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 3: b'Request denied\r\n'
+2025-06-06 15:22:22,936 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 4: b'Request denied\r\n'
+2025-06-06 15:22:22,993 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 5: b'Request denied\r\n'
+2025-06-06 15:22:23,065 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 6: b'Request denied\r\n'
+2025-06-06 15:22:23,139 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 7: b'Request denied\r\n'
+2025-06-06 15:22:23,270 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 8: b'Request denied\r\n'
+2025-06-06 15:22:23,331 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 9: b'Request denied\r\n'
+2025-06-06 15:22:23,394 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 10: b'Request denied\r\n'
+2025-06-06 15:22:23,455 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 11: b'Request denied\r\n'
+2025-06-06 15:22:23,521 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 12: b'Request denied\r\n'
+2025-06-06 15:22:23,580 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 13: b'Request denied\r\n'
+2025-06-06 15:22:23,646 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 14: b'Request denied\r\n'
+2025-06-06 15:22:23,720 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 15: b'Request denied\r\n'
+2025-06-06 15:22:23,781 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 16: b'Request denied\r\n'
+2025-06-06 15:22:23,841 - WARNING - Error getting roster for 242.l.10035622710.t.5 week 17: b'Request denied\r\n'
+2025-06-06 15:22:23,910 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 1: b'Request denied\r\n'
+2025-06-06 15:22:23,970 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 2: b'Request denied\r\n'
+2025-06-06 15:22:24,026 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 3: b'Request denied\r\n'
+2025-06-06 15:22:24,088 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 4: b'Request denied\r\n'
+2025-06-06 15:22:24,148 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 5: b'Request denied\r\n'
+2025-06-06 15:22:24,213 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 6: b'Request denied\r\n'
+2025-06-06 15:22:24,276 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 7: b'Request denied\r\n'
+2025-06-06 15:22:24,342 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 8: b'Request denied\r\n'
+2025-06-06 15:22:24,406 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 9: b'Request denied\r\n'
+2025-06-06 15:22:24,470 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 10: b'Request denied\r\n'
+2025-06-06 15:22:24,534 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 11: b'Request denied\r\n'
+2025-06-06 15:22:24,597 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 12: b'Request denied\r\n'
+2025-06-06 15:22:24,671 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 13: b'Request denied\r\n'
+2025-06-06 15:22:24,731 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 14: b'Request denied\r\n'
+2025-06-06 15:22:24,794 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 15: b'Request denied\r\n'
+2025-06-06 15:22:24,857 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 16: b'Request denied\r\n'
+2025-06-06 15:22:24,919 - WARNING - Error getting roster for 242.l.10035622710.t.6 week 17: b'Request denied\r\n'
+2025-06-06 15:22:24,983 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 1: b'Request denied\r\n'
+2025-06-06 15:22:25,046 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 2: b'Request denied\r\n'
+2025-06-06 15:22:25,113 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 3: b'Request denied\r\n'
+2025-06-06 15:22:25,177 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 4: b'Request denied\r\n'
+2025-06-06 15:22:25,240 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 5: b'Request denied\r\n'
+2025-06-06 15:22:25,302 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 6: b'Request denied\r\n'
+2025-06-06 15:22:25,369 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 7: b'Request denied\r\n'
+2025-06-06 15:22:25,428 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 8: b'Request denied\r\n'
+2025-06-06 15:22:25,489 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 9: b'Request denied\r\n'
+2025-06-06 15:22:25,550 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 10: b'Request denied\r\n'
+2025-06-06 15:22:25,611 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 11: b'Request denied\r\n'
+2025-06-06 15:22:25,674 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 12: b'Request denied\r\n'
+2025-06-06 15:22:25,733 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 13: b'Request denied\r\n'
+2025-06-06 15:22:25,797 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 14: b'Request denied\r\n'
+2025-06-06 15:22:25,859 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 15: b'Request denied\r\n'
+2025-06-06 15:22:25,993 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 16: b'Request denied\r\n'
+2025-06-06 15:22:26,054 - WARNING - Error getting roster for 242.l.10035622710.t.7 week 17: b'Request denied\r\n'
+2025-06-06 15:22:26,118 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 1: b'Request denied\r\n'
+2025-06-06 15:22:26,184 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 2: b'Request denied\r\n'
+2025-06-06 15:22:26,248 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 3: b'Request denied\r\n'
+2025-06-06 15:22:26,306 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 4: b'Request denied\r\n'
+2025-06-06 15:22:26,434 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 5: b'Request denied\r\n'
+2025-06-06 15:22:26,492 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 6: b'Request denied\r\n'
+2025-06-06 15:22:26,552 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 7: b'Request denied\r\n'
+2025-06-06 15:22:26,608 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 8: b'Request denied\r\n'
+2025-06-06 15:22:26,742 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 9: b'Request denied\r\n'
+2025-06-06 15:22:26,801 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 10: b'Request denied\r\n'
+2025-06-06 15:22:26,865 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 11: b'Request denied\r\n'
+2025-06-06 15:22:26,935 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 12: b'Request denied\r\n'
+2025-06-06 15:22:27,008 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 13: b'Request denied\r\n'
+2025-06-06 15:22:27,074 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 14: b'Request denied\r\n'
+2025-06-06 15:22:27,138 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 15: b'Request denied\r\n'
+2025-06-06 15:22:27,197 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 16: b'Request denied\r\n'
+2025-06-06 15:22:27,260 - WARNING - Error getting roster for 242.l.10035622710.t.8 week 17: b'Request denied\r\n'
+2025-06-06 15:22:27,319 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 1: b'Request denied\r\n'
+2025-06-06 15:22:27,401 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 2: b'Request denied\r\n'
+2025-06-06 15:22:27,464 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 3: b'Request denied\r\n'
+2025-06-06 15:22:27,593 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 4: b'Request denied\r\n'
+2025-06-06 15:22:27,724 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 5: b'Request denied\r\n'
+2025-06-06 15:22:27,784 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 6: b'Request denied\r\n'
+2025-06-06 15:22:27,856 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 7: b'Request denied\r\n'
+2025-06-06 15:22:27,917 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 8: b'Request denied\r\n'
+2025-06-06 15:22:27,988 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 9: b'Request denied\r\n'
+2025-06-06 15:22:28,067 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 10: b'Request denied\r\n'
+2025-06-06 15:22:28,130 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 11: b'Request denied\r\n'
+2025-06-06 15:22:28,198 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 12: b'Request denied\r\n'
+2025-06-06 15:22:28,260 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 13: b'Request denied\r\n'
+2025-06-06 15:22:28,324 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 14: b'Request denied\r\n'
+2025-06-06 15:22:28,386 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 15: b'Request denied\r\n'
+2025-06-06 15:22:28,448 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 16: b'Request denied\r\n'
+2025-06-06 15:22:28,508 - WARNING - Error getting roster for 242.l.10035622710.t.9 week 17: b'Request denied\r\n'
+2025-06-06 15:22:28,508 - INFO -   👥 Found 0 roster entries in league 242.l.10035622710
+2025-06-06 15:22:31,332 - ERROR - Error extracting matchups for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:22:33,998 - ERROR - Error extracting transactions for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:22:35,037 - INFO - 🎯 Extracting draft data for league 242.l.10035622710...
+2025-06-06 15:22:35,104 - ERROR - Error extracting draft data for league 242.l.10035622710: b'Request denied\r\n'
+2025-06-06 15:22:36,220 - INFO - ✅ Successfully extracted Christian Fellowship League
+2025-06-06 15:22:36,580 - INFO - 💾 Progress saved: data/current/yahoo_fantasy_RESUME_progress_20250606_152236.json
+2025-06-06 15:22:36,580 - INFO - 
+📋 Processing failed league 2/20: Football Gods 15 (2010)
+2025-06-06 15:22:36,580 - INFO - 🔄 Attempt 1/3: Football Gods 15
+2025-06-06 15:22:41,860 - ERROR - Error extracting teams for league 242.l.245298: b'Request denied\r\n'
+2025-06-06 15:22:41,860 - WARNING - ⚠️ No teams found for Football Gods 15
+2025-06-06 15:22:41,860 - WARNING - ⚠️ Failed to extract Football Gods 15 - skipping
+2025-06-06 15:22:41,860 - INFO - 
+📋 Processing failed league 3/20: Round 6 (2010)
+2025-06-06 15:22:41,860 - INFO - 🔄 Attempt 1/3: Round 6
+2025-06-06 15:22:47,433 - ERROR - Error extracting teams for league 242.l.413666: b'Request denied\r\n'
+2025-06-06 15:22:47,433 - WARNING - ⚠️ No teams found for Round 6
+2025-06-06 15:22:47,434 - WARNING - ⚠️ Failed to extract Round 6 - skipping
+2025-06-06 15:22:47,434 - INFO - 
+📋 Processing failed league 4/20: Power House League (2011)
+2025-06-06 15:22:47,434 - INFO - 🔄 Attempt 1/3: Power House League
+2025-06-06 15:22:53,130 - ERROR - Error extracting teams for league 257.l.656437: b'Request denied\r\n'
+2025-06-06 15:22:53,130 - WARNING - ⚠️ No teams found for Power House League
+2025-06-06 15:22:53,131 - WARNING - ⚠️ Failed to extract Power House League - skipping
+2025-06-06 15:22:53,131 - INFO - 
+📋 Processing failed league 5/20: Lock It Up (2011)
+2025-06-06 15:22:53,131 - INFO - 🔄 Attempt 1/3: Lock It Up
+2025-06-06 15:22:58,750 - INFO - 📊 API requests made: 10
+2025-06-06 15:22:58,810 - ERROR - Error extracting teams for league 257.l.89145: b'Request denied\r\n'
+2025-06-06 15:22:58,811 - WARNING - ⚠️ No teams found for Lock It Up
+2025-06-06 15:22:58,811 - WARNING - ⚠️ Failed to extract Lock It Up - skipping
+2025-06-06 15:22:58,811 - INFO - 
+📋 Processing failed league 6/20: The League About Nothing (2012)
+2025-06-06 15:22:58,811 - INFO - 🔄 Attempt 1/3: The League About Nothing
+2025-06-06 15:23:04,546 - ERROR - Error extracting teams for league 273.l.107980: b'Request denied\r\n'
+2025-06-06 15:23:04,546 - WARNING - ⚠️ No teams found for The League About Nothing
+2025-06-06 15:23:04,546 - WARNING - ⚠️ Failed to extract The League About Nothing - skipping
+2025-06-06 15:23:04,547 - INFO - 
+📋 Processing failed league 7/20: Rosterbaters Anonymous (2013)
+2025-06-06 15:23:04,547 - INFO - 🔄 Attempt 1/3: Rosterbaters Anonymous
+2025-06-06 15:23:10,319 - ERROR - Error extracting teams for league 314.l.319572: b'Request denied\r\n'
+2025-06-06 15:23:10,320 - WARNING - ⚠️ No teams found for Rosterbaters Anonymous
+2025-06-06 15:23:10,320 - WARNING - ⚠️ Failed to extract Rosterbaters Anonymous - skipping
+2025-06-06 15:23:10,320 - INFO - 
+📋 Processing failed league 8/20: 10 Years 10 Assholes (2014)
+2025-06-06 15:23:10,320 - INFO - 🔄 Attempt 1/3: 10 Years 10 Assholes
+2025-06-06 15:23:15,993 - ERROR - Error extracting teams for league 331.l.355899: b'Request denied\r\n'
+2025-06-06 15:23:15,993 - WARNING - ⚠️ No teams found for 10 Years 10 Assholes
+2025-06-06 15:23:15,993 - WARNING - ⚠️ Failed to extract 10 Years 10 Assholes - skipping
+2025-06-06 15:23:15,993 - INFO - 
+📋 Processing failed league 9/20: Concussion Factory (2014)
+2025-06-06 15:23:15,994 - INFO - 🔄 Attempt 1/3: Concussion Factory
+2025-06-06 15:23:21,671 - ERROR - Error extracting teams for league 331.l.947050: b'Request denied\r\n'
+2025-06-06 15:23:21,671 - WARNING - ⚠️ No teams found for Concussion Factory
+2025-06-06 15:23:21,671 - WARNING - ⚠️ Failed to extract Concussion Factory - skipping
+2025-06-06 15:23:21,671 - INFO - 
+📋 Processing failed league 10/20: Luke's Kingdom (2015)
+2025-06-06 15:23:21,671 - INFO - 🔄 Attempt 1/3: Luke's Kingdom
+2025-06-06 15:23:26,945 - ERROR - Error extracting teams for league 348.l.655822: b'Request denied\r\n'
+2025-06-06 15:23:26,945 - WARNING - ⚠️ No teams found for Luke's Kingdom
+2025-06-06 15:23:26,945 - WARNING - ⚠️ Failed to extract Luke's Kingdom - skipping
+2025-06-06 15:23:26,946 - INFO - 
+📋 Processing failed league 11/20: The Great SF Draft (2016)
+2025-06-06 15:23:26,946 - INFO - 🔄 Attempt 1/3: The Great SF Draft
+2025-06-06 15:31:43,889 - INFO - 🚀 Starting FULL fantasy football data extraction
+2025-06-06 15:31:43,890 - INFO - 📊 Step 1: Extracting main fantasy data...
+2025-06-06 15:31:43,890 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-06 15:31:43,890 - DEBUG - Checking 
+2025-06-06 15:31:43,891 - DEBUG - ELAPSED TIME : 2703.0175659656525
+2025-06-06 15:31:43,891 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:31:43,891 - DEBUG - ELAPSED TIME : 2703.0182070732117
+2025-06-06 15:31:43,892 - DEBUG - TOKEN IS STILL VALID
+2025-06-06 15:31:44,088 - ERROR - ❌ Authentication failed: b'Request denied\r\n'
+2025-06-06 15:31:44,088 - ERROR - ❌ Authentication failed

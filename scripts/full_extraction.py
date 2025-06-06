@@ -34,8 +34,8 @@ def main():
             logger.error("❌ Authentication failed")
             return None
         
-        # Extract all data
-        all_data = extractor.extract_all_data()
+        # Extract all data with batch processing (5 leagues per batch, 90s between batches)
+        all_data = extractor.extract_all_data(batch_size=5, batch_delay=90)
         
         # Save main data
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
