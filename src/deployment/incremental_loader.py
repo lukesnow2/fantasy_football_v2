@@ -141,6 +141,13 @@ class IncrementalDatabaseLoader:
             if field in df.columns:
                 df[field] = pd.to_numeric(df[field], errors='coerce')
         
+        # Convert numpy types to Python native types to avoid psycopg2 issues
+        for col in df.columns:
+            if df[col].dtype.name.startswith('int'):
+                df[col] = df[col].astype(int)
+            elif df[col].dtype.name.startswith('float'):
+                df[col] = df[col].astype(float)
+        
         return df
     
     def execute_upsert_strategy(self, table_name: str, df: pd.DataFrame, strategy: Dict) -> bool:
@@ -216,8 +223,10 @@ class IncrementalDatabaseLoader:
                         # Delete existing records for these periods
                         deleted_count = 0
                         for period in periods_to_update:
+                            # Convert numpy types to Python native types
+                            period_value = int(period) if hasattr(period, 'item') else period
                             delete_query = f"DELETE FROM {table_name} WHERE {filter_field} = :period"
-                            result = conn.execute(text(delete_query), {'period': period})
+                            result = conn.execute(text(delete_query), {'period': period_value})
                             deleted_count += result.rowcount
                         
                         if deleted_count > 0:
@@ -438,8 +447,8 @@ class IncrementalDatabaseLoader:
             logger.error(f"❌ Verification failed: {e}")
             return False
     
-    def deploy_incremental(self) -> bool:
-        """Execute complete incremental deployment"""
+    def deploy_incremental(self, run_edw: bool = True) -> bool:
+        """Execute complete incremental deployment with optional EDW processing"""
         steps = [
             ("Connect", self.connect),
             ("Load Data", self.load_data),
@@ -447,6 +456,10 @@ class IncrementalDatabaseLoader:
             ("Load Incremental Data", self.load_incremental_data),
             ("Verify & Summarize", self.verify_and_summarize)
         ]
+        
+        # Add EDW step if requested
+        if run_edw:
+            steps.append(("Process EDW", self.process_edw_updates))
         
         start_time = datetime.now()
         
@@ -461,7 +474,60 @@ class IncrementalDatabaseLoader:
         logger.info(f"⏱️ Runtime: {runtime}")
         logger.info(f"🗄️ Database updated with incremental loading strategies!")
         
+        if run_edw:
+            logger.info(f"📊 EDW updated with latest operational data!")
+        
         return True
+    
+    def process_edw_updates(self) -> bool:
+        """Process EDW updates based on operational table changes"""
+        try:
+            logger.info("🚀 Starting EDW processing...")
+            
+            # Import EDW processor
+            sys.path.append('src/edw_schema')
+            from edw_etl_processor import EdwEtlProcessor
+            
+            # Determine which tables were changed during incremental loading
+            changed_tables = set()
+            for table_name in self.TABLE_STRATEGIES.keys():
+                if table_name in self.data and self.data[table_name]:
+                    changed_tables.add(table_name)
+            
+            if not changed_tables:
+                logger.info("✅ No operational table changes - skipping EDW processing")
+                return True
+            
+            logger.info(f"📊 Operational tables changed: {changed_tables}")
+            
+            # Initialize EDW processor
+            edw = EdwEtlProcessor(database_url=self.database_url, data_file=self.data_file)
+            
+            # Connect to database (reuse existing connection info)
+            if not edw.connect():
+                logger.error("❌ Failed to connect to EDW database")
+                return False
+            
+            # Load operational data
+            if not edw.load_data():
+                logger.error("❌ Failed to load operational data for EDW")
+                return False
+            
+            # Process incremental EDW updates
+            if not edw.process_incremental_edw(changed_tables):
+                logger.error("❌ EDW processing failed")
+                return False
+            
+            logger.info("✅ EDW processing completed successfully")
+            return True
+            
+        except ImportError as e:
+            logger.warning(f"⚠️ EDW processor not available: {e}")
+            logger.info("📝 Skipping EDW processing - install EDW components if needed")
+            return True
+        except Exception as e:
+            logger.error(f"❌ EDW processing failed: {e}")
+            return False
 
 def main():
     """Main incremental loading entry point"""
@@ -474,8 +540,15 @@ def main():
                        help='Data file path (supports wildcards)')
     parser.add_argument('--database-url', 
                        help='Database URL (or set DATABASE_URL env var)')
+    parser.add_argument('--skip-edw', action='store_true',
+                       help='Skip EDW processing (only load operational data)')
+    parser.add_argument('--edw-only', action='store_true',
+                       help='Only process EDW updates (skip operational loading)')
     
     args = parser.parse_args()
+    
+    # Determine EDW processing mode
+    run_edw = not args.skip_edw
     
     # Auto-detect data file
     data_file = args.data_file
@@ -488,21 +561,52 @@ def main():
             data_file = 'data/current/yahoo_fantasy_FINAL_complete_data_20250605_101225.json'
             logger.warning(f"⚠️ No files match pattern, using: {data_file}")
     
-    logger.info(f"🚀 Starting incremental database loading")
-    logger.info(f"📊 Data file: {data_file}")
-    
-    try:
-        loader = IncrementalDatabaseLoader(data_file, args.database_url)
+    # Handle EDW-only mode
+    if args.edw_only:
+        logger.info(f"🚀 Starting EDW-only processing")
+        logger.info(f"📊 Data file: {data_file}")
         
-        if loader.deploy_incremental():
-            logger.info("🏆 Incremental loading system operational!")
-        else:
-            logger.error("❌ Incremental loading failed")
-            sys.exit(1)
+        try:
+            # Import and run EDW processor directly
+            sys.path.append('src/edw_schema')
+            from edw_etl_processor import EdwEtlProcessor
             
-    except Exception as e:
-        logger.error(f"❌ Loading error: {e}")
-        sys.exit(1)
+            database_url = args.database_url or os.getenv('DATABASE_URL')
+            if not database_url:
+                logger.error("❌ DATABASE_URL required for EDW processing")
+                sys.exit(1)
+            
+            edw = EdwEtlProcessor(database_url=database_url, data_file=data_file)
+            
+            if edw.connect() and edw.load_data() and edw.process_incremental_edw():
+                logger.info("🏆 EDW processing completed successfully!")
+            else:
+                logger.error("❌ EDW processing failed")
+                sys.exit(1)
+                
+        except Exception as e:
+            logger.error(f"❌ EDW error: {e}")
+            sys.exit(1)
+    else:
+        logger.info(f"🚀 Starting incremental database loading")
+        logger.info(f"📊 Data file: {data_file}")
+        if run_edw:
+            logger.info("🏢 EDW processing: ENABLED")
+        else:
+            logger.info("🏢 EDW processing: DISABLED")
+        
+        try:
+            loader = IncrementalDatabaseLoader(data_file, args.database_url)
+            
+            if loader.deploy_incremental(run_edw=run_edw):
+                logger.info("🏆 Incremental loading system operational!")
+            else:
+                logger.error("❌ Incremental loading failed")
+                sys.exit(1)
+                
+        except Exception as e:
+            logger.error(f"❌ Loading error: {e}")
+            sys.exit(1)
 
 if __name__ == "__main__":
     main() 
