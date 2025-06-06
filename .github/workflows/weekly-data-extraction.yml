@@ -125,6 +125,34 @@ jobs:
           echo "🚀 Deploying data to Heroku Postgres"
           python3 scripts/deploy.py --data-file "${{ steps.extraction.outputs.data_file }}" --database-url "$DATABASE_URL"
 
+      - name: Deploy EDW Schema
+        env:
+          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
+        run: |
+          echo "🏗️ Deploying EDW (Enterprise Data Warehouse)..."
+          python3 src/edw_schema/deploy_edw.py
+
+      - name: Test EDW Deployment
+        env:
+          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
+        run: |
+          echo "🧪 Testing EDW deployment..."
+          python3 src/edw_schema/test_edw_deployment.py --fast
+
+      - name: Deploy EDW Schema
+        env:
+          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
+        run: |
+          echo "🏗️ Deploying EDW (Enterprise Data Warehouse)..."
+          python3 src/edw_schema/deploy_edw.py
+
+      - name: Test EDW Deployment
+        env:
+          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
+        run: |
+          echo "🧪 Testing EDW deployment..."
+          python3 src/edw_schema/test_edw_deployment.py --fast
+
       - name: Archive extraction file
         uses: actions/upload-artifact@v3
         with:
@@ -138,6 +166,7 @@ jobs:
           echo "✅ Weekly fantasy football data pipeline completed successfully!"
           echo "📊 Data file: ${{ steps.extraction.outputs.data_file }}"
           echo "🗄️ Deployed to Heroku Postgres"
+          echo "🏗️ EDW Schema deployed and tested"
 
       - name: Send success email notification
         if: success()
@@ -154,6 +183,7 @@ jobs:
           Run #${{ github.run_number }} completed successfully!
           📅 Date: $(date)
           📊 Data extracted and deployed to Heroku Postgres
+          🏗️ EDW Schema deployed and validated
           📁 File: ${{ steps.extraction.outputs.data_file }}
           ⚡ Type: ${{ github.event.inputs.force_full_extraction == 'true' && 'Full Extraction (with draft data)' || 'Weekly Update' }}
           

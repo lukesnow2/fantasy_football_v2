@@ -19,7 +19,33 @@ config.json
 .env.local
 .env.production
 
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
+# Next.js
+.next/
+out/
+
+# Web directories (if they contain build artifacts)
+fantasy-league-web/
+web/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+out/
+
+# Web directories (if they contain build artifacts)
+fantasy-league-web/
+web/
 
 # Python
 __pycache__/
