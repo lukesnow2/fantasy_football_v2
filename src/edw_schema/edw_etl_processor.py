@@ -329,26 +329,119 @@ class EdwEtlProcessor:
             logger.warning(f"⚠️ Could not update metadata for {table_name}: {e}")
     
     def extract_seasons(self) -> List[Dict]:
-        """Extract unique seasons from leagues data"""
+        """Extract unique seasons from leagues data with derived week information"""
         seasons = {}
         
         if not self.data:
             logger.warning("⚠️ No data available for season extraction")
             return list(seasons.values())
         
+        # Build season metrics from actual matchup data
+        season_metrics = {}
+        
+        # Analyze matchups to get actual week ranges and playoff info
+        for matchup in self.data.get('matchups', []):
+            # Get season from league data
+            season_year = None
+            for league in self.data.get('leagues', []):
+                if league['league_id'] == matchup['league_id']:
+                    season_year = int(league['season'])
+                    break
+            
+            if not season_year:
+                continue
+            
+            if season_year not in season_metrics:
+                season_metrics[season_year] = {
+                    'weeks': set(),
+                    'playoff_weeks': set(),
+                    'championship_weeks': set(),
+                    'start_week': None,
+                    'end_week': None
+                }
+            
+            week = matchup['week']
+            season_metrics[season_year]['weeks'].add(week)
+            
+            if matchup.get('is_playoffs'):
+                season_metrics[season_year]['playoff_weeks'].add(week)
+            if matchup.get('is_championship'):
+                season_metrics[season_year]['championship_weeks'].add(week)
+        
+        # Calculate derived metrics for each season
+        for season_year, metrics in season_metrics.items():
+            if metrics['weeks']:
+                metrics['start_week'] = min(metrics['weeks'])
+                metrics['end_week'] = max(metrics['weeks'])
+                metrics['total_weeks'] = len(metrics['weeks'])
+                
+                # Determine playoff start week (first week where playoffs=true)
+                if metrics['playoff_weeks']:
+                    metrics['playoff_start_week'] = min(metrics['playoff_weeks'])
+                else:
+                    # Fallback: assume playoffs start at week total_weeks - 2
+                    metrics['playoff_start_week'] = max(1, metrics['end_week'] - 2)
+                
+                # Championship week is the latest week with championship games
+                if metrics['championship_weeks']:
+                    metrics['championship_week'] = max(metrics['championship_weeks'])
+                else:
+                    # Fallback: championship is the last week
+                    metrics['championship_week'] = metrics['end_week']
+        
+        # Use league configuration data as additional source
+        league_configs = {}
+        for league in self.data.get('leagues', []):
+            season_year = int(league['season'])
+            if season_year not in league_configs:
+                league_configs[season_year] = {
+                    'start_weeks': [],
+                    'end_weeks': [],
+                    'current_weeks': []
+                }
+            
+            if league.get('start_week'):
+                league_configs[season_year]['start_weeks'].append(league['start_week'])
+            if league.get('end_week'):
+                league_configs[season_year]['end_weeks'].append(league['end_week'])
+            if league.get('current_week'):
+                league_configs[season_year]['current_weeks'].append(league['current_week'])
+        
+        # Create final season records
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if season_year not in seasons:
+                metrics = season_metrics.get(season_year, {})
+                config = league_configs.get(season_year, {})
+                
+                # Use derived data or intelligent fallbacks
+                total_weeks = metrics.get('total_weeks', 17)
+                start_week = metrics.get('start_week', 1)
+                end_week = metrics.get('end_week', total_weeks)
+                playoff_start_week = metrics.get('playoff_start_week', max(1, end_week - 2))
+                championship_week = metrics.get('championship_week', end_week)
+                
+                # Override with league config if available (prefer mode/most common value)
+                if config.get('start_weeks'):
+                    start_week = max(set(config['start_weeks']), key=config['start_weeks'].count)
+                if config.get('end_weeks'):
+                    end_week = max(set(config['end_weeks']), key=config['end_weeks'].count)
+                
                 seasons[season_year] = {
                     'season_year': season_year,
-                    'season_start_date': date(season_year, 9, 1),  # Approximate NFL season start
-                    'season_end_date': date(season_year + 1, 1, 31),  # Approximate end
-                    'playoff_start_week': 15,  # Standard fantasy playoffs
-                    'championship_week': 17,
-                    'total_weeks': 17,
+                    'season_start_date': date(season_year, 9, 1),  # NFL season typically starts early September
+                    'season_end_date': date(season_year + 1, 1, 31),  # Fantasy typically ends in January
+                    'playoff_start_week': playoff_start_week,
+                    'championship_week': championship_week,
+                    'total_weeks': total_weeks,
                     'is_current_season': season_year == datetime.now().year,
                     'season_status': 'completed' if season_year < datetime.now().year else 'active'
                 }
+        
+        logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
+        for season_year in sorted(seasons.keys()):
+            s = seasons[season_year]
+            logger.info(f"  {season_year}: {s['total_weeks']} weeks, playoffs start week {s['playoff_start_week']}, championship week {s['championship_week']}")
         
         return list(seasons.values())
     
