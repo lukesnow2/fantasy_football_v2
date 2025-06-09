@@ -407,6 +407,54 @@ CREATE INDEX idx_keepers ON fact_draft (is_keeper_pick);
 CREATE INDEX idx_auction_costs ON fact_draft (draft_cost);
 CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_game);
 
+-- Fact: Player Statistics (Season-level player performance)
+CREATE TABLE fact_player_statistics (
+    stat_key SERIAL PRIMARY KEY,
+    league_key INTEGER NOT NULL,
+    player_key INTEGER NOT NULL,
+    season_year INTEGER NOT NULL,
+    
+    -- Basic Stats
+    total_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0,
+    position_type VARCHAR(10), -- O (Offense), K (Kicker), DEF (Defense)
+    
+    -- Performance Metrics
+    games_played INTEGER,
+    points_per_game DECIMAL(8,2),
+    consistency_score DECIMAL(8,4), -- Standard deviation of weekly scores
+    
+    -- Ranking Metrics (within league/position)
+    position_rank INTEGER,
+    league_rank INTEGER,
+    
+    -- Value Metrics
+    points_above_replacement DECIMAL(10,2),
+    draft_value_score DECIMAL(8,4), -- Actual vs expected performance
+    
+    -- Source Data
+    source_stat_id VARCHAR(100), -- Reference to original public.statistics record
+    game_code VARCHAR(10) DEFAULT 'nfl',
+    
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
+    FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
+    
+    UNIQUE(league_key, player_key, season_year)
+);
+
+-- Indexes for fact_player_statistics
+CREATE INDEX idx_player_stats_season ON fact_player_statistics (season_year);
+CREATE INDEX idx_player_stats_league ON fact_player_statistics (league_key, season_year);
+CREATE INDEX idx_player_stats_player ON fact_player_statistics (player_key, season_year);
+CREATE INDEX idx_player_stats_position ON fact_player_statistics (position_type, season_year);
+CREATE INDEX idx_player_stats_points ON fact_player_statistics (total_fantasy_points);
+CREATE INDEX idx_player_stats_ranking ON fact_player_statistics (league_key, position_rank);
+CREATE INDEX idx_player_stats_performance ON fact_player_statistics (points_per_game, consistency_score);
+CREATE INDEX idx_player_stats_source ON fact_player_statistics (source_stat_id);
+
 -- ============================================================================
 -- DATA MARTS (Pre-aggregated for Web App Performance)
 -- ============================================================================
@@ -826,6 +874,7 @@ COMMENT ON TABLE fact_matchup IS 'Head-to-head matchup results and statistics';
 COMMENT ON TABLE fact_roster IS 'Player ownership and roster decisions';
 COMMENT ON TABLE fact_transaction IS 'All player movement transactions';
 COMMENT ON TABLE fact_draft IS 'Draft results with value analysis';
+COMMENT ON TABLE fact_player_statistics IS 'Season-level player fantasy statistics and performance metrics';
 
 COMMENT ON TABLE mart_league_summary IS 'Pre-aggregated league statistics for dashboards';
 COMMENT ON TABLE mart_manager_performance IS 'Career manager statistics across all leagues';

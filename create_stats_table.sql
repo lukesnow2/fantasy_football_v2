@@ -1,0 +1,22 @@
+CREATE TABLE edw.fact_player_statistics (
+    stat_key SERIAL PRIMARY KEY,
+    league_key INTEGER NOT NULL,
+    player_key INTEGER NOT NULL,
+    season_year INTEGER NOT NULL,
+    total_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0,
+    position_type VARCHAR(10),
+    games_played INTEGER,
+    points_per_game DECIMAL(8,2),
+    consistency_score DECIMAL(8,4),
+    position_rank INTEGER,
+    league_rank INTEGER,
+    points_above_replacement DECIMAL(10,2),
+    draft_value_score DECIMAL(8,4),
+    source_stat_id VARCHAR(100),
+    game_code VARCHAR(10) DEFAULT 'nfl',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (league_key) REFERENCES edw.dim_league(league_key),
+    FOREIGN KEY (player_key) REFERENCES edw.dim_player(player_key),
+    UNIQUE(league_key, player_key, season_year)
+); 

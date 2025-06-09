@@ -108,7 +108,7 @@ class EdwEtlProcessor:
             'depends_on': 'operational_draft_picks'
         },
         'statistics': {
-            'triggers_refresh': ['fact_draft', 'mart_player_value', 'fact_team_performance'],
+            'triggers_refresh': ['fact_player_statistics', 'fact_draft', 'mart_player_value', 'fact_team_performance'],
             'refresh_type': 'UPSERT',  # Update existing, insert new
             'depends_on': 'operational_statistics'
         }
@@ -1100,13 +1100,17 @@ class EdwEtlProcessor:
                 # Build performance key
                 perf_key = (league_id, season_year, numeric_player_id)
                 
-                # Use real statistics data
+                # Use real statistics data - include all required fields for compatibility
                 player_performance[perf_key] = {
                     'total_points': float(stat.get('total_fantasy_points', 0)),
                     'games_played': 17 if float(stat.get('total_fantasy_points', 0)) > 0 else 0,  # Default to full season for real stats
                     'points_per_game': float(stat.get('total_fantasy_points', 0)) / 17 if float(stat.get('total_fantasy_points', 0)) > 0 else 0,
                     'position': stat.get('position_type', 'Unknown'),
-                    'data_source': 'real_statistics'  # Flag to indicate real data
+                    'data_source': 'real_statistics',  # Flag to indicate real data
+                    'weeks_active': set(range(1, 18)) if float(stat.get('total_fantasy_points', 0)) > 0 else set(),  # Add for compatibility
+                    'weeks_started': set(range(1, 18)) if float(stat.get('total_fantasy_points', 0)) > 0 else set(),  # Add for compatibility
+                    'team_scores_while_active': [],
+                    'team_scores_while_started': []
                 }
                 real_stats_count += 1
             
@@ -1323,6 +1327,160 @@ class EdwEtlProcessor:
                 'points_per_game': float(perf_data['points_per_game']) if perf_data['points_per_game'] > 0 else None
             })
         
+        return facts
+    
+    def transform_fact_player_statistics(self) -> List[Dict]:
+        """Transform player statistics data into fact_player_statistics format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for player statistics transformation")
+            return facts
+
+        # Build set of league of record IDs for efficient lookup
+        league_of_record_ids = set()
+        league_to_season = {}
+        for league in self.data.get('leagues', []):
+            season_year = int(league['season'])
+            if self.is_league_of_record(league['league_id'], season_year):
+                league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        if not league_of_record_ids:
+            logger.warning("⚠️ No league of record data found")
+            return facts
+
+        # Process statistics data
+        statistics_data = self.data.get('statistics', [])
+        if not statistics_data:
+            logger.warning("⚠️ No statistics data found")
+            return facts
+
+        logger.info(f"📊 Processing {len(statistics_data)} player statistics records...")
+
+        # Group stats by league-season for ranking calculations
+        league_season_stats = {}
+        position_stats = {}
+
+        # First pass: collect all stats for ranking calculations
+        for stat in statistics_data:
+            league_id = stat['league_id']
+            if league_id not in league_of_record_ids:
+                continue
+
+            season_year = league_to_season.get(league_id)
+            if not season_year:
+                continue
+
+            fantasy_points = float(stat.get('total_fantasy_points', 0))
+            position_type = stat.get('position_type', 'Unknown')
+
+            # Group for league rankings
+            league_season_key = (league_id, season_year)
+            if league_season_key not in league_season_stats:
+                league_season_stats[league_season_key] = []
+            league_season_stats[league_season_key].append((stat, fantasy_points))
+
+            # Group for position rankings
+            position_key = (league_id, season_year, position_type)
+            if position_key not in position_stats:
+                position_stats[position_key] = []
+            position_stats[position_key].append((stat, fantasy_points))
+
+        # Calculate rankings
+        league_rankings = {}
+        position_rankings = {}
+
+        for league_season_key, stats_list in league_season_stats.items():
+            # Sort by fantasy points descending
+            sorted_stats = sorted(stats_list, key=lambda x: x[1], reverse=True)
+            for rank, (stat, points) in enumerate(sorted_stats, 1):
+                stat_key = (stat['league_id'], stat['player_id'], stat['season_year'])
+                league_rankings[stat_key] = rank
+
+        for position_key, stats_list in position_stats.items():
+            # Sort by fantasy points descending
+            sorted_stats = sorted(stats_list, key=lambda x: x[1], reverse=True)
+            for rank, (stat, points) in enumerate(sorted_stats, 1):
+                stat_key = (stat['league_id'], stat['player_id'], stat['season_year'])
+                position_rankings[stat_key] = rank
+
+        # Second pass: create fact records with rankings
+        for stat in statistics_data:
+            league_id = stat['league_id']
+            if league_id not in league_of_record_ids:
+                continue
+
+            season_year = league_to_season.get(league_id)
+            if not season_year:
+                continue
+
+            # Get dimension keys
+            league_key = self.dim_mappings['league_keys'].get(league_id)
+            if not league_key:
+                continue
+
+            # Extract player ID (handle Yahoo format)
+            raw_player_id = stat['player_id']
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+
+            player_key = self.dim_mappings['player_keys'].get(numeric_player_id)
+            if not player_key:
+                continue
+
+            # Basic stats
+            fantasy_points = float(stat.get('total_fantasy_points', 0))
+            position_type = stat.get('position_type', 'Unknown')
+
+            # Get rankings
+            stat_key = (league_id, stat['player_id'], int(stat['season_year']))
+            league_rank = league_rankings.get(stat_key)
+            position_rank = position_rankings.get(stat_key)
+
+            # Calculate estimated performance metrics
+            # For now, use simplified calculations - can be enhanced later
+            estimated_games = 17 if fantasy_points > 0 else 0
+            points_per_game = fantasy_points / estimated_games if estimated_games > 0 else 0
+
+            # Calculate points above replacement (simplified)
+            # Use bottom 25% of position as replacement level
+            position_key = (league_id, season_year, position_type)
+            if position_key in position_stats:
+                position_players = position_stats[position_key]
+                if len(position_players) > 3:  # Need enough players for replacement calculation
+                    replacement_threshold = int(len(position_players) * 0.75)  # Bottom 25%
+                    sorted_position = sorted(position_players, key=lambda x: x[1], reverse=True)
+                    replacement_points = sorted_position[replacement_threshold][1] if replacement_threshold < len(sorted_position) else 0
+                    points_above_replacement = fantasy_points - replacement_points
+                else:
+                    points_above_replacement = fantasy_points
+            else:
+                points_above_replacement = fantasy_points
+
+            # Create fact record
+            fact = {
+                'league_key': league_key,
+                'player_key': player_key,
+                'season_year': season_year,
+                'total_fantasy_points': fantasy_points,
+                'position_type': position_type,
+                'games_played': estimated_games,
+                'points_per_game': round(points_per_game, 2),
+                'consistency_score': None,  # Would need weekly data to calculate
+                'position_rank': position_rank,
+                'league_rank': league_rank,
+                'points_above_replacement': round(points_above_replacement, 2),
+                'draft_value_score': None,  # Would need draft data correlation
+                'source_stat_id': stat.get('stat_id'),
+                'game_code': stat.get('game_code', 'nfl')
+            }
+
+            facts.append(fact)
+
+        logger.info(f"✅ Player statistics facts transformed: {len(facts)} records")
         return facts
     
     def transform_fact_team_performance(self) -> List[Dict]:
@@ -1613,6 +1771,7 @@ class EdwEtlProcessor:
                 ("fact_matchup", self.transform_fact_matchup),
                 ("fact_transaction", self.transform_fact_transaction),
                 ("fact_draft", self.transform_fact_draft),
+                ("fact_player_statistics", self.transform_fact_player_statistics),
                 ("fact_team_performance", self.transform_fact_team_performance)
             ]
             
@@ -2135,7 +2294,7 @@ class EdwEtlProcessor:
                         logger.info(f"⚡ Inserting {len(df)} new records...")
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
                         
-                    elif table_name in ['fact_transaction', 'fact_draft']:
+                    elif table_name in ['fact_transaction', 'fact_draft', 'fact_player_statistics']:
                         # Append-only tables: use bulk insert (let database handle duplicates)
                         logger.info(f"🔄 Using bulk insert for append-only table {table_name}")
                         
@@ -2143,9 +2302,37 @@ class EdwEtlProcessor:
                         if 'transaction_id' in df.columns:
                             df = df.drop('transaction_id', axis=1)
                             
-                        # Use bulk insert
-                        df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
-                        logger.info(f"✅ Bulk inserted {len(df)} records")
+                        # For statistics, use UPSERT strategy since we may update stats
+                        if table_name == 'fact_player_statistics':
+                            logger.info(f"🔄 Using UPSERT strategy for {table_name}")
+                            # Convert DataFrame to records for individual upsert
+                            for _, row in df.iterrows():
+                                upsert_sql = text("""
+                                    INSERT INTO edw.fact_player_statistics 
+                                    (league_key, player_key, season_year, total_fantasy_points, position_type, 
+                                     games_played, points_per_game, consistency_score, position_rank, league_rank, 
+                                     points_above_replacement, draft_value_score, source_stat_id, game_code)
+                                    VALUES (:league_key, :player_key, :season_year, :total_fantasy_points, :position_type,
+                                            :games_played, :points_per_game, :consistency_score, :position_rank, :league_rank,
+                                            :points_above_replacement, :draft_value_score, :source_stat_id, :game_code)
+                                    ON CONFLICT (league_key, player_key, season_year) 
+                                    DO UPDATE SET
+                                        total_fantasy_points = EXCLUDED.total_fantasy_points,
+                                        position_type = EXCLUDED.position_type,
+                                        games_played = EXCLUDED.games_played,
+                                        points_per_game = EXCLUDED.points_per_game,
+                                        position_rank = EXCLUDED.position_rank,
+                                        league_rank = EXCLUDED.league_rank,
+                                        points_above_replacement = EXCLUDED.points_above_replacement,
+                                        source_stat_id = EXCLUDED.source_stat_id,
+                                        updated_at = CURRENT_TIMESTAMP
+                                """)
+                                conn.execute(upsert_sql, row.to_dict())
+                            logger.info(f"✅ Upserted {len(df)} statistics records")
+                        else:
+                            # Use bulk insert for other tables
+                            df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
+                            logger.info(f"✅ Bulk inserted {len(df)} records")
                         
                     else:
                         logger.warning(f"⚠️ No incremental loading strategy for {table_name}, using bulk insert")

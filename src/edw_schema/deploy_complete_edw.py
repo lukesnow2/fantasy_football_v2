@@ -102,8 +102,9 @@ class EdwDeployment:
             
             # 2. Check which tables exist
             expected_tables = ['dim_season', 'dim_league', 'dim_team', 'dim_player', 'dim_manager', 'dim_week',
-                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft',
-                             'mart_league_summary', 'mart_manager_performance', 'mart_player_value', 'mart_weekly_power_rankings']
+                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft', 
+                             'fact_player_statistics', 'mart_league_summary', 'mart_manager_performance', 
+                             'mart_player_value', 'mart_weekly_power_rankings']
             
             cur.execute("""
                 SELECT table_name 
