@@ -446,13 +446,47 @@ class EdwEtlProcessor:
         return list(seasons.values())
     
     def extract_weeks(self) -> List[Dict]:
-        """Extract week dimension from available data"""
+        """Extract week dimension from available data with calculated week dates"""
         weeks = {}
         
         # Build league-to-season mapping
         league_to_season = {}
         for league in self.data.get('leagues', []):
             league_to_season[league['league_id']] = int(league['season'])
+        
+        # Build season info for week classification (use the updated season logic)
+        season_playoff_starts = {}
+        season_championships = {}
+        
+        # Use the same logic as extract_seasons to get playoff/championship week info
+        season_metrics = {}
+        for matchup in self.data.get('matchups', []):
+            season_year = None
+            for league in self.data.get('leagues', []):
+                if league['league_id'] == matchup['league_id']:
+                    season_year = int(league['season'])
+                    break
+            
+            if not season_year:
+                continue
+            
+            if season_year not in season_metrics:
+                season_metrics[season_year] = {
+                    'playoff_weeks': set(),
+                    'championship_weeks': set()
+                }
+            
+            if matchup.get('is_playoffs'):
+                season_metrics[season_year]['playoff_weeks'].add(matchup['week'])
+            if matchup.get('is_championship'):
+                season_metrics[season_year]['championship_weeks'].add(matchup['week'])
+        
+        # Calculate playoff/championship weeks for each season
+        for season_year, metrics in season_metrics.items():
+            if metrics['playoff_weeks']:
+                season_playoff_starts[season_year] = min(metrics['playoff_weeks'])
+            if metrics['championship_weeks']:
+                season_championships[season_year] = max(metrics['championship_weeks'])
         
         # Extract from matchup data (has week information)
         for matchup in self.data.get('matchups', []):
@@ -462,25 +496,102 @@ class EdwEtlProcessor:
             
             key = (season_year, week_number)
             if key not in weeks:
+                # Calculate week dates based on NFL season patterns
+                week_start_date, week_end_date = self.calculate_week_dates(season_year, week_number)
+                
+                # Determine week type based on actual playoff data for this season
+                week_type = self.classify_week_type_for_season(
+                    season_year, 
+                    week_number, 
+                    season_playoff_starts.get(season_year), 
+                    season_championships.get(season_year)
+                )
+                
                 weeks[key] = {
                     'season_year': season_year,
                     'week_number': week_number,
-                    'week_type': self.classify_week_type(week_number),
-                    'week_start_date': None,  # Could calculate based on season
-                    'week_end_date': None,
-                    'is_current_week': False  # Will be updated based on current logic
+                    'week_type': week_type,
+                    'week_start_date': week_start_date,
+                    'week_end_date': week_end_date,
+                    'is_current_week': self.is_current_week(season_year, week_number)
                 }
+        
+        logger.info(f"📅 Extracted {len(weeks)} weeks with calculated dates")
         
         return list(weeks.values())
     
     def classify_week_type(self, week_number: int) -> str:
-        """Classify week type based on week number"""
+        """Classify week type based on week number (legacy - use classify_week_type_for_season)"""
         if week_number <= 14:
             return 'regular'
         elif week_number <= 16:
             return 'playoffs'
         else:
             return 'championship'
+    
+    def classify_week_type_for_season(self, season_year: int, week_number: int, 
+                                    playoff_start_week: int = None, championship_week: int = None) -> str:
+        """Classify week type based on actual season data"""
+        if championship_week and week_number >= championship_week:
+            return 'championship'
+        elif playoff_start_week and week_number >= playoff_start_week:
+            return 'playoffs'
+        else:
+            return 'regular'
+    
+    def calculate_week_dates(self, season_year: int, week_number: int) -> tuple:
+        """Calculate week start and end dates based on NFL season patterns"""
+        from datetime import date, timedelta
+        
+        # NFL season typically starts the first or second week of September
+        # Week 1 usually starts on the Tuesday after Labor Day (first Monday in September)
+        
+        # Calculate Labor Day (first Monday in September)
+        labor_day = date(season_year, 9, 1)
+        while labor_day.weekday() != 0:  # 0 = Monday
+            labor_day += timedelta(days=1)
+        
+        # NFL Week 1 typically starts the Tuesday after Labor Day
+        nfl_week_1_start = labor_day + timedelta(days=1)  # Tuesday
+        
+        # However, some seasons start a week earlier or later
+        # Adjust based on historical patterns
+        if season_year <= 2020:
+            # Pre-2021: Often started earlier
+            if season_year <= 2010:
+                nfl_week_1_start = date(season_year, 8, 31)  # Late August start
+            else:
+                nfl_week_1_start = date(season_year, 9, 1)   # Early September
+        else:
+            # 2021+: More standardized start around Labor Day
+            nfl_week_1_start = labor_day + timedelta(days=1)
+        
+        # Ensure it's a Tuesday (fantasy weeks typically run Tuesday-Monday)
+        while nfl_week_1_start.weekday() != 1:  # 1 = Tuesday
+            nfl_week_1_start += timedelta(days=1)
+        
+        # Calculate this week's dates (each week is 7 days, Tuesday-Monday)
+        week_start_date = nfl_week_1_start + timedelta(weeks=week_number - 1)
+        week_end_date = week_start_date + timedelta(days=6)  # Monday
+        
+        return week_start_date, week_end_date
+    
+    def is_current_week(self, season_year: int, week_number: int) -> bool:
+        """Determine if this is the current week"""
+        from datetime import date
+        
+        current_date = date.today()
+        current_year = current_date.year
+        
+        # Only current season can have current week
+        if season_year != current_year:
+            return False
+        
+        # Calculate the current week dates
+        week_start_date, week_end_date = self.calculate_week_dates(season_year, week_number)
+        
+        # Check if today falls within this week
+        return week_start_date <= current_date <= week_end_date
     
     def transform_leagues(self) -> List[Dict]:
         """Transform leagues into dimension format"""
