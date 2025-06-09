@@ -1053,7 +1053,7 @@ class EdwEtlProcessor:
         return facts
     
     def transform_fact_draft(self) -> List[Dict]:
-        """Transform draft pick data into fact_draft format"""
+        """Transform draft pick data into fact_draft format with calculated performance metrics"""
         facts = []
         
         if not self.data:
@@ -1062,10 +1062,66 @@ class EdwEtlProcessor:
 
         # Build set of league of record IDs for efficient lookup
         league_of_record_ids = set()
+        league_to_season = {}
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        # Build player performance lookup from roster data
+        player_performance = {}
+        for roster in self.data.get('rosters', []):
+            league_id = roster['league_id']
+            if league_id not in league_of_record_ids:
+                continue
+                
+            season_year = league_to_season.get(league_id)
+            if not season_year:
+                continue
+                
+            # Extract numeric player ID from Yahoo format
+            raw_player_id = roster['player_id']
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+            
+            # Build performance key
+            perf_key = (league_id, season_year, numeric_player_id)
+            
+            if perf_key not in player_performance:
+                player_performance[perf_key] = {
+                    'total_points': 0.0,
+                    'games_played': 0,
+                    'weeks_active': set()
+                }
+            
+            # Count games where player was active (on roster)
+            if roster.get('status') == 'active':
+                player_performance[perf_key]['weeks_active'].add(roster['week'])
+                
+                # Add actual points if available
+                actual_points = roster.get('actual_points')
+                if actual_points is not None:
+                    try:
+                        player_performance[perf_key]['total_points'] += float(actual_points)
+                    except (ValueError, TypeError):
+                        pass  # Skip invalid point values
+
+        # Calculate final performance metrics
+        for perf_key, perf_data in player_performance.items():
+            perf_data['games_played'] = len(perf_data['weeks_active'])
+            if perf_data['games_played'] > 0:
+                perf_data['points_per_game'] = perf_data['total_points'] / perf_data['games_played']
+            else:
+                perf_data['points_per_game'] = 0.0
+
+        logger.info(f"📊 Built performance data for {len(player_performance)} player-season combinations")
+
+        # Ensure dimension mappings are cached
+        if not self.dim_mappings:
+            self.cache_dimension_mappings()
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -1102,19 +1158,16 @@ class EdwEtlProcessor:
                 logger.debug(f"⚠️ Missing keys for draft pick: league={league_key}, team={team_key} (raw={raw_team_id}, full={full_team_id}), player={player_key}, manager={manager_key}")
                 continue
             
-            # Extract season from extracted_at timestamp
-            try:
-                if 'extracted_at' in draft_pick:
-                    extracted_date = datetime.fromisoformat(draft_pick['extracted_at'].replace('T', ' ').replace('Z', '')).date()
-                    season_year = extracted_date.year
-                    if extracted_date.month >= 9:  # September or later = current NFL season
-                        season_year = extracted_date.year
-                    else:  # January-August = previous NFL season  
-                        season_year = extracted_date.year - 1
-                else:
-                    season_year = 2024  # Default fallback
-            except (ValueError, KeyError):
-                season_year = 2024  # Default fallback
+            # Get season year from league data (not extracted_at timestamp!)
+            season_year = league_to_season.get(league_id, 2024)
+            
+            # Get player performance data for this season
+            perf_key = (league_id, season_year, draft_pick['player_id'])
+            perf_data = player_performance.get(perf_key, {
+                'total_points': 0.0,
+                'games_played': 0,
+                'points_per_game': 0.0
+            })
             
             facts.append({
                 'league_key': int(league_key),
@@ -1127,9 +1180,9 @@ class EdwEtlProcessor:
                 'pick_in_round': int(draft_pick.get('pick_in_round', (draft_pick['pick_number'] - 1) % 12 + 1)),
                 'draft_cost': float(draft_pick.get('cost', 0)) if draft_pick.get('cost') else None,
                 'is_keeper_pick': bool(draft_pick.get('is_keeper', False)),
-                'season_points': None,  # Will be calculated later
-                'games_played': None,
-                'points_per_game': None
+                'season_points': float(perf_data['total_points']) if perf_data['total_points'] > 0 else None,
+                'games_played': int(perf_data['games_played']) if perf_data['games_played'] > 0 else None,
+                'points_per_game': float(perf_data['points_per_game']) if perf_data['points_per_game'] > 0 else None
             })
         
         return facts
