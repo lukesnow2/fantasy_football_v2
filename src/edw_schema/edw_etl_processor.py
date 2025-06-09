@@ -788,11 +788,7 @@ class EdwEtlProcessor:
                             to_manager_key = manager_keys.get(consolidated_manager_name)
                         break
             
-            # Generate a unique transaction_id
-            transaction_id = f"{transaction['league_id']}_{transaction['player_id']}_{transaction_date.strftime('%Y%m%d')}_{transaction['type']}"
-            
             facts.append({
-                'transaction_id': transaction_id,
                 'league_key': int(league_key),
                 'player_key': int(player_key),
                 'season_year': int(season_year),
