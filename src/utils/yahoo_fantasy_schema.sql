@@ -1,4 +1,3 @@
-
 -- Yahoo Fantasy Football Database Schema
 -- Generated for comprehensive data storage
 
@@ -49,7 +48,7 @@ CREATE TABLE teams (
     INDEX idx_wins_losses (wins, losses)
 );
 
--- Rosters table (player assignments to teams)
+-- Rosters table - ENABLED for roster data storage
 CREATE TABLE rosters (
     roster_id VARCHAR(100) PRIMARY KEY,
     team_id VARCHAR(50) NOT NULL,

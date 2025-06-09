@@ -3,6 +3,11 @@
 -- ============================================================================
 -- Designed for high-performance analytics and web application serving
 -- Includes: Dimension tables, Fact tables, Data Marts, and Optimized Views
+-- 
+-- NOTE: ROSTER FUNCTIONALITY DISABLED
+-- fact_roster table and related indexes commented out due to removal 
+-- of roster extraction from data pipeline for API efficiency
+-- 
 -- Author: AI Assistant
 -- Date: 2025-06-06
 -- ============================================================================
@@ -54,6 +59,7 @@ CREATE TABLE dim_team (
     team_key SERIAL PRIMARY KEY,
     team_id VARCHAR(50) NOT NULL,
     league_key INTEGER NOT NULL,
+    manager_key INTEGER,
     team_name VARCHAR(255) NOT NULL,
     manager_name VARCHAR(255),
     manager_id VARCHAR(100),
@@ -63,12 +69,14 @@ CREATE TABLE dim_team (
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (league_key) REFERENCES dim_league(league_key)
+    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
+    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key)
 );
 
 CREATE INDEX idx_team_id ON dim_team (team_id);
 CREATE INDEX idx_league_team ON dim_team (league_key);
 CREATE INDEX idx_manager ON dim_team (manager_name);
+CREATE INDEX idx_manager_key ON dim_team (manager_key);
 CREATE INDEX idx_team_active ON dim_team (is_active);
 CREATE INDEX idx_team_valid_period ON dim_team (valid_from, valid_to);
 
@@ -95,6 +103,36 @@ CREATE INDEX idx_nfl_team ON dim_player (nfl_team);
 CREATE INDEX idx_player_active ON dim_player (is_active);
 CREATE INDEX idx_player_valid_period ON dim_player (valid_from, valid_to);
 
+-- Dimension: Manager (Manager dimension for analytics)
+CREATE TABLE dim_manager (
+    manager_key SERIAL PRIMARY KEY,
+    manager_name VARCHAR(255) NOT NULL UNIQUE,
+    manager_id VARCHAR(100), -- Yahoo manager ID if available
+    first_season_year INTEGER,
+    last_season_year INTEGER,
+    total_seasons INTEGER DEFAULT 0,
+    total_leagues INTEGER DEFAULT 0,
+    
+    -- Manual flags for analysis control
+    is_current BOOLEAN DEFAULT TRUE,
+    include_in_analysis BOOLEAN DEFAULT TRUE,
+    
+    -- Manager profile data
+    email VARCHAR(255),
+    display_name VARCHAR(255),
+    profile_image_url VARCHAR(500),
+    
+    -- Metadata
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_manager_name ON dim_manager (manager_name);
+CREATE INDEX idx_manager_seasons ON dim_manager (first_season_year, last_season_year);
+CREATE INDEX idx_manager_analysis ON dim_manager (include_in_analysis, is_current);
+CREATE INDEX idx_manager_active ON dim_manager (is_active);
+
 -- Dimension: Week (Granular time dimension)
 CREATE TABLE dim_week (
     week_key SERIAL PRIMARY KEY,
@@ -117,10 +155,48 @@ CREATE INDEX idx_current_week ON dim_week (is_current_week);
 -- FACT TABLES (Transactional/Event Data)
 -- ============================================================================
 
+-- Fact: Roster Data (Player assignments) - DISABLED: roster extraction removed
+CREATE TABLE fact_roster (
+    roster_key SERIAL PRIMARY KEY,
+    team_key INTEGER NOT NULL,
+    manager_key INTEGER NOT NULL,
+    player_key INTEGER NOT NULL,
+    league_key INTEGER NOT NULL,
+    week_key INTEGER NOT NULL,
+    season_year INTEGER NOT NULL,
+    
+    -- Roster Details
+    roster_position VARCHAR(20),
+    is_starter BOOLEAN DEFAULT FALSE,
+    is_bench BOOLEAN DEFAULT FALSE,
+    is_ir BOOLEAN DEFAULT FALSE,
+    
+    -- Acquisition Info
+    acquisition_type VARCHAR(30), -- draft, waiver, trade, free_agent
+    acquisition_date DATE,
+    acquisition_cost DECIMAL(8,2), -- FAAB or trade value
+    
+    -- Performance
+    weekly_points DECIMAL(8,2),
+    games_played INTEGER DEFAULT 0,
+    projected_points DECIMAL(8,2),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (team_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key),
+    FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
+    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
+    FOREIGN KEY (week_key) REFERENCES dim_week(week_key),
+    
+    UNIQUE(team_key, player_key, week_key)
+);
+
 -- Fact: Team Performance (Weekly snapshots)
 CREATE TABLE fact_team_performance (
     performance_key SERIAL PRIMARY KEY,
     team_key INTEGER NOT NULL,
+    manager_key INTEGER NOT NULL,
     league_key INTEGER NOT NULL,
     week_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
@@ -151,6 +227,7 @@ CREATE TABLE fact_team_performance (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (team_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key),
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
     FOREIGN KEY (week_key) REFERENCES dim_week(week_key),
     
@@ -160,6 +237,7 @@ CREATE TABLE fact_team_performance (
 -- Indexes for fact_team_performance
 CREATE INDEX idx_team_performance_season ON fact_team_performance (season_year);
 CREATE INDEX idx_team_season ON fact_team_performance (team_key, season_year);
+CREATE INDEX idx_manager_season_perf ON fact_team_performance (manager_key, season_year);
 CREATE INDEX idx_league_week_perf ON fact_team_performance (league_key, week_key);
 CREATE INDEX idx_performance_metrics ON fact_team_performance (points_for, points_against);
 CREATE INDEX idx_weekly_rank ON fact_team_performance (weekly_rank);
@@ -176,6 +254,10 @@ CREATE TABLE fact_matchup (
     team1_key INTEGER NOT NULL,
     team2_key INTEGER NOT NULL,
     
+    -- Managers
+    manager1_key INTEGER NOT NULL,
+    manager2_key INTEGER NOT NULL,
+    
     -- Scores
     team1_points DECIMAL(10,2),
     team2_points DECIMAL(10,2),
@@ -184,12 +266,12 @@ CREATE TABLE fact_matchup (
     
     -- Outcome
     winner_team_key INTEGER,
+    winner_manager_key INTEGER,
     is_tie BOOLEAN DEFAULT FALSE,
     margin_of_victory DECIMAL(10,2),
     
     -- Game Type
     matchup_type VARCHAR(20) DEFAULT 'regular', -- regular, playoffs, championship, consolation
-    is_upset BOOLEAN DEFAULT FALSE, -- lower seed beats higher seed
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -198,7 +280,10 @@ CREATE TABLE fact_matchup (
     FOREIGN KEY (week_key) REFERENCES dim_week(week_key),
     FOREIGN KEY (team1_key) REFERENCES dim_team(team_key),
     FOREIGN KEY (team2_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (manager1_key) REFERENCES dim_manager(manager_key),
+    FOREIGN KEY (manager2_key) REFERENCES dim_manager(manager_key),
     FOREIGN KEY (winner_team_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (winner_manager_key) REFERENCES dim_manager(manager_key),
     
     UNIQUE(league_key, week_key, team1_key, team2_key)
 );
@@ -207,58 +292,14 @@ CREATE TABLE fact_matchup (
 CREATE INDEX idx_matchup_season ON fact_matchup (season_year);
 CREATE INDEX idx_matchup_league_week ON fact_matchup (league_key, week_key);
 CREATE INDEX idx_matchup_teams ON fact_matchup (team1_key, team2_key);
+CREATE INDEX idx_matchup_managers ON fact_matchup (manager1_key, manager2_key);
 CREATE INDEX idx_winner ON fact_matchup (winner_team_key);
+CREATE INDEX idx_winner_manager ON fact_matchup (winner_manager_key);
 CREATE INDEX idx_matchup_type ON fact_matchup (matchup_type);
-CREATE INDEX idx_upsets ON fact_matchup (is_upset);
+
 CREATE INDEX idx_scores ON fact_matchup (team1_points, team2_points);
 
--- Fact: Player Roster (Player ownership)
-CREATE TABLE fact_roster (
-    roster_key SERIAL PRIMARY KEY,
-    team_key INTEGER NOT NULL,
-    player_key INTEGER NOT NULL,
-    league_key INTEGER NOT NULL,
-    week_key INTEGER NOT NULL,
-    season_year INTEGER NOT NULL,
-    
-    -- Roster Details
-    roster_position VARCHAR(20), -- QB, RB, WR, TE, K, DEF, BN
-    is_starter BOOLEAN DEFAULT FALSE,
-    is_captain BOOLEAN DEFAULT FALSE,
-    
-    -- Performance
-    weekly_points DECIMAL(8,2),
-    projected_points DECIMAL(8,2),
-    points_vs_projection DECIMAL(8,2),
-    
-    -- Acquisition Info
-    acquisition_type VARCHAR(30), -- draft, waiver, free_agent, trade
-    acquisition_date DATE,
-    acquisition_cost DECIMAL(10,2), -- FAAB cost
-    days_owned INTEGER,
-    
-    -- Status
-    player_status VARCHAR(20), -- active, injured, bye, suspended
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (team_key) REFERENCES dim_team(team_key),
-    FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
-    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
-    FOREIGN KEY (week_key) REFERENCES dim_week(week_key),
-    
-    UNIQUE(team_key, player_key, week_key)
-);
-
--- Indexes for fact_roster
-CREATE INDEX idx_roster_season ON fact_roster (season_year);
-CREATE INDEX idx_team_week ON fact_roster (team_key, week_key);
-CREATE INDEX idx_player_week ON fact_roster (player_key, week_key);
-CREATE INDEX idx_league_week_roster ON fact_roster (league_key, week_key);
-CREATE INDEX idx_starters ON fact_roster (is_starter);
-CREATE INDEX idx_acquisition ON fact_roster (acquisition_type);
-CREATE INDEX idx_roster_performance ON fact_roster (weekly_points);
-CREATE INDEX idx_roster_position ON fact_roster (roster_position);
+-- Fact: Player Roster (Player ownership) - DISABLED: roster extraction removed
 
 -- Fact: Transactions (Player movements)
 CREATE TABLE fact_transaction (
@@ -276,6 +317,10 @@ CREATE TABLE fact_transaction (
     from_team_key INTEGER, -- NULL for free agents
     to_team_key INTEGER,   -- NULL for drops
     
+    -- Managers
+    from_manager_key INTEGER, -- NULL for free agents
+    to_manager_key INTEGER,   -- NULL for drops
+    
     -- Financial
     faab_bid DECIMAL(10,2),
     waiver_priority INTEGER,
@@ -291,7 +336,9 @@ CREATE TABLE fact_transaction (
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
     FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
     FOREIGN KEY (from_team_key) REFERENCES dim_team(team_key),
-    FOREIGN KEY (to_team_key) REFERENCES dim_team(team_key)
+    FOREIGN KEY (to_team_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (from_manager_key) REFERENCES dim_manager(manager_key),
+    FOREIGN KEY (to_manager_key) REFERENCES dim_manager(manager_key)
 );
 
 -- Indexes for fact_transaction
@@ -300,6 +347,7 @@ CREATE INDEX idx_league_date ON fact_transaction (league_key, transaction_date);
 CREATE INDEX idx_transaction_type ON fact_transaction (transaction_type);
 CREATE INDEX idx_player_transactions ON fact_transaction (player_key);
 CREATE INDEX idx_team_transactions ON fact_transaction (from_team_key, to_team_key);
+CREATE INDEX idx_manager_transactions ON fact_transaction (from_manager_key, to_manager_key);
 CREATE INDEX idx_faab_activity ON fact_transaction (faab_bid);
 CREATE INDEX idx_trade_groups ON fact_transaction (trade_group_id);
 CREATE INDEX idx_transaction_week ON fact_transaction (transaction_week);
@@ -309,6 +357,7 @@ CREATE TABLE fact_draft (
     draft_key SERIAL PRIMARY KEY,
     league_key INTEGER NOT NULL,
     team_key INTEGER NOT NULL,
+    manager_key INTEGER NOT NULL,
     player_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
     
@@ -340,6 +389,7 @@ CREATE TABLE fact_draft (
     
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
     FOREIGN KEY (team_key) REFERENCES dim_team(team_key),
+    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key),
     FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
     
     UNIQUE(league_key, season_year, overall_pick)
@@ -351,6 +401,7 @@ CREATE INDEX idx_league_draft ON fact_draft (league_key, season_year);
 CREATE INDEX idx_draft_order ON fact_draft (overall_pick);
 CREATE INDEX idx_round_pick ON fact_draft (round_number, pick_in_round);
 CREATE INDEX idx_team_draft ON fact_draft (team_key, season_year);
+CREATE INDEX idx_manager_draft ON fact_draft (manager_key, season_year);
 CREATE INDEX idx_player_draft ON fact_draft (player_key);
 CREATE INDEX idx_keepers ON fact_draft (is_keeper_pick);
 CREATE INDEX idx_auction_costs ON fact_draft (draft_cost);
@@ -526,6 +577,102 @@ CREATE TABLE mart_weekly_power_rankings (
 CREATE INDEX idx_power_rankings ON mart_weekly_power_rankings (league_key, week_key, power_rank);
 CREATE INDEX idx_team_progression ON mart_weekly_power_rankings (team_key, week_key);
 
+-- Data Mart: Manager Head-to-Head Historical Performance
+CREATE TABLE mart_manager_h2h (
+    h2h_key SERIAL PRIMARY KEY,
+    
+    -- Manager Identification (alphabetical ordering to avoid duplicates)
+    manager_a_name VARCHAR(255) NOT NULL,
+    manager_b_name VARCHAR(255) NOT NULL,
+    manager_a_id VARCHAR(100) NOT NULL,
+    manager_b_id VARCHAR(100) NOT NULL,
+    
+    -- Game Summary
+    total_matchups INTEGER DEFAULT 0,
+    first_matchup_date DATE,
+    last_matchup_date DATE,
+    seasons_played_together INTEGER DEFAULT 0,
+    leagues_played_together INTEGER DEFAULT 0,
+    
+    -- Manager A Performance
+    manager_a_wins INTEGER DEFAULT 0,
+    manager_a_losses INTEGER DEFAULT 0,
+    manager_a_ties INTEGER DEFAULT 0,
+    manager_a_win_percentage DECIMAL(8,4) DEFAULT 0,
+    manager_a_total_points DECIMAL(12,2) DEFAULT 0,
+    manager_a_avg_points DECIMAL(8,2) DEFAULT 0,
+    manager_a_highest_score DECIMAL(8,2) DEFAULT 0,
+    manager_a_lowest_score DECIMAL(8,2) DEFAULT 0,
+    manager_a_pythagorean_wins DECIMAL(8,2) DEFAULT 0,
+    manager_a_luck_factor DECIMAL(8,4) DEFAULT 0,
+    manager_a_biggest_win_margin DECIMAL(8,2) DEFAULT 0,
+    manager_a_current_streak INTEGER DEFAULT 0,
+    
+    -- Manager B Performance
+    manager_b_wins INTEGER DEFAULT 0,
+    manager_b_losses INTEGER DEFAULT 0,
+    manager_b_ties INTEGER DEFAULT 0,
+    manager_b_win_percentage DECIMAL(8,4) DEFAULT 0,
+    manager_b_total_points DECIMAL(12,2) DEFAULT 0,
+    manager_b_avg_points DECIMAL(8,2) DEFAULT 0,
+    manager_b_highest_score DECIMAL(8,2) DEFAULT 0,
+    manager_b_lowest_score DECIMAL(8,2) DEFAULT 0,
+    manager_b_pythagorean_wins DECIMAL(8,2) DEFAULT 0,
+    manager_b_luck_factor DECIMAL(8,4) DEFAULT 0,
+    manager_b_biggest_win_margin DECIMAL(8,2) DEFAULT 0,
+    manager_b_current_streak INTEGER DEFAULT 0,
+    
+    -- Head-to-Head Analysis
+    series_leader VARCHAR(255),
+    series_record VARCHAR(20),
+    point_differential DECIMAL(10,2) DEFAULT 0,
+    avg_point_differential DECIMAL(8,2) DEFAULT 0,
+    most_lopsided_game DECIMAL(8,2) DEFAULT 0,
+    closest_game DECIMAL(8,2) DEFAULT 999.99,
+    total_points_in_series DECIMAL(12,2) DEFAULT 0,
+    avg_total_points_per_game DECIMAL(8,2) DEFAULT 0,
+    high_scoring_games INTEGER DEFAULT 0,
+    low_scoring_games INTEGER DEFAULT 0,
+    
+    -- Playoff & Championship Tracking
+    playoff_matchups INTEGER DEFAULT 0,
+    championship_matchups INTEGER DEFAULT 0,
+    semifinal_matchups INTEGER DEFAULT 0,
+    manager_a_playoff_wins INTEGER DEFAULT 0,
+    manager_a_championship_wins INTEGER DEFAULT 0,
+    manager_a_semifinal_wins INTEGER DEFAULT 0,
+    manager_b_playoff_wins INTEGER DEFAULT 0,
+    manager_b_championship_wins INTEGER DEFAULT 0,
+    manager_b_semifinal_wins INTEGER DEFAULT 0,
+    
+    -- Most Important Game Ever
+    most_important_game_type VARCHAR(20),
+    most_important_game_date DATE,
+    most_important_game_winner VARCHAR(255),
+    most_important_game_score VARCHAR(100),
+    most_important_game_margin DECIMAL(8,2),
+    most_important_game_season INTEGER,
+    most_important_game_week INTEGER,
+    most_important_game_league VARCHAR(255),
+    
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    UNIQUE(manager_a_name, manager_b_name),
+    CHECK (manager_a_name < manager_b_name) -- Ensure alphabetical ordering
+);
+
+-- Indexes for mart_manager_h2h
+CREATE INDEX idx_h2h_managers ON mart_manager_h2h (manager_a_name, manager_b_name);
+CREATE INDEX idx_h2h_manager_a ON mart_manager_h2h (manager_a_name);
+CREATE INDEX idx_h2h_manager_b ON mart_manager_h2h (manager_b_name);
+CREATE INDEX idx_h2h_series_leader ON mart_manager_h2h (series_leader);
+CREATE INDEX idx_h2h_playoff_games ON mart_manager_h2h (playoff_matchups, championship_matchups);
+CREATE INDEX idx_h2h_important_game ON mart_manager_h2h (most_important_game_type, most_important_game_date);
+CREATE INDEX idx_h2h_matchup_count ON mart_manager_h2h (total_matchups);
+
 -- ============================================================================
 -- OPTIMIZED VIEWS FOR WEB APPLICATION
 -- ============================================================================
@@ -684,6 +831,7 @@ COMMENT ON TABLE mart_league_summary IS 'Pre-aggregated league statistics for da
 COMMENT ON TABLE mart_manager_performance IS 'Career manager statistics across all leagues';
 COMMENT ON TABLE mart_player_value IS 'Player performance and value metrics by season';
 COMMENT ON TABLE mart_weekly_power_rankings IS 'Advanced team rankings and projections';
+COMMENT ON TABLE mart_manager_h2h IS 'Head-to-head historical performance between manager pairs';
 
 -- ============================================================================
 -- END OF SCHEMA

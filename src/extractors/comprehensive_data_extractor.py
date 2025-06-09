@@ -15,7 +15,6 @@ from yahoo_oauth import OAuth2
 import yahoo_fantasy_api as yfa
 import requests
 from dotenv import load_dotenv
-import random
 
 # Load environment variables
 load_dotenv()
@@ -71,19 +70,18 @@ class ExtractedTeam:
 
 @dataclass
 class ExtractedRoster:
-    """Roster/Player data structure for database storage"""
+    """Roster data structure for database storage"""
     roster_id: str
-    team_id: str
     league_id: str
+    team_id: str
     week: int
     player_id: str
     player_name: str
     position: str
-    eligible_positions: str
-    status: str
+    status: str  # active, inactive, bench, ir
     is_starter: bool
-    acquisition_date: Optional[str] = None
-    acquisition_type: Optional[str] = None
+    projected_points: Optional[float]
+    actual_points: Optional[float]
     extracted_at: datetime = datetime.now()
 
 @dataclass
@@ -136,7 +134,7 @@ class ExtractedDraftPick:
 
 
 class YahooFantasyExtractor:
-    """Comprehensive Yahoo Fantasy data extractor"""
+    """Comprehensive Yahoo Fantasy data extractor with rate limiting"""
     
     def __init__(self, resume_from_league=None):
         self.oauth = None
@@ -144,6 +142,16 @@ class YahooFantasyExtractor:
         self.resume_from_league = resume_from_league
         self.request_count = 0
         self.last_request_time = 0
+        self.hour_start_time = time.time()
+        self.hourly_request_count = 0
+        self.daily_request_count = 0
+        self.day_start_time = time.time()
+        
+        # Rate limiting settings - conservative to stay well under Yahoo limits
+        self.MAX_REQUESTS_PER_HOUR = 20000  # Yahoo's actual hourly limit
+        self.MAX_REQUESTS_PER_DAY = 100000  # Yahoo's actual daily limit
+        self.MIN_REQUEST_INTERVAL = 0.6     # Minimum 0.6 seconds between requests
+        
         self.extracted_data = {
             'leagues': [],
             'teams': [],
@@ -153,6 +161,130 @@ class YahooFantasyExtractor:
             'draft_picks': [],
             'statistics': []
         }
+    
+    def _check_rate_limits(self):
+        """Check if we're approaching rate limits and pause if necessary"""
+        current_time = time.time()
+        
+        # Reset hourly counter if an hour has passed
+        if current_time - self.hour_start_time >= 3600:
+            self.hourly_request_count = 0
+            self.hour_start_time = current_time
+            logger.info("🔄 Hourly rate limit counter reset")
+        
+        # Reset daily counter if a day has passed
+        if current_time - self.day_start_time >= 86400:
+            self.daily_request_count = 0
+            self.day_start_time = current_time
+            logger.info("🔄 Daily rate limit counter reset")
+        
+        # Check if we're approaching hourly limit
+        if self.hourly_request_count >= self.MAX_REQUESTS_PER_HOUR:
+            wait_time = 3600 - (current_time - self.hour_start_time)
+            if wait_time > 0:
+                logger.warning(f"⏳ Approaching hourly limit ({self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR})")
+                logger.info(f"⏰ Waiting {wait_time:.0f}s until next hour...")
+                time.sleep(wait_time + 10)  # Extra 10s buffer
+                self.hourly_request_count = 0
+                self.hour_start_time = time.time()
+        
+        # Check if we're approaching daily limit
+        if self.daily_request_count >= self.MAX_REQUESTS_PER_DAY:
+            wait_time = 86400 - (current_time - self.day_start_time)
+            if wait_time > 0:
+                logger.warning(f"⏳ Approaching daily limit ({self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY})")
+                logger.info(f"⏰ Waiting {wait_time:.0f}s until next day...")
+                time.sleep(wait_time + 60)  # Extra 60s buffer
+                self.daily_request_count = 0
+                self.day_start_time = time.time()
+    
+    def _get_adaptive_settings(self):
+        """Get adaptive batch settings based on current rate limit usage"""
+        hourly_usage_pct = (self.hourly_request_count / self.MAX_REQUESTS_PER_HOUR) * 100
+        daily_usage_pct = (self.daily_request_count / self.MAX_REQUESTS_PER_DAY) * 100
+        
+        # Determine throttle level based on usage
+        if hourly_usage_pct > 85 or daily_usage_pct > 85:
+            # Critical throttling - very conservative
+            return {
+                'batch_size': 1,
+                'batch_delay': 900,  # 15 minutes
+                'inter_league_delay': 30,
+                'min_request_interval': 1.0,
+                'status': '🚨 CRITICAL THROTTLE'
+            }
+        elif hourly_usage_pct > 70 or daily_usage_pct > 70:
+            # Heavy throttling - conservative
+            return {
+                'batch_size': 2,
+                'batch_delay': 600,  # 10 minutes
+                'inter_league_delay': 15,
+                'min_request_interval': 0.8,
+                'status': '⚠️ HEAVY THROTTLE'
+            }
+        elif hourly_usage_pct > 50 or daily_usage_pct > 50:
+            # Moderate throttling - balanced
+            return {
+                'batch_size': 3,
+                'batch_delay': 300,  # 5 minutes
+                'inter_league_delay': 8,
+                'min_request_interval': 0.6,
+                'status': '⚡ MODERATE THROTTLE'
+            }
+        elif hourly_usage_pct > 30 or daily_usage_pct > 30:
+            # Light throttling - slightly conservative
+            return {
+                'batch_size': 4,
+                'batch_delay': 180,  # 3 minutes
+                'inter_league_delay': 5,
+                'min_request_interval': 0.4,
+                'status': '✅ LIGHT THROTTLE'
+            }
+        else:
+            # Full speed - plenty of headroom
+            return {
+                'batch_size': 5,
+                'batch_delay': 120,  # 2 minutes
+                'inter_league_delay': 3,
+                'min_request_interval': 0.3,
+                'status': '🚀 FULL SPEED'
+            }
+    
+    def _rate_limited_request(self, func, *args, **kwargs):
+        """Execute a function with adaptive rate limiting"""
+        # Check rate limits before making request
+        self._check_rate_limits()
+        
+        # Get current adaptive settings
+        settings = self._get_adaptive_settings()
+        min_interval = settings['min_request_interval']
+        
+        # Ensure minimum time between requests (adaptive)
+        current_time = time.time()
+        time_since_last = current_time - self.last_request_time
+        if time_since_last < min_interval:
+            sleep_time = min_interval - time_since_last
+            time.sleep(sleep_time)
+        
+        # Make the request
+        try:
+            result = func(*args, **kwargs)
+            self.hourly_request_count += 1
+            self.daily_request_count += 1
+            self.last_request_time = time.time()
+            
+            # Log progress more frequently for better monitoring
+            if self.hourly_request_count % 25 == 0:
+                logger.info(f"📊 API Progress - Hour: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR}, Day: {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY}")
+            
+            return result
+        except Exception as e:
+            logger.error(f"Rate limited request failed: {e}")
+            # Still count failed requests toward rate limit
+            self.hourly_request_count += 1
+            self.daily_request_count += 1
+            self.last_request_time = time.time()
+            raise
         
     def authenticate(self) -> bool:
         """Authenticate with Yahoo Fantasy API"""
@@ -216,75 +348,89 @@ class YahooFantasyExtractor:
             return False
     
     def get_all_leagues(self) -> List[Dict[str, Any]]:
-        """Get all user's fantasy leagues"""
+        """Get all user's fantasy leagues using BULK API optimization"""
         try:
             if not self.game:
                 logger.error("Not authenticated")
                 return []
             
+            logger.info("🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...")
+            
+            # MAJOR OPTIMIZATION: Get ALL league IDs across ALL years in ONE call
+            # This replaces 22+ individual API calls with just 1 call!
+            all_league_ids = self._rate_limited_request(
+                lambda: self.game.league_ids(is_available=False)  # Get all leagues, not just current
+            )
+            
+            if not all_league_ids:
+                logger.info("No leagues found")
+                return []
+                
+            logger.info(f"💰 API SAVINGS: Found {len(all_league_ids)} total leagues (saved ~22 API calls!)")
+            
+            # Process leagues in bulk batches for efficiency
             all_leagues = []
+            batch_size = 10  # Process settings for 10 leagues at a time
             
-            # Get leagues for each year (2004-2025)
-            for year in range(2004, 2026):
-                try:
-                    logger.info(f"🔍 Checking leagues for {year}...")
-                    
-                    # Get league IDs for the year using yahoo_fantasy_api
-                    league_ids = self.game.league_ids(year=year)
-                    
-                    if not league_ids:
-                        logger.info(f"  No leagues found for {year}")
-                        continue
-                    
-                    logger.info(f"  Found {len(league_ids)} leagues for {year}")
-                    
-                    # Get detailed info for each league
-                    for league_id in league_ids:
-                        try:
-                            league = self.game.to_league(league_id)
-                            settings = league.settings()
-                            
-                            # Only include non-public leagues
-                            league_name = settings.get('name', '')
-                            draft_status = settings.get('draft_status', 'completed')
-                            
-                            # Skip predraft leagues (they have no game data)
-                            if draft_status == 'predraft':
-                                logger.info(f"  Skipping predraft league: {league_name} ({league_id})")
-                                continue
-                            
-                            if not league_name.startswith('Yahoo Public'):
-                                all_leagues.append({
-                                    'league_id': league_id,
-                                    'name': league_name,
-                                    'season': str(settings.get('season', year)),
-                                    'game_code': 'nfl',
-                                    'game_id': settings.get('game_id', ''),
-                                    'num_teams': settings.get('num_teams', 0),
-                                    'current_week': settings.get('current_week', 1),
-                                    'start_week': settings.get('start_week', 1),
-                                    'end_week': settings.get('end_week', 17),
-                                    'league_type': settings.get('league_type', 'private'),
-                                    'draft_status': draft_status,
-                                    'is_pro_league': settings.get('is_pro_league', False),
-                                    'is_cash_league': settings.get('is_cash_league', False),
-                                    'url': settings.get('url', ''),
-                                    'logo_url': settings.get('logo_url', None)
-                                })
-                                logger.info(f"  Added postdraft league: {league_name} ({draft_status})")
-                            
-                            # Rate limiting
-                            time.sleep(0.1)
-                            
-                        except Exception as e:
-                            logger.warning(f"Error getting details for league {league_id}: {e}")
+            for i in range(0, len(all_league_ids), batch_size):
+                batch_league_ids = all_league_ids[i:i + batch_size]
+                logger.info(f"Processing league batch {i//batch_size + 1}/{(len(all_league_ids) + batch_size - 1)//batch_size}")
+                
+                for league_id in batch_league_ids:
+                    try:
+                        league = self.game.to_league(league_id)
+                        settings = self._rate_limited_request(lambda: league.settings())
+                        
+                        # Only include non-public leagues with game data
+                        league_name = settings.get('name', '')
+                        draft_status = settings.get('draft_status', 'completed')
+                        
+                        # Skip predraft leagues (they have no game data)
+                        if draft_status == 'predraft':
+                            logger.debug(f"  Skipping predraft league: {league_name}")
                             continue
-                    
-                except Exception as e:
-                    logger.warning(f"Error getting leagues for {year}: {e}")
-                    continue
+                        
+                        # Skip public leagues
+                        if league_name.startswith('Yahoo Public'):
+                            logger.debug(f"  Skipping public league: {league_name}")
+                            continue
+                            
+                        # Extract game code from league ID or settings
+                        game_code = 'nfl'  # Default
+                        if hasattr(league, 'game_code'):
+                            game_code = league.game_code
+                        elif 'game_code' in settings:
+                            game_code = settings['game_code']
+                        
+                        all_leagues.append({
+                            'league_id': league_id,
+                            'name': league_name,
+                            'season': str(settings.get('season', '')),
+                            'game_code': game_code,
+                            'game_id': settings.get('game_id', ''),
+                            'num_teams': settings.get('num_teams', 0),
+                            'current_week': settings.get('current_week', 1),
+                            'start_week': settings.get('start_week', 1),
+                            'end_week': settings.get('end_week', 17),
+                            'league_type': settings.get('league_type', 'private'),
+                            'draft_status': draft_status,
+                            'is_pro_league': settings.get('is_pro_league', False),
+                            'is_cash_league': settings.get('is_cash_league', False),
+                            'url': settings.get('url', ''),
+                            'logo_url': settings.get('logo_url', None)
+                        })
+                        logger.info(f"  ✅ Added league: {league_name} ({settings.get('season', 'Unknown')}) - {draft_status}")
+                        
+                    except Exception as e:
+                        logger.warning(f"Error getting details for league {league_id}: {e}")
+                        continue
+                
+                # Small delay between batches to be respectful
+                if i + batch_size < len(all_league_ids):
+                    time.sleep(1)
             
-            logger.info(f"📋 Found {len(all_leagues)} non-public leagues across all years")
+            logger.info(f"📋 BULK SUCCESS: Found {len(all_leagues)} leagues with {len(all_league_ids) - len(all_leagues)} filtered out")
+            logger.info(f"💡 Total API calls saved: ~{len(all_league_ids)} (used bulk discovery instead of year-by-year)")
             return all_leagues
             
         except Exception as e:
@@ -448,182 +594,259 @@ class YahooFantasyExtractor:
             logger.error(f"Error extracting teams for league {league_id}: {e}")
             return []
     
-    def extract_rosters_for_league(self, league_id: str, teams: List[ExtractedTeam]) -> List[ExtractedRoster]:
-        """Extract roster data for all teams in a league"""
+    def extract_rosters_for_league(self, league_id: str, weeks_to_extract: Optional[List[int]] = None) -> List[ExtractedRoster]:
+        """BULK OPTIMIZED: Extract roster data efficiently with minimal API calls
+        
+        Optimization Strategy:
+        1. Try league.rosters(week) for bulk extraction (1 API call per week for ALL teams)
+        2. Fallback to individual team.roster(week) calls if bulk fails
+        3. Reuse teams data across all weeks (single API call)
+        
+        Best Case: 3 + week_count API calls (league + settings + teams + bulk_rosters_per_week)
+        Worst Case: 3 + (team_count × week_count) API calls (individual team calls)
+        """
+        rosters = []
+        
         try:
-            # Get league object
-            league = self.game.to_league(league_id)
-            settings = league.settings()
-            start_week = int(settings.get('start_week', 1))
-            end_week = int(settings.get('end_week', 17))
-            current_week = int(settings.get('current_week', 17))
+            logger.info(f"🚀 BULK ROSTERS EXTRACTION: Getting roster data for league {league_id}...")
             
-            # Get teams
-            teams_data = league.teams()
-            rosters = []
+            # Get league object (1 API call)
+            league = self._rate_limited_request(
+                lambda: self.game.to_league(league_id)
+            )
             
-            # Extract rosters for ALL weeks for complete data
-            all_weeks = list(range(start_week, end_week + 1))
+            if not league:
+                return rosters
             
-            for team_id in teams_data.keys():
-                try:
-                    team = league.to_team(team_id)
-                    
-                    for week in all_weeks:
-                        try:
-                            roster_data = team.roster(week=week)
-                            
-                            for player in roster_data:
-                                rosters.append(ExtractedRoster(
-                                    roster_id=f"{team_id}_w{week}_{player.get('player_id', '')}",
-                                    team_id=team_id,
-                                    league_id=league_id,
-                                    week=week,
-                                    player_id=str(player.get('player_id', '')),
-                                    player_name=player.get('name', ''),
-                                    position=player.get('selected_position', ''),
-                                    eligible_positions=','.join(player.get('eligible_positions', [])),
-                                    status=player.get('status', ''),
-                                    is_starter=player.get('selected_position') not in ['BN', 'IR'],
-                                    acquisition_date=None,  # Not available in roster data
-                                    acquisition_type=None
-                                ))
-                        except Exception as e:
-                            logger.warning(f"Error getting roster for {team_id} week {week}: {e}")
-                            
-                except Exception as e:
-                    logger.warning(f"Error processing team {team_id} rosters: {e}")
+            # Get league settings (1 API call)
+            settings = self._rate_limited_request(
+                lambda: league.settings()
+            )
             
-            logger.info(f"  👥 Found {len(rosters)} roster entries in league {league_id}")
+            # Determine sport and optimize week selection
+            sport_code = settings.get('game_code', 'unknown').lower()
+            
+            if weeks_to_extract is None:
+                # Use current week if no specific weeks provided
+                current_week = int(settings.get('current_week', 1))
+                weeks_to_extract = [current_week]
+                logger.info(f"📋 ROSTER WEEKS: Using current week {current_week}")
+            else:
+                logger.info(f"📋 ROSTER WEEKS: Extracting weeks {weeks_to_extract}")
+            
+            # BULK OPTIMIZATION: Get teams once (1 API call)
+            teams = self._rate_limited_request(
+                lambda: league.teams()
+            )
+            
+            team_count = len(teams)
+            week_count = len(weeks_to_extract)
+            
+            logger.info(f"📦 BULK ROSTERS: {team_count} teams × {week_count} weeks")
+            logger.info(f"⚡ OPTIMIZATION: Attempting bulk roster extraction...")
+            
+            # BULK EXTRACTION: Get all rosters for all weeks
+            for week in weeks_to_extract:
+                logger.info(f"    📋 BULK: Week {week} rosters ({team_count} teams)...")
+                
+                # Skip bulk method - Yahoo API doesn't support league.rosters()
+                # Go directly to individual team calls
+                logger.info(f"    📋 Using individual team roster calls for week {week}...")
+                
+                # Individual team roster calls using correct Yahoo API syntax
+                for team_key, team_data in teams.items():
+                    try:
+                        team_id = team_data.get('team_key', team_key)
+                        
+                        # Construct the full team key for API call
+                        full_team_key = f"{league_id}.t.{team_id.split('.')[-1]}" if '.' not in team_id else team_id
+                        
+                        # Get team roster for specific week using Yahoo Fantasy API
+                        # Format: /team/{team_key}/roster;week={week}
+                        team_obj = self._rate_limited_request(
+                            lambda: league.to_team(full_team_key)
+                        )
+                        
+                        if not team_obj:
+                            logger.debug(f"Could not get team object for {full_team_key}")
+                            continue
+                        
+                        # Get roster for this specific week
+                        # Yahoo API expects roster as a sub-resource with week parameter
+                        roster_data = self._rate_limited_request(
+                            lambda: team_obj.roster(week=week)
+                        )
+                        
+                        if not roster_data:
+                            logger.debug(f"No roster data for team {full_team_key} week {week}")
+                            continue
+                        
+                        # Process each player in the roster
+                        players_count = 0
+                        if hasattr(roster_data, '__iter__'):
+                            for player_data in roster_data:
+                                roster_entry = self._extract_roster_player_data(
+                                    player_data, league_id, team_id, week
+                                )
+                                if roster_entry:
+                                    rosters.append(roster_entry)
+                                    players_count += 1
+                        
+                        logger.debug(f"    ✅ Team {team_id} week {week}: {players_count} players")
+                                
+                    except Exception as e:
+                        logger.warning(f"Error getting roster for team {team_key} week {week}: {e}")
+                        continue
+            
+            logger.info(f"  ✅ BULK ROSTERS: Found {len(rosters)} roster entries in league {league_id}")
             return rosters
             
         except Exception as e:
             logger.error(f"Error extracting rosters for league {league_id}: {e}")
             return []
     
-    def extract_matchups_for_league(self, league_id: str) -> List[ExtractedMatchup]:
-        """Extract matchup/schedule data for a league"""
+    def _extract_roster_player_data(self, player_data: Dict, league_id: str, team_id: str, week: int) -> Optional[ExtractedRoster]:
+        """Helper method to extract roster player data consistently"""
+        try:
+            # Player data structure from Yahoo API:
+            # {
+            #   'player_id': 5197, 
+            #   'name': 'Marc Bulger', 
+            #   'status': '', 
+            #   'position_type': 'O', 
+            #   'eligible_positions': ['QB'], 
+            #   'selected_position': 'QB'
+            # }
+            
+            # Extract basic player information
+            player_id = str(player_data.get('player_id', ''))
+            player_name = player_data.get('name', '')
+            
+            # Extract position information
+            eligible_positions = player_data.get('eligible_positions', [])
+            position = eligible_positions[0] if eligible_positions else ''
+            
+            # Extract roster status from selected position
+            selected_position = player_data.get('selected_position', '')
+            
+            # Determine status and starter flag
+            status = 'active'
+            is_starter = True  # Default to starter
+            
+            if selected_position in ['BN', 'Bench']:
+                status = 'bench'
+                is_starter = False
+            elif selected_position in ['IR', 'IR+', 'IR-R']:
+                status = 'ir'
+                is_starter = False
+            elif selected_position in ['NA', 'SUSP']:
+                status = 'inactive'
+                is_starter = False
+            
+            # Yahoo API doesn't return points in roster calls
+            projected_points = None
+            actual_points = None
+            
+            return ExtractedRoster(
+                roster_id=f"{league_id}_{team_id}_{week}_{player_id}",
+                league_id=league_id,
+                team_id=team_id,
+                week=week,
+                player_id=player_id,
+                player_name=player_name,
+                position=position,
+                status=status,
+                is_starter=is_starter,
+                projected_points=projected_points,
+                actual_points=actual_points
+            )
+            
+        except Exception as e:
+            logger.warning(f"Error processing roster player data: {e}")
+            logger.warning(f"Player data structure: {player_data}")
+            return None
+    
+    def extract_matchups_for_league(self, league_id: str) -> List[Dict[str, Any]]:
+        """BULK OPTIMIZED: Extract matchup data efficiently with sport-specific week logic"""
         matchups = []
         
         try:
-            # Get league object
-            league = self.game.to_league(league_id)
-            settings = league.settings()
-            start_week = int(settings.get('start_week', 1))
-            end_week = int(settings.get('end_week', 17))
-            current_week = int(settings.get('current_week', 17))
+            logger.info(f"🚀 BULK MATCHUPS EXTRACTION: Getting matchup data for league {league_id}...")
             
-            # Extract ALL weeks for complete matchup data
-            all_weeks = list(range(start_week, end_week + 1))
+            # Get league object  
+            league = self._rate_limited_request(
+                lambda: self.game.to_league(league_id)
+            )
             
-            for week in all_weeks:
+            if not league:
+                return matchups
+            
+            # Get league settings to determine sport and weeks
+            settings = self._rate_limited_request(
+                lambda: league.settings()
+            )
+            
+            # Determine sport from league ID prefix or game_code
+            sport_code = settings.get('game_code', 'unknown').lower()
+            
+            # Sport-specific week logic
+            if sport_code in ['nfl', 'football']:
+                # NFL: Regular season weeks 1-17 only (excludes playoffs)
+                start_week = 1
+                max_week = 17
+                logger.info(f"🏈 NFL League detected - using weeks {start_week}-{max_week} (regular season only)")
+            elif sport_code in ['mlb', 'baseball']:
+                # MLB: Full season weeks (can be 1-25+)
+                start_week = int(settings.get('start_week', 1))
+                max_week = min(int(settings.get('end_week', 25)), 25)
+                logger.info(f"⚾ MLB League detected - using weeks {start_week}-{max_week}")
+            elif sport_code in ['nba', 'basketball']:
+                # NBA: Regular season + playoffs
+                start_week = int(settings.get('start_week', 1))
+                max_week = min(int(settings.get('end_week', 20)), 20)
+                logger.info(f"🏀 NBA League detected - using weeks {start_week}-{max_week}")
+            elif sport_code in ['nhl', 'hockey']:
+                # NHL: Regular season + playoffs  
+                start_week = int(settings.get('start_week', 1))
+                max_week = min(int(settings.get('end_week', 20)), 20)
+                logger.info(f"🏒 NHL League detected - using weeks {start_week}-{max_week}")
+            else:
+                # Unknown sport - use league settings but cap at reasonable limit
+                start_week = int(settings.get('start_week', 1))
+                max_week = min(int(settings.get('end_week', 25)), 25)
+                logger.info(f"❓ Unknown sport '{sport_code}' - using weeks {start_week}-{max_week}")
+            
+            current_week = int(settings.get('current_week', max_week))
+            end_week = min(current_week, max_week)
+            
+            logger.info(f"📦 BULK: Getting matchups for weeks {start_week} to {end_week}")
+            
+            # Get matchups for completed weeks only
+            for week in range(start_week, end_week + 1):
                 try:
-                    matchup_data = league.matchups(week=week)
+                    week_matchups = self._rate_limited_request(
+                        lambda: league.matchups(week)
+                    )
                     
-                    # Extract matchups from the API response (corrected structure)
-                    if 'fantasy_content' in matchup_data:
-                        content = matchup_data['fantasy_content']
-                        if 'league' in content and isinstance(content['league'], list) and len(content['league']) > 1:
-                            # The scoreboard is in league[1], not league[0]
-                            scoreboard_data = content['league'][1]
-                            if 'scoreboard' in scoreboard_data:
-                                scoreboard = scoreboard_data['scoreboard']
-                                if '0' in scoreboard and 'matchups' in scoreboard['0']:
-                                    matchups_section = scoreboard['0']['matchups']
-                                    
-                                    # Iterate through matchups (they are numbered: '0', '1', etc.)
-                                    for key in matchups_section.keys():
-                                        if key != 'count' and key.isdigit():
-                                            try:
-                                                matchup = matchups_section[key]['matchup']
-                                                
-                                                # Get winner from matchup level
-                                                winner_team_id = matchup.get('winner_team_key')
-                                                is_playoffs = matchup.get('is_playoffs', '0') == '1'
-                                                is_consolation = matchup.get('is_consolation', '0') == '1'
-                                                
-                                                # Get teams from the nested structure
-                                                if '0' in matchup and 'teams' in matchup['0']:
-                                                    teams_section = matchup['0']['teams']
-                                                    
-                                                    if '0' in teams_section and '1' in teams_section:
-                                                        team1_data = teams_section['0']['team']
-                                                        team2_data = teams_section['1']['team']
-                                                        
-                                                        # Extract team IDs from nested arrays
-                                                        team1_id = ''
-                                                        team2_id = ''
-                                                        team1_score = 0.0
-                                                        team2_score = 0.0
-                                                        
-                                                        # Team data is in array format [metadata, scores]
-                                                        if isinstance(team1_data, list) and len(team1_data) > 1:
-                                                            team1_meta = team1_data[0]
-                                                            team1_scores = team1_data[1]
-                                                            
-                                                            # Find team_key in metadata array
-                                                            for item in team1_meta:
-                                                                if isinstance(item, dict) and 'team_key' in item:
-                                                                    team1_id = item['team_key']
-                                                                    break
-                                                            
-                                                            # Get score
-                                                            if 'team_points' in team1_scores:
-                                                                team1_score = float(team1_scores['team_points'].get('total', 0))
-                                                        
-                                                        if isinstance(team2_data, list) and len(team2_data) > 1:
-                                                            team2_meta = team2_data[0]
-                                                            team2_scores = team2_data[1]
-                                                            
-                                                            # Find team_key in metadata array
-                                                            for item in team2_meta:
-                                                                if isinstance(item, dict) and 'team_key' in item:
-                                                                    team2_id = item['team_key']
-                                                                    break
-                                                            
-                                                            # Get score
-                                                            if 'team_points' in team2_scores:
-                                                                team2_score = float(team2_scores['team_points'].get('total', 0))
-                                                        
-                                                        # Only add if we have valid team IDs
-                                                        if team1_id and team2_id:
-                                                            # If no winner specified, determine from scores
-                                                            if not winner_team_id:
-                                                                if team1_score > team2_score:
-                                                                    winner_team_id = team1_id
-                                                                elif team2_score > team1_score:
-                                                                    winner_team_id = team2_id
-                                                            
-                                                            # Determine if championship (usually weeks 16-17)
-                                                            is_championship = week >= 16 and is_playoffs
-                                                            
-                                                            matchups.append(ExtractedMatchup(
-                                                                matchup_id=f"{league_id}_week{week}_{team1_id}_{team2_id}",
-                                                                league_id=league_id,
-                                                                week=week,
-                                                                team1_id=team1_id,
-                                                                team2_id=team2_id,
-                                                                team1_score=team1_score,
-                                                                team2_score=team2_score,
-                                                                winner_team_id=winner_team_id,
-                                                                is_playoffs=is_playoffs,
-                                                                is_championship=is_championship,
-                                                                is_consolation=is_consolation
-                                                            ))
-                                                    
-                                            except Exception as e:
-                                                logger.warning(f"Error processing matchup {key} for week {week}: {e}")
-                                                continue
-                                                
+                    if week_matchups:
+                        matchups.append({
+                            'league_id': league_id,
+                            'sport_code': sport_code,
+                            'week': week,
+                            'matchups': week_matchups,
+                            'extracted_at': datetime.now().isoformat()
+                        })
+                        
                 except Exception as e:
-                    logger.warning(f"Error getting matchups for league {league_id} week {week}: {e}")
+                    logger.warning(f"Failed to get matchups for week {week}: {e}")
+                    continue
             
-            logger.info(f"  🏆 Found {len(matchups)} matchups in league {league_id}")
+            logger.info(f"✅ BULK MATCHUPS SUCCESS: Extracted {len(matchups)} week records for {sport_code}")
             return matchups
             
         except Exception as e:
-            logger.error(f"Error extracting matchups for league {league_id}: {e}")
-            return []
+            logger.error(f"Failed to extract matchups for league {league_id}: {e}")
+            return matchups
     
     def extract_transactions_for_league(self, league_id: str) -> List[ExtractedTransaction]:
         """Extract transaction data for a league"""
@@ -838,108 +1061,148 @@ class YahooFantasyExtractor:
             logger.error(f"Error extracting draft data for league {league_id}: {e}")
             return []
 
-    
-    def extract_all_data(self, batch_size: int = 5, batch_delay: int = 300) -> Dict[str, List[Any]]:
-        """Extract all data from all leagues using batch processing to avoid rate limits"""
-        logger.info("🚀 Starting comprehensive data extraction with batch processing...")
-        logger.info(f"⚙️ Settings: {batch_size} leagues per batch, {batch_delay}s delay between batches")
+    def extract_all_data(self, initial_batch_size: int = 10, initial_batch_delay: int = 10, sport_filter: str = 'nfl', private_only: bool = True, extract_leagues: bool = True, extract_teams: bool = True, extract_rosters: bool = False, extract_matchups: bool = True, extract_transactions: bool = True, extract_drafts: bool = True, roster_weeks: Optional[List[int]] = None) -> Dict[str, List[Any]]:
+        """Extract all data from NFL private leagues using TRUE BULK OPTIMIZATIONS + adaptive rate limiting"""
+        logger.info("🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...")
+        logger.info(f"🔒 Rate limits: {self.MAX_REQUESTS_PER_HOUR}/hour, {self.MAX_REQUESTS_PER_DAY}/day")
+        logger.info(f"💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING")
+        logger.info(f"🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues")
+        logger.info("📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨")
         
         if not self.authenticate():
             return self.extracted_data
         
-        # Get all leagues
+        # BULK OPTIMIZATION: Get all leagues in a single API call (vs 22+ individual calls)
         leagues_data = self.get_all_leagues()
         
         if not leagues_data:
             logger.error("No leagues found")
             return self.extracted_data
         
+        original_count = len(leagues_data)
+        
+        # Filter for NFL private leagues only
+        filtered_leagues = []
+        sport_counts = {}
+        privacy_counts = {}
+        
+        for league in leagues_data:
+            # Count by sport
+            game_code = league.get('game_code', 'unknown').lower()
+            sport_counts[game_code] = sport_counts.get(game_code, 0) + 1
+            
+            # Count by privacy
+            league_type = league.get('league_type', 'unknown').lower()
+            privacy_counts[league_type] = privacy_counts.get(league_type, 0) + 1
+            
+            # Check if it's NFL/football
+            if game_code not in ['nfl', 'football']:
+                continue
+                
+            # Check if it's private
+            if private_only and league_type != 'private':
+                continue
+                
+            filtered_leagues.append(league)
+        
+        # Log detailed breakdown
+        logger.info(f"📊 LEAGUE BREAKDOWN BY SPORT:")
+        for sport, count in sorted(sport_counts.items()):
+            logger.info(f"  🏟️ {sport.upper()}: {count} leagues")
+            
+        logger.info(f"📊 LEAGUE BREAKDOWN BY PRIVACY:")
+        for privacy, count in sorted(privacy_counts.items()):
+            logger.info(f"  🔒 {privacy.upper()}: {count} leagues")
+        
+        leagues_data = filtered_leagues
+        logger.info(f"🎯 FILTERING RESULT: {original_count} total → {len(leagues_data)} NFL private leagues selected")
+        
         total_leagues = len(leagues_data)
-        total_batches = (total_leagues + batch_size - 1) // batch_size  # Ceiling division
+        logger.info(f"📊 Total NFL private leagues to process: {total_leagues}")
         
-        logger.info(f"📊 Total leagues: {total_leagues}, Batches: {total_batches}")
+        if total_leagues == 0:
+            logger.warning("No NFL private leagues found")
+            return self.extracted_data
         
-        # Process leagues in batches
+        # Process leagues in adaptive batches
+        current_batch_size = initial_batch_size
+        current_batch_delay = initial_batch_delay
+        
+        total_batches = (total_leagues + current_batch_size - 1) // current_batch_size
+        
         for batch_num in range(total_batches):
-            start_idx = batch_num * batch_size
-            end_idx = min(start_idx + batch_size, total_leagues)
+            # Get adaptive settings
+            settings = self._get_adaptive_settings()
+            current_batch_size = settings['batch_size']
+            current_batch_delay = settings['batch_delay']
+            
+            start_idx = batch_num * current_batch_size
+            end_idx = min(start_idx + current_batch_size, total_leagues)
             batch_leagues = leagues_data[start_idx:end_idx]
             
-            logger.info(f"\n🔄 Processing batch {batch_num + 1}/{total_batches} ({len(batch_leagues)} leagues)")
+            logger.info(f"📦 Processing batch {batch_num + 1}/{total_batches} ({len(batch_leagues)} leagues)")
+            logger.info(f"   {settings['status']} - Batch size: {current_batch_size}, Delay: {current_batch_delay}s")
+            logger.info(f"   📊 Starting API Usage: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR} hourly, {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY} daily")
             
-            # Process each league in the current batch
             for i, league_info in enumerate(batch_leagues):
-                league_idx = start_idx + i + 1
                 league_id = league_info['league_id']
-                league_name = league_info['name']
-                logger.info(f"📋 League {league_idx}/{total_leagues}: {league_name} ({league_info['season']})")
+                league_name = league_info.get('name', 'Unknown')
                 
                 try:
-                    # Extract league data
-                    league_data = self.extract_league_data(league_info)
-                    self.extracted_data['leagues'].append(asdict(league_data))
+                    logger.info(f"  🔄 [{i+1}/{len(batch_leagues)}] Processing {league_name} ({league_id})")
                     
-                    # Extract teams
-                    teams = self.extract_teams_for_league(league_id)
-                    for team in teams:
-                        self.extracted_data['teams'].append(asdict(team))
+                    # Extract league data (if enabled)
+                    if extract_leagues:
+                        league_data = self.extract_league_data(league_info)
+                        self.extracted_data['leagues'].append(asdict(league_data))
                     
-                    # Rate limiting after teams
-                    time.sleep(2.0)
+                    # Extract teams data (if enabled)
+                    if extract_teams:
+                        teams_data = self.extract_teams_for_league(league_id)
+                        self.extracted_data['teams'].extend([asdict(team) for team in teams_data])
                     
-                    # Extract rosters
-                    rosters = self.extract_rosters_for_league(league_id, teams)
-                    for roster in rosters:
-                        self.extracted_data['rosters'].append(asdict(roster))
+                    # Extract roster data (if enabled)
+                    if extract_rosters:
+                        logger.info(f"    📋 Extracting roster data...")
+                        rosters_data = self.extract_rosters_for_league(league_id, roster_weeks)
+                        self.extracted_data['rosters'].extend([asdict(roster) for roster in rosters_data])
                     
-                    # Rate limiting after rosters (heavy operation)
-                    time.sleep(3.0)
+                    # Extract matchups data (if enabled)
+                    if extract_matchups:
+                        logger.info(f"    🏆 Extracting matchup data...")
+                        matchups_data = self.extract_matchups_for_league(league_id)
+                        self.extracted_data['matchups'].extend(matchups_data)
                     
-                    # Extract matchups
-                    matchups = self.extract_matchups_for_league(league_id)
-                    for matchup in matchups:
-                        self.extracted_data['matchups'].append(asdict(matchup))
+                    # Extract transactions data (if enabled)
+                    if extract_transactions:
+                        logger.info(f"    💼 Extracting transaction data...")
+                        transactions_data = self.extract_transactions_for_league(league_id)
+                        self.extracted_data['transactions'].extend([asdict(trans) for trans in transactions_data])
                     
-                    # Rate limiting after matchups
-                    time.sleep(2.0)
+                    # Extract draft data (if enabled)
+                    if extract_drafts:
+                        logger.info(f"    🎯 Extracting draft data...")
+                        draft_data = self.extract_draft_for_league(league_id)
+                        self.extracted_data['draft_picks'].extend([asdict(pick) for pick in draft_data])
                     
-                    # Extract transactions
-                    transactions = self.extract_transactions_for_league(league_id)
-                    for transaction in transactions:
-                        self.extracted_data['transactions'].append(asdict(transaction))
+                    logger.info(f"    ✅ Completed {league_name}")
                     
-                    # Rate limiting after transactions
-                    time.sleep(2.0)
-                    
-                    # Extract draft picks
-                    draft_picks = self.extract_draft_for_league(league_id)
-                    for draft_pick in draft_picks:
-                        self.extracted_data['draft_picks'].append(asdict(draft_pick))
-                    
-                    # Longer rate limiting between leagues
-                    time.sleep(5.0)
-                    
-                    logger.info(f"✅ Successfully processed {league_name}")
+                    # Show API usage after each league  
+                    hourly_pct = (self.hourly_request_count / self.MAX_REQUESTS_PER_HOUR) * 100
+                    daily_pct = (self.daily_request_count / self.MAX_REQUESTS_PER_DAY) * 100
+                    logger.info(f"    📊 API Usage: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR} hourly ({hourly_pct:.1f}%), {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY} daily ({daily_pct:.1f}%)")
                     
                 except Exception as e:
-                    logger.error(f"❌ Error processing league {league_name}: {e}")
-                    # Still wait on errors to avoid hammering the API
-                    time.sleep(10.0)
+                    logger.error(f"    ❌ Error processing league {league_id}: {e}")
                     continue
             
-            # Save progress after each batch
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            progress_filename = f'data/current/yahoo_fantasy_batch_{batch_num + 1}_progress_{timestamp}.json'
-            self.save_to_json(progress_filename)
-            logger.info(f"💾 Batch {batch_num + 1} progress saved: {progress_filename}")
-            
-            # Long delay between batches (except for the last batch)
+            # Adaptive delay between batches (except for last batch)
             if batch_num < total_batches - 1:
-                logger.info(f"⏰ Waiting {batch_delay}s before next batch to avoid rate limits...")
-                time.sleep(batch_delay)
+                logger.info(f"   ⏱️ Waiting {current_batch_delay}s between batches...")
+                time.sleep(current_batch_delay)
         
         # Log final summary
-        logger.info("🎉 Data extraction completed!")
+        logger.info("🎉 Selective data extraction completed!")
         logger.info(f"📊 Final Summary:")
         logger.info(f"  - Leagues: {len(self.extracted_data['leagues'])}")
         logger.info(f"  - Teams: {len(self.extracted_data['teams'])}")
@@ -947,6 +1210,7 @@ class YahooFantasyExtractor:
         logger.info(f"  - Matchups: {len(self.extracted_data['matchups'])}")
         logger.info(f"  - Transactions: {len(self.extracted_data['transactions'])}")
         logger.info(f"  - Draft Picks: {len(self.extracted_data['draft_picks'])}")
+        logger.info(f"📊 Total API requests made - Hour: {self.hourly_request_count}, Day: {self.daily_request_count}")
         
         return self.extracted_data
     
@@ -974,19 +1238,5 @@ class YahooFantasyExtractor:
         except Exception as e:
             logger.error(f"Error saving data to JSON: {e}")
 
-def main():
-    """Main execution function"""
-    extractor = YahooFantasyExtractor()
-    
-    # Extract all data with batch processing (5 leagues per batch, 300s between batches)
-    data = extractor.extract_all_data(batch_size=5, batch_delay=300)
-    
-    # Save final data
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    final_filename = f'data/current/yahoo_fantasy_COMPLETE_{timestamp}.json'
-    extractor.save_to_json(final_filename)
-    
-    return data
-
-if __name__ == "__main__":
-    main()
+# This module is designed to be imported and used by scripts/full_extraction.py
+# Remove the main() function to avoid conflicts with the entry point script

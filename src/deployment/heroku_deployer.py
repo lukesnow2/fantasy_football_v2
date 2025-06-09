@@ -125,6 +125,176 @@ class HerokuPostgresDeployer:
         
         return df
     
+    def flatten_matchups_data(self, matchups_data: list) -> list:
+        """
+        Flatten nested Yahoo API matchup responses into database-ready format
+        Converts complex nested API structure to simple flat records
+        """
+        flattened_matchups = []
+        
+        for league_matchup in matchups_data:
+            league_id = league_matchup.get('league_id')
+            week = league_matchup.get('week')
+            matchups = league_matchup.get('matchups', {})
+            
+            # Skip if no matchups data or missing required fields
+            if not matchups or not league_id or not week:
+                continue
+                
+            # Extract nested matchup data
+            scoreboard = matchups.get('fantasy_content', {}).get('league', [{}])
+            if isinstance(scoreboard, list) and len(scoreboard) > 1:
+                scoreboard_data = scoreboard[1].get('scoreboard', {})
+                if '0' in scoreboard_data and 'matchups' in scoreboard_data['0']:
+                    week_matchups = scoreboard_data['0']['matchups']
+                    
+                    # Process each matchup in the week
+                    for match_key, match_data in week_matchups.items():
+                        if match_key == 'count' or not isinstance(match_data, dict):
+                            continue
+                            
+                        matchup = match_data.get('matchup', {})
+                        if not matchup:
+                            continue
+                            
+                        # Extract basic matchup info
+                        matchup_record = {
+                            'matchup_id': f"{league_id}_W{week}_{match_key}",
+                            'league_id': league_id,
+                            'week': int(week),
+                            'is_playoffs': matchup.get('is_playoffs', '0') == '1',
+                            'is_championship': False,  # Will be enhanced later
+                            'is_consolation': matchup.get('is_consolation', '0') == '1',
+                            'winner_team_id': matchup.get('winner_team_key'),
+                            'team1_id': None,
+                            'team2_id': None,
+                            'team1_score': 0.0,
+                            'team2_score': 0.0,
+                            'extracted_at': league_matchup.get('extracted_at')
+                        }
+                        
+                        # Extract team data from nested structure
+                        if '0' in matchup and 'teams' in matchup['0']:
+                            teams_data = matchup['0']['teams']
+                            team_scores = []
+                            team_ids = []
+                            
+                            for team_idx in ['0', '1']:
+                                if team_idx in teams_data:
+                                    team_info = teams_data[team_idx].get('team', [])
+                                    if isinstance(team_info, list) and len(team_info) >= 2:
+                                        # Extract team ID
+                                        team_basic = team_info[0]
+                                        for item in team_basic:
+                                            if isinstance(item, dict) and 'team_key' in item:
+                                                team_ids.append(item['team_key'])
+                                                break
+                                        
+                                        # Extract team score
+                                        team_stats = team_info[1]
+                                        if 'team_points' in team_stats:
+                                            score = team_stats['team_points'].get('total', '0')
+                                            team_scores.append(float(score))
+                            
+                            # Assign team data
+                            if len(team_ids) >= 2:
+                                matchup_record['team1_id'] = team_ids[0]
+                                matchup_record['team2_id'] = team_ids[1]
+                            if len(team_scores) >= 2:
+                                matchup_record['team1_score'] = team_scores[0]  
+                                matchup_record['team2_score'] = team_scores[1]
+                        
+                        # Only add if we have essential data
+                        if matchup_record['team1_id'] and matchup_record['team2_id']:
+                            flattened_matchups.append(matchup_record)
+        
+        logger.info(f"📊 Flattened {len(flattened_matchups)} matchup records from {len(matchups_data)} league-weeks")
+        return flattened_matchups
+
+    def preprocess_data(self) -> bool:
+        """Preprocess data to match expected database format"""
+        try:
+            logger.info("🔄 Preprocessing data for database compatibility...")
+            
+            # Step 1: Filter out non-NFL leagues and collect their IDs
+            non_nfl_league_ids = set()
+            if 'leagues' in self.data and self.data['leagues']:
+                original_leagues = len(self.data['leagues'])
+                
+                # Identify non-NFL leagues
+                for league in self.data['leagues']:
+                    if league.get('game_code') != 'nfl':
+                        non_nfl_league_ids.add(league.get('league_id'))
+                
+                # Filter out non-NFL leagues (keep only NFL)
+                self.data['leagues'] = [
+                    league for league in self.data['leagues'] 
+                    if league.get('game_code') == 'nfl'
+                ]
+                
+                filtered_leagues = len(self.data['leagues'])
+                logger.info(f"🏈 Filtered out {original_leagues - filtered_leagues} non-NFL leagues, keeping {filtered_leagues} NFL leagues only")
+            
+            # Step 2: Filter out all data associated with non-NFL leagues
+            if non_nfl_league_ids:
+                logger.info(f"🗑️ Removing all data associated with {len(non_nfl_league_ids)} non-NFL leagues...")
+                
+                # Filter teams
+                if 'teams' in self.data and self.data['teams']:
+                    original_teams = len(self.data['teams'])
+                    self.data['teams'] = [
+                        team for team in self.data['teams']
+                        if team.get('league_id') not in non_nfl_league_ids
+                    ]
+                    logger.info(f"  👥 Teams: {original_teams} → {len(self.data['teams'])}")
+                
+                # Filter matchups
+                if 'matchups' in self.data and self.data['matchups']:
+                    original_matchups = len(self.data['matchups'])
+                    self.data['matchups'] = [
+                        matchup for matchup in self.data['matchups']
+                        if matchup.get('league_id') not in non_nfl_league_ids
+                    ]
+                    logger.info(f"  🏟️ Matchups: {original_matchups} → {len(self.data['matchups'])}")
+                
+                # Filter transactions
+                if 'transactions' in self.data and self.data['transactions']:
+                    original_transactions = len(self.data['transactions'])
+                    self.data['transactions'] = [
+                        transaction for transaction in self.data['transactions']
+                        if transaction.get('league_id') not in non_nfl_league_ids
+                    ]
+                    logger.info(f"  💱 Transactions: {original_transactions} → {len(self.data['transactions'])}")
+                
+                # Filter draft picks
+                if 'draft_picks' in self.data and self.data['draft_picks']:
+                    original_draft_picks = len(self.data['draft_picks'])
+                    self.data['draft_picks'] = [
+                        pick for pick in self.data['draft_picks']
+                        if pick.get('league_id') not in non_nfl_league_ids
+                    ]
+                    logger.info(f"  🎯 Draft picks: {original_draft_picks} → {len(self.data['draft_picks'])}")
+            
+            # Step 3: Flatten matchups data if it exists and is nested
+            if 'matchups' in self.data and self.data['matchups']:
+                sample_matchup = self.data['matchups'][0] if self.data['matchups'] else {}
+                
+                # Check if data is nested (has 'matchups' key in records)
+                if 'matchups' in sample_matchup:
+                    logger.info("📊 Detected nested matchups data, flattening...")
+                    self.data['matchups'] = self.flatten_matchups_data(self.data['matchups'])
+                else:
+                    logger.info("📊 Matchups data already in flat format")
+            
+            # Final summary
+            total_records = sum(len(records) for records in self.data.values() if isinstance(records, list))
+            logger.info(f"✅ Preprocessing complete: {total_records:,} total records ready for deployment")
+            
+            return True
+        except Exception as e:
+            logger.error(f"❌ Data preprocessing failed: {e}")
+            return False
+    
     def upload_data(self) -> bool:
         """Upload data to database"""
         try:
@@ -209,6 +379,7 @@ class HerokuPostgresDeployer:
             ("Connect", self.connect),
             ("Load Data", self.load_data),
             ("Create Schema", self.create_schema),
+            ("Preprocess Data", self.preprocess_data),
             ("Upload Data", self.upload_data),
             ("Verify & Summarize", self.verify_and_summarize)
         ]

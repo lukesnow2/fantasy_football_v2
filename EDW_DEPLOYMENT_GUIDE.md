@@ -5,7 +5,7 @@
 The Fantasy Football Enterprise Data Warehouse (EDW) provides a comprehensive analytical layer with dimensional modeling, automated deployment, and comprehensive testing for advanced analytics.
 
 **Key Features:**
-- **15 tables**: 6 dimensions + 5 facts + 4 marts
+- **16 tables**: 6 dimensions + 5 facts + 5 marts
 - **5 analytical views** for dashboards
 - **Automated deployment** via GitHub Actions
 - **Cloud-ready** architecture
@@ -38,9 +38,10 @@ edw/
 ├── Facts (5 tables)
 │   ├── fact_team_performance, fact_matchup
 │   ├── fact_roster, fact_transaction, fact_draft
-├── Marts (4 tables)
+├── Marts (5 tables)
 │   ├── mart_league_summary, mart_manager_performance
 │   ├── mart_player_value, mart_weekly_power_rankings
+│   └── mart_manager_h2h
 └── Views (5 analytical views)
     ├── vw_current_season_dashboard
     ├── vw_manager_hall_of_fame
@@ -125,7 +126,7 @@ Success Rate: 100.0%
 ## 📊 Production Status
 
 **Current EDW Status:**
-- ✅ **15 tables**: 6 dimensions + 5 facts + 4 marts
+- ✅ **16 tables**: 6 dimensions + 5 facts + 5 marts
 - ✅ **5 analytical views** for dashboards
 - ✅ **24 performance indexes**
 - ✅ **Complete test coverage**
