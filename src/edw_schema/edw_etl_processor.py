@@ -466,17 +466,48 @@ class EdwEtlProcessor:
         return transformed
     
     def transform_players(self) -> List[Dict]:
-        """Transform players from transaction and draft data"""
+        """Transform players from transaction and draft data with position lookup"""
         transformed = []
         
         if not self.data:
             logger.warning("⚠️ No data available for player transformation")
             return transformed
         
-        # Collect unique players from transactions and draft picks
+        # First, build a position lookup map from sources that have position data
+        position_lookup = {}
+        
+        # Extract position data from draft picks (highest quality data)
+        for draft_pick in self.data.get('draft_picks', []):
+            player_id = draft_pick['player_id']
+            position = draft_pick.get('position')
+            if position and position.strip() and position != 'Unknown':
+                # Normalize position (e.g., "S,CB" -> "S")
+                normalized_position = position.split(',')[0] if ',' in position else position
+                position_lookup[player_id] = normalized_position
+        
+        # Extract position data from rosters (fallback for players not in draft)
+        for roster in self.data.get('rosters', []):
+            raw_player_id = roster['player_id']
+            
+            # Extract numeric player ID from Yahoo format  
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+                
+            position = roster.get('position')
+            if position and position.strip() and position != 'Unknown':
+                # Only use if we don't already have position data from draft
+                if numeric_player_id not in position_lookup:
+                    normalized_position = position.split(',')[0] if ',' in position else position
+                    position_lookup[numeric_player_id] = normalized_position
+        
+        logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
+        
+        # Collect unique players from all sources
         unique_players = {}
         
-        # Extract players from transactions
+        # Extract players from transactions (most comprehensive player list)
         for transaction in self.data.get('transactions', []):
             raw_player_id = transaction['player_id']
             
@@ -487,12 +518,15 @@ class EdwEtlProcessor:
                 numeric_player_id = raw_player_id
             
             if numeric_player_id not in unique_players:
+                # Use position lookup to get position data
+                position = position_lookup.get(numeric_player_id, 'Unknown')
+                
                 unique_players[numeric_player_id] = {
                     'player_id': numeric_player_id,
                     'player_name': transaction.get('player_name', f'Player {numeric_player_id}'),
-                    'primary_position': transaction.get('position', 'Unknown'),
-                    'eligible_positions': [transaction.get('position', 'Unknown')],
-                    'nfl_team': transaction.get('team', 'Unknown'),
+                    'primary_position': position,
+                    'eligible_positions': [position] if position != 'Unknown' else [],
+                    'nfl_team': 'Unknown',
                     'jersey_number': None,
                     'rookie_year': None,
                     'is_active': True,
@@ -500,17 +534,19 @@ class EdwEtlProcessor:
                     'valid_to': None
                 }
         
-        # Extract players from draft picks
+        # Extract players from draft picks (ensure we have all drafted players)
         for draft_pick in self.data.get('draft_picks', []):
             player_id = draft_pick['player_id']
             
             if player_id not in unique_players:
+                position = position_lookup.get(player_id, 'Unknown')
+                
                 unique_players[player_id] = {
                     'player_id': player_id,
                     'player_name': draft_pick.get('player_name', f'Player {player_id}'),
-                    'primary_position': draft_pick.get('position', 'Unknown'),
-                    'eligible_positions': [draft_pick.get('position', 'Unknown')],
-                    'nfl_team': draft_pick.get('team', 'Unknown'),
+                    'primary_position': position,
+                    'eligible_positions': [position] if position != 'Unknown' else [],
+                    'nfl_team': 'Unknown',
                     'jersey_number': None,
                     'rookie_year': None,
                     'is_active': True,
@@ -519,7 +555,12 @@ class EdwEtlProcessor:
                 }
         
         transformed = list(unique_players.values())
+        
+        # Count how many players have position data
+        players_with_positions = sum(1 for player in transformed if player['primary_position'] != 'Unknown')
         logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions and draft data")
+        logger.info(f"🏈 {players_with_positions} players have position data ({players_with_positions/len(transformed)*100:.1f}%)")
+        
         return transformed
     
     def transform_fact_roster(self) -> List[Dict]:
