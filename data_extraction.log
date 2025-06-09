@@ -1,0 +1,1313 @@
+2025-06-09 14:39:18,050 - INFO - 🚀 Testing REAL player statistics extraction from Yahoo API...
+2025-06-09 14:39:18,050 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 14:39:18,050 - DEBUG - Checking 
+2025-06-09 14:39:18,052 - DEBUG - ELAPSED TIME : 106435.27235674858
+2025-06-09 14:39:18,052 - DEBUG - TOKEN HAS EXPIRED
+2025-06-09 14:39:18,052 - DEBUG - REFRESHING TOKEN
+2025-06-09 14:39:18,182 - DEBUG - ELAPSED TIME : 0.1296851634979248
+2025-06-09 14:39:18,182 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:39:19,157 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 14:39:19,157 - INFO - 📋 Getting user leagues...
+2025-06-09 14:39:19,157 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 14:39:29,708 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 14:39:29,708 - INFO - Processing league batch 1/5
+2025-06-09 14:39:30,123 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 14:39:30,727 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 14:39:34,767 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 14:39:38,107 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 14:39:38,713 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 14:39:42,409 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 14:39:46,808 - INFO - Processing league batch 2/5
+2025-06-09 14:39:51,313 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 14:39:53,155 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 14:39:56,542 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 14:39:59,709 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 14:40:00,009 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 14:40:00,312 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 14:40:03,519 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 14:40:04,523 - INFO - Processing league batch 3/5
+2025-06-09 14:40:04,774 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 14:40:05,075 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 14:40:05,378 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 14:40:05,682 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 14:40:05,683 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 14:40:05,984 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 14:40:06,285 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 14:40:06,700 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 14:40:07,001 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 14:40:07,302 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 14:40:07,605 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 14:40:08,609 - INFO - Processing league batch 4/5
+2025-06-09 14:40:08,827 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 14:40:09,132 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 14:40:09,433 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 14:40:10,039 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 14:40:10,643 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 14:40:11,248 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 14:40:12,551 - INFO - Processing league batch 5/5
+2025-06-09 14:40:12,783 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 14:40:13,387 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 14:40:14,298 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 14:40:14,902 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 14:40:15,204 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 14:40:15,204 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 14:40:15,504 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 14:40:15,504 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 14:40:15,504 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 14:40:15,505 - INFO - 🏈 Testing with league: Oakdale Park (ID: 153.l.76788, Season: 2006)
+2025-06-09 14:40:15,505 - INFO - 📈 Extracting player statistics...
+2025-06-09 14:40:15,505 - INFO - 📋 Getting roster data for player identification...
+2025-06-09 14:40:15,505 - ERROR - ❌ Test failed: YahooFantasyExtractor.extract_rosters_for_league() got an unexpected keyword argument 'weeks'
+2025-06-09 14:40:15,506 - ERROR - 💥 Test failed!
+2025-06-09 14:41:12,967 - INFO - 🚀 Testing REAL player statistics extraction from Yahoo API...
+2025-06-09 14:41:12,968 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 14:41:12,968 - DEBUG - Checking 
+2025-06-09 14:41:12,969 - DEBUG - ELAPSED TIME : 114.91673803329468
+2025-06-09 14:41:12,969 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:41:12,970 - DEBUG - ELAPSED TIME : 114.91746425628662
+2025-06-09 14:41:12,970 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:41:13,261 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 14:41:13,261 - INFO - 📋 Getting user leagues...
+2025-06-09 14:41:13,261 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 14:41:30,509 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 14:41:30,509 - INFO - Processing league batch 1/5
+2025-06-09 14:41:30,918 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 14:41:31,525 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 14:41:34,636 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 14:41:34,941 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 14:41:35,544 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 14:41:39,272 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 14:41:41,873 - INFO - Processing league batch 2/5
+2025-06-09 14:41:44,488 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 14:41:47,781 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 14:41:50,927 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 14:41:55,122 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 14:41:55,425 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 14:41:55,725 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 14:41:59,304 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 14:42:00,309 - INFO - Processing league batch 3/5
+2025-06-09 14:42:00,520 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 14:42:00,824 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 14:42:01,125 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 14:42:01,427 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 14:42:01,428 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 14:42:01,731 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 14:42:02,034 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 14:42:02,335 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 14:42:02,635 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 14:42:02,935 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 14:42:03,270 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 14:42:04,275 - INFO - Processing league batch 4/5
+2025-06-09 14:42:04,479 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 14:42:04,780 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 14:42:05,084 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 14:42:05,714 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 14:42:06,318 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 14:42:06,921 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 14:42:08,230 - INFO - Processing league batch 5/5
+2025-06-09 14:42:08,447 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 14:42:09,051 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 14:42:09,951 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 14:42:10,552 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 14:42:10,852 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 14:42:10,852 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 14:42:11,152 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 14:42:11,152 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 14:42:11,153 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 14:42:11,153 - INFO - 🏈 Testing with league: Oakdale Park (ID: 153.l.76788, Season: 2006)
+2025-06-09 14:42:11,153 - INFO - 📈 Extracting player statistics...
+2025-06-09 14:42:11,153 - INFO - 📋 Getting roster data for player identification...
+2025-06-09 14:42:11,153 - INFO - 🚀 BULK ROSTERS EXTRACTION: Getting roster data for league 153.l.76788...
+2025-06-09 14:42:11,958 - INFO - 📋 ROSTER WEEKS: Extracting weeks [1, 2]
+2025-06-09 14:42:12,506 - INFO - 📦 BULK ROSTERS: 10 teams × 2 weeks
+2025-06-09 14:42:12,506 - INFO - ⚡ OPTIMIZATION: Attempting bulk roster extraction...
+2025-06-09 14:42:12,506 - INFO -     📋 BULK: Week 1 rosters (10 teams)...
+2025-06-09 14:42:12,506 - INFO -     📋 Using individual team roster calls for week 1...
+2025-06-09 14:42:23,280 - INFO -     📋 BULK: Week 2 rosters (10 teams)...
+2025-06-09 14:42:23,280 - INFO -     📋 Using individual team roster calls for week 2...
+2025-06-09 14:42:23,584 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 14:42:33,472 - INFO -   ✅ BULK ROSTERS: Found 485 roster entries in league 153.l.76788
+2025-06-09 14:42:33,472 - INFO - 📋 Found 485 roster entries
+2025-06-09 14:42:34,263 - INFO -     📈 Extracting player statistics for weeks [1, 2]
+2025-06-09 14:42:35,185 - ERROR - Rate limited request failed: 'str' object has no attribute 'roster'
+2025-06-09 14:42:35,185 - ERROR - Error extracting statistics for league 153.l.76788: 'str' object has no attribute 'roster'
+2025-06-09 14:42:35,186 - ERROR - ❌ No statistics data extracted
+2025-06-09 14:42:35,186 - ERROR - 💥 Test failed!
+2025-06-09 14:44:24,284 - INFO - 🚀 Testing REAL player statistics extraction from Yahoo API...
+2025-06-09 14:44:24,284 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 14:44:24,284 - DEBUG - Checking 
+2025-06-09 14:44:24,285 - DEBUG - ELAPSED TIME : 306.23242807388306
+2025-06-09 14:44:24,285 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:44:24,286 - DEBUG - ELAPSED TIME : 306.23316502571106
+2025-06-09 14:44:24,286 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:44:24,551 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 14:44:24,551 - INFO - 📋 Getting user leagues...
+2025-06-09 14:44:24,551 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 14:44:40,655 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 14:44:40,656 - INFO - Processing league batch 1/5
+2025-06-09 14:44:41,311 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 14:44:42,035 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 14:44:45,084 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 14:44:45,583 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 14:44:46,189 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 14:44:49,364 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 14:44:53,684 - INFO - Processing league batch 2/5
+2025-06-09 14:44:58,553 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 14:45:01,691 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 14:45:04,968 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 14:45:06,568 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 14:45:06,870 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 14:45:07,170 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 14:45:09,265 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 14:45:10,270 - INFO - Processing league batch 3/5
+2025-06-09 14:45:10,466 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 14:45:10,770 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 14:45:11,072 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 14:45:11,396 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 14:45:11,396 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 14:45:11,696 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 14:45:11,999 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 14:45:12,301 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 14:45:12,603 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 14:45:12,908 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 14:45:13,241 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 14:45:14,243 - INFO - Processing league batch 4/5
+2025-06-09 14:45:14,432 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 14:45:14,735 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 14:45:15,036 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 14:45:15,640 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 14:45:16,244 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 14:45:16,849 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 14:45:18,152 - INFO - Processing league batch 5/5
+2025-06-09 14:45:18,365 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 14:45:18,975 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 14:45:19,882 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 14:45:20,488 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 14:45:20,793 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 14:45:20,794 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 14:45:21,264 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 14:45:21,265 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 14:45:21,265 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 14:45:21,265 - INFO - 🏈 Testing with league: Idaho's DEI Quota (ID: 449.l.674707, Season: 2024)
+2025-06-09 14:45:21,265 - INFO - 📈 Testing Yahoo API player stats access...
+2025-06-09 14:45:21,762 - INFO - ✅ Got league object for Idaho's DEI Quota
+2025-06-09 14:45:22,065 - INFO - 📋 League settings: start_week=1, end_week=17, current_week=17
+2025-06-09 14:45:22,691 - INFO - 📋 Found 10 teams
+2025-06-09 14:45:22,692 - ERROR - ❌ Error testing Yahoo API: 0
+2025-06-09 14:45:22,693 - ERROR - 💥 Test failed!
+2025-06-09 14:51:20,554 - INFO - 🚀 Testing corrected Yahoo Fantasy API for player statistics...
+2025-06-09 14:51:20,555 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 14:51:20,555 - DEBUG - Checking 
+2025-06-09 14:51:20,556 - DEBUG - ELAPSED TIME : 722.5036451816559
+2025-06-09 14:51:20,556 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:51:20,558 - DEBUG - ELAPSED TIME : 722.5052301883698
+2025-06-09 14:51:20,558 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 14:51:22,259 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 14:51:22,260 - INFO - 📋 Getting user leagues...
+2025-06-09 14:51:22,260 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 14:51:37,728 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 14:51:37,728 - INFO - Processing league batch 1/5
+2025-06-09 14:51:38,030 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 14:51:38,631 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 14:51:41,844 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 14:51:42,319 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 14:51:42,928 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 14:51:44,899 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 14:51:48,977 - INFO - Processing league batch 2/5
+2025-06-09 14:51:52,976 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 14:51:55,119 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 14:51:57,028 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 14:51:57,328 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 14:51:57,631 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 14:51:57,931 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 14:52:01,571 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 14:52:02,575 - INFO - Processing league batch 3/5
+2025-06-09 14:52:02,790 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 14:52:03,094 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 14:52:03,397 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 14:52:03,700 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 14:52:03,700 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 14:52:04,001 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 14:52:04,305 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 14:52:04,609 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 14:52:04,909 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 14:52:05,214 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 14:52:05,516 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 14:52:06,517 - INFO - Processing league batch 4/5
+2025-06-09 14:52:06,712 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 14:52:07,014 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 14:52:07,317 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 14:52:07,927 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 14:52:08,531 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 14:52:09,139 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 14:52:10,447 - INFO - Processing league batch 5/5
+2025-06-09 14:52:10,718 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 14:52:11,327 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 14:52:12,231 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 14:52:12,840 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 14:52:13,142 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 14:52:13,143 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 14:52:13,447 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 14:52:13,448 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 14:52:13,448 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 14:52:13,448 - INFO - 🏈 Testing with league: Idaho's DEI Quota (ID: 449.l.674707)
+2025-06-09 14:52:13,448 - INFO - 📈 Testing corrected player statistics extraction...
+2025-06-09 14:52:13,959 - INFO - ✅ Got league object
+2025-06-09 14:52:13,959 - INFO - 🔍 Testing direct league.player_stats() call...
+2025-06-09 14:52:24,062 - INFO - 📋 Found 148 taken players
+2025-06-09 14:52:24,062 - INFO - 🔍 Testing with player: Matthew Stafford (ID: 9265)
+2025-06-09 14:52:24,062 - INFO - 📊 Testing season stats...
+2025-06-09 14:52:29,219 - INFO - ✅ SUCCESS! Got season stats for Matthew Stafford
+2025-06-09 14:52:29,219 - INFO - 📊 Sample stats: {'player_id': 9265, 'name': 'Matthew Stafford', 'position_type': 'O', 'Pass Yds': 3762.0, 'Pass TD': 20.0, 'Int': 8.0, 'Rush Att': 30.0, 'Rush Yds': 41.0, 'Rush TD': 0.0, 'Rec': 0.0, 'Rec Yds': 0.0, 'Rec TD': 0.0, 'Ret TD': 0.0, '2-PT': 0.0, 'Fum Lost': 2.0, 'Targets': 0.0, 'Fum Ret TD': 0.0, 'total_points': '281.20'}
+2025-06-09 14:52:29,220 - INFO - 💾 Results saved to api_test_results.json
+2025-06-09 14:52:29,221 - INFO - 🎉 Test completed successfully!
+2025-06-09 14:55:46,978 - INFO - 🧪 Testing streamlined fantasy points extraction...
+2025-06-09 14:55:46,978 - INFO - 📊 League ID: 450.l.1035
+2025-06-09 14:55:46,979 - ERROR - Rate limited request failed: 'NoneType' object has no attribute 'to_league'
+2025-06-09 14:55:46,979 - ERROR - Error extracting fantasy points for league 450.l.1035: 'NoneType' object has no attribute 'to_league'
+2025-06-09 14:55:46,979 - ERROR - ❌ FAILED: No fantasy points extracted
+2025-06-09 15:04:52,690 - INFO - 🧪 Testing improved extractor with real fantasy points integration...
+2025-06-09 15:04:52,691 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:04:52,691 - DEBUG - Checking 
+2025-06-09 15:04:52,692 - DEBUG - ELAPSED TIME : 1534.6396353244781
+2025-06-09 15:04:52,692 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:04:52,693 - DEBUG - ELAPSED TIME : 1534.640457391739
+2025-06-09 15:04:52,693 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:04:54,568 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:04:54,569 - INFO - ✅ Authentication successful
+2025-06-09 15:04:54,569 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:05:03,713 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:05:03,713 - INFO - Processing league batch 1/5
+2025-06-09 15:05:04,222 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:05:04,997 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:05:08,218 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:05:08,624 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:05:09,231 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:05:12,703 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:05:17,125 - INFO - Processing league batch 2/5
+2025-06-09 15:05:20,167 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:05:21,774 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:05:22,077 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:05:23,709 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:05:24,013 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:05:24,315 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:05:28,157 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:05:29,161 - INFO - Processing league batch 3/5
+2025-06-09 15:05:29,390 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:05:29,695 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:05:30,000 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:05:30,300 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 15:05:30,300 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:05:30,603 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:05:30,907 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:05:31,211 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:05:31,515 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:05:31,819 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:05:32,123 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:05:33,129 - INFO - Processing league batch 4/5
+2025-06-09 15:05:33,324 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:05:33,629 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:05:33,933 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:05:34,536 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:05:35,139 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:05:35,741 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:05:37,048 - INFO - Processing league batch 5/5
+2025-06-09 15:05:37,283 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:05:37,889 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:05:38,800 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:05:39,407 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:05:39,711 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 15:05:39,712 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:05:40,016 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:05:40,016 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:05:40,016 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:05:40,016 - INFO - 🏈 Testing with league: Idaho's DEI Quota (ID: 449.l.674707)
+2025-06-09 15:05:40,016 - INFO - 📈 Testing improved statistics extraction...
+2025-06-09 15:05:40,819 - INFO -     📈 Extracting real fantasy points for Idaho's DEI Quota (2024 season)...
+2025-06-09 15:05:42,558 - INFO -     📋 Processing 148 players for real fantasy data...
+2025-06-09 15:05:57,825 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 15:06:15,968 - INFO - 📊 API Progress - Hour: 100/20000, Day: 100/100000
+2025-06-09 15:06:29,941 - INFO - 📊 API Progress - Hour: 125/20000, Day: 125/100000
+2025-06-09 15:06:42,017 - INFO - 📊 API Progress - Hour: 150/20000, Day: 150/100000
+2025-06-09 15:07:01,071 - INFO - 📊 API Progress - Hour: 175/20000, Day: 175/100000
+2025-06-09 15:07:12,888 - INFO - 📊 API Progress - Hour: 200/20000, Day: 200/100000
+2025-06-09 15:07:13,674 - INFO -     📊 SUCCESS: Extracted 148 players with real fantasy points
+2025-06-09 15:07:13,674 - INFO -         💰 Total points: 30,392.0, Average: 205.4 pts/player
+2025-06-09 15:07:13,674 - INFO -         🎯 Coverage: 148/148 players (100.0%)
+2025-06-09 15:07:13,674 - INFO - ✅ SUCCESS: Extracted statistics for 148 players!
+2025-06-09 15:07:13,674 - INFO - 📊 Sample statistic object type: <class 'extractors.comprehensive_data_extractor.ExtractedPlayerStatistics'>
+2025-06-09 15:07:13,674 - INFO - 🔑 Sample stat fields: ['extracted_at', 'game_code', 'league_id', 'player_id', 'player_name', 'position_type', 'season_year', 'stat_id', 'total_fantasy_points']
+2025-06-09 15:07:13,674 - INFO - 
+📋 Sample Real Fantasy Points Data:
+2025-06-09 15:07:13,674 - INFO -   1. Matthew Stafford (O)
+2025-06-09 15:07:13,675 - INFO -      🎯 Fantasy Points: 281.2
+2025-06-09 15:07:13,675 - INFO -      🔑 Player ID: 9265
+2025-06-09 15:07:13,675 - INFO -      📅 Season: 2024
+2025-06-09 15:07:13,675 - INFO -      🏆 League: 449.l.674707
+2025-06-09 15:07:13,675 - INFO - 
+2025-06-09 15:07:13,675 - INFO -   2. Russell Wilson (O)
+2025-06-09 15:07:13,675 - INFO -      🎯 Fantasy Points: 217.6
+2025-06-09 15:07:13,675 - INFO -      🔑 Player ID: 25785
+2025-06-09 15:07:13,675 - INFO -      📅 Season: 2024
+2025-06-09 15:07:13,675 - INFO -      🏆 League: 449.l.674707
+2025-06-09 15:07:13,675 - INFO - 
+2025-06-09 15:07:13,675 - INFO -   3. DeAndre Hopkins (O)
+2025-06-09 15:07:13,675 - INFO -      🎯 Fantasy Points: 147.0
+2025-06-09 15:07:13,675 - INFO -      🔑 Player ID: 26650
+2025-06-09 15:07:13,676 - INFO -      📅 Season: 2024
+2025-06-09 15:07:13,676 - INFO -      🏆 League: 449.l.674707
+2025-06-09 15:07:13,676 - INFO - 
+2025-06-09 15:07:13,676 - INFO -   4. Zach Ertz (O)
+2025-06-09 15:07:13,676 - INFO -      🎯 Fantasy Points: 177.4
+2025-06-09 15:07:13,676 - INFO -      🔑 Player ID: 26658
+2025-06-09 15:07:13,676 - INFO -      📅 Season: 2024
+2025-06-09 15:07:13,676 - INFO -      🏆 League: 449.l.674707
+2025-06-09 15:07:13,676 - INFO - 
+2025-06-09 15:07:13,676 - INFO -   5. Geno Smith (O)
+2025-06-09 15:07:13,676 - INFO -      🎯 Fantasy Points: 347.2
+2025-06-09 15:07:13,676 - INFO -      🔑 Player ID: 26662
+2025-06-09 15:07:13,677 - INFO -      📅 Season: 2024
+2025-06-09 15:07:13,677 - INFO -      🏆 League: 449.l.674707
+2025-06-09 15:07:13,677 - INFO - 
+2025-06-09 15:07:13,677 - INFO - 🚀 Testing integration with extract_all_data...
+2025-06-09 15:07:13,677 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 15:07:13,677 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 15:07:13,677 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 15:07:13,677 - INFO - 🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues
+2025-06-09 15:07:13,677 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 15:07:13,677 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:07:13,677 - DEBUG - Checking 
+2025-06-09 15:07:13,678 - DEBUG - ELAPSED TIME : 1675.6258313655853
+2025-06-09 15:07:13,678 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:07:13,679 - DEBUG - ELAPSED TIME : 1675.6264171600342
+2025-06-09 15:07:13,679 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:07:13,883 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:07:13,883 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:07:23,512 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:07:23,512 - INFO - Processing league batch 1/5
+2025-06-09 15:07:23,999 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:07:24,603 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:07:26,133 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:07:26,778 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:07:27,382 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:07:31,243 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:07:34,043 - INFO - Processing league batch 2/5
+2025-06-09 15:07:36,363 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:07:36,666 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:07:40,012 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:07:41,563 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:07:41,866 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:07:42,171 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:07:42,866 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:07:43,868 - INFO - Processing league batch 3/5
+2025-06-09 15:07:44,072 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:07:44,376 - INFO - 📊 API Progress - Hour: 225/20000, Day: 225/100000
+2025-06-09 15:07:44,376 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:07:44,676 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:07:44,981 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:07:45,283 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:07:45,587 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:07:45,892 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:07:46,197 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:07:46,499 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:07:46,799 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:07:47,800 - INFO - Processing league batch 4/5
+2025-06-09 15:07:47,983 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:07:48,283 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:07:48,587 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:07:49,196 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:07:49,803 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:07:50,409 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:07:51,710 - INFO - Processing league batch 5/5
+2025-06-09 15:07:52,001 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:07:52,602 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:07:53,505 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:07:53,809 - INFO - 📊 API Progress - Hour: 250/20000, Day: 250/100000
+2025-06-09 15:07:54,111 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:07:54,446 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:07:54,749 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:07:54,750 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:07:54,750 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:07:54,750 - INFO - 📊 LEAGUE BREAKDOWN BY SPORT:
+2025-06-09 15:07:54,750 - INFO -   🏟️ MLB: 6 leagues
+2025-06-09 15:07:54,750 - INFO -   🏟️ NBA: 3 leagues
+2025-06-09 15:07:54,750 - INFO -   🏟️ NFL: 26 leagues
+2025-06-09 15:07:54,750 - INFO - 📊 LEAGUE BREAKDOWN BY PRIVACY:
+2025-06-09 15:07:54,750 - INFO -   🔒 PRIVATE: 35 leagues
+2025-06-09 15:07:54,750 - INFO - 🎯 FILTERING RESULT: 35 total → 26 NFL private leagues selected
+2025-06-09 15:07:54,750 - INFO - 📊 Total NFL private leagues to process: 26
+2025-06-09 15:07:54,751 - INFO - 📦 Processing batch 1/3 (5 leagues)
+2025-06-09 15:07:54,751 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:07:54,751 - INFO -    📊 Starting API Usage: 253/20000 hourly, 253/100000 daily
+2025-06-09 15:07:54,751 - INFO -   🔄 [1/5] Processing Oakdale Park (153.l.76788)
+2025-06-09 15:07:54,751 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:07:55,560 - INFO -     📈 Extracting real fantasy points for Oakdale Park (2006 season)...
+2025-06-09 15:08:01,095 - INFO -     📋 Processing 237 players for real fantasy data...
+2025-06-09 15:08:50,318 - INFO - 📊 API Progress - Hour: 275/20000, Day: 275/100000
+2025-06-09 15:09:45,025 - INFO - 📊 API Progress - Hour: 300/20000, Day: 300/100000
+2025-06-09 15:10:30,165 - INFO - 📊 API Progress - Hour: 325/20000, Day: 325/100000
+2025-06-09 15:11:07,287 - INFO - 📊 API Progress - Hour: 350/20000, Day: 350/100000
+2025-06-09 15:11:40,733 - INFO - 📊 API Progress - Hour: 375/20000, Day: 375/100000
+2025-06-09 15:15:44,133 - INFO - 🎯 Running STATISTICS ONLY extraction...
+2025-06-09 15:15:44,133 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:15:44,133 - DEBUG - Checking 
+2025-06-09 15:15:44,134 - DEBUG - ELAPSED TIME : 2186.08198928833
+2025-06-09 15:15:44,134 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:15:44,135 - DEBUG - ELAPSED TIME : 2186.0829842090607
+2025-06-09 15:15:44,135 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:15:44,377 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:15:44,377 - INFO - ✅ Authentication successful
+2025-06-09 15:15:44,377 - INFO - 📈 Extracting ONLY player statistics (fantasy points)...
+2025-06-09 15:15:44,377 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 15:15:44,377 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 15:15:44,377 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 15:15:44,377 - INFO - 🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues
+2025-06-09 15:15:44,377 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 15:15:44,378 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:15:44,379 - DEBUG - Checking 
+2025-06-09 15:15:44,379 - DEBUG - ELAPSED TIME : 2186.3269901275635
+2025-06-09 15:15:44,379 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:15:44,380 - DEBUG - ELAPSED TIME : 2186.32758808136
+2025-06-09 15:15:44,380 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:15:44,530 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:15:44,530 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:16:04,661 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:16:04,662 - INFO - Processing league batch 1/5
+2025-06-09 15:16:05,068 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:16:05,676 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:16:07,356 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:16:07,674 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:16:08,287 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:16:11,688 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:16:15,967 - INFO - Processing league batch 2/5
+2025-06-09 15:16:19,889 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:16:22,726 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:16:24,449 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:16:27,565 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:16:27,869 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:16:28,170 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:16:30,531 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:16:31,532 - INFO - Processing league batch 3/5
+2025-06-09 15:16:31,745 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:16:32,047 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:16:32,347 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:16:32,648 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 15:16:32,648 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:16:32,948 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:16:33,250 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:16:33,554 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:16:33,854 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:16:34,159 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:16:34,462 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:16:35,466 - INFO - Processing league batch 4/5
+2025-06-09 15:16:35,658 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:16:35,963 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:16:36,264 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:16:36,870 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:16:37,572 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:16:38,179 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:16:39,480 - INFO - Processing league batch 5/5
+2025-06-09 15:16:39,735 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:16:40,338 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:16:41,435 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:16:42,040 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:16:42,343 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 15:16:42,343 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:16:42,645 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:16:42,646 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:16:42,646 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:16:42,646 - INFO - 📊 LEAGUE BREAKDOWN BY SPORT:
+2025-06-09 15:16:42,646 - INFO -   🏟️ MLB: 6 leagues
+2025-06-09 15:16:42,647 - INFO -   🏟️ NBA: 3 leagues
+2025-06-09 15:16:42,647 - INFO -   🏟️ NFL: 26 leagues
+2025-06-09 15:16:42,647 - INFO - 📊 LEAGUE BREAKDOWN BY PRIVACY:
+2025-06-09 15:16:42,647 - INFO -   🔒 PRIVATE: 35 leagues
+2025-06-09 15:16:42,647 - INFO - 🎯 FILTERING RESULT: 35 total → 26 NFL private leagues selected
+2025-06-09 15:16:42,648 - INFO - 📊 Total NFL private leagues to process: 26
+2025-06-09 15:16:42,648 - INFO - 📦 Processing batch 1/3 (5 leagues)
+2025-06-09 15:16:42,648 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:16:42,648 - INFO -    📊 Starting API Usage: 51/20000 hourly, 51/100000 daily
+2025-06-09 15:16:42,648 - INFO -   🔄 [1/5] Processing Oakdale Park (153.l.76788)
+2025-06-09 15:16:42,648 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:16:43,446 - INFO -     📈 Extracting real fantasy points for Oakdale Park (2006 season)...
+2025-06-09 15:16:47,616 - INFO -     📋 Processing 237 players for real fantasy data...
+2025-06-09 15:17:09,679 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 15:17:36,921 - INFO - 📊 API Progress - Hour: 100/20000, Day: 100/100000
+2025-06-09 15:18:04,821 - INFO - 📊 API Progress - Hour: 125/20000, Day: 125/100000
+2025-06-09 15:18:22,999 - INFO - 📊 API Progress - Hour: 150/20000, Day: 150/100000
+2025-06-09 15:18:38,673 - INFO - 📊 API Progress - Hour: 175/20000, Day: 175/100000
+2025-06-09 15:18:59,010 - INFO - 📊 API Progress - Hour: 200/20000, Day: 200/100000
+2025-06-09 15:19:09,762 - INFO - 📊 API Progress - Hour: 225/20000, Day: 225/100000
+2025-06-09 15:19:23,180 - INFO - 📊 API Progress - Hour: 250/20000, Day: 250/100000
+2025-06-09 15:19:38,228 - INFO - 📊 API Progress - Hour: 275/20000, Day: 275/100000
+2025-06-09 15:19:45,366 - INFO -     📊 SUCCESS: Extracted 235 players with real fantasy points
+2025-06-09 15:19:45,366 - INFO -         💰 Total points: 25,500.8, Average: 108.5 pts/player
+2025-06-09 15:19:45,367 - INFO -         🎯 Coverage: 235/237 players (99.2%)
+2025-06-09 15:19:45,384 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:19:45,386 - INFO -     📊 API Usage: 291/20000 hourly (1.5%), 291/100000 daily (0.3%)
+2025-06-09 15:19:45,386 - INFO -   🔄 [2/5] Processing Oakdale Park (124.l.109785)
+2025-06-09 15:19:45,386 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:19:46,172 - INFO -     📈 Extracting real fantasy points for Oakdale Park (2005 season)...
+2025-06-09 15:19:50,566 - INFO -     📋 Processing 194 players for real fantasy data...
+2025-06-09 15:20:08,110 - INFO - 📊 API Progress - Hour: 300/20000, Day: 300/100000
+2025-06-09 15:21:10,838 - INFO - 📊 API Progress - Hour: 325/20000, Day: 325/100000
+2025-06-09 15:21:55,643 - INFO - 📊 API Progress - Hour: 350/20000, Day: 350/100000
+2025-06-09 15:22:38,135 - INFO - 📊 API Progress - Hour: 375/20000, Day: 375/100000
+2025-06-09 15:23:08,460 - INFO - 📊 API Progress - Hour: 400/20000, Day: 400/100000
+2025-06-09 15:23:36,663 - INFO - 📊 API Progress - Hour: 425/20000, Day: 425/100000
+2025-06-09 15:24:02,527 - INFO - 📊 API Progress - Hour: 450/20000, Day: 450/100000
+2025-06-09 15:24:26,727 - INFO - 📊 API Progress - Hour: 475/20000, Day: 475/100000
+2025-06-09 15:24:33,479 - INFO -     📊 SUCCESS: Extracted 181 players with real fantasy points
+2025-06-09 15:24:33,479 - INFO -         💰 Total points: 21,596.0, Average: 119.3 pts/player
+2025-06-09 15:24:33,479 - INFO -         🎯 Coverage: 181/194 players (93.3%)
+2025-06-09 15:24:33,482 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:24:33,482 - INFO -     📊 API Usage: 488/20000 hourly (2.4%), 488/100000 daily (0.5%)
+2025-06-09 15:24:33,482 - INFO -   🔄 [3/5] Processing Oakdale 2 (175.l.86092)
+2025-06-09 15:24:33,482 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:24:34,397 - INFO -     📈 Extracting real fantasy points for Oakdale 2 (2007 season)...
+2025-06-09 15:24:38,471 - INFO -     📋 Processing 150 players for real fantasy data...
+2025-06-09 15:25:06,006 - INFO - 📊 API Progress - Hour: 500/20000, Day: 500/100000
+2025-06-09 15:25:58,180 - ERROR - Rate limited request failed: b'upstream connect error or disconnect/reset before headers. reset reason: connection termination'
+2025-06-09 15:26:17,188 - INFO - 📊 API Progress - Hour: 525/20000, Day: 525/100000
+2025-06-09 15:26:51,404 - INFO - 📊 API Progress - Hour: 550/20000, Day: 550/100000
+2025-06-09 15:27:37,406 - INFO - 📊 API Progress - Hour: 575/20000, Day: 575/100000
+2025-06-09 15:28:02,827 - INFO - 📊 API Progress - Hour: 600/20000, Day: 600/100000
+2025-06-09 15:28:32,515 - INFO - 📊 API Progress - Hour: 625/20000, Day: 625/100000
+2025-06-09 15:28:40,480 - INFO -     📊 SUCCESS: Extracted 149 players with real fantasy points
+2025-06-09 15:28:40,480 - INFO -         💰 Total points: 21,861.6, Average: 146.7 pts/player
+2025-06-09 15:28:40,480 - INFO -         🎯 Coverage: 149/150 players (99.3%)
+2025-06-09 15:28:40,482 - INFO -     ✅ Completed Oakdale 2
+2025-06-09 15:28:40,482 - INFO -     📊 API Usage: 641/20000 hourly (3.2%), 641/100000 daily (0.6%)
+2025-06-09 15:28:40,482 - INFO -   🔄 [4/5] Processing Oakdale Park (175.l.658531)
+2025-06-09 15:28:40,483 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:28:41,290 - INFO -     📈 Extracting real fantasy points for Oakdale Park (2007 season)...
+2025-06-09 15:28:44,443 - INFO -     📋 Processing 192 players for real fantasy data...
+2025-06-09 15:28:54,957 - INFO - 📊 API Progress - Hour: 650/20000, Day: 650/100000
+2025-06-09 15:29:19,659 - INFO - 📊 API Progress - Hour: 675/20000, Day: 675/100000
+2025-06-09 15:29:41,789 - INFO - 🎯 Running STATISTICS ONLY extraction...
+2025-06-09 15:29:41,789 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:29:41,789 - DEBUG - Checking 
+2025-06-09 15:29:41,791 - DEBUG - ELAPSED TIME : 3023.7381780147552
+2025-06-09 15:29:41,791 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:29:41,792 - DEBUG - ELAPSED TIME : 3023.7392461299896
+2025-06-09 15:29:41,792 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:29:42,300 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:29:42,301 - INFO - ✅ Authentication successful
+2025-06-09 15:29:42,301 - INFO - 📈 Extracting ONLY player statistics (fantasy points)...
+2025-06-09 15:29:42,301 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 15:29:42,301 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 15:29:42,301 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 15:29:42,301 - INFO - 🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues
+2025-06-09 15:29:42,301 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 15:29:42,301 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:29:42,301 - DEBUG - Checking 
+2025-06-09 15:29:42,302 - DEBUG - ELAPSED TIME : 3024.2494072914124
+2025-06-09 15:29:42,302 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:29:42,302 - DEBUG - ELAPSED TIME : 3024.2500541210175
+2025-06-09 15:29:42,303 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:29:42,464 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:29:42,465 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:29:47,424 - INFO - 📊 API Progress - Hour: 700/20000, Day: 700/100000
+2025-06-09 15:29:59,859 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:29:59,859 - INFO - Processing league batch 1/5
+2025-06-09 15:30:00,429 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:30:01,033 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:30:04,104 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:30:04,484 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:30:05,092 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:30:08,993 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:30:10,298 - INFO - Processing league batch 2/5
+2025-06-09 15:30:14,261 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:30:17,352 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:30:17,656 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:30:20,762 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:30:21,064 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:30:21,366 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:30:25,202 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:30:26,202 - INFO - Processing league batch 3/5
+2025-06-09 15:30:26,383 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:30:26,685 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:30:26,989 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:30:27,291 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 15:30:27,291 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:30:27,591 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:30:27,891 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:30:28,376 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:30:28,758 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:30:29,059 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:30:29,374 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:30:30,376 - INFO - Processing league batch 4/5
+2025-06-09 15:30:30,652 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:30:30,956 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:30:31,258 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:30:31,863 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:30:32,471 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:30:33,074 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:30:34,376 - INFO - Processing league batch 5/5
+2025-06-09 15:30:34,652 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:30:35,261 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:30:36,173 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:30:36,798 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:30:37,099 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 15:30:37,099 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:30:37,399 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:30:37,400 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:30:37,400 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:30:37,400 - INFO - 📊 LEAGUE BREAKDOWN BY SPORT:
+2025-06-09 15:30:37,400 - INFO -   🏟️ MLB: 6 leagues
+2025-06-09 15:30:37,400 - INFO -   🏟️ NBA: 3 leagues
+2025-06-09 15:30:37,400 - INFO -   🏟️ NFL: 26 leagues
+2025-06-09 15:30:37,400 - INFO - 📊 LEAGUE BREAKDOWN BY PRIVACY:
+2025-06-09 15:30:37,400 - INFO -   🔒 PRIVATE: 35 leagues
+2025-06-09 15:30:37,400 - INFO - 🎯 FILTERING RESULT: 35 total → 26 NFL private leagues selected
+2025-06-09 15:30:37,401 - INFO - 📊 Total NFL private leagues to process: 26
+2025-06-09 15:30:37,401 - INFO - 📦 Processing batch 1/3 (5 leagues)
+2025-06-09 15:30:37,401 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:30:37,401 - INFO -    📊 Starting API Usage: 51/20000 hourly, 51/100000 daily
+2025-06-09 15:30:37,401 - INFO -   🔄 [1/5] Processing Oakdale Park (153.l.76788)
+2025-06-09 15:30:37,401 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:30:38,191 - INFO -     📈 BULK STATISTICS: Extracting real fantasy points for Oakdale Park (2006 season)...
+2025-06-09 15:30:43,315 - INFO -     💰 API SAVINGS: Found 237 players in single bulk call!
+2025-06-09 15:30:43,316 - INFO -       📦 Processing statistics batch 1/16 (15 players)
+2025-06-09 15:31:07,757 - INFO -       📦 Processing statistics batch 2/16 (15 players)
+2025-06-09 15:31:16,697 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 15:31:29,344 - INFO -       📦 Processing statistics batch 3/16 (15 players)
+2025-06-09 15:31:43,380 - INFO -       📦 Processing statistics batch 4/16 (15 players)
+2025-06-09 15:31:43,504 - INFO - 📊 API Progress - Hour: 100/20000, Day: 100/100000
+2025-06-09 15:31:56,215 - INFO -       📦 Processing statistics batch 5/16 (15 players)
+2025-06-09 15:32:05,005 - INFO - 📊 API Progress - Hour: 125/20000, Day: 125/100000
+2025-06-09 15:32:16,588 - INFO -       📦 Processing statistics batch 6/16 (15 players)
+2025-06-09 15:32:39,601 - INFO -       📦 Processing statistics batch 7/16 (15 players)
+2025-06-09 15:32:50,155 - INFO - 📊 API Progress - Hour: 150/20000, Day: 150/100000
+2025-06-09 15:33:00,335 - INFO -       📦 Processing statistics batch 8/16 (15 players)
+2025-06-09 15:33:20,033 - INFO -       📦 Processing statistics batch 9/16 (15 players)
+2025-06-09 15:33:20,152 - INFO - 📊 API Progress - Hour: 175/20000, Day: 175/100000
+2025-06-09 15:33:31,815 - INFO -       📦 Processing statistics batch 10/16 (15 players)
+2025-06-09 15:33:38,442 - INFO - 📊 API Progress - Hour: 200/20000, Day: 200/100000
+2025-06-09 15:33:40,922 - INFO -       📦 Processing statistics batch 11/16 (15 players)
+2025-06-09 15:33:52,489 - INFO -       📦 Processing statistics batch 12/16 (15 players)
+2025-06-09 15:33:54,782 - INFO - 📊 API Progress - Hour: 225/20000, Day: 225/100000
+2025-06-09 15:33:59,526 - INFO -       📦 Processing statistics batch 13/16 (15 players)
+2025-06-09 15:34:11,871 - INFO -       📦 Processing statistics batch 14/16 (15 players)
+2025-06-09 15:34:12,011 - INFO - 📊 API Progress - Hour: 250/20000, Day: 250/100000
+2025-06-09 15:34:19,504 - INFO -       📦 Processing statistics batch 15/16 (15 players)
+2025-06-09 15:34:23,966 - INFO - 📊 API Progress - Hour: 275/20000, Day: 275/100000
+2025-06-09 15:34:26,507 - INFO -       📦 Processing statistics batch 16/16 (12 players)
+2025-06-09 15:34:31,257 - INFO -     📊 BULK SUCCESS: Extracted 235 players with real fantasy points
+2025-06-09 15:34:31,257 - INFO -         💰 Total points: 25,500.8, Average: 108.5 pts/player
+2025-06-09 15:34:31,257 - INFO -         🎯 Coverage: 235/237 players (99.2%)
+2025-06-09 15:34:31,257 - INFO -         💡 API calls optimized: 16 batches vs 237 individual calls
+2025-06-09 15:34:31,259 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:34:31,259 - INFO -     📊 API Usage: 291/20000 hourly (1.5%), 291/100000 daily (0.3%)
+2025-06-09 15:34:31,259 - INFO -   🔄 [2/5] Processing Oakdale Park (124.l.109785)
+2025-06-09 15:34:31,259 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:34:32,061 - INFO -     📈 BULK STATISTICS: Extracting real fantasy points for Oakdale Park (2005 season)...
+2025-06-09 15:34:35,958 - INFO -     💰 API SAVINGS: Found 194 players in single bulk call!
+2025-06-09 15:34:35,958 - INFO -       📦 Processing statistics batch 1/13 (15 players)
+2025-06-09 15:34:46,052 - INFO - 📊 API Progress - Hour: 300/20000, Day: 300/100000
+2025-06-09 15:39:39,610 - INFO - 🎯 Running STATISTICS ONLY extraction...
+2025-06-09 15:39:39,611 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:39:39,611 - DEBUG - Checking 
+2025-06-09 15:39:39,612 - DEBUG - ELAPSED TIME : 3621.5600759983063
+2025-06-09 15:39:39,613 - DEBUG - TOKEN HAS EXPIRED
+2025-06-09 15:39:39,613 - DEBUG - REFRESHING TOKEN
+2025-06-09 15:39:39,735 - DEBUG - ELAPSED TIME : 0.12225174903869629
+2025-06-09 15:39:39,735 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:39:40,188 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:39:40,188 - INFO - ✅ Authentication successful
+2025-06-09 15:39:40,188 - INFO - 📈 Extracting ONLY player statistics (fantasy points)...
+2025-06-09 15:39:40,189 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 15:39:40,189 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 15:39:40,189 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 15:39:40,189 - INFO - 🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues
+2025-06-09 15:39:40,189 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 15:39:40,189 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:39:40,189 - DEBUG - Checking 
+2025-06-09 15:39:40,189 - DEBUG - ELAPSED TIME : 0.5764548778533936
+2025-06-09 15:39:40,189 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:39:40,190 - DEBUG - ELAPSED TIME : 0.577009916305542
+2025-06-09 15:39:40,190 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:39:40,385 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:39:40,385 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:39:47,121 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:39:47,121 - INFO - Processing league batch 1/5
+2025-06-09 15:39:47,631 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:39:48,237 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:39:51,175 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:39:51,624 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:39:52,228 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:39:54,082 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:39:58,159 - INFO - Processing league batch 2/5
+2025-06-09 15:40:01,324 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:40:05,153 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:40:07,968 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:40:08,269 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:40:08,569 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:40:08,870 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:40:12,963 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:40:13,969 - INFO - Processing league batch 3/5
+2025-06-09 15:40:14,246 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:40:14,547 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:40:14,852 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:40:15,155 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 15:40:15,155 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:40:15,458 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:40:15,763 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:40:16,064 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:40:16,369 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:40:16,671 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:40:16,975 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:40:17,980 - INFO - Processing league batch 4/5
+2025-06-09 15:40:18,269 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:40:18,573 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:40:18,877 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:40:19,486 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:40:20,091 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:40:20,695 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:40:22,002 - INFO - Processing league batch 5/5
+2025-06-09 15:40:22,202 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:40:22,805 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:40:23,713 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:40:24,319 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:40:24,621 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 15:40:24,622 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:40:24,926 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:40:24,926 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:40:24,926 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:40:24,926 - INFO - 📊 LEAGUE BREAKDOWN BY SPORT:
+2025-06-09 15:40:24,926 - INFO -   🏟️ MLB: 6 leagues
+2025-06-09 15:40:24,926 - INFO -   🏟️ NBA: 3 leagues
+2025-06-09 15:40:24,927 - INFO -   🏟️ NFL: 26 leagues
+2025-06-09 15:40:24,927 - INFO - 📊 LEAGUE BREAKDOWN BY PRIVACY:
+2025-06-09 15:40:24,927 - INFO -   🔒 PRIVATE: 35 leagues
+2025-06-09 15:40:24,927 - INFO - 🎯 FILTERING RESULT: 35 total → 26 NFL private leagues selected
+2025-06-09 15:40:24,927 - INFO - 📊 Total NFL private leagues to process: 26
+2025-06-09 15:40:24,927 - INFO - 📦 Processing batch 1/3 (5 leagues)
+2025-06-09 15:40:24,927 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:40:24,928 - INFO -    📊 Starting API Usage: 51/20000 hourly, 51/100000 daily
+2025-06-09 15:40:24,928 - INFO -   🔄 [1/5] Processing Oakdale Park (153.l.76788)
+2025-06-09 15:40:24,928 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:40:25,736 - INFO -     📈 Extracting fantasy points for Oakdale Park (2006 season)...
+2025-06-09 15:40:30,199 - INFO -     📋 Getting stats for ALL 237 players in one bulk call...
+2025-06-09 15:40:37,104 - INFO -     📊 SUCCESS: Extracted 235 players with real fantasy points
+2025-06-09 15:40:37,104 - INFO -         💰 Total points: 25,500.8, Average: 108.5 pts/player
+2025-06-09 15:40:37,104 - INFO -         🎯 Coverage: 235/237 players (99.2%)
+2025-06-09 15:40:37,104 - INFO -         🚀 API efficiency: 1 bulk call instead of 237 individual calls
+2025-06-09 15:40:37,106 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:40:37,106 - INFO -     📊 API Usage: 55/20000 hourly (0.3%), 55/100000 daily (0.1%)
+2025-06-09 15:40:37,107 - INFO -   🔄 [2/5] Processing Oakdale Park (124.l.109785)
+2025-06-09 15:40:37,107 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:40:38,111 - INFO -     📈 Extracting fantasy points for Oakdale Park (2005 season)...
+2025-06-09 15:40:42,404 - INFO -     📋 Getting stats for ALL 194 players in one bulk call...
+2025-06-09 15:40:49,199 - INFO -     📊 SUCCESS: Extracted 181 players with real fantasy points
+2025-06-09 15:40:49,199 - INFO -         💰 Total points: 21,596.0, Average: 119.3 pts/player
+2025-06-09 15:40:49,199 - INFO -         🎯 Coverage: 181/194 players (93.3%)
+2025-06-09 15:40:49,199 - INFO -         🚀 API efficiency: 1 bulk call instead of 194 individual calls
+2025-06-09 15:40:49,201 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:40:49,201 - INFO -     📊 API Usage: 59/20000 hourly (0.3%), 59/100000 daily (0.1%)
+2025-06-09 15:40:49,201 - INFO -   🔄 [3/5] Processing Oakdale 2 (175.l.86092)
+2025-06-09 15:40:49,201 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:40:50,007 - INFO -     📈 Extracting fantasy points for Oakdale 2 (2007 season)...
+2025-06-09 15:40:53,064 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:40:57,831 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:40:57,831 - INFO -         💰 Total points: 21,993.6, Average: 146.6 pts/player
+2025-06-09 15:40:57,831 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:40:57,831 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:40:57,833 - INFO -     ✅ Completed Oakdale 2
+2025-06-09 15:40:57,833 - INFO -     📊 API Usage: 63/20000 hourly (0.3%), 63/100000 daily (0.1%)
+2025-06-09 15:40:57,833 - INFO -   🔄 [4/5] Processing Oakdale Park (175.l.658531)
+2025-06-09 15:40:57,833 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:40:58,644 - INFO -     📈 Extracting fantasy points for Oakdale Park (2007 season)...
+2025-06-09 15:41:02,566 - INFO -     📋 Getting stats for ALL 192 players in one bulk call...
+2025-06-09 15:41:11,474 - INFO -     📊 SUCCESS: Extracted 192 players with real fantasy points
+2025-06-09 15:41:11,474 - INFO -         💰 Total points: 26,460.9, Average: 137.8 pts/player
+2025-06-09 15:41:11,474 - INFO -         🎯 Coverage: 192/192 players (100.0%)
+2025-06-09 15:41:11,475 - INFO -         🚀 API efficiency: 1 bulk call instead of 192 individual calls
+2025-06-09 15:41:11,477 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:41:11,477 - INFO -     📊 API Usage: 67/20000 hourly (0.3%), 67/100000 daily (0.1%)
+2025-06-09 15:41:11,477 - INFO -   🔄 [5/5] Processing The Draft (199.l.42364)
+2025-06-09 15:41:11,477 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:41:12,302 - INFO -     📈 Extracting fantasy points for The Draft (2008 season)...
+2025-06-09 15:41:17,750 - INFO -     📋 Getting stats for ALL 144 players in one bulk call...
+2025-06-09 15:41:34,952 - INFO -     📊 SUCCESS: Extracted 144 players with real fantasy points
+2025-06-09 15:41:34,952 - INFO -         💰 Total points: 27,455.7, Average: 190.7 pts/player
+2025-06-09 15:41:34,952 - INFO -         🎯 Coverage: 144/144 players (100.0%)
+2025-06-09 15:41:34,953 - INFO -         🚀 API efficiency: 1 bulk call instead of 144 individual calls
+2025-06-09 15:41:34,954 - INFO -     ✅ Completed The Draft
+2025-06-09 15:41:34,954 - INFO -     📊 API Usage: 71/20000 hourly (0.4%), 71/100000 daily (0.1%)
+2025-06-09 15:41:34,954 - INFO -    ⏱️ Waiting 120s between batches...
+2025-06-09 15:43:34,960 - INFO - 📦 Processing batch 2/3 (5 leagues)
+2025-06-09 15:43:34,961 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:43:34,961 - INFO -    📊 Starting API Usage: 71/20000 hourly, 71/100000 daily
+2025-06-09 15:43:34,961 - INFO -   🔄 [1/5] Processing Engaged (222.l.222935)
+2025-06-09 15:43:34,961 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:43:35,736 - INFO -     📈 Extracting fantasy points for Engaged (2009 season)...
+2025-06-09 15:43:41,111 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:43:59,528 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 15:43:59,529 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:43:59,529 - INFO -         💰 Total points: 29,398.6, Average: 196.0 pts/player
+2025-06-09 15:43:59,529 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:43:59,529 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:43:59,530 - INFO -     ✅ Completed Engaged
+2025-06-09 15:43:59,530 - INFO -     📊 API Usage: 75/20000 hourly (0.4%), 75/100000 daily (0.1%)
+2025-06-09 15:43:59,530 - INFO -   🔄 [2/5] Processing Football Gods 15 (242.l.245298)
+2025-06-09 15:43:59,531 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:44:00,321 - INFO -     📈 Extracting fantasy points for Football Gods 15 (2010 season)...
+2025-06-09 15:44:08,258 - INFO -     📋 Getting stats for ALL 240 players in one bulk call...
+2025-06-09 15:44:39,319 - INFO -     📊 SUCCESS: Extracted 240 players with real fantasy points
+2025-06-09 15:44:39,319 - INFO -         💰 Total points: 45,326.9, Average: 188.9 pts/player
+2025-06-09 15:44:39,319 - INFO -         🎯 Coverage: 240/240 players (100.0%)
+2025-06-09 15:44:39,319 - INFO -         🚀 API efficiency: 1 bulk call instead of 240 individual calls
+2025-06-09 15:44:39,322 - INFO -     ✅ Completed Football Gods 15
+2025-06-09 15:44:39,322 - INFO -     📊 API Usage: 79/20000 hourly (0.4%), 79/100000 daily (0.1%)
+2025-06-09 15:44:39,322 - INFO -   🔄 [3/5] Processing Round 6 (242.l.413666)
+2025-06-09 15:44:39,322 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:44:40,194 - INFO -     📈 Extracting fantasy points for Round 6 (2010 season)...
+2025-06-09 15:44:44,875 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:45:01,804 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:45:01,804 - INFO -         💰 Total points: 28,955.1, Average: 193.0 pts/player
+2025-06-09 15:45:01,804 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:45:01,804 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:45:01,806 - INFO -     ✅ Completed Round 6
+2025-06-09 15:45:01,806 - INFO -     📊 API Usage: 83/20000 hourly (0.4%), 83/100000 daily (0.1%)
+2025-06-09 15:45:01,806 - INFO -   🔄 [4/5] Processing Christian Fellowship League (242.l.10035622710)
+2025-06-09 15:45:01,806 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:45:02,615 - INFO -     📈 Extracting fantasy points for Christian Fellowship League (2010 season)...
+2025-06-09 15:45:03,043 - WARNING - No taken players found for league 242.l.10035622710
+2025-06-09 15:45:03,043 - INFO -     ✅ Completed Christian Fellowship League
+2025-06-09 15:45:03,043 - INFO -     📊 API Usage: 86/20000 hourly (0.4%), 86/100000 daily (0.1%)
+2025-06-09 15:45:03,043 - INFO -   🔄 [5/5] Processing Lock It Up (257.l.89145)
+2025-06-09 15:45:03,043 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:45:03,865 - INFO -     📈 Extracting fantasy points for Lock It Up (2011 season)...
+2025-06-09 15:45:10,146 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:45:36,062 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:45:36,063 - INFO -         💰 Total points: 29,958.0, Average: 199.7 pts/player
+2025-06-09 15:45:36,063 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:45:36,063 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:45:36,064 - INFO -     ✅ Completed Lock It Up
+2025-06-09 15:45:36,065 - INFO -     📊 API Usage: 90/20000 hourly (0.4%), 90/100000 daily (0.1%)
+2025-06-09 15:45:36,065 - INFO -    ⏱️ Waiting 120s between batches...
+2025-06-09 15:47:36,074 - INFO - 📦 Processing batch 3/3 (5 leagues)
+2025-06-09 15:47:36,075 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:47:36,076 - INFO -    📊 Starting API Usage: 90/20000 hourly, 90/100000 daily
+2025-06-09 15:47:36,076 - INFO -   🔄 [1/5] Processing Power House League (257.l.656437)
+2025-06-09 15:47:36,076 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:47:36,981 - INFO -     📈 Extracting fantasy points for Power House League (2011 season)...
+2025-06-09 15:47:41,665 - INFO -     📋 Getting stats for ALL 90 players in one bulk call...
+2025-06-09 15:47:45,141 - INFO -     📊 SUCCESS: Extracted 88 players with real fantasy points
+2025-06-09 15:47:45,141 - INFO -         💰 Total points: 18,725.8, Average: 212.8 pts/player
+2025-06-09 15:47:45,142 - INFO -         🎯 Coverage: 88/90 players (97.8%)
+2025-06-09 15:47:45,142 - INFO -         🚀 API efficiency: 1 bulk call instead of 90 individual calls
+2025-06-09 15:47:45,143 - INFO -     ✅ Completed Power House League
+2025-06-09 15:47:45,143 - INFO -     📊 API Usage: 94/20000 hourly (0.5%), 94/100000 daily (0.1%)
+2025-06-09 15:47:45,143 - INFO -   🔄 [2/5] Processing The League About Nothing (273.l.107980)
+2025-06-09 15:47:45,143 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:47:45,957 - INFO -     📈 Extracting fantasy points for The League About Nothing (2012 season)...
+2025-06-09 15:47:51,221 - INFO -     📋 Getting stats for ALL 149 players in one bulk call...
+2025-06-09 15:48:16,245 - INFO -     📊 SUCCESS: Extracted 148 players with real fantasy points
+2025-06-09 15:48:16,246 - INFO -         💰 Total points: 29,729.4, Average: 200.9 pts/player
+2025-06-09 15:48:16,246 - INFO -         🎯 Coverage: 148/149 players (99.3%)
+2025-06-09 15:48:16,246 - INFO -         🚀 API efficiency: 1 bulk call instead of 149 individual calls
+2025-06-09 15:48:16,247 - INFO -     ✅ Completed The League About Nothing
+2025-06-09 15:48:16,247 - INFO -     📊 API Usage: 98/20000 hourly (0.5%), 98/100000 daily (0.1%)
+2025-06-09 15:48:16,248 - INFO -   🔄 [3/5] Processing Rosterbaters Anonymous (314.l.319572)
+2025-06-09 15:48:16,248 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:48:17,088 - INFO - 📊 API Progress - Hour: 100/20000, Day: 100/100000
+2025-06-09 15:48:17,089 - INFO -     📈 Extracting fantasy points for Rosterbaters Anonymous (2013 season)...
+2025-06-09 15:48:23,041 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:48:51,436 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:48:51,436 - INFO -         💰 Total points: 30,216.1, Average: 201.4 pts/player
+2025-06-09 15:48:51,436 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:48:51,436 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:48:51,438 - INFO -     ✅ Completed Rosterbaters Anonymous
+2025-06-09 15:48:51,438 - INFO -     📊 API Usage: 102/20000 hourly (0.5%), 102/100000 daily (0.1%)
+2025-06-09 15:48:51,438 - INFO -   🔄 [4/5] Processing 10 Years 10 Assholes (331.l.355899)
+2025-06-09 15:48:51,438 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:48:52,256 - INFO -     📈 Extracting fantasy points for 10 Years 10 Assholes (2014 season)...
+2025-06-09 15:48:58,616 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:49:23,449 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:49:23,450 - INFO -         💰 Total points: 30,168.2, Average: 201.1 pts/player
+2025-06-09 15:49:23,450 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:49:23,450 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:49:23,451 - INFO -     ✅ Completed 10 Years 10 Assholes
+2025-06-09 15:49:23,451 - INFO -     📊 API Usage: 106/20000 hourly (0.5%), 106/100000 daily (0.1%)
+2025-06-09 15:49:23,452 - INFO -   🔄 [5/5] Processing Concussion Factory (331.l.947050)
+2025-06-09 15:49:23,452 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:49:24,314 - INFO -     📈 Extracting fantasy points for Concussion Factory (2014 season)...
+2025-06-09 15:49:27,524 - INFO -     📋 Getting stats for ALL 96 players in one bulk call...
+2025-06-09 15:49:30,762 - INFO -     📊 SUCCESS: Extracted 95 players with real fantasy points
+2025-06-09 15:49:30,762 - INFO -         💰 Total points: 19,064.2, Average: 200.7 pts/player
+2025-06-09 15:49:30,762 - INFO -         🎯 Coverage: 95/96 players (99.0%)
+2025-06-09 15:49:30,762 - INFO -         🚀 API efficiency: 1 bulk call instead of 96 individual calls
+2025-06-09 15:49:30,763 - INFO -     ✅ Completed Concussion Factory
+2025-06-09 15:49:30,763 - INFO -     📊 API Usage: 110/20000 hourly (0.5%), 110/100000 daily (0.1%)
+2025-06-09 15:49:30,763 - INFO - 🎉 Selective data extraction completed!
+2025-06-09 15:49:30,763 - INFO - 📊 Final Summary:
+2025-06-09 15:49:30,764 - INFO -   - Leagues: 0
+2025-06-09 15:49:30,764 - INFO -   - Teams: 0
+2025-06-09 15:49:30,764 - INFO -   - Rosters: 0
+2025-06-09 15:49:30,764 - INFO -   - Matchups: 0
+2025-06-09 15:49:30,764 - INFO -   - Transactions: 0
+2025-06-09 15:49:30,764 - INFO -   - Draft Picks: 0
+2025-06-09 15:49:30,764 - INFO -   - Statistics: 2223
+2025-06-09 15:49:30,764 - INFO - 📊 Total API requests made - Hour: 110, Day: 110
+2025-06-09 15:49:30,764 - INFO - 🎉 SUCCESS: Extracted 2223 player statistics records!
+2025-06-09 15:49:30,764 - INFO - 
+📊 Sample Fantasy Points Data:
+2025-06-09 15:49:30,764 - INFO -   1. John Carney (K)
+2025-06-09 15:49:30,764 - INFO -      🎯 Fantasy Points: 117.0
+2025-06-09 15:49:30,764 - INFO -      🔑 Player ID: 549
+2025-06-09 15:49:30,764 - INFO -      📅 Season: 2006
+2025-06-09 15:49:30,764 - INFO -      🏆 League: 153.l.76788
+2025-06-09 15:49:30,765 - INFO - 
+2025-06-09 15:49:30,765 - INFO -   2. Brett Favre (O)
+2025-06-09 15:49:30,765 - INFO -      🎯 Fantasy Points: 164.4
+2025-06-09 15:49:30,765 - INFO -      🔑 Player ID: 1025
+2025-06-09 15:49:30,765 - INFO -      📅 Season: 2006
+2025-06-09 15:49:30,765 - INFO -      🏆 League: 153.l.76788
+2025-06-09 15:49:30,765 - INFO - 
+2025-06-09 15:49:30,765 - INFO -   3. Matt Stover (K)
+2025-06-09 15:49:30,765 - INFO -      🎯 Fantasy Points: 127.0
+2025-06-09 15:49:30,765 - INFO -      🔑 Player ID: 1078
+2025-06-09 15:49:30,765 - INFO -      📅 Season: 2006
+2025-06-09 15:49:30,765 - INFO -      🏆 League: 153.l.76788
+2025-06-09 15:49:30,765 - INFO - 
+2025-06-09 15:49:30,765 - INFO -   4. John Kasay (K)
+2025-06-09 15:49:30,765 - INFO -      🎯 Fantasy Points: 116.0
+2025-06-09 15:49:30,765 - INFO -      🔑 Player ID: 1111
+2025-06-09 15:49:30,765 - INFO -      📅 Season: 2006
+2025-06-09 15:49:30,765 - INFO -      🏆 League: 153.l.76788
+2025-06-09 15:49:30,766 - INFO - 
+2025-06-09 15:49:30,766 - INFO -   5. Keenan McCardell (O)
+2025-06-09 15:49:30,766 - INFO -      🎯 Fantasy Points: 20.65
+2025-06-09 15:49:30,766 - INFO -      🔑 Player ID: 2014
+2025-06-09 15:49:30,766 - INFO -      📅 Season: 2006
+2025-06-09 15:49:30,766 - INFO -      🏆 League: 153.l.76788
+2025-06-09 15:49:30,766 - INFO - 
+2025-06-09 15:49:30,766 - INFO - 📈 Summary Statistics:
+2025-06-09 15:49:30,766 - INFO -    Total players: 2223
+2025-06-09 15:49:30,766 - INFO -    Total fantasy points: 384,549.2
+2025-06-09 15:49:30,766 - INFO -    Average points per player: 173.0
+2025-06-09 15:49:30,804 - INFO - 💾 Statistics saved to fantasy_statistics_only.json
+2025-06-09 15:49:30,804 - INFO - 
+⏭️ Skipped data types (as requested):
+2025-06-09 15:49:30,804 - INFO -    Leagues: 0
+2025-06-09 15:49:30,804 - INFO -    Teams: 0
+2025-06-09 15:49:30,804 - INFO -    Rosters: 0
+2025-06-09 15:49:30,804 - INFO -    Matchups: 0
+2025-06-09 15:49:30,804 - INFO -    Transactions: 0
+2025-06-09 15:49:30,804 - INFO -    Draft picks: 0
+2025-06-09 15:54:00,591 - INFO - 🎯 Running STATISTICS ONLY extraction...
+2025-06-09 15:54:00,592 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:54:00,592 - DEBUG - Checking 
+2025-06-09 15:54:00,594 - DEBUG - ELAPSED TIME : 860.9808027744293
+2025-06-09 15:54:00,594 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:54:00,594 - DEBUG - ELAPSED TIME : 860.9816088676453
+2025-06-09 15:54:00,595 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:54:01,150 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:54:01,150 - INFO - ✅ Authentication successful
+2025-06-09 15:54:01,150 - INFO - 📈 Extracting ONLY player statistics (fantasy points) from ALL YEARS of PRIVATE NFL...
+2025-06-09 15:54:01,150 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 15:54:01,150 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 15:54:01,150 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 15:54:01,150 - INFO - 🎯 FILTERING: NFL ONLY + PRIVATE LEAGUES ONLY
+2025-06-09 15:54:01,150 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 15:54:01,151 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 15:54:01,151 - DEBUG - Checking 
+2025-06-09 15:54:01,151 - DEBUG - ELAPSED TIME : 861.5382158756256
+2025-06-09 15:54:01,151 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:54:01,152 - DEBUG - ELAPSED TIME : 861.5390710830688
+2025-06-09 15:54:01,152 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 15:54:01,357 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 15:54:01,357 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...
+2025-06-09 15:54:22,329 - INFO - 💰 API SAVINGS: Found 50 total leagues (saved ~22 API calls!)
+2025-06-09 15:54:22,329 - INFO - Processing league batch 1/5
+2025-06-09 15:54:22,858 - INFO -   ✅ Added league: Owned In the Face By G.W. Bush (2006) - postdraft
+2025-06-09 15:54:23,470 - INFO -   ✅ Added league: Oakdale Park (2006) - postdraft
+2025-06-09 15:54:26,956 - INFO -   ✅ Added league: oakdale park (2006) - postdraft
+2025-06-09 15:54:27,410 - INFO -   ✅ Added league: Jesse And The McBum de BumBums (2005) - postdraft
+2025-06-09 15:54:28,018 - INFO -   ✅ Added league: Oakdale Park (2005) - postdraft
+2025-06-09 15:54:31,357 - INFO -   ✅ Added league: Freezer (2005) - postdraft
+2025-06-09 15:54:33,780 - INFO - Processing league batch 2/5
+2025-06-09 15:54:37,627 - INFO -   ✅ Added league: Oakdale Park (2004) - postdraft
+2025-06-09 15:54:40,928 - INFO -   ✅ Added league: Oakdale High (2007) - postdraft
+2025-06-09 15:54:42,652 - INFO -   ✅ Added league: Oakdale #1 (2007) - postdraft
+2025-06-09 15:54:44,454 - INFO -   ✅ Added league: baseball2 (2007) - postdraft
+2025-06-09 15:54:44,755 - INFO -   ✅ Added league: Oakdale 2 (2007) - postdraft
+2025-06-09 15:54:45,059 - INFO -   ✅ Added league: Oakdale Park (2007) - postdraft
+2025-06-09 15:54:48,899 - INFO -   ✅ Added league: Oakdale Park (2008) - postdraft
+2025-06-09 15:54:49,903 - INFO - Processing league batch 3/5
+2025-06-09 15:54:50,103 - INFO -   ✅ Added league: The Draft (2008) - postdraft
+2025-06-09 15:54:50,408 - INFO -   ✅ Added league: Engaged (2009) - postdraft
+2025-06-09 15:54:50,711 - INFO -   ✅ Added league: Football Gods 15 (2010) - postdraft
+2025-06-09 15:54:51,014 - INFO - 📊 API Progress - Hour: 25/20000, Day: 25/100000
+2025-06-09 15:54:51,015 - INFO -   ✅ Added league: Round 6 (2010) - postdraft
+2025-06-09 15:54:51,317 - INFO -   ✅ Added league: Christian Fellowship League (2010) - postdraft
+2025-06-09 15:54:51,619 - INFO -   ✅ Added league: Lock It Up (2011) - postdraft
+2025-06-09 15:54:51,920 - INFO -   ✅ Added league: Power House League (2011) - postdraft
+2025-06-09 15:54:52,220 - INFO -   ✅ Added league: The League About Nothing (2012) - postdraft
+2025-06-09 15:54:52,520 - INFO -   ✅ Added league: Rosterbaters Anonymous (2013) - postdraft
+2025-06-09 15:54:52,820 - INFO -   ✅ Added league: 10 Years 10 Assholes (2014) - postdraft
+2025-06-09 15:54:53,821 - INFO - Processing league batch 4/5
+2025-06-09 15:54:54,322 - INFO -   ✅ Added league: Concussion Factory (2014) - postdraft
+2025-06-09 15:54:55,166 - INFO -   ✅ Added league: Luke's Kingdom (2015) - postdraft
+2025-06-09 15:54:55,628 - INFO -   ✅ Added league: The Great SF Draft (2016) - postdraft
+2025-06-09 15:54:56,237 - INFO -   ✅ Added league: Go Fuck Yourself San Diego (2017) - postdraft
+2025-06-09 15:54:56,843 - INFO -   ✅ Added league: Sleepless In Seattle (2018) - postdraft
+2025-06-09 15:54:57,444 - INFO -   ✅ Added league: Women & Women First (2019) - postdraft
+2025-06-09 15:54:58,749 - INFO - Processing league batch 5/5
+2025-06-09 15:54:58,986 - INFO -   ✅ Added league: The Lost Year (2020) - postdraft
+2025-06-09 15:54:59,589 - INFO -   ✅ Added league: Rocky Mountain High (2021) - postdraft
+2025-06-09 15:55:00,618 - INFO -   ✅ Added league: Wet Hot Tahoe Summer (2022) - postdraft
+2025-06-09 15:55:01,220 - INFO -   ✅ Added league: Move the Raiders to PDX (2023) - postdraft
+2025-06-09 15:55:01,525 - INFO - 📊 API Progress - Hour: 50/20000, Day: 50/100000
+2025-06-09 15:55:01,526 - INFO -   ✅ Added league: Sequoiabowl I (2023) - postdraft
+2025-06-09 15:55:01,827 - INFO -   ✅ Added league: Idaho's DEI Quota (2024) - postdraft
+2025-06-09 15:55:01,827 - INFO - 📋 BULK SUCCESS: Found 35 leagues with 15 filtered out
+2025-06-09 15:55:01,828 - INFO - 💡 Total API calls saved: ~50 (used bulk discovery instead of year-by-year)
+2025-06-09 15:55:01,828 - INFO - 📊 LEAGUE BREAKDOWN BY SPORT:
+2025-06-09 15:55:01,828 - INFO -   🏟️ MLB: 6 leagues
+2025-06-09 15:55:01,828 - INFO -   🏟️ NBA: 3 leagues
+2025-06-09 15:55:01,828 - INFO -   🏟️ NFL: 26 leagues
+2025-06-09 15:55:01,828 - INFO - 📊 LEAGUE BREAKDOWN BY PRIVACY:
+2025-06-09 15:55:01,828 - INFO -   🔒 PRIVATE: 35 leagues
+2025-06-09 15:55:01,828 - INFO - 🎯 FILTERING RESULT: 35 total → 26 NFL PRIVATE LEAGUES selected
+2025-06-09 15:55:01,828 - INFO - 📊 Total NFL PRIVATE LEAGUES to process: 26
+2025-06-09 15:55:01,828 - INFO - 📦 Processing batch 1/3 (5 leagues)
+2025-06-09 15:55:01,828 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:55:01,828 - INFO -    📊 Starting API Usage: 51/20000 hourly, 51/100000 daily
+2025-06-09 15:55:01,828 - INFO -   🔄 [1/5] Processing Oakdale Park (153.l.76788)
+2025-06-09 15:55:01,828 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:55:02,645 - INFO -     📈 Extracting fantasy points for Oakdale Park (2006 season)...
+2025-06-09 15:55:06,666 - INFO -     📋 Getting stats for ALL 237 players in one bulk call...
+2025-06-09 15:55:14,273 - INFO -     📊 SUCCESS: Extracted 235 players with real fantasy points
+2025-06-09 15:55:14,273 - INFO -         💰 Total points: 25,500.8, Average: 108.5 pts/player
+2025-06-09 15:55:14,273 - INFO -         🎯 Coverage: 235/237 players (99.2%)
+2025-06-09 15:55:14,273 - INFO -         🚀 API efficiency: 1 bulk call instead of 237 individual calls
+2025-06-09 15:55:14,276 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:55:14,276 - INFO -     📊 API Usage: 55/20000 hourly (0.3%), 55/100000 daily (0.1%)
+2025-06-09 15:55:14,276 - INFO -   🔄 [2/5] Processing Oakdale Park (124.l.109785)
+2025-06-09 15:55:14,276 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:55:15,069 - INFO -     📈 Extracting fantasy points for Oakdale Park (2005 season)...
+2025-06-09 15:55:18,764 - INFO -     📋 Getting stats for ALL 194 players in one bulk call...
+2025-06-09 15:55:29,627 - INFO -     📊 SUCCESS: Extracted 181 players with real fantasy points
+2025-06-09 15:55:29,627 - INFO -         💰 Total points: 21,596.0, Average: 119.3 pts/player
+2025-06-09 15:55:29,627 - INFO -         🎯 Coverage: 181/194 players (93.3%)
+2025-06-09 15:55:29,627 - INFO -         🚀 API efficiency: 1 bulk call instead of 194 individual calls
+2025-06-09 15:55:29,629 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:55:29,629 - INFO -     📊 API Usage: 59/20000 hourly (0.3%), 59/100000 daily (0.1%)
+2025-06-09 15:55:29,629 - INFO -   🔄 [3/5] Processing Oakdale 2 (175.l.86092)
+2025-06-09 15:55:29,629 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:55:30,499 - INFO -     📈 Extracting fantasy points for Oakdale 2 (2007 season)...
+2025-06-09 15:55:33,254 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:55:42,495 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:55:42,495 - INFO -         💰 Total points: 21,993.6, Average: 146.6 pts/player
+2025-06-09 15:55:42,495 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:55:42,495 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:55:42,497 - INFO -     ✅ Completed Oakdale 2
+2025-06-09 15:55:42,497 - INFO -     📊 API Usage: 63/20000 hourly (0.3%), 63/100000 daily (0.1%)
+2025-06-09 15:55:42,497 - INFO -   🔄 [4/5] Processing Oakdale Park (175.l.658531)
+2025-06-09 15:55:42,497 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:55:43,314 - INFO -     📈 Extracting fantasy points for Oakdale Park (2007 season)...
+2025-06-09 15:55:47,144 - INFO -     📋 Getting stats for ALL 192 players in one bulk call...
+2025-06-09 15:55:56,626 - INFO -     📊 SUCCESS: Extracted 192 players with real fantasy points
+2025-06-09 15:55:56,626 - INFO -         💰 Total points: 26,460.9, Average: 137.8 pts/player
+2025-06-09 15:55:56,626 - INFO -         🎯 Coverage: 192/192 players (100.0%)
+2025-06-09 15:55:56,626 - INFO -         🚀 API efficiency: 1 bulk call instead of 192 individual calls
+2025-06-09 15:55:56,629 - INFO -     ✅ Completed Oakdale Park
+2025-06-09 15:55:56,629 - INFO -     📊 API Usage: 67/20000 hourly (0.3%), 67/100000 daily (0.1%)
+2025-06-09 15:55:56,629 - INFO -   🔄 [5/5] Processing The Draft (199.l.42364)
+2025-06-09 15:55:56,630 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:55:57,576 - INFO -     📈 Extracting fantasy points for The Draft (2008 season)...
+2025-06-09 15:56:01,297 - INFO -     📋 Getting stats for ALL 144 players in one bulk call...
+2025-06-09 15:56:18,064 - INFO -     📊 SUCCESS: Extracted 144 players with real fantasy points
+2025-06-09 15:56:18,064 - INFO -         💰 Total points: 27,455.7, Average: 190.7 pts/player
+2025-06-09 15:56:18,064 - INFO -         🎯 Coverage: 144/144 players (100.0%)
+2025-06-09 15:56:18,064 - INFO -         🚀 API efficiency: 1 bulk call instead of 144 individual calls
+2025-06-09 15:56:18,066 - INFO -     ✅ Completed The Draft
+2025-06-09 15:56:18,066 - INFO -     📊 API Usage: 71/20000 hourly (0.4%), 71/100000 daily (0.1%)
+2025-06-09 15:56:18,066 - INFO -    ⏱️ Waiting 120s between batches...
+2025-06-09 15:58:18,070 - INFO - 📦 Processing batch 2/3 (5 leagues)
+2025-06-09 15:58:18,070 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 15:58:18,070 - INFO -    📊 Starting API Usage: 71/20000 hourly, 71/100000 daily
+2025-06-09 15:58:18,070 - INFO -   🔄 [1/5] Processing Engaged (222.l.222935)
+2025-06-09 15:58:18,071 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:58:18,702 - INFO -     📈 Extracting fantasy points for Engaged (2009 season)...
+2025-06-09 15:58:23,507 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:58:39,896 - INFO - 📊 API Progress - Hour: 75/20000, Day: 75/100000
+2025-06-09 15:58:39,896 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:58:39,896 - INFO -         💰 Total points: 29,398.6, Average: 196.0 pts/player
+2025-06-09 15:58:39,897 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:58:39,897 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:58:39,898 - INFO -     ✅ Completed Engaged
+2025-06-09 15:58:39,898 - INFO -     📊 API Usage: 75/20000 hourly (0.4%), 75/100000 daily (0.1%)
+2025-06-09 15:58:39,899 - INFO -   🔄 [2/5] Processing Football Gods 15 (242.l.245298)
+2025-06-09 15:58:39,899 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:58:40,702 - INFO -     📈 Extracting fantasy points for Football Gods 15 (2010 season)...
+2025-06-09 15:58:46,764 - INFO -     📋 Getting stats for ALL 240 players in one bulk call...
+2025-06-09 15:59:12,148 - INFO -     📊 SUCCESS: Extracted 240 players with real fantasy points
+2025-06-09 15:59:12,148 - INFO -         💰 Total points: 45,326.9, Average: 188.9 pts/player
+2025-06-09 15:59:12,148 - INFO -         🎯 Coverage: 240/240 players (100.0%)
+2025-06-09 15:59:12,148 - INFO -         🚀 API efficiency: 1 bulk call instead of 240 individual calls
+2025-06-09 15:59:12,151 - INFO -     ✅ Completed Football Gods 15
+2025-06-09 15:59:12,151 - INFO -     📊 API Usage: 79/20000 hourly (0.4%), 79/100000 daily (0.1%)
+2025-06-09 15:59:12,151 - INFO -   🔄 [3/5] Processing Round 6 (242.l.413666)
+2025-06-09 15:59:12,151 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:59:12,970 - INFO -     📈 Extracting fantasy points for Round 6 (2010 season)...
+2025-06-09 15:59:17,011 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 15:59:22,180 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 15:59:22,180 - INFO -         💰 Total points: 28,955.1, Average: 193.0 pts/player
+2025-06-09 15:59:22,180 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 15:59:22,180 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 15:59:22,182 - INFO -     ✅ Completed Round 6
+2025-06-09 15:59:22,182 - INFO -     📊 API Usage: 83/20000 hourly (0.4%), 83/100000 daily (0.1%)
+2025-06-09 15:59:22,182 - INFO -   🔄 [4/5] Processing Christian Fellowship League (242.l.10035622710)
+2025-06-09 15:59:22,182 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:59:23,099 - INFO -     📈 Extracting fantasy points for Christian Fellowship League (2010 season)...
+2025-06-09 15:59:23,542 - WARNING - No taken players found for league 242.l.10035622710
+2025-06-09 15:59:23,542 - INFO -     ✅ Completed Christian Fellowship League
+2025-06-09 15:59:23,542 - INFO -     📊 API Usage: 86/20000 hourly (0.4%), 86/100000 daily (0.1%)
+2025-06-09 15:59:23,542 - INFO -   🔄 [5/5] Processing Lock It Up (257.l.89145)
+2025-06-09 15:59:23,542 - INFO -     📈 Extracting player statistics...
+2025-06-09 15:59:24,615 - INFO -     📈 Extracting fantasy points for Lock It Up (2011 season)...
+2025-06-09 15:59:29,550 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 16:00:00,586 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 16:00:00,587 - INFO -         💰 Total points: 29,958.0, Average: 199.7 pts/player
+2025-06-09 16:00:00,587 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 16:00:00,587 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 16:00:00,588 - INFO -     ✅ Completed Lock It Up
+2025-06-09 16:00:00,588 - INFO -     📊 API Usage: 90/20000 hourly (0.4%), 90/100000 daily (0.1%)
+2025-06-09 16:00:00,589 - INFO -    ⏱️ Waiting 120s between batches...
+2025-06-09 16:02:00,592 - INFO - 📦 Processing batch 3/3 (5 leagues)
+2025-06-09 16:02:00,592 - INFO -    🚀 FULL SPEED - Batch size: 5, Delay: 120s
+2025-06-09 16:02:00,593 - INFO -    📊 Starting API Usage: 90/20000 hourly, 90/100000 daily
+2025-06-09 16:02:00,593 - INFO -   🔄 [1/5] Processing Power House League (257.l.656437)
+2025-06-09 16:02:00,593 - INFO -     📈 Extracting player statistics...
+2025-06-09 16:02:01,617 - INFO -     📈 Extracting fantasy points for Power House League (2011 season)...
+2025-06-09 16:02:04,882 - INFO -     📋 Getting stats for ALL 90 players in one bulk call...
+2025-06-09 16:02:07,556 - INFO -     📊 SUCCESS: Extracted 88 players with real fantasy points
+2025-06-09 16:02:07,556 - INFO -         💰 Total points: 18,725.8, Average: 212.8 pts/player
+2025-06-09 16:02:07,556 - INFO -         🎯 Coverage: 88/90 players (97.8%)
+2025-06-09 16:02:07,556 - INFO -         🚀 API efficiency: 1 bulk call instead of 90 individual calls
+2025-06-09 16:02:07,557 - INFO -     ✅ Completed Power House League
+2025-06-09 16:02:07,557 - INFO -     📊 API Usage: 94/20000 hourly (0.5%), 94/100000 daily (0.1%)
+2025-06-09 16:02:07,557 - INFO -   🔄 [2/5] Processing The League About Nothing (273.l.107980)
+2025-06-09 16:02:07,558 - INFO -     📈 Extracting player statistics...
+2025-06-09 16:02:08,401 - INFO -     📈 Extracting fantasy points for The League About Nothing (2012 season)...
+2025-06-09 16:02:12,595 - INFO -     📋 Getting stats for ALL 149 players in one bulk call...
+2025-06-09 16:02:34,471 - INFO -     📊 SUCCESS: Extracted 148 players with real fantasy points
+2025-06-09 16:02:34,472 - INFO -         💰 Total points: 29,729.4, Average: 200.9 pts/player
+2025-06-09 16:02:34,472 - INFO -         🎯 Coverage: 148/149 players (99.3%)
+2025-06-09 16:02:34,472 - INFO -         🚀 API efficiency: 1 bulk call instead of 149 individual calls
+2025-06-09 16:02:34,473 - INFO -     ✅ Completed The League About Nothing
+2025-06-09 16:02:34,473 - INFO -     📊 API Usage: 98/20000 hourly (0.5%), 98/100000 daily (0.1%)
+2025-06-09 16:02:34,474 - INFO -   🔄 [3/5] Processing Rosterbaters Anonymous (314.l.319572)
+2025-06-09 16:02:34,474 - INFO -     📈 Extracting player statistics...
+2025-06-09 16:02:35,309 - INFO - 📊 API Progress - Hour: 100/20000, Day: 100/100000
+2025-06-09 16:02:35,310 - INFO -     📈 Extracting fantasy points for Rosterbaters Anonymous (2013 season)...
+2025-06-09 16:02:43,157 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 16:03:06,629 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 16:03:06,629 - INFO -         💰 Total points: 30,216.1, Average: 201.4 pts/player
+2025-06-09 16:03:06,629 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 16:03:06,630 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 16:03:06,631 - INFO -     ✅ Completed Rosterbaters Anonymous
+2025-06-09 16:03:06,631 - INFO -     📊 API Usage: 102/20000 hourly (0.5%), 102/100000 daily (0.1%)
+2025-06-09 16:03:06,631 - INFO -   🔄 [4/5] Processing 10 Years 10 Assholes (331.l.355899)
+2025-06-09 16:03:06,631 - INFO -     📈 Extracting player statistics...
+2025-06-09 16:03:07,542 - INFO -     📈 Extracting fantasy points for 10 Years 10 Assholes (2014 season)...
+2025-06-09 16:03:13,143 - INFO -     📋 Getting stats for ALL 150 players in one bulk call...
+2025-06-09 16:03:36,033 - INFO -     📊 SUCCESS: Extracted 150 players with real fantasy points
+2025-06-09 16:03:36,033 - INFO -         💰 Total points: 30,168.2, Average: 201.1 pts/player
+2025-06-09 16:03:36,033 - INFO -         🎯 Coverage: 150/150 players (100.0%)
+2025-06-09 16:03:36,033 - INFO -         🚀 API efficiency: 1 bulk call instead of 150 individual calls
+2025-06-09 16:03:36,034 - INFO -     ✅ Completed 10 Years 10 Assholes
+2025-06-09 16:03:36,035 - INFO -     📊 API Usage: 106/20000 hourly (0.5%), 106/100000 daily (0.1%)
+2025-06-09 16:03:36,035 - INFO -   🔄 [5/5] Processing Concussion Factory (331.l.947050)
+2025-06-09 16:03:36,035 - INFO -     📈 Extracting player statistics...
+2025-06-09 16:03:36,873 - INFO -     📈 Extracting fantasy points for Concussion Factory (2014 season)...
+2025-06-09 16:03:39,446 - INFO -     📋 Getting stats for ALL 96 players in one bulk call...
+2025-06-09 16:03:42,444 - INFO -     📊 SUCCESS: Extracted 95 players with real fantasy points
+2025-06-09 16:03:42,444 - INFO -         💰 Total points: 19,064.2, Average: 200.7 pts/player
+2025-06-09 16:03:42,444 - INFO -         🎯 Coverage: 95/96 players (99.0%)
+2025-06-09 16:03:42,444 - INFO -         🚀 API efficiency: 1 bulk call instead of 96 individual calls
+2025-06-09 16:03:42,445 - INFO -     ✅ Completed Concussion Factory
+2025-06-09 16:03:42,446 - INFO -     📊 API Usage: 110/20000 hourly (0.5%), 110/100000 daily (0.1%)
+2025-06-09 16:03:42,446 - INFO - 🎉 Selective data extraction completed!
+2025-06-09 16:03:42,446 - INFO - 📊 Final Summary:
+2025-06-09 16:03:42,446 - INFO -   - Leagues: 0
+2025-06-09 16:03:42,446 - INFO -   - Teams: 0
+2025-06-09 16:03:42,446 - INFO -   - Rosters: 0
+2025-06-09 16:03:42,446 - INFO -   - Matchups: 0
+2025-06-09 16:03:42,446 - INFO -   - Transactions: 0
+2025-06-09 16:03:42,446 - INFO -   - Draft Picks: 0
+2025-06-09 16:03:42,446 - INFO -   - Statistics: 2223
+2025-06-09 16:03:42,446 - INFO - 📊 Total API requests made - Hour: 110, Day: 110
+2025-06-09 16:03:42,446 - INFO - 🎉 SUCCESS: Extracted 2223 player statistics records!
+2025-06-09 16:03:42,446 - INFO - 
+📊 Sample Fantasy Points Data:
+2025-06-09 16:03:42,446 - INFO -   1. John Carney (K)
+2025-06-09 16:03:42,447 - INFO -      🎯 Fantasy Points: 117.0
+2025-06-09 16:03:42,447 - INFO -      🔑 Player ID: 549
+2025-06-09 16:03:42,447 - INFO -      📅 Season: 2006
+2025-06-09 16:03:42,447 - INFO -      🏆 League: 153.l.76788
+2025-06-09 16:03:42,447 - INFO - 
+2025-06-09 16:03:42,447 - INFO -   2. Brett Favre (O)
+2025-06-09 16:03:42,447 - INFO -      🎯 Fantasy Points: 164.4
+2025-06-09 16:03:42,447 - INFO -      🔑 Player ID: 1025
+2025-06-09 16:03:42,447 - INFO -      📅 Season: 2006
+2025-06-09 16:03:42,447 - INFO -      🏆 League: 153.l.76788
+2025-06-09 16:03:42,447 - INFO - 
+2025-06-09 16:03:42,447 - INFO -   3. Matt Stover (K)
+2025-06-09 16:03:42,447 - INFO -      🎯 Fantasy Points: 127.0
+2025-06-09 16:03:42,447 - INFO -      🔑 Player ID: 1078
+2025-06-09 16:03:42,447 - INFO -      📅 Season: 2006
+2025-06-09 16:03:42,447 - INFO -      🏆 League: 153.l.76788
+2025-06-09 16:03:42,448 - INFO - 
+2025-06-09 16:03:42,448 - INFO -   4. John Kasay (K)
+2025-06-09 16:03:42,448 - INFO -      🎯 Fantasy Points: 116.0
+2025-06-09 16:03:42,448 - INFO -      🔑 Player ID: 1111
+2025-06-09 16:03:42,448 - INFO -      📅 Season: 2006
+2025-06-09 16:03:42,448 - INFO -      🏆 League: 153.l.76788
+2025-06-09 16:03:42,448 - INFO - 
+2025-06-09 16:03:42,448 - INFO -   5. Keenan McCardell (O)
+2025-06-09 16:03:42,448 - INFO -      🎯 Fantasy Points: 20.65
+2025-06-09 16:03:42,448 - INFO -      🔑 Player ID: 2014
+2025-06-09 16:03:42,448 - INFO -      📅 Season: 2006
+2025-06-09 16:03:42,448 - INFO -      🏆 League: 153.l.76788
+2025-06-09 16:03:42,448 - INFO - 
+2025-06-09 16:03:42,449 - INFO - 📈 Summary Statistics:
+2025-06-09 16:03:42,449 - INFO -    Total players: 2223
+2025-06-09 16:03:42,449 - INFO -    Total fantasy points: 384,549.2
+2025-06-09 16:03:42,449 - INFO -    Average points per player: 173.0
+2025-06-09 16:03:42,485 - INFO - 💾 Statistics saved to fantasy_statistics_only.json
+2025-06-09 16:03:42,485 - INFO - 
+⏭️ Skipped data types (as requested):
+2025-06-09 16:03:42,485 - INFO -    Leagues: 0
+2025-06-09 16:03:42,485 - INFO -    Teams: 0
+2025-06-09 16:03:42,486 - INFO -    Rosters: 0
+2025-06-09 16:03:42,486 - INFO -    Matchups: 0
+2025-06-09 16:03:42,486 - INFO -    Transactions: 0
+2025-06-09 16:03:42,486 - INFO -    Draft picks: 0
+2025-06-09 16:08:07,618 - INFO - 🎯 STATISTICS-ONLY DEPLOYMENT
+2025-06-09 16:08:07,618 - INFO - ==================================================
+2025-06-09 16:08:07,618 - INFO - 📈 Step 1: Extracting real fantasy statistics...
+2025-06-09 16:08:07,619 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 16:08:07,619 - DEBUG - Checking 
+2025-06-09 16:08:07,620 - DEBUG - ELAPSED TIME : 1708.0067427158356
+2025-06-09 16:08:07,620 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 16:08:07,620 - DEBUG - ELAPSED TIME : 1708.0074298381805
+2025-06-09 16:08:07,620 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 16:08:07,869 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 16:08:07,869 - INFO - 🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...
+2025-06-09 16:08:07,869 - INFO - 🔒 Rate limits: 20000/hour, 100000/day
+2025-06-09 16:08:07,869 - INFO - 💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING
+2025-06-09 16:08:07,870 - INFO - 🎯 FILTERING: NFL ONLY + PRIVATE LEAGUES ONLY
+2025-06-09 16:08:07,870 - INFO - 📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨
+2025-06-09 16:08:07,870 - INFO - 🔑 Found existing OAuth file: oauth2.json
+2025-06-09 16:08:07,870 - DEBUG - Checking 
+2025-06-09 16:08:07,870 - DEBUG - ELAPSED TIME : 1708.2573556900024
+2025-06-09 16:08:07,870 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 16:08:07,871 - DEBUG - ELAPSED TIME : 1708.2580440044403
+2025-06-09 16:08:07,871 - DEBUG - TOKEN IS STILL VALID
+2025-06-09 16:08:08,099 - INFO - ✅ Authentication successful! Game ID: 461
+2025-06-09 16:08:08,099 - INFO - 🚀 BULK OPTIMIZATION: Getting all leagues across all years in single call...

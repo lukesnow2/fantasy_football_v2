@@ -27,9 +27,10 @@ class HerokuPostgresDeployer:
                       'is_championship', 'is_consolation', 'is_keeper', 'is_auction_draft'}
     NUMERIC_FIELDS = {'wins', 'losses', 'ties', 'points_for', 'points_against', 
                       'team1_score', 'team2_score', 'faab_bid', 'faab_balance', 
-                      'pick_number', 'round_number', 'cost'}
+                      'pick_number', 'round_number', 'cost', 'total_fantasy_points', 
+                      'season_year'}
     
-    TABLE_ORDER = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
+    TABLE_ORDER = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics']
     
     def __init__(self, data_file: str, database_url: str = None):
         self.data_file = data_file
@@ -274,6 +275,15 @@ class HerokuPostgresDeployer:
                         if pick.get('league_id') not in non_nfl_league_ids
                     ]
                     logger.info(f"  🎯 Draft picks: {original_draft_picks} → {len(self.data['draft_picks'])}")
+                
+                # Filter statistics
+                if 'statistics' in self.data and self.data['statistics']:
+                    original_statistics = len(self.data['statistics'])
+                    self.data['statistics'] = [
+                        stat for stat in self.data['statistics']
+                        if stat.get('league_id') not in non_nfl_league_ids
+                    ]
+                    logger.info(f"  📈 Statistics: {original_statistics} → {len(self.data['statistics'])}")
             
             # Step 3: Flatten matchups data if it exists and is nested
             if 'matchups' in self.data and self.data['matchups']:

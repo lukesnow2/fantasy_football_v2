@@ -106,6 +106,11 @@ class EdwEtlProcessor:
             'triggers_refresh': ['fact_draft', 'mart_player_value'],
             'refresh_type': 'APPEND',  # Only new draft picks
             'depends_on': 'operational_draft_picks'
+        },
+        'statistics': {
+            'triggers_refresh': ['fact_draft', 'mart_player_value', 'fact_team_performance'],
+            'refresh_type': 'UPSERT',  # Update existing, insert new
+            'depends_on': 'operational_statistics'
         }
     }
     
@@ -201,7 +206,7 @@ class EdwEtlProcessor:
             logger.info("📊 Loading data from operational database tables...")
             
             self.data = {}
-            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
+            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics']
             
             with self.engine.connect() as conn:
                 for table in operational_tables:
@@ -1069,8 +1074,65 @@ class EdwEtlProcessor:
                 league_of_record_ids.add(league['league_id'])
                 league_to_season[league['league_id']] = season_year
 
-        # Build player performance lookup from roster data
+        # Build player performance lookup - prioritize real statistics data, fall back to estimation
         player_performance = {}
+        
+        # First, load real statistics data if available
+        real_stats_count = 0
+        if 'statistics' in self.data and self.data['statistics']:
+            logger.info("📊 Loading real player statistics data...")
+            for stat in self.data['statistics']:
+                league_id = stat['league_id']
+                if league_id not in league_of_record_ids:
+                    continue
+                    
+                season_year = league_to_season.get(league_id)
+                if not season_year:
+                    continue
+                
+                # Extract numeric player ID from stat data
+                raw_player_id = stat['player_id']
+                if '.p.' in raw_player_id:
+                    numeric_player_id = raw_player_id.split('.p.')[-1]
+                else:
+                    numeric_player_id = raw_player_id
+                
+                # Build performance key
+                perf_key = (league_id, season_year, numeric_player_id)
+                
+                # Use real statistics data
+                player_performance[perf_key] = {
+                    'total_points': float(stat.get('total_fantasy_points', 0)),
+                    'games_played': 17 if float(stat.get('total_fantasy_points', 0)) > 0 else 0,  # Default to full season for real stats
+                    'points_per_game': float(stat.get('total_fantasy_points', 0)) / 17 if float(stat.get('total_fantasy_points', 0)) > 0 else 0,
+                    'position': stat.get('position_type', 'Unknown'),
+                    'data_source': 'real_statistics'  # Flag to indicate real data
+                }
+                real_stats_count += 1
+            
+            logger.info(f"✅ Loaded {real_stats_count} real player statistics records")
+        
+        # Fall back to estimation for players without real statistics data
+        team_weekly_scores = {}
+        
+        # First, collect team weekly scores from matchup data
+        for matchup in self.data.get('matchups', []):
+            if matchup['league_id'] not in league_of_record_ids:
+                continue
+                
+            season_year = league_to_season.get(matchup['league_id'])
+            if not season_year:
+                continue
+                
+            # Store team weekly scores
+            team1_key = (matchup['league_id'], season_year, matchup['team1_id'], matchup['week'])
+            team2_key = (matchup['league_id'], season_year, matchup['team2_id'], matchup['week'])
+            
+            team_weekly_scores[team1_key] = float(matchup.get('team1_score', 0))
+            team_weekly_scores[team2_key] = float(matchup.get('team2_score', 0))
+        
+        # Collect roster composition for performance estimation (only for players without real stats)
+        estimation_count = 0
         for roster in self.data.get('rosters', []):
             league_id = roster['league_id']
             if league_id not in league_of_record_ids:
@@ -1090,34 +1152,110 @@ class EdwEtlProcessor:
             # Build performance key
             perf_key = (league_id, season_year, numeric_player_id)
             
+            # Only estimate for players that don't have real statistics data
             if perf_key not in player_performance:
                 player_performance[perf_key] = {
                     'total_points': 0.0,
                     'games_played': 0,
-                    'weeks_active': set()
+                    'weeks_active': set(),
+                    'weeks_started': set(),
+                    'team_scores_while_active': [],
+                    'team_scores_while_started': [],
+                    'position': roster.get('position', 'Unknown'),
+                    'data_source': 'estimated'  # Flag to indicate estimated data
                 }
+                estimation_count += 1
             
             # Count games where player was active (on roster)
             if roster.get('status') == 'active':
-                player_performance[perf_key]['weeks_active'].add(roster['week'])
+                week = roster['week']
+                team_id = roster['team_id']
                 
-                # Add actual points if available
-                actual_points = roster.get('actual_points')
-                if actual_points is not None:
-                    try:
-                        player_performance[perf_key]['total_points'] += float(actual_points)
-                    except (ValueError, TypeError):
-                        pass  # Skip invalid point values
+                player_performance[perf_key]['weeks_active'].add(week)
+                
+                # Get team score for this week
+                team_score_key = (league_id, season_year, team_id, week)
+                team_score = team_weekly_scores.get(team_score_key, 0)
+                
+                if team_score > 0:
+                    player_performance[perf_key]['team_scores_while_active'].append(team_score)
+                
+                # Track starter weeks separately  
+                if roster.get('is_starter', False):
+                    player_performance[perf_key]['weeks_started'].add(week)
+                    if team_score > 0:
+                        player_performance[perf_key]['team_scores_while_started'].append(team_score)
 
-        # Calculate final performance metrics
+        # Calculate estimated performance metrics only for players without real data
         for perf_key, perf_data in player_performance.items():
-            perf_data['games_played'] = len(perf_data['weeks_active'])
-            if perf_data['games_played'] > 0:
-                perf_data['points_per_game'] = perf_data['total_points'] / perf_data['games_played']
+            # Skip real statistics data - it's already complete
+            if perf_data.get('data_source') == 'real_statistics':
+                continue
+                
+            games_played = len(perf_data.get('weeks_active', set()))
+            weeks_started = len(perf_data.get('weeks_started', set()))
+            position = perf_data['position']
+            
+            perf_data['games_played'] = games_played
+            
+            # Estimate season points using multiple factors
+            if games_played > 0:
+                # Base estimation from team performance correlation
+                avg_team_score_active = sum(perf_data['team_scores_while_active']) / len(perf_data['team_scores_while_active']) if perf_data['team_scores_while_active'] else 0
+                avg_team_score_started = sum(perf_data['team_scores_while_started']) / len(perf_data['team_scores_while_started']) if perf_data['team_scores_while_started'] else 0
+                
+                # Position-based point estimation (Fantasy football typical scoring)
+                position_multipliers = {
+                    'QB': 0.18,      # QBs typically 18% of team score
+                    'RB': 0.16,      # Top RBs get 16% of team score  
+                    'WR': 0.14,      # Top WRs get 14% of team score
+                    'TE': 0.10,      # TEs typically 10% of team score
+                    'K': 0.08,       # Kickers around 8% of team score
+                    'DEF': 0.11,     # Defense around 11% of team score
+                    'Unknown': 0.12  # Average estimation
+                }
+                
+                base_multiplier = position_multipliers.get(position, 0.12)
+                
+                # Adjust multiplier based on starter rate (starters get more points)
+                starter_rate = weeks_started / games_played if games_played > 0 else 0
+                adjusted_multiplier = base_multiplier * (0.7 + (0.6 * starter_rate))  # 70% base, up to 130% for full starters
+                
+                # Estimate weekly points
+                if avg_team_score_started > 0 and weeks_started > 0:
+                    # Use started games for primary estimation
+                    estimated_weekly_points = avg_team_score_started * adjusted_multiplier
+                    estimated_total_points = estimated_weekly_points * weeks_started
+                    
+                    # Add bench contribution for non-starter weeks
+                    bench_weeks = games_played - weeks_started
+                    if bench_weeks > 0 and avg_team_score_active > 0:
+                        bench_weekly_points = avg_team_score_active * (base_multiplier * 0.3)  # Bench players get ~30% of starter value
+                        estimated_total_points += bench_weekly_points * bench_weeks
+                        
+                elif avg_team_score_active > 0:
+                    # Fall back to overall active estimation
+                    estimated_weekly_points = avg_team_score_active * (base_multiplier * 0.5)  # Conservative for non-starters
+                    estimated_total_points = estimated_weekly_points * games_played
+                else:
+                    estimated_total_points = 0
+                
+                # Apply realistic bounds and adjustments
+                perf_data['total_points'] = max(0, estimated_total_points)
+                perf_data['points_per_game'] = estimated_total_points / games_played if games_played > 0 else 0
+                
             else:
+                perf_data['total_points'] = 0.0
                 perf_data['points_per_game'] = 0.0
 
-        logger.info(f"📊 Built performance data for {len(player_performance)} player-season combinations")
+        # Log performance data breakdown
+        total_players = len(player_performance)
+        estimated_players = sum(1 for p in player_performance.values() if p.get('data_source') == 'estimated')
+        logger.info(f"📊 Built performance data for {total_players} player-season combinations")
+        logger.info(f"    ✅ Real statistics: {real_stats_count} players")
+        logger.info(f"    📈 Estimated data: {estimated_players} players")
+        if real_stats_count > 0:
+            logger.info(f"    🎯 Real data coverage: {real_stats_count}/{total_players} ({100*real_stats_count/total_players:.1f}%)")
 
         # Ensure dimension mappings are cached
         if not self.dim_mappings:

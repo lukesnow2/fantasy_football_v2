@@ -152,6 +152,29 @@ CREATE TABLE draft_picks (
     INDEX idx_keeper_picks (is_keeper)
 );
 
+-- Player statistics table (real fantasy points performance data)
+CREATE TABLE statistics (
+    stat_id VARCHAR(100) PRIMARY KEY,
+    league_id VARCHAR(50) NOT NULL,
+    player_id VARCHAR(50) NOT NULL,
+    player_name VARCHAR(255) NOT NULL,
+    position_type VARCHAR(20) NOT NULL,
+    season_year INTEGER NOT NULL,
+    total_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    game_code VARCHAR(10) NOT NULL DEFAULT 'nfl',
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (league_id) REFERENCES leagues(league_id) ON DELETE CASCADE,
+    INDEX idx_league_stats (league_id),
+    INDEX idx_player_stats (player_id),
+    INDEX idx_season_stats (season_year),
+    INDEX idx_position_stats (position_type),
+    INDEX idx_fantasy_points (total_fantasy_points),
+    INDEX idx_league_season (league_id, season_year),
+    INDEX idx_player_season (player_id, season_year),
+    UNIQUE KEY unique_player_league_season (player_id, league_id, season_year)
+);
+
 
 
 -- Views for common queries

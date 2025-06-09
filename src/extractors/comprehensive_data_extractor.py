@@ -131,6 +131,19 @@ class ExtractedDraftPick:
     is_auction_draft: bool
     extracted_at: datetime = datetime.now()
 
+@dataclass
+class ExtractedPlayerStatistics:
+    """Player statistics data structure for database storage"""
+    stat_id: str  # Generated unique identifier
+    league_id: str
+    player_id: str
+    player_name: str
+    position_type: str
+    season_year: int
+    total_fantasy_points: float
+    game_code: str
+    extracted_at: datetime = datetime.now()
+
 
 
 class YahooFantasyExtractor:
@@ -1061,12 +1074,16 @@ class YahooFantasyExtractor:
             logger.error(f"Error extracting draft data for league {league_id}: {e}")
             return []
 
-    def extract_all_data(self, initial_batch_size: int = 10, initial_batch_delay: int = 10, sport_filter: str = 'nfl', private_only: bool = True, extract_leagues: bool = True, extract_teams: bool = True, extract_rosters: bool = False, extract_matchups: bool = True, extract_transactions: bool = True, extract_drafts: bool = True, roster_weeks: Optional[List[int]] = None) -> Dict[str, List[Any]]:
+    def extract_all_data(self, initial_batch_size: int = 10, initial_batch_delay: int = 10, sport_filter: str = 'nfl', private_only: bool = True, extract_leagues: bool = True, extract_teams: bool = True, extract_rosters: bool = False, extract_matchups: bool = True, extract_transactions: bool = True, extract_drafts: bool = True, extract_statistics: bool = True, roster_weeks: Optional[List[int]] = None, statistics_weeks: Optional[List[int]] = None) -> Dict[str, List[Any]]:
         """Extract all data from NFL private leagues using TRUE BULK OPTIMIZATIONS + adaptive rate limiting"""
         logger.info("🚀 Starting comprehensive data extraction with TRUE BULK OPTIMIZATIONS...")
         logger.info(f"🔒 Rate limits: {self.MAX_REQUESTS_PER_HOUR}/hour, {self.MAX_REQUESTS_PER_DAY}/day")
         logger.info(f"💡 TRUE BULK MODE: Gets ALL data with minimal API calls - NO SKIPPING")
-        logger.info(f"🏈 NFL PRIVATE LEAGUES ONLY: Filtering for football private leagues")
+        
+        # Dynamic filtering message
+        sport_desc = "ALL SPORTS" if sport_filter == 'all' else f"{sport_filter.upper()} ONLY"
+        privacy_desc = "ALL LEAGUES" if not private_only else "PRIVATE LEAGUES ONLY"
+        logger.info(f"🎯 FILTERING: {sport_desc} + {privacy_desc}")
         logger.info("📈 Adaptive batching: 🚀→✅→⚡→⚠️→🚨")
         
         if not self.authenticate():
@@ -1081,7 +1098,7 @@ class YahooFantasyExtractor:
         
         original_count = len(leagues_data)
         
-        # Filter for NFL private leagues only
+        # Filter leagues based on sport and privacy settings
         filtered_leagues = []
         sport_counts = {}
         privacy_counts = {}
@@ -1095,11 +1112,12 @@ class YahooFantasyExtractor:
             league_type = league.get('league_type', 'unknown').lower()
             privacy_counts[league_type] = privacy_counts.get(league_type, 0) + 1
             
-            # Check if it's NFL/football
-            if game_code not in ['nfl', 'football']:
-                continue
+            # Check sport filter
+            if sport_filter != 'all':
+                if game_code not in [sport_filter.lower(), 'football' if sport_filter.lower() == 'nfl' else sport_filter.lower()]:
+                    continue
                 
-            # Check if it's private
+            # Check privacy filter
             if private_only and league_type != 'private':
                 continue
                 
@@ -1115,13 +1133,17 @@ class YahooFantasyExtractor:
             logger.info(f"  🔒 {privacy.upper()}: {count} leagues")
         
         leagues_data = filtered_leagues
-        logger.info(f"🎯 FILTERING RESULT: {original_count} total → {len(leagues_data)} NFL private leagues selected")
+        
+        # Dynamic filtering message
+        sport_msg = "ALL SPORTS" if sport_filter == 'all' else sport_filter.upper()
+        privacy_msg = "ALL LEAGUES" if not private_only else "PRIVATE LEAGUES"
+        logger.info(f"🎯 FILTERING RESULT: {original_count} total → {len(leagues_data)} {sport_msg} {privacy_msg} selected")
         
         total_leagues = len(leagues_data)
-        logger.info(f"📊 Total NFL private leagues to process: {total_leagues}")
+        logger.info(f"📊 Total {sport_msg} {privacy_msg} to process: {total_leagues}")
         
         if total_leagues == 0:
-            logger.warning("No NFL private leagues found")
+            logger.warning(f"No {sport_msg} {privacy_msg} found")
             return self.extracted_data
         
         # Process leagues in adaptive batches
@@ -1185,6 +1207,13 @@ class YahooFantasyExtractor:
                         draft_data = self.extract_draft_for_league(league_id)
                         self.extracted_data['draft_picks'].extend([asdict(pick) for pick in draft_data])
                     
+                    # Extract player statistics (if enabled)
+                    if extract_statistics:
+                        logger.info(f"    📈 Extracting player statistics...")
+                        statistics_data = self.extract_statistics_for_league(league_id, statistics_weeks)
+                        # Convert ExtractedPlayerStatistics objects to dictionaries for storage
+                        self.extracted_data['statistics'].extend([asdict(stat) for stat in statistics_data])
+                    
                     logger.info(f"    ✅ Completed {league_name}")
                     
                     # Show API usage after each league  
@@ -1210,6 +1239,7 @@ class YahooFantasyExtractor:
         logger.info(f"  - Matchups: {len(self.extracted_data['matchups'])}")
         logger.info(f"  - Transactions: {len(self.extracted_data['transactions'])}")
         logger.info(f"  - Draft Picks: {len(self.extracted_data['draft_picks'])}")
+        logger.info(f"  - Statistics: {len(self.extracted_data['statistics'])}")
         logger.info(f"📊 Total API requests made - Hour: {self.hourly_request_count}, Day: {self.daily_request_count}")
         
         return self.extracted_data
@@ -1237,6 +1267,126 @@ class YahooFantasyExtractor:
             
         except Exception as e:
             logger.error(f"Error saving data to JSON: {e}")
+
+
+
+    def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None) -> List[ExtractedPlayerStatistics]:
+        """Extract player statistics using bulk API call for entire league at once
+        
+        Gets all players in one call, then gets all their stats in one bulk call.
+        Much more efficient than individual player calls.
+        
+        Args:
+            league_id: League ID to extract statistics for
+            weeks: Not used for season stats but kept for API compatibility
+        
+        Returns:
+            List of ExtractedPlayerStatistics objects with real fantasy points
+        """
+        statistics = []
+        
+        try:
+            # Get league object
+            league = self._rate_limited_request(
+                lambda: self.game.to_league(league_id)
+            )
+            
+            if not league:
+                logger.warning(f"Could not get league {league_id} for statistics extraction")
+                return statistics
+            
+            # Get league settings for context
+            settings = self._rate_limited_request(lambda: league.settings())
+            if not settings:
+                logger.warning(f"Could not get settings for league {league_id}")
+                return statistics
+            
+            season_year = int(settings.get('season', 2024))
+            game_code = settings.get('game_code', 'nfl')
+            league_name = settings.get('name', 'Unknown League')
+            
+            logger.info(f"    📈 Extracting fantasy points for {league_name} ({season_year} season)...")
+            
+            # Get all players who were taken in this league
+            taken_players = self._rate_limited_request(
+                lambda: league.taken_players()
+            )
+            
+            if not taken_players:
+                logger.warning(f"No taken players found for league {league_id}")
+                return statistics
+            
+            # Extract all player IDs for bulk API call
+            all_player_ids = [int(player.get('player_id')) for player in taken_players if player.get('player_id')]
+            
+            if not all_player_ids:
+                logger.warning(f"No valid player IDs found for league {league_id}")
+                return statistics
+            
+            logger.info(f"    📋 Getting stats for ALL {len(all_player_ids)} players in one bulk call...")
+            
+            # BULK API CALL: Get statistics for ALL players at once
+            all_season_stats = self._rate_limited_request(
+                lambda: league.player_stats(all_player_ids, 'season')
+            )
+            
+            if not all_season_stats:
+                logger.warning(f"No stats returned for league {league_id}")
+                return statistics
+            
+            # Process all players from bulk response
+            players_with_points = 0
+            total_points = 0.0
+            
+            for player_data in all_season_stats:
+                try:
+                    player_id = str(player_data.get('player_id'))
+                    total_points_value = float(player_data.get('total_points', 0))
+                    
+                    # Only include players who actually scored points
+                    if total_points_value > 0:
+                        stat_id = f"{league_id}_{player_id}_{season_year}"
+                        
+                        player_stats = ExtractedPlayerStatistics(
+                            stat_id=stat_id,
+                            league_id=league_id,
+                            player_id=player_id,
+                            player_name=player_data.get('name', 'Unknown'),
+                            position_type=player_data.get('position_type', 'Unknown'),
+                            season_year=season_year,
+                            total_fantasy_points=total_points_value,
+                            game_code=game_code
+                        )
+                        
+                        statistics.append(player_stats)
+                        players_with_points += 1
+                        total_points += total_points_value
+                        
+                        logger.debug(f"      ✅ {player_data.get('name', 'Unknown')}: {total_points_value} pts")
+                
+                except Exception as e:
+                    logger.debug(f"      ⚠️ Error processing player data: {e}")
+                    continue
+            
+            # Log extraction results
+            if statistics:
+                avg_points = total_points / len(statistics) if statistics else 0
+                logger.info(f"    📊 SUCCESS: Extracted {len(statistics)} players with real fantasy points")
+                logger.info(f"        💰 Total points: {total_points:,.1f}, Average: {avg_points:.1f} pts/player")
+                logger.info(f"        🎯 Coverage: {players_with_points}/{len(all_player_ids)} players ({100*players_with_points/len(all_player_ids):.1f}%)")
+                logger.info(f"        🚀 API efficiency: 1 bulk call instead of {len(all_player_ids)} individual calls")
+            else:
+                logger.warning(f"    ⚠️ No fantasy points extracted for any players in {league_name}")
+            
+            return statistics
+            
+        except Exception as e:
+            logger.error(f"Error extracting statistics for league {league_id}: {e}")
+            return []
+
+
+
+
 
 # This module is designed to be imported and used by scripts/full_extraction.py
 # Remove the main() function to avoid conflicts with the entry point script
