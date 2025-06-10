@@ -272,6 +272,9 @@ CREATE TABLE fact_matchup (
     
     -- Game Type
     matchup_type VARCHAR(20) DEFAULT 'regular', -- regular, playoffs, championship, consolation
+    is_playoffs BOOLEAN DEFAULT FALSE,
+    is_championship BOOLEAN DEFAULT FALSE,
+    is_consolation BOOLEAN DEFAULT FALSE,
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

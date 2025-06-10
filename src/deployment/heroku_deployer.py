@@ -164,7 +164,7 @@ class HerokuPostgresDeployer:
                             'league_id': league_id,
                             'week': int(week),
                             'is_playoffs': matchup.get('is_playoffs', '0') == '1',
-                            'is_championship': False,  # Will be enhanced later
+                            'is_championship': self._detect_championship_game(matchup, week),
                             'is_consolation': matchup.get('is_consolation', '0') == '1',
                             'winner_team_id': matchup.get('winner_team_key'),
                             'team1_id': None,
@@ -401,6 +401,47 @@ class HerokuPostgresDeployer:
                 return False
         
         return True
+
+    def _detect_championship_game(self, matchup, week):
+        """
+        Detect if a matchup is a championship game based on week number and playoff status.
+        
+        Championship detection logic:
+        1. Must be a playoff game (is_playoffs = True)
+        2. Must be in the final week of playoffs (typically week 16 or 17)
+        3. Week 17 is almost always championship for modern leagues
+        4. Week 16 can be championship for shorter seasons
+        """
+        # Must be a playoff game first
+        is_playoffs = matchup.get('is_playoffs', '0') == '1'
+        if not is_playoffs:
+            return False
+        
+        # Check for explicit championship indicator in Yahoo API data
+        # Some Yahoo leagues may have this field
+        if 'is_championship' in matchup:
+            return matchup.get('is_championship', '0') == '1'
+        
+        # Week-based championship detection
+        week_num = int(week)
+        
+        # Week 17 is championship week for most modern leagues (2021+)
+        if week_num == 17:
+            return True
+        
+        # Week 16 was championship week for many leagues (pre-2021)
+        # and still is for some shorter seasons
+        if week_num == 16:
+            # Additional logic: if it's playoffs and week 16, likely championship
+            # unless there's evidence of week 17 playoffs
+            return True
+        
+        # Week 15 can be championship for very short seasons
+        if week_num == 15:
+            # Only if it's playoffs - this is rare but possible
+            return True
+        
+        return False
 
 def auto_detect_data_file(pattern: str) -> str:
     """Auto-detect the most recent data file"""

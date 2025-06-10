@@ -949,7 +949,7 @@ class EdwEtlProcessor:
                 'is_tie': bool(team1_points == team2_points),
                 'margin_of_victory': float(abs(team1_points - team2_points)),
                 'matchup_type': str(matchup_type),
-                'is_playoffs': bool(matchup_type in ['playoffs', 'championship', 'consolation']),
+                'is_playoffs': bool(matchup_type in ['playoffs', 'championship']),
                 'is_championship': bool(matchup_type == 'championship'),
                 'is_consolation': bool(matchup_type == 'consolation')
             })
