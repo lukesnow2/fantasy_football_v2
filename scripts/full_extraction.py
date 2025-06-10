@@ -89,7 +89,7 @@ def main():
         # Determine what data to extract based on flags
         extract_leagues = True
         extract_teams = True
-        extract_rosters = False
+        extract_rosters = True  # Always include roster data by default for proper analytics
         extract_matchups = True
         extract_transactions = True
         extract_drafts = True

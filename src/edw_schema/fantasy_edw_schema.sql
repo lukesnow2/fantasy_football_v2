@@ -4,9 +4,8 @@
 -- Designed for high-performance analytics and web application serving
 -- Includes: Dimension tables, Fact tables, Data Marts, and Optimized Views
 -- 
--- NOTE: ROSTER FUNCTIONALITY DISABLED
--- fact_roster table and related indexes commented out due to removal 
--- of roster extraction from data pipeline for API efficiency
+-- NOTE: ROSTER FUNCTIONALITY ENABLED
+-- fact_roster table included for weekly player performance analytics
 -- 
 -- Author: AI Assistant
 -- Date: 2025-06-06
@@ -155,7 +154,7 @@ CREATE INDEX idx_current_week ON dim_week (is_current_week);
 -- FACT TABLES (Transactional/Event Data)
 -- ============================================================================
 
--- Fact: Roster Data (Player assignments) - DISABLED: roster extraction removed
+-- Fact: Roster Data (Player assignments) - ENABLED: weekly player performance
 CREATE TABLE fact_roster (
     roster_key SERIAL PRIMARY KEY,
     team_key INTEGER NOT NULL,

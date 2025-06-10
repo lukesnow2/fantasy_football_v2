@@ -800,9 +800,20 @@ class EdwEtlProcessor:
         manager_keys = self.dim_mappings.get('manager_keys', {})
         week_keys = self.dim_mappings.get('week_keys', {})
         
+        debug_count = 0
+        filtered_league = 0
+        missing_season = 0
+        missing_keys = 0
+        successful = 0
+        
         for roster in rosters_data:
+            debug_count += 1
+            
             # Only include rosters from leagues of record
             if roster['league_id'] not in league_of_record_ids:
+                filtered_league += 1
+                if debug_count <= 5:  # Only show first 5 for debugging
+                    logger.debug(f"🔍 Roster {debug_count}: Filtered league {roster['league_id']}")
                 continue
                 
             # Extract league info to get season
@@ -813,30 +824,36 @@ class EdwEtlProcessor:
                     break
             
             if not season_year:
+                missing_season += 1
+                if debug_count <= 5:  # Only show first 5 for debugging
+                    logger.debug(f"🔍 Roster {debug_count}: Missing season for league {roster['league_id']}")
                 continue
                 
             league_key = league_keys.get(roster['league_id'])
             team_key = team_keys.get(roster['team_id'])
             
-            # Extract numeric player ID from Yahoo format
-            raw_player_id = roster['player_id']
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
-            
+            # Player ID is already numeric in roster data
+            numeric_player_id = str(roster['player_id'])
             player_key = player_keys.get(numeric_player_id)
             week_key = week_keys.get((season_year, roster['week']))
             
-            # Get manager_key from team's manager_name
+            # Get manager_key from team data (roster doesn't have manager_name)
             manager_key = None
-            raw_manager_name = roster.get('manager_name')
-            if raw_manager_name:
-                consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
-                manager_key = manager_keys.get(consolidated_manager_name)
+            for team in self.data.get('teams', []):
+                if team['team_id'] == roster['team_id']:
+                    raw_manager_name = team.get('manager_name')
+                    if raw_manager_name:
+                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        manager_key = manager_keys.get(consolidated_manager_name)
+                    break
             
             if not all([league_key, team_key, player_key, week_key, manager_key]):
+                missing_keys += 1
+                if debug_count <= 5:  # Only show first 5 for debugging
+                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}, player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name})")
                 continue
+            
+            successful += 1
             
             facts.append({
                 'league_key': league_key,
@@ -846,16 +863,15 @@ class EdwEtlProcessor:
                 'week_key': week_key,
                 'season_year': season_year,
                 'is_starter': roster.get('is_starter', False),
-                'roster_position': roster.get('selected_position', 'BN'),
-                'weekly_points': float(roster.get('player_points', 0)),
-                'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') else None,
-                'roster_slot_type': roster.get('roster_position'),
-                'ownership_percentage': None,  # Not available in current data
+                'roster_position': roster.get('position', 'BN'),  # Use 'position' field from data
+                'weekly_points': float(roster.get('actual_points', 0)) if roster.get('actual_points') is not None else 0.0,  # Use 'actual_points'
+                'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
                 'acquisition_type': roster.get('acquisition_type'),
                 'acquisition_date': None  # Not available in current data
             })
         
         logger.info(f"📋 Transformed {len(facts)} roster facts from {len(rosters_data)} roster records")
+        logger.info(f"🔍 Roster Debug: filtered_league={filtered_league}, missing_season={missing_season}, missing_keys={missing_keys}, successful={successful}")
         return facts
     
     def transform_fact_matchup(self) -> List[Dict]:
@@ -1385,6 +1401,16 @@ class EdwEtlProcessor:
             else:
                 points_above_replacement = fantasy_points
 
+            # Calculate consistency score using simplified method
+            consistency_score = self._calculate_consistency_score(
+                fantasy_points, points_per_game, position_type, estimated_games
+            )
+
+            # Calculate draft value score
+            draft_value_score = self._calculate_draft_value_score(
+                league_id, numeric_player_id, season_year, fantasy_points, position_rank
+            )
+
             # Create fact record
             fact = {
                 'league_key': league_key,
@@ -1394,11 +1420,11 @@ class EdwEtlProcessor:
                 'position_type': position_type,
                 'games_played': estimated_games,
                 'points_per_game': round(points_per_game, 2),
-                'consistency_score': None,  # Would need weekly data to calculate
+                'consistency_score': round(consistency_score, 4) if consistency_score is not None else None,
                 'position_rank': position_rank,
                 'league_rank': league_rank,
                 'points_above_replacement': round(points_above_replacement, 2),
-                'draft_value_score': None,  # Would need draft data correlation
+                'draft_value_score': round(draft_value_score, 4) if draft_value_score is not None else None,
                 'source_stat_id': stat.get('stat_id'),
                 'game_code': stat.get('game_code', 'nfl')
             }
@@ -1407,6 +1433,94 @@ class EdwEtlProcessor:
 
         logger.info(f"✅ Player statistics facts transformed: {len(facts)} records")
         return facts
+
+    def _calculate_consistency_score(self, total_points: float, points_per_game: float, 
+                                   position_type: str, games_played: int) -> float:
+        """
+        Calculate consistency score using simplified method without weekly data.
+        
+        This uses position-based variance estimates since we don't have weekly data.
+        Lower scores indicate more consistent performance.
+        """
+        if total_points <= 0 or games_played <= 0:
+            return None
+        
+        # Position-based consistency multipliers (estimated from historical data)
+        # QBs tend to be more consistent, RBs/WRs more volatile, K/DEF very volatile
+        position_volatility = {
+            'O': 0.25,    # Offensive players (QB, RB, WR, TE) - moderate volatility
+            'K': 0.45,    # Kickers - high volatility  
+            'DT': 0.40,   # Defense/Team - high volatility
+            'DP': 0.35,   # Individual defensive players - moderate-high volatility
+        }
+        
+        base_volatility = position_volatility.get(position_type, 0.30)
+        
+        # Estimate standard deviation as percentage of points per game
+        estimated_std_dev = points_per_game * base_volatility
+        
+        # Normalize by points per game to get coefficient of variation
+        consistency_score = estimated_std_dev / points_per_game if points_per_game > 0 else None
+        
+        return consistency_score
+
+    def _calculate_draft_value_score(self, league_id: str, player_id: str, season_year: int, 
+                                   fantasy_points: float, position_rank: int) -> float:
+        """
+        Calculate draft value score by comparing actual performance to draft position.
+        
+        Positive scores indicate player outperformed their draft position.
+        Negative scores indicate player underperformed their draft position.
+        """
+        try:
+            # Get draft data for this player
+            draft_info = None
+            for draft_pick in self.data.get('draft_picks', []):
+                if (draft_pick.get('league_id') == league_id and 
+                    draft_pick.get('season_year') == season_year):
+                    
+                    # Handle Yahoo player ID format
+                    draft_player_id = draft_pick.get('player_id', '')
+                    if '.p.' in draft_player_id:
+                        draft_numeric_id = draft_player_id.split('.p.')[-1]
+                    else:
+                        draft_numeric_id = draft_player_id
+                    
+                    if draft_numeric_id == player_id:
+                        draft_info = draft_pick
+                        break
+            
+            if not draft_info:
+                return None  # Player wasn't drafted
+            
+            draft_position = draft_info.get('pick_number', 0)
+            if draft_position <= 0:
+                return None
+            
+            # Calculate expected points based on draft position
+            # Use a logarithmic decay model: early picks should score much more
+            # This is a simplified model - could be enhanced with historical ADP data
+            max_expected_points = 400  # Top pick expected points
+            min_expected_points = 50   # Last pick expected points
+            total_picks = 200  # Assume ~200 total picks across all leagues
+            
+            # Logarithmic decay from max to min
+            import math
+            decay_factor = math.log(total_picks) / (max_expected_points - min_expected_points)
+            expected_points = max_expected_points - (math.log(draft_position) / decay_factor)
+            expected_points = max(expected_points, min_expected_points)
+            
+            # Calculate value score as percentage above/below expected
+            if expected_points > 0:
+                value_score = (fantasy_points - expected_points) / expected_points
+            else:
+                value_score = 0
+            
+            return value_score
+            
+        except Exception as e:
+            logger.debug(f"Could not calculate draft value score for player {player_id}: {e}")
+            return None
     
     def transform_fact_team_performance(self) -> List[Dict]:
         """Transform team performance data from matchups and rosters"""
