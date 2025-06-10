@@ -1130,16 +1130,17 @@ class EdwEtlProcessor:
         logger.info("📊 Loading player performance data from public.statistics...")
         try:
             with self.engine.connect() as conn:
-                # Get season_points from public.statistics
+                # Aggregate weekly points to get season totals
                 league_ids_str = "', '".join(league_of_record_ids)
                 sql = f"""
                     SELECT 
                         s.league_id,
                         s.player_id,
                         s.season_year,
-                        s.total_fantasy_points
+                        SUM(s.weekly_fantasy_points) as total_fantasy_points
                     FROM public.statistics s
                     WHERE s.league_id IN ('{league_ids_str}')
+                    GROUP BY s.league_id, s.player_id, s.season_year
                 """
                 
                 result = conn.execute(text(sql))
@@ -1285,7 +1286,7 @@ class EdwEtlProcessor:
         return facts
     
     def transform_fact_player_statistics(self) -> List[Dict]:
-        """Transform player statistics data into fact_player_statistics format"""
+        """Transform player statistics data into weekly fact_player_statistics format"""
         facts = []
         
         if not self.data:
@@ -1311,13 +1312,12 @@ class EdwEtlProcessor:
             logger.warning("⚠️ No statistics data found")
             return facts
 
-        logger.info(f"📊 Processing {len(statistics_data)} player statistics records...")
+        logger.info(f"📊 Processing {len(statistics_data)} weekly player statistics records...")
 
-        # Group stats by league-season for ranking calculations
-        league_season_stats = {}
-        position_stats = {}
-
-        # First pass: collect all stats for ranking calculations
+        # Aggregate by player-season for season-level rankings
+        player_season_totals = {}
+        
+        # First pass: aggregate weekly data to season totals for ranking purposes
         for stat in statistics_data:
             league_id = stat['league_id']
             if league_id not in league_of_record_ids:
@@ -1327,40 +1327,61 @@ class EdwEtlProcessor:
             if not season_year:
                 continue
 
-            fantasy_points = float(stat.get('total_fantasy_points', 0))
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
             position_type = stat.get('position_type', 'Unknown')
+            player_id = stat['player_id']
+            
+            # Aggregate to season level for rankings
+            season_key = (league_id, player_id, season_year, position_type)
+            if season_key not in player_season_totals:
+                player_season_totals[season_key] = {
+                    'total_points': 0,
+                    'weeks_played': 0,
+                    'position_type': position_type
+                }
+            
+            player_season_totals[season_key]['total_points'] += weekly_points
+            player_season_totals[season_key]['weeks_played'] += 1
 
-            # Group for league rankings
+        # Calculate season-level rankings
+        league_season_rankings = {}
+        position_season_rankings = {}
+        
+        # Group for league rankings
+        league_season_players = {}
+        for (league_id, player_id, season_year, position_type), totals in player_season_totals.items():
             league_season_key = (league_id, season_year)
-            if league_season_key not in league_season_stats:
-                league_season_stats[league_season_key] = []
-            league_season_stats[league_season_key].append((stat, fantasy_points))
+            if league_season_key not in league_season_players:
+                league_season_players[league_season_key] = []
+            league_season_players[league_season_key].append(
+                (player_id, totals['total_points'])
+            )
 
-            # Group for position rankings
+        # Calculate league rankings
+        for league_season_key, players in league_season_players.items():
+            sorted_players = sorted(players, key=lambda x: x[1], reverse=True)
+            for rank, (player_id, points) in enumerate(sorted_players, 1):
+                ranking_key = (league_season_key[0], player_id, league_season_key[1])
+                league_season_rankings[ranking_key] = rank
+
+        # Group for position rankings
+        position_season_players = {}
+        for (league_id, player_id, season_year, position_type), totals in player_season_totals.items():
             position_key = (league_id, season_year, position_type)
-            if position_key not in position_stats:
-                position_stats[position_key] = []
-            position_stats[position_key].append((stat, fantasy_points))
+            if position_key not in position_season_players:
+                position_season_players[position_key] = []
+            position_season_players[position_key].append(
+                (player_id, totals['total_points'])
+            )
 
-        # Calculate rankings
-        league_rankings = {}
-        position_rankings = {}
+        # Calculate position rankings
+        for position_key, players in position_season_players.items():
+            sorted_players = sorted(players, key=lambda x: x[1], reverse=True)
+            for rank, (player_id, points) in enumerate(sorted_players, 1):
+                ranking_key = (position_key[0], player_id, position_key[1])
+                position_season_rankings[ranking_key] = rank
 
-        for league_season_key, stats_list in league_season_stats.items():
-            # Sort by fantasy points descending
-            sorted_stats = sorted(stats_list, key=lambda x: x[1], reverse=True)
-            for rank, (stat, points) in enumerate(sorted_stats, 1):
-                stat_key = (stat['league_id'], stat['player_id'], stat['season_year'])
-                league_rankings[stat_key] = rank
-
-        for position_key, stats_list in position_stats.items():
-            # Sort by fantasy points descending
-            sorted_stats = sorted(stats_list, key=lambda x: x[1], reverse=True)
-            for rank, (stat, points) in enumerate(sorted_stats, 1):
-                stat_key = (stat['league_id'], stat['player_id'], stat['season_year'])
-                position_rankings[stat_key] = rank
-
-        # Second pass: create fact records with rankings
+        # Second pass: create weekly fact records with season-level context
         for stat in statistics_data:
             league_id = stat['league_id']
             if league_id not in league_of_record_ids:
@@ -1386,57 +1407,67 @@ class EdwEtlProcessor:
             if not player_key:
                 continue
 
-            # Basic stats
-            fantasy_points = float(stat.get('total_fantasy_points', 0))
+            # Weekly stats
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
+            week_number = int(stat.get('week_number', 1))
             position_type = stat.get('position_type', 'Unknown')
 
-            # Get rankings
-            stat_key = (league_id, stat['player_id'], int(stat['season_year']))
-            league_rank = league_rankings.get(stat_key)
-            position_rank = position_rankings.get(stat_key)
+            # Get season-level rankings
+            ranking_key = (league_id, stat['player_id'], season_year)
+            league_rank = league_season_rankings.get(ranking_key)
+            position_rank = position_season_rankings.get(ranking_key)
 
-            # Calculate estimated performance metrics
-            # For now, use simplified calculations - can be enhanced later
-            estimated_games = 17 if fantasy_points > 0 else 0
-            points_per_game = fantasy_points / estimated_games if estimated_games > 0 else 0
+            # Get season totals for calculations
+            season_key = (league_id, stat['player_id'], season_year, position_type)
+            season_totals = player_season_totals.get(season_key, {
+                'total_points': weekly_points,
+                'weeks_played': 1
+            })
 
-            # Calculate points above replacement (simplified)
+            # Calculate season-level metrics
+            season_total_points = season_totals['total_points']
+            weeks_played = season_totals['weeks_played']
+            avg_points_per_game = season_total_points / weeks_played if weeks_played > 0 else 0
+
+            # Calculate points above replacement for this week
             # Use bottom 25% of position as replacement level
             position_key = (league_id, season_year, position_type)
-            if position_key in position_stats:
-                position_players = position_stats[position_key]
-                if len(position_players) > 3:  # Need enough players for replacement calculation
-                    replacement_threshold = int(len(position_players) * 0.75)  # Bottom 25%
+            if position_key in position_season_players:
+                position_players = position_season_players[position_key]
+                if len(position_players) > 3:
+                    replacement_threshold = int(len(position_players) * 0.75)
                     sorted_position = sorted(position_players, key=lambda x: x[1], reverse=True)
-                    replacement_points = sorted_position[replacement_threshold][1] if replacement_threshold < len(sorted_position) else 0
-                    points_above_replacement = fantasy_points - replacement_points
+                    replacement_season_total = sorted_position[replacement_threshold][1] if replacement_threshold < len(sorted_position) else 0
+                    replacement_weekly_avg = replacement_season_total / 17  # Assume 17 weeks
+                    points_above_replacement = weekly_points - replacement_weekly_avg
                 else:
-                    points_above_replacement = fantasy_points
+                    points_above_replacement = weekly_points
             else:
-                points_above_replacement = fantasy_points
+                points_above_replacement = weekly_points
 
-            # Calculate consistency score using simplified method
-            consistency_score = self._calculate_consistency_score(
-                fantasy_points, points_per_game, position_type, estimated_games
+            # Calculate weekly consistency score (simplified for weekly data)
+            consistency_score = self._calculate_weekly_consistency_score(
+                weekly_points, avg_points_per_game, position_type
             )
 
-            # Calculate draft value score
+            # Calculate draft value score based on season performance
             draft_value_score = self._calculate_draft_value_score(
-                league_id, numeric_player_id, season_year, fantasy_points, position_rank
+                league_id, numeric_player_id, season_year, season_total_points, position_rank
             )
 
-            # Create fact record
+            # Create weekly fact record
             fact = {
                 'league_key': league_key,
                 'player_key': player_key,
                 'season_year': season_year,
-                'total_fantasy_points': fantasy_points,
+                'week_number': week_number,
+                'weekly_fantasy_points': weekly_points,
                 'position_type': position_type,
-                'games_played': estimated_games,
-                'points_per_game': round(points_per_game, 2),
+                'games_played': 1,  # Each week represents 1 game
+                'avg_points_per_game': round(avg_points_per_game, 2),  # Season average
                 'consistency_score': round(consistency_score, 4) if consistency_score is not None else None,
-                'position_rank': position_rank,
-                'league_rank': league_rank,
+                'position_rank': position_rank,  # Season-level rank
+                'league_rank': league_rank,     # Season-level rank
                 'points_above_replacement': round(points_above_replacement, 2),
                 'draft_value_score': round(draft_value_score, 4) if draft_value_score is not None else None,
                 'source_stat_id': stat.get('stat_id'),
@@ -1475,6 +1506,35 @@ class EdwEtlProcessor:
         
         # Normalize by points per game to get coefficient of variation
         consistency_score = estimated_std_dev / points_per_game if points_per_game > 0 else None
+        
+        return consistency_score
+
+    def _calculate_weekly_consistency_score(self, weekly_points: float, season_avg: float, 
+                                          position_type: str) -> float:
+        """
+        Calculate weekly consistency score by comparing this week's performance to season average.
+        
+        Returns a score indicating how much this week deviates from the player's season average.
+        Lower scores indicate performance closer to average (more consistent).
+        """
+        if season_avg <= 0:
+            return None
+        
+        # Calculate deviation from season average as percentage
+        deviation = abs(weekly_points - season_avg) / season_avg
+        
+        # Position-based volatility expectations
+        position_volatility = {
+            'O': 0.30,    # Offensive players - moderate expected volatility
+            'K': 0.50,    # Kickers - high volatility  
+            'DT': 0.45,   # Defense/Team - high volatility
+            'DP': 0.40,   # Individual defensive players - moderate-high volatility
+        }
+        
+        expected_volatility = position_volatility.get(position_type, 0.35)
+        
+        # Normalize deviation by expected volatility for this position
+        consistency_score = deviation / expected_volatility
         
         return consistency_score
 
