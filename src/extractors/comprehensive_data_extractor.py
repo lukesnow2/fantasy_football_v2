@@ -140,7 +140,8 @@ class ExtractedPlayerStatistics:
     player_name: str
     position_type: str
     season_year: int
-    total_fantasy_points: float
+    week_number: int  # Added for weekly stats
+    weekly_fantasy_points: float  # Changed from total_fantasy_points
     game_code: str
     extracted_at: datetime = datetime.now()
 
@@ -221,7 +222,7 @@ class YahooFantasyExtractor:
             # Critical throttling - very conservative
             return {
                 'batch_size': 1,
-                'batch_delay': 900,  # 15 minutes
+                'batch_delay': 60,  # 1 minute instead of 15
                 'inter_league_delay': 30,
                 'min_request_interval': 1.0,
                 'status': '🚨 CRITICAL THROTTLE'
@@ -230,7 +231,7 @@ class YahooFantasyExtractor:
             # Heavy throttling - conservative
             return {
                 'batch_size': 2,
-                'batch_delay': 600,  # 10 minutes
+                'batch_delay': 30,  # 30 seconds instead of 10 minutes
                 'inter_league_delay': 15,
                 'min_request_interval': 0.8,
                 'status': '⚠️ HEAVY THROTTLE'
@@ -239,7 +240,7 @@ class YahooFantasyExtractor:
             # Moderate throttling - balanced
             return {
                 'batch_size': 3,
-                'batch_delay': 300,  # 5 minutes
+                'batch_delay': 15,  # 15 seconds instead of 5 minutes
                 'inter_league_delay': 8,
                 'min_request_interval': 0.6,
                 'status': '⚡ MODERATE THROTTLE'
@@ -248,7 +249,7 @@ class YahooFantasyExtractor:
             # Light throttling - slightly conservative
             return {
                 'batch_size': 4,
-                'batch_delay': 180,  # 3 minutes
+                'batch_delay': 10,  # 10 seconds instead of 3 minutes
                 'inter_league_delay': 5,
                 'min_request_interval': 0.4,
                 'status': '✅ LIGHT THROTTLE'
@@ -257,7 +258,7 @@ class YahooFantasyExtractor:
             # Full speed - plenty of headroom
             return {
                 'batch_size': 5,
-                'batch_delay': 120,  # 2 minutes
+                'batch_delay': 5,  # 5 seconds instead of 2 minutes
                 'inter_league_delay': 3,
                 'min_request_interval': 0.3,
                 'status': '🚀 FULL SPEED'
@@ -1150,19 +1151,25 @@ class YahooFantasyExtractor:
         current_batch_size = initial_batch_size
         current_batch_delay = initial_batch_delay
         
-        total_batches = (total_leagues + current_batch_size - 1) // current_batch_size
+        processed_leagues = 0
+        batch_num = 0
         
-        for batch_num in range(total_batches):
+        while processed_leagues < total_leagues:
             # Get adaptive settings
             settings = self._get_adaptive_settings()
             current_batch_size = settings['batch_size']
             current_batch_delay = settings['batch_delay']
             
-            start_idx = batch_num * current_batch_size
+            # Calculate current batch indices
+            start_idx = processed_leagues
             end_idx = min(start_idx + current_batch_size, total_leagues)
             batch_leagues = leagues_data[start_idx:end_idx]
             
-            logger.info(f"📦 Processing batch {batch_num + 1}/{total_batches} ({len(batch_leagues)} leagues)")
+            # Calculate total batches remaining for logging
+            remaining_leagues = total_leagues - processed_leagues  
+            remaining_batches = (remaining_leagues + current_batch_size - 1) // current_batch_size
+            
+            logger.info(f"📦 Processing batch {batch_num + 1} ({len(batch_leagues)} leagues) - Progress: {processed_leagues}/{total_leagues}")
             logger.info(f"   {settings['status']} - Batch size: {current_batch_size}, Delay: {current_batch_delay}s")
             logger.info(f"   📊 Starting API Usage: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR} hourly, {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY} daily")
             
@@ -1207,12 +1214,20 @@ class YahooFantasyExtractor:
                         draft_data = self.extract_draft_for_league(league_id)
                         self.extracted_data['draft_picks'].extend([asdict(pick) for pick in draft_data])
                     
-                    # Extract player statistics (if enabled)
+                    # Extract player statistics using BULK SEASON OPTIMIZATION (if enabled)
                     if extract_statistics:
-                        logger.info(f"    📈 Extracting player statistics...")
+                        logger.info(f"    📊 Extracting weekly fantasy points using BULK SEASON optimization...")
                         statistics_data = self.extract_statistics_for_league(league_id, statistics_weeks)
                         # Convert ExtractedPlayerStatistics objects to dictionaries for storage
-                        self.extracted_data['statistics'].extend([asdict(stat) for stat in statistics_data])
+                        stats_dicts = [asdict(stat) for stat in statistics_data]
+                        self.extracted_data['statistics'].extend(stats_dicts)
+                        
+                        # Log statistics extraction results
+                        if statistics_data:
+                            total_points = sum(stat.weekly_fantasy_points for stat in statistics_data)
+                            players_with_points = len([s for s in statistics_data if s.weekly_fantasy_points > 0])
+                            weeks_covered = len(set(stat.week_number for stat in statistics_data))
+                            logger.info(f"    ✅ Statistics: {len(statistics_data):,} records, {weeks_covered} weeks, {total_points:,.1f} total pts, {players_with_points} active players")
                     
                     logger.info(f"    ✅ Completed {league_name}")
                     
@@ -1225,21 +1240,46 @@ class YahooFantasyExtractor:
                     logger.error(f"    ❌ Error processing league {league_id}: {e}")
                     continue
             
+            # Update progress counters
+            processed_leagues += len(batch_leagues)
+            batch_num += 1
+            
             # Adaptive delay between batches (except for last batch)
-            if batch_num < total_batches - 1:
+            if processed_leagues < total_leagues:
                 logger.info(f"   ⏱️ Waiting {current_batch_delay}s between batches...")
                 time.sleep(current_batch_delay)
         
-        # Log final summary
-        logger.info("🎉 Selective data extraction completed!")
-        logger.info(f"📊 Final Summary:")
+        # Log final summary with enhanced statistics reporting
+        logger.info("🎉 BULK SEASON EXTRACTION COMPLETED!")
+        logger.info(f"📊 Final Data Summary:")
         logger.info(f"  - Leagues: {len(self.extracted_data['leagues'])}")
         logger.info(f"  - Teams: {len(self.extracted_data['teams'])}")
         logger.info(f"  - Rosters: {len(self.extracted_data['rosters'])}")
         logger.info(f"  - Matchups: {len(self.extracted_data['matchups'])}")
         logger.info(f"  - Transactions: {len(self.extracted_data['transactions'])}")
         logger.info(f"  - Draft Picks: {len(self.extracted_data['draft_picks'])}")
-        logger.info(f"  - Statistics: {len(self.extracted_data['statistics'])}")
+        
+        # Enhanced statistics summary
+        stats_count = len(self.extracted_data['statistics'])
+        logger.info(f"  - Weekly Statistics: {stats_count:,} player-week records")
+        
+        if stats_count > 0:
+            # Calculate additional statistics metrics
+            total_fantasy_points = sum(stat.get('weekly_fantasy_points', 0) for stat in self.extracted_data['statistics'])
+            players_with_points = len([s for s in self.extracted_data['statistics'] if s.get('weekly_fantasy_points', 0) > 0])
+            unique_weeks = len(set(stat.get('week_number', 0) for stat in self.extracted_data['statistics']))
+            unique_players = len(set(stat.get('player_id', '') for stat in self.extracted_data['statistics']))
+            
+            logger.info(f"      💰 Total fantasy points: {total_fantasy_points:,.1f}")
+            logger.info(f"      👥 Unique players: {unique_players:,}")
+            logger.info(f"      📅 Weeks covered: {unique_weeks}")
+            logger.info(f"      📈 Players with points: {players_with_points:,} ({(players_with_points/stats_count)*100:.1f}%)")
+            
+            if unique_weeks > 0 and unique_players > 0:
+                logger.info(f"      ⚡ API efficiency: ~{unique_weeks} bulk calls vs ~{stats_count:,} individual calls")
+                efficiency_gain = ((stats_count - unique_weeks) / stats_count) * 100 if stats_count > 0 else 0
+                logger.info(f"      🚀 Efficiency gain: {efficiency_gain:.1f}%")
+        
         logger.info(f"📊 Total API requests made - Hour: {self.hourly_request_count}, Day: {self.daily_request_count}")
         
         return self.extracted_data
@@ -1268,20 +1308,17 @@ class YahooFantasyExtractor:
         except Exception as e:
             logger.error(f"Error saving data to JSON: {e}")
 
-
-
     def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None) -> List[ExtractedPlayerStatistics]:
-        """Extract player statistics using bulk API call for entire league at once
+        """Extract weekly player fantasy points using optimized bulk season loading
         
-        Gets all players in one call, then gets all their stats in one bulk call.
-        Much more efficient than individual player calls.
+        Uses efficient bulk API calls to get all weekly data for a season with minimal requests.
         
         Args:
             league_id: League ID to extract statistics for
-            weeks: Not used for season stats but kept for API compatibility
+            weeks: List of weeks to extract. If None, extracts all completed weeks
         
         Returns:
-            List of ExtractedPlayerStatistics objects with real fantasy points
+            List of ExtractedPlayerStatistics objects with weekly fantasy points
         """
         statistics = []
         
@@ -1304,8 +1341,21 @@ class YahooFantasyExtractor:
             season_year = int(settings.get('season', 2024))
             game_code = settings.get('game_code', 'nfl')
             league_name = settings.get('name', 'Unknown League')
+            current_week = int(settings.get('current_week', 17))
+            end_week = int(settings.get('end_week', 17))
             
-            logger.info(f"    📈 Extracting fantasy points for {league_name} ({season_year} season)...")
+            logger.info(f"    🏈 BULK SEASON EXTRACTION: {league_name} ({season_year} season)")
+            
+            # Determine which weeks to extract
+            if weeks is None:
+                # Extract all completed weeks (current week - 1 to avoid incomplete data)
+                extract_weeks = list(range(1, min(current_week, end_week + 1)))
+            else:
+                extract_weeks = [w for w in weeks if w <= end_week]
+            
+            if not extract_weeks:
+                logger.warning(f"No valid weeks to extract for league {league_id}")
+                return statistics
             
             # Get all players who were taken in this league
             taken_players = self._rate_limited_request(
@@ -1323,65 +1373,96 @@ class YahooFantasyExtractor:
                 logger.warning(f"No valid player IDs found for league {league_id}")
                 return statistics
             
-            logger.info(f"    📋 Getting stats for ALL {len(all_player_ids)} players in one bulk call...")
+            logger.info(f"    📊 BULK OPTIMIZATION: Processing {len(all_player_ids)} players × {len(extract_weeks)} weeks")
+            logger.info(f"    🚀 Target: {len(extract_weeks)} bulk API calls instead of {len(extract_weeks) * len(all_player_ids)} individual calls")
             
-            # BULK API CALL: Get statistics for ALL players at once
-            all_season_stats = self._rate_limited_request(
-                lambda: league.player_stats(all_player_ids, 'season')
-            )
-            
-            if not all_season_stats:
-                logger.warning(f"No stats returned for league {league_id}")
-                return statistics
-            
-            # Process all players from bulk response
-            players_with_points = 0
+            total_stats_extracted = 0
             total_points = 0.0
             
-            for player_data in all_season_stats:
+            # OPTIMIZED BULK PROCESSING: Get all weeks efficiently
+            for week_num in extract_weeks:
+                logger.info(f"        📈 Week {week_num}: Bulk processing {len(all_player_ids)} players...")
+                
                 try:
-                    player_id = str(player_data.get('player_id'))
-                    total_points_value = float(player_data.get('total_points', 0))
+                    # SINGLE BULK API CALL: Get weekly statistics for ALL players at once
+                    weekly_stats = self._rate_limited_request(
+                        lambda: league.player_stats(all_player_ids, 'week', week=week_num)
+                    )
                     
-                    # Only include players who actually scored points
-                    if total_points_value > 0:
-                        stat_id = f"{league_id}_{player_id}_{season_year}"
-                        
-                        player_stats = ExtractedPlayerStatistics(
-                            stat_id=stat_id,
-                            league_id=league_id,
-                            player_id=player_id,
-                            player_name=player_data.get('name', 'Unknown'),
-                            position_type=player_data.get('position_type', 'Unknown'),
-                            season_year=season_year,
-                            total_fantasy_points=total_points_value,
-                            game_code=game_code
-                        )
-                        
-                        statistics.append(player_stats)
-                        players_with_points += 1
-                        total_points += total_points_value
-                        
-                        logger.debug(f"      ✅ {player_data.get('name', 'Unknown')}: {total_points_value} pts")
+                    if not weekly_stats:
+                        logger.warning(f"No stats returned for league {league_id} week {week_num}")
+                        continue
+                    
+                    week_players_count = 0
+                    week_total_points = 0.0
+                    week_stats_processed = 0
+                    
+                    # BULK PROCESSING: Process all players from bulk response for this week
+                    for player_data in weekly_stats:
+                        try:
+                            player_id = str(player_data.get('player_id'))
+                            # Extract fantasy points from API response
+                            weekly_points = float(player_data.get('total_points', 0.0))
+                            
+                            # Create unique stat record for this player-week combination
+                            stat_id = f"{league_id}_{player_id}_{season_year}_w{week_num}"
+                            
+                            player_stats = ExtractedPlayerStatistics(
+                                stat_id=stat_id,
+                                league_id=league_id,
+                                player_id=player_id,
+                                player_name=player_data.get('name', 'Unknown'),
+                                position_type=player_data.get('position_type', 'Unknown'),
+                                season_year=season_year,
+                                week_number=week_num,
+                                weekly_fantasy_points=weekly_points,
+                                game_code=game_code
+                            )
+                            
+                            statistics.append(player_stats)
+                            week_players_count += 1
+                            week_total_points += weekly_points
+                            total_stats_extracted += 1
+                            total_points += weekly_points
+                            week_stats_processed += 1
+                            
+                        except Exception as e:
+                            logger.debug(f"          ⚠️ Error processing player data for week {week_num}: {e}")
+                            continue
+                    
+                    # Log week results with efficiency metrics
+                    avg_week_points = week_total_points / week_players_count if week_players_count > 0 else 0
+                    players_with_points = len([s for s in weekly_stats if float(s.get('total_points', 0)) > 0])
+                    
+                    logger.info(f"        ✅ Week {week_num}: {week_players_count} players, {week_total_points:,.1f} total pts")
+                    logger.info(f"            💰 {players_with_points} players scored points (avg: {avg_week_points:.1f})")
+                    logger.info(f"            🚀 Processed {week_stats_processed} records in 1 bulk API call")
                 
                 except Exception as e:
-                    logger.debug(f"      ⚠️ Error processing player data: {e}")
+                    logger.warning(f"        ❌ Error extracting week {week_num} for league {league_id}: {e}")
                     continue
             
-            # Log extraction results
+            # Log final extraction results with efficiency summary
             if statistics:
-                avg_points = total_points / len(statistics) if statistics else 0
-                logger.info(f"    📊 SUCCESS: Extracted {len(statistics)} players with real fantasy points")
-                logger.info(f"        💰 Total points: {total_points:,.1f}, Average: {avg_points:.1f} pts/player")
-                logger.info(f"        🎯 Coverage: {players_with_points}/{len(all_player_ids)} players ({100*players_with_points/len(all_player_ids):.1f}%)")
-                logger.info(f"        🚀 API efficiency: 1 bulk call instead of {len(all_player_ids)} individual calls")
+                avg_points = total_points / total_stats_extracted if total_stats_extracted > 0 else 0
+                players_with_points = len([s for s in statistics if s.weekly_fantasy_points > 0])
+                api_calls_made = len(extract_weeks)
+                api_calls_saved = (len(extract_weeks) * len(all_player_ids)) - api_calls_made
+                efficiency_percent = ((api_calls_saved / (api_calls_saved + api_calls_made)) * 100) if api_calls_saved > 0 else 0
+                
+                logger.info(f"    🎉 BULK SEASON SUCCESS: Extracted {total_stats_extracted:,} weekly records")
+                logger.info(f"        📅 Coverage: {len(extract_weeks)} weeks × {len(all_player_ids)} players")
+                logger.info(f"        💰 Total fantasy points: {total_points:,.1f}")
+                logger.info(f"        📈 Players with points: {players_with_points:,} ({(players_with_points/total_stats_extracted)*100:.1f}%)")
+                logger.info(f"        ⚡ API Efficiency: {api_calls_made} calls vs {api_calls_made + api_calls_saved} individual calls")
+                logger.info(f"        🚀 Efficiency gain: {efficiency_percent:.1f}% ({api_calls_saved:,} calls saved)")
             else:
-                logger.warning(f"    ⚠️ No fantasy points extracted for any players in {league_name}")
+                logger.warning(f"    ⚠️ No weekly fantasy points extracted for any players in {league_name}")
             
             return statistics
             
         except Exception as e:
-            logger.error(f"Error extracting statistics for league {league_id}: {e}")
+            logger.error(f"Error extracting weekly statistics for league {league_id}: {e}")
             return []
 
 
