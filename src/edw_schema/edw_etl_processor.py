@@ -855,6 +855,18 @@ class EdwEtlProcessor:
             
             successful += 1
             
+            # Calculate roster status flags
+            player_status = roster.get('status', 'active')
+            player_position = roster.get('position', 'BN')
+            is_starter = roster.get('is_starter', False)
+            
+            # Determine bench status: not a starter OR explicitly marked as bench
+            is_bench = (player_status == 'bench') or (not is_starter)
+            
+            # Determine IR status: check for IR-related positions
+            # Note: Yahoo typically uses "IR" position or specific status for injured reserve
+            is_ir = (player_position in ['IR', 'INJ', 'INJURED']) or (player_status in ['ir', 'injured', 'inactive'])
+            
             facts.append({
                 'league_key': league_key,
                 'team_key': team_key,
@@ -862,9 +874,11 @@ class EdwEtlProcessor:
                 'player_key': player_key,
                 'week_key': week_key,
                 'season_year': season_year,
-                'is_starter': roster.get('is_starter', False),
-                'roster_position': roster.get('position', 'BN'),  # Use 'position' field from data
-                'weekly_points': float(roster.get('actual_points', 0)) if roster.get('actual_points') is not None else 0.0,  # Use 'actual_points'
+                'is_starter': is_starter,
+                'is_bench': is_bench,
+                'is_ir': is_ir,
+                'roster_position': player_position,
+                'weekly_points': float(roster.get('actual_points', 0)) if roster.get('actual_points') is not None else 0.0,
                 'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
                 'acquisition_type': roster.get('acquisition_type'),
                 'acquisition_date': None  # Not available in current data
