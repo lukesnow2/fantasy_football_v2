@@ -383,8 +383,8 @@ CREATE TABLE fact_draft (
     
     -- Performance Tracking
     season_points DECIMAL(10,2),
-    games_played INTEGER,
-    points_per_game DECIMAL(8,2),
+    fantasy_games_played INTEGER,
+    points_per_week DECIMAL(8,2),
     draft_grade VARCHAR(5), -- A+, A, B+, B, C+, C, D+, D, F
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -407,7 +407,7 @@ CREATE INDEX idx_manager_draft ON fact_draft (manager_key, season_year);
 CREATE INDEX idx_player_draft ON fact_draft (player_key);
 CREATE INDEX idx_keepers ON fact_draft (is_keeper_pick);
 CREATE INDEX idx_auction_costs ON fact_draft (draft_cost);
-CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_game);
+CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_week);
 
 -- Fact: Player Statistics (Season-level player performance)
 CREATE TABLE fact_player_statistics (

@@ -16,6 +16,14 @@ import yahoo_fantasy_api as yfa
 import requests
 from dotenv import load_dotenv
 
+# Database support (optional import)
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+    DATABASE_SUPPORT = True
+except ImportError:
+    DATABASE_SUPPORT = False
+
 # Load environment variables
 load_dotenv()
 
@@ -150,21 +158,75 @@ class ExtractedPlayerStatistics:
 class YahooFantasyExtractor:
     """Comprehensive Yahoo Fantasy data extractor with rate limiting"""
     
+    # League of Record Filtering (for upstream API call reduction)
+    HISTORICAL_LEAGUE_IDS = {
+        "449.l.674707",    # Idaho's DEI Quota (2024)
+        "423.l.841006",    # Move the Raiders to PDX (2023)
+        "414.l.1194955",   # Wet Hot Tahoe Summer (2022)
+        "406.l.1065326",   # Rocky Mountain High (2021)
+        "399.l.837311",    # The Lost Year (2020)
+        "390.l.777720",    # Women & Women First (2019)
+        "380.l.1143665",   # Sleepless In Seattle (2018)
+        "371.l.1025465",   # Go Fuck Yourself San Diego (2017)
+        "359.l.696366",    # The Great SF Draft (2016)
+        "348.l.655822",    # Luke's Kingdom (2015)
+        "331.l.355899",    # 10 Years 10 Assholes (2014)
+        "314.l.319572",    # Rosterbaters Anonymous (2013)
+        "273.l.107980",    # The League About Nothing (2012)
+        "257.l.89145",     # Lock It Up (2011)
+        "242.l.413666",    # Round 6 (2010)
+        "222.l.222935",    # Engaged (2009)
+        "199.l.42364",     # The Draft (2008)
+        "175.l.658531",    # Oakdale Park (2007)
+        "153.l.76788",     # Oakdale Park (2006)
+        "124.l.109785"     # Oakdale Park (2005)
+    }
+    
+    FUTURE_SEASON_THRESHOLD = 2025
+    EXCLUDED_LEAGUE_IDS = set()
+    
     def __init__(self, resume_from_league=None):
+        """Initialize the extractor with optional resume capability"""
         self.oauth = None
         self.game = None
-        self.resume_from_league = resume_from_league
-        self.request_count = 0
-        self.last_request_time = 0
-        self.hour_start_time = time.time()
+        
+        # Rate limiting settings - VERY conservative to avoid Yahoo rate limit denials
+        self.MAX_REQUESTS_PER_HOUR = 15000  # Reduced from 20000 to stay well under
+        self.MAX_REQUESTS_PER_DAY = 80000   # Reduced from 100000 to stay well under  
+        self.MIN_REQUEST_INTERVAL = 1.5     # Increased from 0.6 to 1.5 seconds (much more conservative)
+        
+        # Request counting and timing
         self.hourly_request_count = 0
         self.daily_request_count = 0
-        self.day_start_time = time.time()
+        self.last_request_time = 0
+        self.last_hour_reset = time.time()
+        self.last_day_reset = time.time()
         
-        # Rate limiting settings - conservative to stay well under Yahoo limits
-        self.MAX_REQUESTS_PER_HOUR = 20000  # Yahoo's actual hourly limit
-        self.MAX_REQUESTS_PER_DAY = 100000  # Yahoo's actual daily limit
-        self.MIN_REQUEST_INTERVAL = 0.6     # Minimum 0.6 seconds between requests
+        # Resume functionality
+        self.resume_from_league = resume_from_league
+        self.current_resume_file = None
+        self.total_items_processed = 0
+        
+        # Database integration
+        self.db_url = None
+        self.output_mode = 'json'  # 'json' or 'database'
+        
+        # Progress tracking
+        self.extraction_stats = {
+            'leagues_processed': 0,
+            'teams_processed': 0,
+            'rosters_processed': 0,
+            'matchups_processed': 0,
+            'transactions_processed': 0,
+            'drafts_processed': 0,
+            'errors_encountered': 0,
+            'leagues_skipped': 0
+        }
+        
+        # Enhanced error recovery
+        self.consecutive_failures = 0
+        self.max_consecutive_failures = 3
+        self.failed_leagues = []
         
         self.extracted_data = {
             'leagues': [],
@@ -181,91 +243,91 @@ class YahooFantasyExtractor:
         current_time = time.time()
         
         # Reset hourly counter if an hour has passed
-        if current_time - self.hour_start_time >= 3600:
+        if current_time - self.last_hour_reset >= 3600:
             self.hourly_request_count = 0
-            self.hour_start_time = current_time
+            self.last_hour_reset = current_time
             logger.info("🔄 Hourly rate limit counter reset")
         
         # Reset daily counter if a day has passed
-        if current_time - self.day_start_time >= 86400:
+        if current_time - self.last_day_reset >= 86400:
             self.daily_request_count = 0
-            self.day_start_time = current_time
+            self.last_day_reset = current_time
             logger.info("🔄 Daily rate limit counter reset")
         
         # Check if we're approaching hourly limit
         if self.hourly_request_count >= self.MAX_REQUESTS_PER_HOUR:
-            wait_time = 3600 - (current_time - self.hour_start_time)
+            wait_time = 3600 - (current_time - self.last_hour_reset)
             if wait_time > 0:
                 logger.warning(f"⏳ Approaching hourly limit ({self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR})")
                 logger.info(f"⏰ Waiting {wait_time:.0f}s until next hour...")
                 time.sleep(wait_time + 10)  # Extra 10s buffer
                 self.hourly_request_count = 0
-                self.hour_start_time = time.time()
+                self.last_hour_reset = time.time()
         
         # Check if we're approaching daily limit
         if self.daily_request_count >= self.MAX_REQUESTS_PER_DAY:
-            wait_time = 86400 - (current_time - self.day_start_time)
+            wait_time = 86400 - (current_time - self.last_day_reset)
             if wait_time > 0:
                 logger.warning(f"⏳ Approaching daily limit ({self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY})")
                 logger.info(f"⏰ Waiting {wait_time:.0f}s until next day...")
                 time.sleep(wait_time + 60)  # Extra 60s buffer
                 self.daily_request_count = 0
-                self.day_start_time = time.time()
+                self.last_day_reset = time.time()
     
     def _get_adaptive_settings(self):
         """Get adaptive batch settings based on current rate limit usage"""
         hourly_usage_pct = (self.hourly_request_count / self.MAX_REQUESTS_PER_HOUR) * 100
         daily_usage_pct = (self.daily_request_count / self.MAX_REQUESTS_PER_DAY) * 100
         
-        # Determine throttle level based on usage
+        # Determine throttle level based on usage - MUCH MORE CONSERVATIVE
         if hourly_usage_pct > 85 or daily_usage_pct > 85:
-            # Critical throttling - very conservative
+            # Critical throttling - extremely conservative
             return {
                 'batch_size': 1,
-                'batch_delay': 60,  # 1 minute instead of 15
-                'inter_league_delay': 30,
-                'min_request_interval': 1.0,
+                'batch_delay': 120,  # 2 minutes between batches
+                'inter_league_delay': 60,
+                'min_request_interval': 3.0,  # 3 seconds minimum
                 'status': '🚨 CRITICAL THROTTLE'
             }
         elif hourly_usage_pct > 70 or daily_usage_pct > 70:
-            # Heavy throttling - conservative
+            # Heavy throttling - very conservative
             return {
-                'batch_size': 2,
-                'batch_delay': 30,  # 30 seconds instead of 10 minutes
-                'inter_league_delay': 15,
-                'min_request_interval': 0.8,
+                'batch_size': 1,
+                'batch_delay': 90,  # 1.5 minutes between batches
+                'inter_league_delay': 30,
+                'min_request_interval': 2.5,  # 2.5 seconds minimum
                 'status': '⚠️ HEAVY THROTTLE'
             }
         elif hourly_usage_pct > 50 or daily_usage_pct > 50:
-            # Moderate throttling - balanced
+            # Moderate throttling - conservative
             return {
-                'batch_size': 3,
-                'batch_delay': 15,  # 15 seconds instead of 5 minutes
-                'inter_league_delay': 8,
-                'min_request_interval': 0.6,
+                'batch_size': 2,
+                'batch_delay': 60,  # 1 minute between batches
+                'inter_league_delay': 20,
+                'min_request_interval': 2.0,  # 2 seconds minimum
                 'status': '⚡ MODERATE THROTTLE'
             }
         elif hourly_usage_pct > 30 or daily_usage_pct > 30:
-            # Light throttling - slightly conservative
+            # Light throttling - still conservative
             return {
-                'batch_size': 4,
-                'batch_delay': 10,  # 10 seconds instead of 3 minutes
-                'inter_league_delay': 5,
-                'min_request_interval': 0.4,
+                'batch_size': 3,
+                'batch_delay': 30,  # 30 seconds between batches
+                'inter_league_delay': 10,
+                'min_request_interval': 1.8,  # 1.8 seconds minimum
                 'status': '✅ LIGHT THROTTLE'
             }
         else:
-            # Full speed - plenty of headroom
+            # Full speed - but still respect our base minimum interval
             return {
                 'batch_size': 5,
-                'batch_delay': 5,  # 5 seconds instead of 2 minutes
-                'inter_league_delay': 3,
-                'min_request_interval': 0.3,
+                'batch_delay': 15,  # 15 seconds between batches
+                'inter_league_delay': 5,
+                'min_request_interval': self.MIN_REQUEST_INTERVAL,  # Use our base 1.5s
                 'status': '🚀 FULL SPEED'
             }
     
     def _rate_limited_request(self, func, *args, **kwargs):
-        """Execute a function with adaptive rate limiting"""
+        """Execute a function with adaptive rate limiting and automatic token refresh"""
         # Check rate limits before making request
         self._check_rate_limits()
         
@@ -280,26 +342,127 @@ class YahooFantasyExtractor:
             sleep_time = min_interval - time_since_last
             time.sleep(sleep_time)
         
-        # Make the request
-        try:
-            result = func(*args, **kwargs)
-            self.hourly_request_count += 1
-            self.daily_request_count += 1
-            self.last_request_time = time.time()
-            
-            # Log progress more frequently for better monitoring
-            if self.hourly_request_count % 25 == 0:
-                logger.info(f"📊 API Progress - Hour: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR}, Day: {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY}")
-            
-            return result
-        except Exception as e:
-            logger.error(f"Rate limited request failed: {e}")
-            # Still count failed requests toward rate limit
-            self.hourly_request_count += 1
-            self.daily_request_count += 1
-            self.last_request_time = time.time()
-            raise
+        # Make the request with automatic token refresh retry
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                result = func(*args, **kwargs)
+                self.hourly_request_count += 1
+                self.daily_request_count += 1
+                self.last_request_time = time.time()
+                
+                # Log progress more frequently for better monitoring
+                if self.hourly_request_count % 25 == 0:
+                    logger.info(f"📊 API Progress - Hour: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR}, Day: {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY}")
+                
+                return result
+                
+            except Exception as e:
+                error_str = str(e)
+                
+                # Check for Yahoo API timeouts (504 Gateway Timeout)
+                if ('504' in error_str or 
+                    'Activity Timeout' in error_str or 
+                    'Gateway Timeout' in error_str or
+                    'Will be right back' in error_str or
+                    '<!DOCTYPE html>' in error_str):
+                    
+                    logger.warning(f"⏰ Yahoo API timeout (504) detected: {e}")
+                    if attempt < max_retries - 1:
+                        logger.info(f"🔄 Retrying in 60 seconds (attempt {attempt + 1}/{max_retries})...")
+                        time.sleep(60)  # Wait 1 minute for Yahoo servers to recover
+                        continue
+                    else:
+                        logger.error(f"❌ Yahoo API timeout persists after {max_retries} attempts - skipping")
+                        # Count the failed request and re-raise as a specific timeout error
+                        self.hourly_request_count += 1
+                        self.daily_request_count += 1
+                        self.last_request_time = time.time()
+                        raise Exception("YAHOO_TIMEOUT")
+                
+                # Check if this is a token expiration error
+                if ('token_expired' in error_str or 
+                    'token_rejected' in error_str or 
+                    'Please provide valid credentials' in error_str):
+                    
+                    if attempt < max_retries - 1:  # Not the last attempt
+                        logger.warning(f"🔄 OAuth token expired, attempting refresh (attempt {attempt + 1}/{max_retries})...")
+                        try:
+                            # Refresh the token
+                            if self.oauth and hasattr(self.oauth, 'refresh_access_token'):
+                                self.oauth.refresh_access_token()
+                                logger.info("✅ OAuth token refreshed successfully!")
+                                
+                                # Longer delay before retry to ensure token propagation
+                                time.sleep(3)  # Increased from 1 to 3 seconds
+                                
+                                # Also reset the game object to ensure new token is used
+                                try:
+                                    import yahoo_fantasy_api as yfa
+                                    self.game = yfa.Game(self.oauth, 'nfl')
+                                    logger.info("🔄 Game object refreshed with new token")
+                                except Exception as refresh_game_error:
+                                    logger.warning(f"⚠️ Could not refresh game object: {refresh_game_error}")
+                                
+                                continue  # Retry the request
+                            else:
+                                logger.error("❌ OAuth refresh not available")
+                                break
+                                
+                        except Exception as refresh_error:
+                            logger.error(f"❌ Failed to refresh OAuth token: {refresh_error}")
+                            break
+                    else:
+                        logger.error(f"❌ Max token refresh retries ({max_retries}) exceeded")
+                
+                # Check for Yahoo rate limiting specifically
+                if 'Request denied' in error_str or 'request_denied' in error_str.lower():
+                    logger.warning(f"🚫 Yahoo rate limit hit: {e}")
+                    logger.info("⏰ Waiting 30 seconds before continuing due to rate limit...")
+                    time.sleep(30)  # Wait 30 seconds on rate limit
+                    
+                    # Count this against our limits and update timing
+                    self.hourly_request_count += 1
+                    self.daily_request_count += 1
+                    self.last_request_time = time.time()
+                    raise
+                
+                # For non-token errors or final retry, log and raise
+                logger.error(f"Rate limited request failed: {e}")
+                # Still count failed requests toward rate limit
+                self.hourly_request_count += 1
+                self.daily_request_count += 1
+                self.last_request_time = time.time()
+                raise
         
+    def is_league_of_record(self, league_id: str, season_year: int) -> bool:
+        """
+        Determine if a league should be included in extraction.
+        
+        Rules:
+        1. Always include historical leagues (hard-coded)
+        2. Automatically include future leagues (2025+)
+        3. Exclude any manually specified leagues
+        
+        This filtering dramatically reduces API calls by only processing needed leagues.
+        """
+        # Never include manually excluded leagues
+        if league_id in self.EXCLUDED_LEAGUE_IDS:
+            logger.info(f"🚫 Excluding manually excluded league: {league_id}")
+            return False
+            
+        # Always include historical leagues
+        if league_id in self.HISTORICAL_LEAGUE_IDS:
+            return True
+            
+        # Automatically include future leagues
+        if season_year >= self.FUTURE_SEASON_THRESHOLD:
+            logger.info(f"🔄 Auto-including future league: {league_id} ({season_year})")
+            return True
+            
+        # Exclude everything else
+        return False
+    
     def authenticate(self) -> bool:
         """Authenticate with Yahoo Fantasy API"""
         try:
@@ -361,7 +524,7 @@ class YahooFantasyExtractor:
                 logger.error("💡 Tip: Make sure YAHOO_CLIENT_KEY and YAHOO_CLIENT_SECRET are set in your .env file")
             return False
     
-    def get_all_leagues(self) -> List[Dict[str, Any]]:
+    def get_all_leagues(self, filter_leagues_of_record: bool = False) -> List[Dict[str, Any]]:
         """Get all user's fantasy leagues using BULK API optimization"""
         try:
             if not self.game:
@@ -392,12 +555,47 @@ class YahooFantasyExtractor:
                 
                 for league_id in batch_league_ids:
                     try:
+                        # 🎯 EARLY FILTERING: Check if this is a league of record BEFORE expensive API calls
+                        if filter_leagues_of_record:
+                            # Extract potential season year from league_id for quick filtering
+                            # Most league IDs follow pattern: 123.l.456789 where 123 relates to season
+                            potential_season = None
+                            try:
+                                game_id_part = league_id.split('.')[0]
+                                # Map known game IDs to seasons (this is approximate but catches most)
+                                season_mapping = {
+                                    '449': 2024, '423': 2023, '414': 2022, '406': 2021, '399': 2020,
+                                    '390': 2019, '380': 2018, '371': 2017, '359': 2016, '348': 2015,
+                                    '331': 2014, '314': 2013, '273': 2012, '257': 2011, '242': 2010,
+                                    '222': 2009, '199': 2008, '175': 2007, '153': 2006, '124': 2005
+                                }
+                                potential_season = season_mapping.get(game_id_part, 2024)
+                            except:
+                                potential_season = 2024  # Default fallback
+                            
+                            # Fast pre-filter before expensive API call
+                            if not self.is_league_of_record(league_id, potential_season):
+                                logger.debug(f"  🚫 EARLY FILTER: Skipping {league_id} (not league of record)")
+                                continue
+                        
                         league = self.game.to_league(league_id)
                         settings = self._rate_limited_request(lambda: league.settings())
                         
                         # Only include non-public leagues with game data
                         league_name = settings.get('name', '')
                         draft_status = settings.get('draft_status', 'completed')
+                        season_str = str(settings.get('season', ''))
+                        
+                        # 🎯 PRECISE FILTERING: Double-check with actual season from API
+                        if filter_leagues_of_record:
+                            try:
+                                actual_season = int(season_str) if season_str else 2024
+                                if not self.is_league_of_record(league_id, actual_season):
+                                    logger.debug(f"  🚫 PRECISE FILTER: Skipping {league_name} ({league_id}) - {actual_season}")
+                                    continue
+                            except (ValueError, TypeError):
+                                logger.warning(f"  ⚠️ Invalid season '{season_str}' for {league_id}")
+                                continue
                         
                         # Skip predraft leagues (they have no game data)
                         if draft_status == 'predraft':
@@ -479,10 +677,10 @@ class YahooFantasyExtractor:
             teams = []
             
             # Get standings (this includes team information with records)
-            standings = league.standings()
+            standings = self._rate_limited_request(lambda: league.standings())
             
             # Get teams (this includes manager and metadata)
-            teams_data = league.teams() if hasattr(league, 'teams') else {}
+            teams_data = self._rate_limited_request(lambda: league.teams()) if hasattr(league, 'teams') else {}
             
             # Create a mapping of team_id to team metadata
             teams_metadata = {}
@@ -609,20 +807,20 @@ class YahooFantasyExtractor:
             return []
     
     def extract_rosters_for_league(self, league_id: str, weeks_to_extract: Optional[List[int]] = None) -> List[ExtractedRoster]:
-        """BULK OPTIMIZED: Extract roster data efficiently with minimal API calls
+        """OPTIMIZED: Extract roster data using Yahoo API best practices with minimal calls
         
-        Optimization Strategy:
-        1. Try league.rosters(week) for bulk extraction (1 API call per week for ALL teams)
-        2. Fallback to individual team.roster(week) calls if bulk fails
-        3. Reuse teams data across all weeks (single API call)
+        Optimization Strategy (Yahoo API Best Practices):
+        1. Get teams once and cache team objects
+        2. Use bulk roster calls where possible 
+        3. Minimize individual team calls
+        4. Smart week batching for current season vs historical
         
-        Best Case: 3 + week_count API calls (league + settings + teams + bulk_rosters_per_week)
-        Worst Case: 3 + (team_count × week_count) API calls (individual team calls)
+        Target: 2-3 API calls per week instead of (team_count × week_count × 2)
         """
         rosters = []
         
         try:
-            logger.info(f"🚀 BULK ROSTERS EXTRACTION: Getting roster data for league {league_id}...")
+            logger.info(f"🚀 OPTIMIZED ROSTERS: Getting roster data for league {league_id}...")
             
             # Get league object (1 API call)
             league = self._rate_limited_request(
@@ -637,82 +835,116 @@ class YahooFantasyExtractor:
                 lambda: league.settings()
             )
             
-            # Determine sport and optimize week selection
-            sport_code = settings.get('game_code', 'unknown').lower()
-            
             if weeks_to_extract is None:
-                # Use current week if no specific weeks provided
+                # Smart week selection for efficiency
                 current_week = int(settings.get('current_week', 1))
-                weeks_to_extract = [current_week]
-                logger.info(f"📋 ROSTER WEEKS: Using current week {current_week}")
+                start_week = int(settings.get('start_week', 1))
+                end_week = int(settings.get('end_week', current_week))
+                
+                # For roster extraction, focus on completed weeks only
+                weeks_to_extract = list(range(start_week, min(current_week, end_week + 1)))
+                logger.info(f"📋 ROSTER WEEKS: Using current week {current_week} only (most efficient)")
             else:
-                logger.info(f"📋 ROSTER WEEKS: Extracting weeks {weeks_to_extract}")
+                logger.info(f"📋 ROSTER WEEKS: Using specific weeks {weeks_to_extract}")
             
-            # BULK OPTIMIZATION: Get teams once (1 API call)
-            teams = self._rate_limited_request(
+            # Get teams data once (1 API call) - keep this efficient
+            teams_dict = self._rate_limited_request(
                 lambda: league.teams()
             )
             
-            team_count = len(teams)
+            if not teams_dict:
+                logger.warning(f"No teams found for league {league_id}")
+                return rosters
+            
+            team_count = len(teams_dict)
             week_count = len(weeks_to_extract)
             
-            logger.info(f"📦 BULK ROSTERS: {team_count} teams × {week_count} weeks")
-            logger.info(f"⚡ OPTIMIZATION: Attempting bulk roster extraction...")
+            logger.info(f"📦 EFFICIENT ROSTERS: {team_count} teams × {week_count} weeks")
             
-            # BULK EXTRACTION: Get all rosters for all weeks
+            # MAJOR OPTIMIZATION: Process each week with minimal API calls
             for week in weeks_to_extract:
-                logger.info(f"    📋 BULK: Week {week} rosters ({team_count} teams)...")
+                logger.info(f"    📋 Week {week}: Processing {team_count} teams efficiently...")
                 
-                # Skip bulk method - Yahoo API doesn't support league.rosters()
-                # Go directly to individual team calls
-                logger.info(f"    📋 Using individual team roster calls for week {week}...")
-                
-                # Individual team roster calls using correct Yahoo API syntax
-                for team_key, team_data in teams.items():
-                    try:
-                        team_id = team_data.get('team_key', team_key)
+                try:
+                    # OPTIMIZATION 1: Try to get all rosters for the week in one call
+                    # Yahoo API: league.matchups(week) includes roster data
+                    week_matchups = self._rate_limited_request(
+                        lambda w=week: league.matchups(w)
+                    )
+                    
+                    if week_matchups:
+                        logger.info(f"        🚀 BULK SUCCESS: Got week {week} data via matchups")
+                        week_rosters_count = 0
                         
-                        # Construct the full team key for API call
-                        full_team_key = f"{league_id}.t.{team_id.split('.')[-1]}" if '.' not in team_id else team_id
-                        
-                        # Get team roster for specific week using Yahoo Fantasy API
-                        # Format: /team/{team_key}/roster;week={week}
-                        team_obj = self._rate_limited_request(
-                            lambda: league.to_team(full_team_key)
-                        )
-                        
-                        if not team_obj:
-                            logger.debug(f"Could not get team object for {full_team_key}")
-                            continue
-                        
-                        # Get roster for this specific week
-                        # Yahoo API expects roster as a sub-resource with week parameter
-                        roster_data = self._rate_limited_request(
-                            lambda: team_obj.roster(week=week)
-                        )
-                        
-                        if not roster_data:
-                            logger.debug(f"No roster data for team {full_team_key} week {week}")
-                            continue
-                        
-                        # Process each player in the roster
-                        players_count = 0
-                        if hasattr(roster_data, '__iter__'):
-                            for player_data in roster_data:
-                                roster_entry = self._extract_roster_player_data(
-                                    player_data, league_id, team_id, week
-                                )
-                                if roster_entry:
-                                    rosters.append(roster_entry)
-                                    players_count += 1
-                        
-                        logger.debug(f"    ✅ Team {team_id} week {week}: {players_count} players")
+                        # Extract roster data from matchup response (includes lineups)
+                        for matchup in week_matchups:
+                            try:
+                                teams_in_matchup = matchup.get('teams', {})
                                 
-                    except Exception as e:
-                        logger.warning(f"Error getting roster for team {team_key} week {week}: {e}")
-                        continue
+                                # Process each team in the matchup
+                                for team_key, team_data in teams_in_matchup.items():
+                                    if isinstance(team_data, dict) and 'roster' in team_data:
+                                        roster_data = team_data['roster']
+                                        team_id = team_data.get('team_key', team_key)
+                                        
+                                        # Process roster players
+                                        if roster_data and 'players' in roster_data:
+                                            players = roster_data['players']
+                                            for player_key, player_data in players.items():
+                                                if isinstance(player_data, dict):
+                                                    roster_entry = self._extract_roster_player_data(
+                                                        player_data, league_id, team_id, week
+                                                    )
+                                                    if roster_entry:
+                                                        rosters.append(roster_entry)
+                                                        week_rosters_count += 1
+                                            
+                            except Exception as e:
+                                logger.debug(f"        Error processing matchup roster data: {e}")
+                                continue
+                        
+                        if week_rosters_count > 0:
+                            logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from bulk call")
+                            continue  # Successfully got week data, move to next week
+                    
+                    # OPTIMIZATION 2: Fallback to efficient individual team calls only if needed
+                    logger.info(f"        📋 Fallback: Individual team calls for week {week}")
+                    week_rosters_count = 0
+                    
+                    for team_key, team_data in teams_dict.items():
+                        try:
+                            team_id = team_data.get('team_key', team_key).split('.')[-1]
+                            
+                            # Build proper team key for API
+                            full_team_key = f"{league_id}.t.{team_id}"
+                            
+                            # SINGLE EFFICIENT CALL: Get team roster for week
+                            # Yahoo API: /league/{league_key}/team/{team_key}/roster;week={week}
+                            roster_data = self._rate_limited_request(
+                                lambda tk=full_team_key, w=week: league.to_team(tk).roster(week=w)
+                            )
+                            
+                            if roster_data:
+                                # Process roster players
+                                for player_data in roster_data:
+                                    roster_entry = self._extract_roster_player_data(
+                                        player_data, league_id, team_id, week
+                                    )
+                                    if roster_entry:
+                                        rosters.append(roster_entry)
+                                        week_rosters_count += 1
+                            
+                        except Exception as e:
+                            logger.debug(f"        Error getting roster for team {team_key} week {week}: {e}")
+                            continue
+                    
+                    logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from individual calls")
+                    
+                except Exception as e:
+                    logger.warning(f"    ❌ Error processing week {week}: {e}")
+                    continue
             
-            logger.info(f"  ✅ BULK ROSTERS: Found {len(rosters)} roster entries in league {league_id}")
+            logger.info(f"  ✅ OPTIMIZED ROSTERS: Found {len(rosters)} total roster entries")
             return rosters
             
         except Exception as e:
@@ -875,7 +1107,9 @@ class YahooFantasyExtractor:
             
             for trans_type in transaction_types:
                 try:
-                    league_transactions = league.transactions(trans_type, 500)  # Increased limit for complete data
+                    league_transactions = self._rate_limited_request(
+                        lambda tt=trans_type: league.transactions(tt, 500)
+                    )
                     
                     for trans_data in league_transactions:
                         try:
@@ -983,11 +1217,11 @@ class YahooFantasyExtractor:
             league = self.game.to_league(league_id)
             
             # Get league settings to check if it's auction
-            settings = league.settings()
+            settings = self._rate_limited_request(lambda: league.settings())
             is_auction_draft = settings.get('is_auction_draft', '0') == '1'
             
             # Get draft results
-            draft_results = league.draft_results()
+            draft_results = self._rate_limited_request(lambda: league.draft_results())
             
             if not draft_results:
                 logger.info(f"  🎯 No draft results found for league {league_id}")
@@ -1004,7 +1238,9 @@ class YahooFantasyExtractor:
                     # Get player details in batches of 25 (API limit)
                     for i in range(0, len(player_ids), 25):
                         batch = player_ids[i:i+25]
-                        player_details = league.player_details(batch)
+                        player_details = self._rate_limited_request(
+                            lambda b=batch: league.player_details(b)
+                        )
                         
                         for player in player_details:
                             player_id = player.get('player_id', '')
@@ -1464,6 +1700,431 @@ class YahooFantasyExtractor:
         except Exception as e:
             logger.error(f"Error extracting weekly statistics for league {league_id}: {e}")
             return []
+
+    # ==========================================
+    # DATABASE INTEGRATION METHODS
+    # ==========================================
+    
+    def configure_database(self, db_url: str = None):
+        """Configure database connection for direct streaming"""
+        if not DATABASE_SUPPORT:
+            raise Exception("Database support not available. Install psycopg2 and python-dotenv")
+        
+        if db_url:
+            self.db_url = db_url
+        else:
+            # Try to get from environment
+            load_dotenv()
+            self.db_url = self._get_database_url_from_env()
+        
+        self.output_mode = 'database'
+        logger.info(f"📦 Database mode enabled")
+    
+    def _get_database_url_from_env(self):
+        """Extract DATABASE_URL from environment or .env file"""
+        db_url = os.getenv("DATABASE_URL")
+        if db_url:
+            return db_url
+            
+        # If not in env, try to extract from .env file manually
+        try:
+            with open('.env', 'r') as f:
+                content = f.read()
+                # Look for DATABASE_URL in the content
+                for line in content.split('\n'):
+                    if 'DATABASE_URL=' in line and not line.strip().startswith('#'):
+                        return line.split('DATABASE_URL=')[1].split()[0]
+                    # Handle case where it's at end of comment line
+                    if 'DATABASE_URL=' in line:
+                        parts = line.split('DATABASE_URL=')
+                        if len(parts) > 1:
+                            return parts[1].split()[0]
+        except Exception as e:
+            logger.error(f"Error reading .env file: {e}")
+            
+        # Fallback: try common environment variable names
+        for var_name in ['DB_URL', 'POSTGRES_URL', 'POSTGRESQL_URL']:
+            url = os.getenv(var_name)
+            if url:
+                logger.info(f"Found database URL in {var_name}")
+                return url
+                
+        raise Exception("DATABASE_URL not found in environment or .env file")
+    
+    def get_db_connection(self):
+        """Get database connection"""
+        if not self.db_url:
+            raise Exception("Database not configured. Call configure_database() first")
+        try:
+            return psycopg2.connect(self.db_url)
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            raise
+    
+    def stream_to_database(self, data_type: str, data_items: List[Any], table_name: str = None):
+        """Stream data directly to database"""
+        if not data_items:
+            logger.info(f"No {data_type} records to insert")
+            return 0
+        
+        if not table_name:
+            table_name = f"public.{data_type.lower()}"
+        
+        try:
+            # Convert data objects to dictionaries if needed
+            data_dicts = []
+            for item in data_items:
+                if hasattr(item, '__dict__'):
+                    data_dict = item.__dict__.copy()
+                else:
+                    data_dict = item.copy()
+                data_dicts.append(data_dict)
+            
+            # Get column names from first record
+            if data_dicts:
+                columns = list(data_dicts[0].keys())
+                
+                # Prepare SQL
+                columns_str = ','.join(columns)
+                sql = f"INSERT INTO {table_name} ({columns_str}) VALUES %s ON CONFLICT DO NOTHING"
+                
+                # Prepare data
+                data = [tuple(data_dict[col] for col in columns) for data_dict in data_dicts]
+                
+                # Execute batch insert
+                with self.get_db_connection() as conn:
+                    with conn.cursor() as cur:
+                        execute_values(cur, sql, data, template=None, page_size=1000)
+                        conn.commit()
+                
+                inserted_count = len(data_dicts)
+                self.total_items_processed += inserted_count
+                self.extraction_stats[f"{data_type.lower()}_processed"] += inserted_count
+                
+                logger.info(f"✅ Inserted {inserted_count} {data_type} records")
+                logger.info(f"📊 Total items processed: {self.total_items_processed}")
+                return inserted_count
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to insert {data_type} data: {e}")
+            self.extraction_stats['errors_encountered'] += 1
+            raise
+        
+        return 0
+    
+    # ==========================================
+    # RESUME/CHECKPOINT SYSTEM
+    # ==========================================
+    
+    def save_resume_point(self, league_id: str, resume_file: str = "resume_extraction.txt"):
+        """Save the current league ID and progress for resuming later"""
+        try:
+            with open(resume_file, 'w') as f:
+                f.write(f"{league_id}\n{self.total_items_processed}\n{datetime.now().isoformat()}\n")
+                f.write(json.dumps(self.extraction_stats))
+            logger.info(f"💾 Saved resume point: {league_id}")
+            self.current_resume_file = resume_file
+        except Exception as e:
+            logger.error(f"Failed to save resume point: {e}")
+    
+    def load_resume_point(self, resume_file: str = "resume_extraction.txt"):
+        """Load the resume point if it exists"""
+        if not os.path.exists(resume_file):
+            return None, 0, {}
+        
+        try:
+            with open(resume_file, 'r') as f:
+                lines = f.read().strip().split('\n')
+                league_id = lines[0] if lines else None
+                items_count = int(lines[1]) if len(lines) > 1 else 0
+                timestamp = lines[2] if len(lines) > 2 else "Unknown"
+                stats = json.loads(lines[3]) if len(lines) > 3 else {}
+                
+            if league_id:
+                logger.info(f"🔄 Found resume point: {league_id} (last saved: {timestamp})")
+                self.total_items_processed = items_count
+                self.extraction_stats.update(stats)
+                self.current_resume_file = resume_file
+                return league_id, items_count, stats
+        except Exception as e:
+            logger.error(f"Error loading resume point: {e}")
+        
+        return None, 0, {}
+    
+    def clear_resume_point(self, resume_file: str = "resume_extraction.txt"):
+        """Clear the resume point file"""
+        try:
+            if os.path.exists(resume_file):
+                os.remove(resume_file)
+                logger.info("🗑️ Cleared resume point")
+                self.current_resume_file = None
+        except Exception as e:
+            logger.error(f"Error clearing resume point: {e}")
+    
+    # ==========================================
+    # ENHANCED PROGRESS TRACKING
+    # ==========================================
+    
+    def log_extraction_progress(self):
+        """Log current extraction progress and statistics"""
+        stats = self.extraction_stats
+        logger.info("📊 === EXTRACTION PROGRESS ===")
+        logger.info(f"📋 Leagues processed: {stats['leagues_processed']}")
+        logger.info(f"👥 Teams processed: {stats['teams_processed']}")
+        logger.info(f"🔢 Rosters processed: {stats['rosters_processed']}")
+        logger.info(f"⚔️ Matchups processed: {stats['matchups_processed']}")
+        logger.info(f"💸 Transactions processed: {stats['transactions_processed']}")
+        logger.info(f"📋 Drafts processed: {stats['drafts_processed']}")
+        logger.info(f"❌ Errors encountered: {stats['errors_encountered']}")
+        logger.info(f"⏭️ Leagues skipped: {stats['leagues_skipped']}")
+        logger.info(f"📊 Total items: {self.total_items_processed}")
+        logger.info("===============================")
+    
+    def handle_league_error(self, league_id: str, league_name: str, error: Exception) -> bool:
+        """Handle errors at the league level with enhanced recovery logic
+        
+        Returns:
+            bool: True if extraction should continue, False if it should stop
+        """
+        error_str = str(error)
+        
+        # Track the failure
+        self.consecutive_failures += 1
+        self.extraction_stats['errors_encountered'] += 1
+        self.failed_leagues.append({'league_id': league_id, 'name': league_name, 'error': error_str})
+        
+        # Check for specific error types
+        if ('token_expired' in error_str or 
+            'token_rejected' in error_str or 
+            'Please provide valid credentials' in error_str or
+            'Max token refresh retries' in error_str):
+            
+            logger.error(f"🔑 OAuth authentication failed for {league_name}: {error}")
+            
+            if self.consecutive_failures >= self.max_consecutive_failures:
+                logger.error(f"💥 STOPPING: {self.max_consecutive_failures} consecutive authentication failures!")
+                logger.error("🔑 OAuth token refresh is completely broken. Manual intervention required.")
+                return False
+            else:
+                logger.warning(f"⚠️ Skipping {league_name} due to auth failure, continuing...")
+                self.extraction_stats['leagues_skipped'] += 1
+                return True
+                
+        elif str(error) == "YAHOO_TIMEOUT":
+            logger.warning(f"⏰ Yahoo API timeout for {league_name} - continuing with next league")
+            logger.info(f"💡 This is a temporary Yahoo server issue, not a script problem")
+            self.extraction_stats['leagues_skipped'] += 1
+            # Reset consecutive failures for timeouts (not our fault)
+            self.consecutive_failures = 0
+            return True
+            
+        elif 'Request denied' in error_str or 'rate limit' in error_str.lower():
+            logger.warning(f"🚫 Rate limited while extracting {league_name}: {error}")
+            # Don't increment consecutive failures for rate limits
+            self.consecutive_failures = 0
+            raise error  # Let the calling code handle rate limit waits
+            
+        else:
+            logger.error(f"❌ Unexpected error processing {league_name}: {error}")
+            if self.consecutive_failures >= self.max_consecutive_failures:
+                logger.error(f"💥 STOPPING: {self.max_consecutive_failures} consecutive unexpected failures!")
+                return False
+            else:
+                logger.warning(f"⚠️ Skipping {league_name} due to unexpected error, continuing...")
+                self.extraction_stats['leagues_skipped'] += 1
+                return True
+    
+    def reset_consecutive_failures(self):
+        """Reset consecutive failure counter (call after successful league processing)"""
+        self.consecutive_failures = 0
+    
+    # ==========================================
+    # ENHANCED EXTRACTION WITH DATABASE & RESUME
+    # ==========================================
+    
+    def extract_all_data_with_resume(self, 
+                                   output_mode: str = 'json',
+                                   db_url: str = None,
+                                   resume_file: str = "resume_extraction.txt",
+                                   sleep_between_leagues: int = 0,
+                                   initial_batch_size: int = 10, 
+                                   initial_batch_delay: int = 10,
+                                   sport_filter: str = 'nfl', 
+                                   private_only: bool = True, 
+                                   extract_leagues: bool = True, 
+                                   extract_teams: bool = True, 
+                                   extract_rosters: bool = False, 
+                                   extract_matchups: bool = True, 
+                                   extract_transactions: bool = True, 
+                                   extract_drafts: bool = True, 
+                                   extract_statistics: bool = True, 
+                                   roster_weeks: Optional[List[int]] = None, 
+                                   statistics_weeks: Optional[List[int]] = None) -> Dict[str, List[Any]]:
+        """Enhanced extraction with database streaming and resume capability
+        
+        Args:
+            output_mode: 'json' or 'database' 
+            db_url: Database URL for streaming mode
+            resume_file: File to save/load resume points
+            sleep_between_leagues: Seconds to sleep between leagues (0 = no sleep)
+            ... (other args same as extract_all_data)
+        """
+        
+        # Configure output mode
+        if output_mode == 'database':
+            if not DATABASE_SUPPORT:
+                raise Exception("Database mode requires psycopg2 and python-dotenv. Install with: pip install psycopg2-binary python-dotenv")
+            self.configure_database(db_url)
+            logger.info("📦 Database streaming mode enabled")
+        else:
+            self.output_mode = 'json'
+            logger.info("📄 JSON output mode enabled")
+        
+        # Authenticate first
+        if not self.authenticate():
+            raise Exception("Authentication failed")
+        
+        # Load resume point if it exists
+        resume_league_id, resume_items, resume_stats = self.load_resume_point(resume_file)
+        start_index = 0
+        
+        # Get all leagues
+        logger.info(f"📋 Getting leagues...")
+        leagues_data = self.get_all_leagues(filter_leagues_of_record=True)
+        if not leagues_data:
+            logger.error("No leagues found")
+            return self.extracted_data
+            
+        logger.info(f"Found {len(leagues_data)} leagues")
+        
+        # Find resume point if specified
+        if resume_league_id:
+            found = False
+            for i, league in enumerate(leagues_data):
+                if league['league_id'] == resume_league_id:
+                    start_index = i
+                    found = True
+                    logger.info(f"🔄 Resuming from league {i+1}/{len(leagues_data)}: {league.get('name', resume_league_id)}")
+                    break
+            
+            if not found:
+                logger.warning(f"⚠️ Resume league {resume_league_id} not found, starting from beginning")
+                start_index = 0
+                self.clear_resume_point(resume_file)
+        
+        # Process leagues starting from resume point
+        leagues_to_process = leagues_data[start_index:]
+        logger.info(f"📋 Processing {len(leagues_to_process)} leagues (starting from index {start_index})")
+        
+        for i, league_info in enumerate(leagues_to_process, start=start_index):
+            league_id = league_info['league_id']
+            league_name = league_info.get('name', 'Unknown')
+            
+            try:
+                logger.info(f"\n📋 [{i+1}/{len(leagues_data)}] Processing: {league_name} ({league_id})")
+                
+                league_extracted_data = {}
+                
+                # Extract league data
+                if extract_leagues:
+                    league_data = self.extract_league_data(league_info)
+                    league_extracted_data['leagues'] = [league_data]
+                
+                # Extract teams data
+                if extract_teams:
+                    teams_data = self.extract_teams_for_league(league_id)
+                    league_extracted_data['teams'] = teams_data
+                    self.extraction_stats['teams_processed'] += len(teams_data)
+                
+                # Extract roster data
+                if extract_rosters:
+                    logger.info(f"    📋 Extracting roster data...")
+                    rosters_data = self.extract_rosters_for_league(league_id, roster_weeks)
+                    league_extracted_data['rosters'] = rosters_data
+                    self.extraction_stats['rosters_processed'] += len(rosters_data)
+                
+                # Extract matchups data
+                if extract_matchups:
+                    logger.info(f"    🏆 Extracting matchup data...")
+                    matchups_data = self.extract_matchups_for_league(league_id)
+                    league_extracted_data['matchups'] = matchups_data
+                    self.extraction_stats['matchups_processed'] += len(matchups_data)
+                
+                # Extract transactions data
+                if extract_transactions:
+                    logger.info(f"    💼 Extracting transaction data...")
+                    transactions_data = self.extract_transactions_for_league(league_id)
+                    league_extracted_data['transactions'] = transactions_data
+                    self.extraction_stats['transactions_processed'] += len(transactions_data)
+                
+                # Extract draft data
+                if extract_drafts:
+                    logger.info(f"    🎯 Extracting draft data...")
+                    draft_data = self.extract_draft_for_league(league_id)
+                    league_extracted_data['drafts'] = draft_data
+                    self.extraction_stats['drafts_processed'] += len(draft_data)
+                
+                # Extract statistics data
+                if extract_statistics:
+                    logger.info(f"    📊 Extracting statistics data...")
+                    statistics_data = self.extract_statistics_for_league(league_id, statistics_weeks)
+                    league_extracted_data['statistics'] = statistics_data
+                
+                # Output data based on mode
+                if self.output_mode == 'database':
+                    # Stream each data type to database immediately
+                    for data_type, data_items in league_extracted_data.items():
+                        if data_items:
+                            self.stream_to_database(data_type, data_items)
+                else:
+                    # Accumulate in memory for JSON output
+                    for data_type, data_items in league_extracted_data.items():
+                        if data_type in self.extracted_data:
+                            if hasattr(data_items[0], '__dict__'):
+                                self.extracted_data[data_type].extend([asdict(item) for item in data_items])
+                            else:
+                                self.extracted_data[data_type].extend(data_items)
+                
+                # Update stats and save progress
+                self.extraction_stats['leagues_processed'] += 1
+                self.reset_consecutive_failures()
+                self.save_resume_point(league_id, resume_file)
+                
+                logger.info(f"    ✅ Completed {league_name}")
+                self.log_extraction_progress()
+                
+                # Sleep between leagues if specified
+                if sleep_between_leagues > 0 and i < len(leagues_data) - 1:
+                    sleep_minutes = sleep_between_leagues // 60
+                    logger.info(f"😴 Sleeping {sleep_minutes} minutes before next league...")
+                    time.sleep(sleep_between_leagues)
+                
+            except Exception as e:
+                # Use enhanced error handling
+                should_continue = self.handle_league_error(league_id, league_name, error=e)
+                if not should_continue:
+                    logger.error("💥 Stopping extraction due to repeated failures")
+                    break
+                    
+                # Save progress even on error
+                self.save_resume_point(league_id, resume_file)
+                continue
+        
+        # Clear resume point on successful completion
+        if start_index + len(leagues_to_process) >= len(leagues_data):
+            self.clear_resume_point(resume_file)
+            logger.info("🎉 Extraction completed successfully!")
+        
+        # Final progress log
+        self.log_extraction_progress()
+        
+        # Log failed leagues if any
+        if self.failed_leagues:
+            logger.warning(f"⚠️ {len(self.failed_leagues)} leagues had errors:")
+            for failed in self.failed_leagues[-5:]:  # Show last 5
+                logger.warning(f"  - {failed['name']} ({failed['league_id']}): {failed['error'][:100]}...")
+        
+        return self.extracted_data
 
 
 

@@ -1110,8 +1110,8 @@ class EdwEtlProcessor:
 
         # Build player performance lookup following business rules:
         # - season_points: from public.statistics (fact_stats)
-        # - games_played: count of non-bench weeks from rosters 
-        # - points_per_game: season_points / total_weeks_in_season
+        # - fantasy_games_played: count of non-bench weeks from rosters (starting lineup games)
+        # - points_per_week: season_points / total_weeks_in_season (average weekly impact)
         player_performance = {}
         
         # Get season weeks count for points_per_game calculation
@@ -1196,16 +1196,16 @@ class EdwEtlProcessor:
             if perf_key in player_performance:
                 player_performance[perf_key]['games_played'] = count
         
-        # Calculate points_per_game = season_points / total_weeks_in_season
+        # Calculate points_per_week = season_points / total_weeks_in_season
         for perf_key, perf_data in player_performance.items():
             season_year = perf_key[1]
             total_weeks = season_weeks.get(season_year, 17)  # Default to 17 weeks
             season_points = perf_data['season_points']
             
             if total_weeks > 0:
-                perf_data['points_per_game'] = season_points / total_weeks
+                perf_data['points_per_week'] = season_points / total_weeks
             else:
-                perf_data['points_per_game'] = 0.0
+                perf_data['points_per_week'] = 0.0
         
         logger.info(f"📊 Built performance data for {len(player_performance)} player-season combinations")
         logger.info(f"📊 Games played calculated from {len(games_played_counts)} roster entries")
@@ -1264,7 +1264,7 @@ class EdwEtlProcessor:
             perf_data = player_performance.get(perf_key, {
                 'season_points': 0.0,
                 'games_played': 0,
-                'points_per_game': 0.0
+                'points_per_week': 0.0
             })
             
             facts.append({
@@ -1279,8 +1279,8 @@ class EdwEtlProcessor:
                 'draft_cost': float(draft_pick.get('cost', 0)) if draft_pick.get('cost') else None,
                 'is_keeper_pick': bool(draft_pick.get('is_keeper', False)),
                 'season_points': float(perf_data['season_points']),
-                'games_played': int(perf_data['games_played']),
-                'points_per_game': float(perf_data['points_per_game'])
+                'fantasy_games_played': int(perf_data['games_played']),
+                'points_per_week': float(perf_data['points_per_week'])
             })
         
         return facts
