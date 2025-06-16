@@ -90,10 +90,18 @@ python3 src/deployment/incremental_loader.py --data-file data/current/data.json
 
 ## 📚 Documentation
 
-- **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - Comprehensive system documentation
-- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Setup and automation procedures  
-- **[Project Status](docs/PROJECT_STATUS.md)** - Current operational status
-- **[Security Guidelines](SECURITY.md)** - Credential protection and best practices
+### **Core Documentation**
+- **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - Complete system architecture, extraction systems, and performance optimizations
+- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Setup procedures, database deployment, and EDW integration
+- **[Project Status](docs/PROJECT_STATUS.md)** - Current operational status and consolidation updates
+- **[Security Guidelines](SECURITY.md)** - Credential protection and security best practices
+
+### **Key Features Covered**
+- 🔥 **Consolidated Extraction**: Single interface for all extraction scenarios
+- 🛡️ **Hybrid Loading**: Table-specific deployment strategies  
+- 📦 **Database Streaming**: Direct PostgreSQL integration with resume capability
+- 🏗️ **EDW Integration**: Enterprise data warehouse with automated deployment
+- ⚡ **Performance Optimizations**: 95% faster processing through smart caching
 
 ## 📈 Production Status
 

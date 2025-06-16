@@ -81,26 +81,53 @@ The fantasy football data pipeline has evolved into a **fully operational enterp
 
 ## 🏗️ **System Architecture**
 
-### **Professional Code Structure**
+### **🆕 Consolidated Extraction Architecture**
+The system has been consolidated into a unified extraction interface with enhanced capabilities:
+
 ```
-📁 src/                    # Modular source code
-├── extractors/           # Data extraction (incremental + historical)
-├── deployment/           # Database deployment with hybrid loading
-│   ├── heroku_deployer.py     # Legacy deployment system
-│   └── incremental_loader.py  # 🔥 Hybrid loading strategies
-├── auth/                # OAuth authentication
-└── utils/               # Database schema & utilities
+📁 Entry Points (Consolidated)
+├── scripts/full_extraction.py      # 🆕 ENHANCED: Single unified interface
+│   ├── Database streaming mode (--direct-to-db)
+│   ├── Resume/checkpoint system (--resume-from)
+│   ├── Sleep intervals (--sleep-between)
+│   └── Flexible output options (JSON/database)
+├── scripts/weekly_extraction.py    # Automated incremental updates
+└── scripts/deploy_with_edw.py      # Integrated deployment
 
-📁 scripts/               # Clean entry points + analysis tools
-├── weekly_extraction.py  # 🔥 Primary incremental system
-├── full_extraction.py   # Historical extraction (completed)
-├── deploy.py            # Database deployment
-├── duplicate_detector.py     # 🛡️ Comprehensive duplicate detection
-└── analyze_data_structure.py # Data structure analysis
+📁 Core Extraction Engines
+├── src/extractors/comprehensive_data_extractor.py  # 🆕 ENHANCED: Core engine
+│   ├── Database integration with psycopg2
+│   ├── Resume/checkpoint system
+│   ├── Enhanced error recovery
+│   └── Direct streaming capabilities
+├── src/extractors/weekly_extractor.py             # Incremental processing
+└── src/extractors/draft_extractor.py              # Specialized draft handling
 
-📁 data/                  # Organized data storage
-├── current/             # Live dataset files
-└── templates/           # SECURE configuration templates
+📁 Deployment & Analysis
+├── src/deployment/incremental_loader.py  # 🔥 Hybrid loading strategies
+├── src/deployment/heroku_deployer.py     # Legacy deployment system
+├── scripts/duplicate_detector.py         # 🛡️ Comprehensive duplicate detection
+└── scripts/analyze_data_structure.py     # Data structure analysis
+```
+
+### **🔄 Extraction Consolidation Benefits**
+- ✅ **Single Entry Point**: One script handles all extraction scenarios
+- ✅ **Enhanced Capabilities**: Database streaming + JSON in unified interface
+- ✅ **Code Reuse**: No duplicate rate limiting or error handling logic
+- ✅ **Better Maintainability**: Unified codebase with consistent features
+
+**Migration Example:**
+```bash
+# Old approach (multiple specialized scripts)
+python scripts/extract_weekly_rosters.py  # Database + resume
+python scripts/full_extraction.py --rosters-only  # JSON only
+
+# New approach (single enhanced script) 
+python scripts/full_extraction.py \
+  --rosters-only \
+  --direct-to-db \
+  --sleep-between 420 \
+  --resume-from resume.txt
 ```
 
 ### **Incremental Processing Flow**
