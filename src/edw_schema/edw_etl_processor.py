@@ -839,6 +839,7 @@ class EdwEtlProcessor:
             
             # Get manager_key from team data (roster doesn't have manager_name)
             manager_key = None
+            raw_manager_name = None  # Initialize to avoid reference errors
             for team in self.data.get('teams', []):
                 if team['team_id'] == roster['team_id']:
                     raw_manager_name = team.get('manager_name')
@@ -850,7 +851,7 @@ class EdwEtlProcessor:
             if not all([league_key, team_key, player_key, week_key, manager_key]):
                 missing_keys += 1
                 if debug_count <= 5:  # Only show first 5 for debugging
-                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}, player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name})")
+                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}, player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name or 'N/A'})")
                 continue
             
             successful += 1
@@ -1163,16 +1164,15 @@ class EdwEtlProcessor:
             logger.warning(f"⚠️ Could not load from public.statistics: {e}")
             logger.info("📊 Season points will default to 0")
         
-        # Calculate games_played from roster data (non-bench positions only)
-        logger.info("📊 Calculating games_played from roster data...")
-        games_played_counts = {}
+        # Calculate fantasy_games_played from roster data (starter positions only)
+        logger.info("📊 Calculating fantasy_games_played from roster data (starter positions only)...")
+        fantasy_games_played_counts = {}
         
         for roster in self.data.get('rosters', []):
             if roster['league_id'] not in league_of_record_ids:
                 continue
-            if roster.get('status') != 'active':
-                continue
-            if roster.get('position') == 'BN':  # Skip bench players
+            # Only count players who were in starting positions
+            if not roster.get('is_starter', False):
                 continue
                 
             season_year = league_to_season.get(roster['league_id'])
@@ -1187,12 +1187,12 @@ class EdwEtlProcessor:
                 player_id = raw_player_id
             
             perf_key = (roster['league_id'], season_year, player_id)
-            if perf_key not in games_played_counts:
-                games_played_counts[perf_key] = 0
-            games_played_counts[perf_key] += 1
+            if perf_key not in fantasy_games_played_counts:
+                fantasy_games_played_counts[perf_key] = 0
+            fantasy_games_played_counts[perf_key] += 1
         
-        # Apply games_played counts to performance data
-        for perf_key, count in games_played_counts.items():
+        # Apply fantasy_games_played counts to performance data
+        for perf_key, count in fantasy_games_played_counts.items():
             if perf_key in player_performance:
                 player_performance[perf_key]['games_played'] = count
         
@@ -1208,7 +1208,7 @@ class EdwEtlProcessor:
                 perf_data['points_per_week'] = 0.0
         
         logger.info(f"📊 Built performance data for {len(player_performance)} player-season combinations")
-        logger.info(f"📊 Games played calculated from {len(games_played_counts)} roster entries")
+        logger.info(f"📊 Fantasy games played calculated from {len(fantasy_games_played_counts)} starting roster entries")
 
         # Ensure dimension mappings are cached
         if not self.dim_mappings:
@@ -2422,18 +2422,18 @@ class EdwEtlProcessor:
                             for _, row in df.iterrows():
                                 upsert_sql = text("""
                                     INSERT INTO edw.fact_player_statistics 
-                                    (league_key, player_key, season_year, total_fantasy_points, position_type, 
-                                     games_played, points_per_game, consistency_score, position_rank, league_rank, 
+                                    (league_key, player_key, season_year, week_number, weekly_fantasy_points, position_type, 
+                                     games_played, avg_points_per_game, consistency_score, position_rank, league_rank, 
                                      points_above_replacement, draft_value_score, source_stat_id, game_code)
-                                    VALUES (:league_key, :player_key, :season_year, :total_fantasy_points, :position_type,
-                                            :games_played, :points_per_game, :consistency_score, :position_rank, :league_rank,
+                                    VALUES (:league_key, :player_key, :season_year, :week_number, :weekly_fantasy_points, :position_type,
+                                            :games_played, :avg_points_per_game, :consistency_score, :position_rank, :league_rank,
                                             :points_above_replacement, :draft_value_score, :source_stat_id, :game_code)
-                                    ON CONFLICT (league_key, player_key, season_year) 
+                                    ON CONFLICT (league_key, player_key, season_year, week_number) 
                                     DO UPDATE SET
-                                        total_fantasy_points = EXCLUDED.total_fantasy_points,
+                                        weekly_fantasy_points = EXCLUDED.weekly_fantasy_points,
                                         position_type = EXCLUDED.position_type,
                                         games_played = EXCLUDED.games_played,
-                                        points_per_game = EXCLUDED.points_per_game,
+                                        avg_points_per_game = EXCLUDED.avg_points_per_game,
                                         position_rank = EXCLUDED.position_rank,
                                         league_rank = EXCLUDED.league_rank,
                                         points_above_replacement = EXCLUDED.points_above_replacement,
