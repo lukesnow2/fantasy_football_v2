@@ -830,7 +830,13 @@ class EdwEtlProcessor:
                 continue
                 
             league_key = league_keys.get(roster['league_id'])
-            team_key = team_keys.get(roster['team_id'])
+            
+            # Map team_id to full team_id format for lookup (same pattern as transform_fact_draft)
+            raw_team_id = roster['team_id']
+            league_id = roster['league_id']
+            # Construct full team_id: league_id + ".t." + team_id
+            full_team_id = f"{league_id}.t.{raw_team_id}"
+            team_key = team_keys.get(full_team_id)
             
             # Player ID is already numeric in roster data
             numeric_player_id = str(roster['player_id'])
@@ -841,7 +847,7 @@ class EdwEtlProcessor:
             manager_key = None
             raw_manager_name = None  # Initialize to avoid reference errors
             for team in self.data.get('teams', []):
-                if team['team_id'] == roster['team_id']:
+                if team['team_id'] == full_team_id:  # Use full_team_id for lookup
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
                         consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
@@ -851,7 +857,7 @@ class EdwEtlProcessor:
             if not all([league_key, team_key, player_key, week_key, manager_key]):
                 missing_keys += 1
                 if debug_count <= 5:  # Only show first 5 for debugging
-                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}, player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name or 'N/A'})")
+                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}(raw={raw_team_id}, full={full_team_id}), player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name or 'N/A'})")
                 continue
             
             successful += 1
