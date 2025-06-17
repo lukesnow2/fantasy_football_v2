@@ -1455,7 +1455,7 @@ class EdwEtlProcessor:
                 league_id, numeric_player_id, season_year, season_total_points, position_rank
             )
 
-            # Create weekly fact record
+            # Create weekly fact record (no calculated fields)
             fact = {
                 'league_key': league_key,
                 'player_key': player_key,
@@ -1463,13 +1463,9 @@ class EdwEtlProcessor:
                 'week_number': week_number,
                 'weekly_fantasy_points': weekly_points,
                 'position_type': position_type,
-                'games_played': 1,  # Each week represents 1 game
-                'avg_points_per_game': round(avg_points_per_game, 2),  # Season average
-                'consistency_score': round(consistency_score, 4) if consistency_score is not None else None,
                 'position_rank': position_rank,  # Season-level rank
                 'league_rank': league_rank,     # Season-level rank
                 'points_above_replacement': round(points_above_replacement, 2),
-                'draft_value_score': round(draft_value_score, 4) if draft_value_score is not None else None,
                 'source_stat_id': stat.get('stat_id'),
                 'game_code': stat.get('game_code', 'nfl')
             }
@@ -2423,17 +2419,13 @@ class EdwEtlProcessor:
                                 upsert_sql = text("""
                                     INSERT INTO edw.fact_player_statistics 
                                     (league_key, player_key, season_year, week_number, weekly_fantasy_points, position_type, 
-                                     games_played, avg_points_per_game, consistency_score, position_rank, league_rank, 
-                                     points_above_replacement, draft_value_score, source_stat_id, game_code)
+                                     position_rank, league_rank, points_above_replacement, source_stat_id, game_code)
                                     VALUES (:league_key, :player_key, :season_year, :week_number, :weekly_fantasy_points, :position_type,
-                                            :games_played, :avg_points_per_game, :consistency_score, :position_rank, :league_rank,
-                                            :points_above_replacement, :draft_value_score, :source_stat_id, :game_code)
+                                            :position_rank, :league_rank, :points_above_replacement, :source_stat_id, :game_code)
                                     ON CONFLICT (league_key, player_key, season_year, week_number) 
                                     DO UPDATE SET
                                         weekly_fantasy_points = EXCLUDED.weekly_fantasy_points,
                                         position_type = EXCLUDED.position_type,
-                                        games_played = EXCLUDED.games_played,
-                                        avg_points_per_game = EXCLUDED.avg_points_per_game,
                                         position_rank = EXCLUDED.position_rank,
                                         league_rank = EXCLUDED.league_rank,
                                         points_above_replacement = EXCLUDED.points_above_replacement,
@@ -2901,6 +2893,19 @@ class EdwEtlProcessor:
                 FROM player_transaction_stats
                 GROUP BY player_key
             ),
+            player_fantasy_performance AS (
+                SELECT 
+                    fps.player_key,
+                    fps.season_year,
+                    SUM(fps.weekly_fantasy_points) as total_fantasy_points,
+                    COUNT(CASE WHEN fps.weekly_fantasy_points > 0 THEN 1 END) as games_played,
+                    AVG(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END) as avg_points_per_game,
+                    MAX(fps.weekly_fantasy_points) as best_weekly_score,
+                    MIN(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END) as worst_weekly_score,
+                    COALESCE(STDDEV(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END), 0) as consistency_rating
+                FROM edw.fact_player_statistics fps
+                GROUP BY fps.player_key, fps.season_year
+            ),
             player_season_combined AS (
                 SELECT 
                     COALESCE(pds.player_key, pts.player_key) as player_key,
@@ -2930,11 +2935,11 @@ class EdwEtlProcessor:
                 psc.earliest_draft_pick,
                 psc.latest_draft_pick,
                 psc.avg_auction_value,
-                0.0 as total_fantasy_points,  -- No roster data available
-                0.0 as avg_points_per_game,
-                0.0 as best_weekly_score,
-                0.0 as worst_weekly_score,
-                0.0 as consistency_rating,
+                COALESCE(fps.total_fantasy_points, 0.0) as total_fantasy_points,
+                COALESCE(fps.avg_points_per_game, 0.0) as avg_points_per_game,
+                COALESCE(fps.best_weekly_score, 0.0) as best_weekly_score,
+                COALESCE(fps.worst_weekly_score, 0.0) as worst_weekly_score,
+                COALESCE(fps.consistency_rating, 0.0) as consistency_rating,
                 CASE 
                     WHEN psc.times_drafted > 0 THEN 0.8  -- Assume high ownership if drafted
                     WHEN psc.waiver_pickups > 0 THEN 0.3  -- Lower ownership for waiver pickups
@@ -2959,10 +2964,12 @@ class EdwEtlProcessor:
                     WHEN psc.waiver_pickups > 0 
                     THEN ROUND(psc.waiver_pickups * 10, 4)
                     ELSE 0
-                END as waiver_pickup_value
+                END as waiver_pickup_value,
+                COALESCE(fps.games_played, 0) as games_played
             FROM player_season_combined psc
             LEFT JOIN player_career_stats pcs ON psc.player_key = pcs.player_key
             LEFT JOIN player_career_transactions pct ON psc.player_key = pct.player_key
+            LEFT JOIN player_fantasy_performance fps ON psc.player_key = fps.player_key AND psc.season_year = fps.season_year
             WHERE psc.times_drafted > 0 OR psc.waiver_pickups > 0
             ORDER BY psc.season_year DESC, psc.times_drafted DESC, psc.avg_draft_position ASC
             """
@@ -2993,7 +3000,8 @@ class EdwEtlProcessor:
                     'starter_percentage': row[17],
                     'points_above_replacement': row[18],
                     'draft_value_score': row[19],
-                    'waiver_pickup_value': row[20]
+                    'waiver_pickup_value': row[20],
+                    'games_played': row[21] if len(row) > 21 else 0  # Add games_played from fantasy performance
                 })
         
         logger.info(f"🏪 Generated {len(marts)} player value records")
