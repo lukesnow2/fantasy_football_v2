@@ -598,6 +598,78 @@ class EdwEtlProcessor:
         # Check if today falls within this week
         return week_start_date <= current_date <= week_end_date
     
+    def get_week_from_date(self, transaction_date: date, season_year: int) -> int:
+        """Find which NFL week a transaction date falls into using dim_week data"""
+        from datetime import date
+        
+        try:
+            # Query dim_week to find the week that contains this date
+            with self.engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT week_number 
+                    FROM edw.dim_week 
+                    WHERE season_year = :season_year 
+                    AND :transaction_date BETWEEN week_start_date AND week_end_date
+                    LIMIT 1
+                """), {
+                    "season_year": season_year,
+                    "transaction_date": transaction_date
+                })
+                
+                row = result.fetchone()
+                if row:
+                    return row[0]
+                else:
+                    # If no exact match found, find the closest week
+                    # This handles edge cases where transaction might fall between weeks
+                    result = conn.execute(text("""
+                        SELECT week_number,
+                               ABS(EXTRACT(EPOCH FROM (week_start_date - :transaction_date))) as start_diff,
+                               ABS(EXTRACT(EPOCH FROM (week_end_date - :transaction_date))) as end_diff
+                        FROM edw.dim_week 
+                        WHERE season_year = :season_year 
+                        ORDER BY LEAST(start_diff, end_diff) 
+                        LIMIT 1
+                    """), {
+                        "season_year": season_year,
+                        "transaction_date": transaction_date
+                    })
+                    
+                    row = result.fetchone()
+                    if row:
+                        return row[0]
+                    else:
+                        # Fallback: return week 1 if no weeks found for this season
+                        logger.warning(f"⚠️ No weeks found for season {season_year}, defaulting to week 1")
+                        return 1
+                        
+        except Exception as e:
+            logger.warning(f"⚠️ Could not determine week for date {transaction_date} in season {season_year}: {e}")
+            # Fallback to simple calculation if database query fails
+            return self.calculate_week_from_date_fallback(transaction_date, season_year)
+    
+    def calculate_week_from_date_fallback(self, transaction_date: date, season_year: int) -> int:
+        """Fallback method to calculate week if dim_week lookup fails"""
+        from datetime import date, timedelta
+        
+        # Get the start date of NFL Week 1 for this season
+        week_1_start, _ = self.calculate_week_dates(season_year, 1)
+        
+        # Calculate days since week 1 started
+        days_since_start = (transaction_date - week_1_start).days
+        
+        # Each week is 7 days, so calculate which week this falls into
+        if days_since_start < 0:
+            # Transaction happened before the season started (probably preseason)
+            return 0  # Week 0 for preseason transactions
+        else:
+            # Add 1 because week numbering starts at 1
+            week_number = (days_since_start // 7) + 1
+            
+            # Cap at reasonable max week number (17 for modern seasons, 16 for older)
+            max_weeks = 17 if season_year >= 2021 else 16
+            return min(week_number, max_weeks)
+    
     def transform_leagues(self) -> List[Dict]:
         """Transform leagues into dimension format"""
         transformed = []
@@ -1140,6 +1212,9 @@ class EdwEtlProcessor:
             else:  # January-August = previous NFL season
                 season_year = transaction_date.year - 1
             
+            # Find transaction week using dim_week data
+            transaction_week = self.get_week_from_date(transaction_date, season_year)
+            
             # Get manager keys for from/to teams
             from_manager_key = None
             to_manager_key = None
@@ -1162,19 +1237,28 @@ class EdwEtlProcessor:
                             to_manager_key = manager_keys.get(consolidated_manager_name)
                         break
             
+            # Handle faab_bid properly - check for None vs 0
+            faab_bid_value = transaction.get('faab_bid')
+            if faab_bid_value is not None and faab_bid_value != '':
+                try:
+                    faab_bid = float(faab_bid_value)
+                except (ValueError, TypeError):
+                    faab_bid = None
+            else:
+                faab_bid = None
+            
             facts.append({
                 'league_key': int(league_key),
                 'player_key': int(player_key),
                 'season_year': int(season_year),
                 'transaction_date': transaction_date,
-                'transaction_week': None,  # Not available in data
+                'transaction_week': transaction_week,  # Now calculated using dim_week
                 'transaction_type': str(transaction['type']),
                 'from_team_key': int(team_keys.get(transaction.get('source_team_id'))) if team_keys.get(transaction.get('source_team_id')) else None,
                 'to_team_key': int(team_keys.get(transaction.get('destination_team_id'))) if team_keys.get(transaction.get('destination_team_id')) else None,
                 'from_manager_key': int(from_manager_key) if from_manager_key else None,
                 'to_manager_key': int(to_manager_key) if to_manager_key else None,
-                'faab_bid': float(transaction.get('faab_bid', 0)) if transaction.get('faab_bid') else None,
-                'waiver_priority': None,  # Not available in data
+                'faab_bid': faab_bid,  # Properly handled None vs 0
                 'trade_group_id': None,  # Not available in data
                 'transaction_status': str(transaction.get('status', 'completed'))
             })
