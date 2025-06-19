@@ -106,6 +106,11 @@ class EdwEtlProcessor:
             'triggers_refresh': ['fact_draft', 'mart_player_value'],
             'refresh_type': 'APPEND',  # Only new draft picks
             'depends_on': 'operational_draft_picks'
+        },
+        'statistics': {
+            'triggers_refresh': ['fact_player_statistics', 'fact_draft', 'mart_player_value', 'fact_team_performance'],
+            'refresh_type': 'UPSERT',  # Update existing, insert new
+            'depends_on': 'operational_statistics'
         }
     }
     
@@ -201,7 +206,7 @@ class EdwEtlProcessor:
             logger.info("📊 Loading data from operational database tables...")
             
             self.data = {}
-            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks']
+            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics']
             
             with self.engine.connect() as conn:
                 for table in operational_tables:
@@ -329,37 +334,164 @@ class EdwEtlProcessor:
             logger.warning(f"⚠️ Could not update metadata for {table_name}: {e}")
     
     def extract_seasons(self) -> List[Dict]:
-        """Extract unique seasons from leagues data"""
+        """Extract unique seasons from leagues data with derived week information"""
         seasons = {}
         
         if not self.data:
             logger.warning("⚠️ No data available for season extraction")
             return list(seasons.values())
         
+        # Build season metrics from actual matchup data
+        season_metrics = {}
+        
+        # Analyze matchups to get actual week ranges and playoff info
+        for matchup in self.data.get('matchups', []):
+            # Get season from league data
+            season_year = None
+            for league in self.data.get('leagues', []):
+                if league['league_id'] == matchup['league_id']:
+                    season_year = int(league['season'])
+                    break
+            
+            if not season_year:
+                continue
+            
+            if season_year not in season_metrics:
+                season_metrics[season_year] = {
+                    'weeks': set(),
+                    'playoff_weeks': set(),
+                    'championship_weeks': set(),
+                    'start_week': None,
+                    'end_week': None
+                }
+            
+            week = matchup['week']
+            season_metrics[season_year]['weeks'].add(week)
+            
+            if matchup.get('is_playoffs'):
+                season_metrics[season_year]['playoff_weeks'].add(week)
+            if matchup.get('is_championship'):
+                season_metrics[season_year]['championship_weeks'].add(week)
+        
+        # Calculate derived metrics for each season
+        for season_year, metrics in season_metrics.items():
+            if metrics['weeks']:
+                metrics['start_week'] = min(metrics['weeks'])
+                metrics['end_week'] = max(metrics['weeks'])
+                metrics['total_weeks'] = len(metrics['weeks'])
+                
+                # Determine playoff start week (first week where playoffs=true)
+                if metrics['playoff_weeks']:
+                    metrics['playoff_start_week'] = min(metrics['playoff_weeks'])
+                else:
+                    # Fallback: assume playoffs start at week total_weeks - 2
+                    metrics['playoff_start_week'] = max(1, metrics['end_week'] - 2)
+                
+                # Championship week is the latest week with championship games
+                if metrics['championship_weeks']:
+                    metrics['championship_week'] = max(metrics['championship_weeks'])
+                else:
+                    # Fallback: championship is the last week
+                    metrics['championship_week'] = metrics['end_week']
+        
+        # Use league configuration data as additional source
+        league_configs = {}
+        for league in self.data.get('leagues', []):
+            season_year = int(league['season'])
+            if season_year not in league_configs:
+                league_configs[season_year] = {
+                    'start_weeks': [],
+                    'end_weeks': [],
+                    'current_weeks': []
+                }
+            
+            if league.get('start_week'):
+                league_configs[season_year]['start_weeks'].append(league['start_week'])
+            if league.get('end_week'):
+                league_configs[season_year]['end_weeks'].append(league['end_week'])
+            if league.get('current_week'):
+                league_configs[season_year]['current_weeks'].append(league['current_week'])
+        
+        # Create final season records
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if season_year not in seasons:
+                metrics = season_metrics.get(season_year, {})
+                config = league_configs.get(season_year, {})
+                
+                # Use derived data or intelligent fallbacks
+                total_weeks = metrics.get('total_weeks', 17)
+                start_week = metrics.get('start_week', 1)
+                end_week = metrics.get('end_week', total_weeks)
+                playoff_start_week = metrics.get('playoff_start_week', max(1, end_week - 2))
+                championship_week = metrics.get('championship_week', end_week)
+                
+                # Override with league config if available (prefer mode/most common value)
+                if config.get('start_weeks'):
+                    start_week = max(set(config['start_weeks']), key=config['start_weeks'].count)
+                if config.get('end_weeks'):
+                    end_week = max(set(config['end_weeks']), key=config['end_weeks'].count)
+                
                 seasons[season_year] = {
                     'season_year': season_year,
-                    'season_start_date': date(season_year, 9, 1),  # Approximate NFL season start
-                    'season_end_date': date(season_year + 1, 1, 31),  # Approximate end
-                    'playoff_start_week': 15,  # Standard fantasy playoffs
-                    'championship_week': 17,
-                    'total_weeks': 17,
+                    'season_start_date': date(season_year, 9, 1),  # NFL season typically starts early September
+                    'season_end_date': date(season_year + 1, 1, 31),  # Fantasy typically ends in January
+                    'playoff_start_week': playoff_start_week,
+                    'championship_week': championship_week,
+                    'total_weeks': total_weeks,
                     'is_current_season': season_year == datetime.now().year,
                     'season_status': 'completed' if season_year < datetime.now().year else 'active'
                 }
         
+        logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
+        for season_year in sorted(seasons.keys()):
+            s = seasons[season_year]
+            logger.info(f"  {season_year}: {s['total_weeks']} weeks, playoffs start week {s['playoff_start_week']}, championship week {s['championship_week']}")
+        
         return list(seasons.values())
     
     def extract_weeks(self) -> List[Dict]:
-        """Extract week dimension from available data"""
+        """Extract week dimension from available data with calculated week dates"""
         weeks = {}
         
         # Build league-to-season mapping
         league_to_season = {}
         for league in self.data.get('leagues', []):
             league_to_season[league['league_id']] = int(league['season'])
+        
+        # Build season info for week classification (use the updated season logic)
+        season_playoff_starts = {}
+        season_championships = {}
+        
+        # Use the same logic as extract_seasons to get playoff/championship week info
+        season_metrics = {}
+        for matchup in self.data.get('matchups', []):
+            season_year = None
+            for league in self.data.get('leagues', []):
+                if league['league_id'] == matchup['league_id']:
+                    season_year = int(league['season'])
+                    break
+            
+            if not season_year:
+                continue
+            
+            if season_year not in season_metrics:
+                season_metrics[season_year] = {
+                    'playoff_weeks': set(),
+                    'championship_weeks': set()
+                }
+            
+            if matchup.get('is_playoffs'):
+                season_metrics[season_year]['playoff_weeks'].add(matchup['week'])
+            if matchup.get('is_championship'):
+                season_metrics[season_year]['championship_weeks'].add(matchup['week'])
+        
+        # Calculate playoff/championship weeks for each season
+        for season_year, metrics in season_metrics.items():
+            if metrics['playoff_weeks']:
+                season_playoff_starts[season_year] = min(metrics['playoff_weeks'])
+            if metrics['championship_weeks']:
+                season_championships[season_year] = max(metrics['championship_weeks'])
         
         # Extract from matchup data (has week information)
         for matchup in self.data.get('matchups', []):
@@ -369,25 +501,174 @@ class EdwEtlProcessor:
             
             key = (season_year, week_number)
             if key not in weeks:
+                # Calculate week dates based on NFL season patterns
+                week_start_date, week_end_date = self.calculate_week_dates(season_year, week_number)
+                
+                # Determine week type based on actual playoff data for this season
+                week_type = self.classify_week_type_for_season(
+                    season_year, 
+                    week_number, 
+                    season_playoff_starts.get(season_year), 
+                    season_championships.get(season_year)
+                )
+                
                 weeks[key] = {
                     'season_year': season_year,
                     'week_number': week_number,
-                    'week_type': self.classify_week_type(week_number),
-                    'week_start_date': None,  # Could calculate based on season
-                    'week_end_date': None,
-                    'is_current_week': False  # Will be updated based on current logic
+                    'week_type': week_type,
+                    'week_start_date': week_start_date,
+                    'week_end_date': week_end_date,
+                    'is_current_week': self.is_current_week(season_year, week_number)
                 }
+        
+        logger.info(f"📅 Extracted {len(weeks)} weeks with calculated dates")
         
         return list(weeks.values())
     
     def classify_week_type(self, week_number: int) -> str:
-        """Classify week type based on week number"""
+        """Classify week type based on week number (legacy - use classify_week_type_for_season)"""
         if week_number <= 14:
             return 'regular'
         elif week_number <= 16:
             return 'playoffs'
         else:
             return 'championship'
+    
+    def classify_week_type_for_season(self, season_year: int, week_number: int, 
+                                    playoff_start_week: int = None, championship_week: int = None) -> str:
+        """Classify week type based on actual season data"""
+        if championship_week and week_number >= championship_week:
+            return 'championship'
+        elif playoff_start_week and week_number >= playoff_start_week:
+            return 'playoffs'
+        else:
+            return 'regular'
+    
+    def calculate_week_dates(self, season_year: int, week_number: int) -> tuple:
+        """Calculate week start and end dates based on NFL season patterns"""
+        from datetime import date, timedelta
+        
+        # NFL season typically starts the first or second week of September
+        # Week 1 usually starts on the Tuesday after Labor Day (first Monday in September)
+        
+        # Calculate Labor Day (first Monday in September)
+        labor_day = date(season_year, 9, 1)
+        while labor_day.weekday() != 0:  # 0 = Monday
+            labor_day += timedelta(days=1)
+        
+        # NFL Week 1 typically starts the Tuesday after Labor Day
+        nfl_week_1_start = labor_day + timedelta(days=1)  # Tuesday
+        
+        # However, some seasons start a week earlier or later
+        # Adjust based on historical patterns
+        if season_year <= 2020:
+            # Pre-2021: Often started earlier
+            if season_year <= 2010:
+                nfl_week_1_start = date(season_year, 8, 31)  # Late August start
+            else:
+                nfl_week_1_start = date(season_year, 9, 1)   # Early September
+        else:
+            # 2021+: More standardized start around Labor Day
+            nfl_week_1_start = labor_day + timedelta(days=1)
+        
+        # Ensure it's a Tuesday (fantasy weeks typically run Tuesday-Monday)
+        while nfl_week_1_start.weekday() != 1:  # 1 = Tuesday
+            nfl_week_1_start += timedelta(days=1)
+        
+        # Calculate this week's dates (each week is 7 days, Tuesday-Monday)
+        week_start_date = nfl_week_1_start + timedelta(weeks=week_number - 1)
+        week_end_date = week_start_date + timedelta(days=6)  # Monday
+        
+        return week_start_date, week_end_date
+    
+    def is_current_week(self, season_year: int, week_number: int) -> bool:
+        """Determine if this is the current week"""
+        from datetime import date
+        
+        current_date = date.today()
+        current_year = current_date.year
+        
+        # Only current season can have current week
+        if season_year != current_year:
+            return False
+        
+        # Calculate the current week dates
+        week_start_date, week_end_date = self.calculate_week_dates(season_year, week_number)
+        
+        # Check if today falls within this week
+        return week_start_date <= current_date <= week_end_date
+    
+    def get_week_from_date(self, transaction_date: date, season_year: int) -> int:
+        """Find which NFL week a transaction date falls into using dim_week data"""
+        from datetime import date
+        
+        try:
+            # Query dim_week to find the week that contains this date
+            with self.engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT week_number 
+                    FROM edw.dim_week 
+                    WHERE season_year = :season_year 
+                    AND :transaction_date BETWEEN week_start_date AND week_end_date
+                    LIMIT 1
+                """), {
+                    "season_year": season_year,
+                    "transaction_date": transaction_date
+                })
+                
+                row = result.fetchone()
+                if row:
+                    return row[0]
+                else:
+                    # If no exact match found, find the closest week
+                    # This handles edge cases where transaction might fall between weeks
+                    result = conn.execute(text("""
+                        SELECT week_number,
+                               ABS(EXTRACT(EPOCH FROM (week_start_date - :transaction_date))) as start_diff,
+                               ABS(EXTRACT(EPOCH FROM (week_end_date - :transaction_date))) as end_diff
+                        FROM edw.dim_week 
+                        WHERE season_year = :season_year 
+                        ORDER BY LEAST(start_diff, end_diff) 
+                        LIMIT 1
+                    """), {
+                        "season_year": season_year,
+                        "transaction_date": transaction_date
+                    })
+                    
+                    row = result.fetchone()
+                    if row:
+                        return row[0]
+                    else:
+                        # Fallback: return week 1 if no weeks found for this season
+                        logger.warning(f"⚠️ No weeks found for season {season_year}, defaulting to week 1")
+                        return 1
+                        
+        except Exception as e:
+            logger.warning(f"⚠️ Could not determine week for date {transaction_date} in season {season_year}: {e}")
+            # Fallback to simple calculation if database query fails
+            return self.calculate_week_from_date_fallback(transaction_date, season_year)
+    
+    def calculate_week_from_date_fallback(self, transaction_date: date, season_year: int) -> int:
+        """Fallback method to calculate week if dim_week lookup fails"""
+        from datetime import date, timedelta
+        
+        # Get the start date of NFL Week 1 for this season
+        week_1_start, _ = self.calculate_week_dates(season_year, 1)
+        
+        # Calculate days since week 1 started
+        days_since_start = (transaction_date - week_1_start).days
+        
+        # Each week is 7 days, so calculate which week this falls into
+        if days_since_start < 0:
+            # Transaction happened before the season started (probably preseason)
+            return 0  # Week 0 for preseason transactions
+        else:
+            # Add 1 because week numbering starts at 1
+            week_number = (days_since_start // 7) + 1
+            
+            # Cap at reasonable max week number (17 for modern seasons, 16 for older)
+            max_weeks = 17 if season_year >= 2021 else 16
+            return min(week_number, max_weeks)
     
     def transform_leagues(self) -> List[Dict]:
         """Transform leagues into dimension format"""
@@ -441,10 +722,11 @@ class EdwEtlProcessor:
             if team['league_id'] not in league_of_record_ids:
                 continue
             
-            # Consolidate manager name and lookup manager_key
+            # Get manager name using team_id override logic, then consolidation
             raw_manager_name = team.get('manager_name')
+            team_id = team['team_id']
             if raw_manager_name:
-                consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                consolidated_manager_name = self.get_manager_name_by_team_id(team_id, raw_manager_name)
                 manager_key = manager_keys.get(consolidated_manager_name)
             else:
                 consolidated_manager_name = None
@@ -466,17 +748,48 @@ class EdwEtlProcessor:
         return transformed
     
     def transform_players(self) -> List[Dict]:
-        """Transform players from transaction and draft data"""
+        """Transform players from transaction and draft data with position lookup"""
         transformed = []
         
         if not self.data:
             logger.warning("⚠️ No data available for player transformation")
             return transformed
         
-        # Collect unique players from transactions and draft picks
+        # First, build a position lookup map from sources that have position data
+        position_lookup = {}
+        
+        # Extract position data from draft picks (highest quality data)
+        for draft_pick in self.data.get('draft_picks', []):
+            player_id = draft_pick['player_id']
+            position = draft_pick.get('position')
+            if position and position.strip() and position != 'Unknown':
+                # Normalize position (e.g., "S,CB" -> "S")
+                normalized_position = position.split(',')[0] if ',' in position else position
+                position_lookup[player_id] = normalized_position
+        
+        # Extract position data from rosters (fallback for players not in draft)
+        for roster in self.data.get('rosters', []):
+            raw_player_id = roster['player_id']
+            
+            # Extract numeric player ID from Yahoo format  
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+                
+            position = roster.get('position')
+            if position and position.strip() and position != 'Unknown':
+                # Only use if we don't already have position data from draft
+                if numeric_player_id not in position_lookup:
+                    normalized_position = position.split(',')[0] if ',' in position else position
+                    position_lookup[numeric_player_id] = normalized_position
+        
+        logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
+        
+        # Collect unique players from all sources
         unique_players = {}
         
-        # Extract players from transactions
+        # Extract players from transactions (most comprehensive player list)
         for transaction in self.data.get('transactions', []):
             raw_player_id = transaction['player_id']
             
@@ -487,12 +800,15 @@ class EdwEtlProcessor:
                 numeric_player_id = raw_player_id
             
             if numeric_player_id not in unique_players:
+                # Use position lookup to get position data
+                position = position_lookup.get(numeric_player_id, 'Unknown')
+                
                 unique_players[numeric_player_id] = {
                     'player_id': numeric_player_id,
                     'player_name': transaction.get('player_name', f'Player {numeric_player_id}'),
-                    'primary_position': transaction.get('position', 'Unknown'),
-                    'eligible_positions': [transaction.get('position', 'Unknown')],
-                    'nfl_team': transaction.get('team', 'Unknown'),
+                    'primary_position': position,
+                    'eligible_positions': [position] if position != 'Unknown' else [],
+                    'nfl_team': 'Unknown',
                     'jersey_number': None,
                     'rookie_year': None,
                     'is_active': True,
@@ -500,17 +816,19 @@ class EdwEtlProcessor:
                     'valid_to': None
                 }
         
-        # Extract players from draft picks
+        # Extract players from draft picks (ensure we have all drafted players)
         for draft_pick in self.data.get('draft_picks', []):
             player_id = draft_pick['player_id']
             
             if player_id not in unique_players:
+                position = position_lookup.get(player_id, 'Unknown')
+                
                 unique_players[player_id] = {
                     'player_id': player_id,
                     'player_name': draft_pick.get('player_name', f'Player {player_id}'),
-                    'primary_position': draft_pick.get('position', 'Unknown'),
-                    'eligible_positions': [draft_pick.get('position', 'Unknown')],
-                    'nfl_team': draft_pick.get('team', 'Unknown'),
+                    'primary_position': position,
+                    'eligible_positions': [position] if position != 'Unknown' else [],
+                    'nfl_team': 'Unknown',
                     'jersey_number': None,
                     'rookie_year': None,
                     'is_active': True,
@@ -519,11 +837,16 @@ class EdwEtlProcessor:
                 }
         
         transformed = list(unique_players.values())
+        
+        # Count how many players have position data
+        players_with_positions = sum(1 for player in transformed if player['primary_position'] != 'Unknown')
         logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions and draft data")
+        logger.info(f"🏈 {players_with_positions} players have position data ({players_with_positions/len(transformed)*100:.1f}%)")
+        
         return transformed
     
     def transform_fact_roster(self) -> List[Dict]:
-        """Transform roster data into fact_roster format"""
+        """Transform roster data into fact_roster format with proper data sources"""
         facts = []
         
         if not self.data:
@@ -536,12 +859,99 @@ class EdwEtlProcessor:
             logger.info("🏈 No roster data available - skipping fact_roster")
             return facts
 
+        logger.info(f"📋 Processing {len(rosters_data)} roster records with enhanced data sources...")
+
         # Build set of league of record IDs for efficient lookup
         league_of_record_ids = set()
+        league_to_season = {}
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        # Build acquisition data from transactions and drafts
+        acquisition_data = {}
+        logger.info("📊 Building acquisition data from transactions and drafts...")
+        
+        # Process draft data for acquisition info
+        for draft in self.data.get('draft_picks', []):
+            if draft['league_id'] not in league_of_record_ids:
+                continue
+            
+            player_id = str(draft['player_id'])
+            team_id = f"{draft['league_id']}.t.{draft['team_id']}"
+            season_year = league_to_season.get(draft['league_id'])
+            
+            if not season_year:
+                continue
+                
+            # Store draft acquisition info
+            key = (draft['league_id'], team_id, player_id, season_year)
+            acquisition_data[key] = {
+                'type': 'draft',
+                'date': None,  # Draft date not available in current data
+                'cost': float(draft.get('cost', 0)) if draft.get('cost') else 0.0
+            }
+        
+        # Process transaction data for acquisition info
+        for transaction in self.data.get('transactions', []):
+            if transaction['league_id'] not in league_of_record_ids:
+                continue
+                
+            # Extract numeric player_id from full format (e.g., "153.p.7755" -> "7755")
+            raw_player_id = transaction['player_id']
+            if '.p.' in raw_player_id:
+                player_id = raw_player_id.split('.p.')[-1]
+            else:
+                player_id = str(raw_player_id)
+                
+            to_team_id = transaction.get('destination_team_id')  # Already in full format
+            season_year = league_to_season.get(transaction['league_id'])
+            
+            if not to_team_id or not season_year:
+                continue
+            
+            # Map transaction type (Fixed: use actual transaction types from database)
+            trans_type = transaction.get('type', 'unknown')
+            if trans_type in ['add', 'add/drop']:
+                acq_type = 'waiver'  # Yahoo adds are typically waiver/FAAB
+            elif trans_type in ['trade']:
+                acq_type = 'trade'
+            elif trans_type in ['drop']:
+                acq_type = None  # Don't track drops as acquisitions
+                continue
+            else:
+                acq_type = 'unknown'
+            
+            # Store transaction acquisition info (to_team_id already in full format)
+            key = (transaction['league_id'], to_team_id, player_id, season_year)
+            acquisition_data[key] = {
+                'type': acq_type,
+                'date': transaction.get('timestamp'),  # Fixed: use timestamp
+                'cost': float(transaction.get('faab_bid', 0)) if transaction.get('faab_bid') else 0.0
+            }
+        
+        # Build weekly points data from statistics
+        weekly_points_data = {}
+        logger.info("📊 Building weekly points data from statistics...")
+        
+        for stat in self.data.get('statistics', []):
+            if stat['league_id'] not in league_of_record_ids:
+                continue
+                
+            player_id = str(stat['player_id'])
+            week = stat.get('week_number')  # Fixed: use week_number instead of week
+            season_year = league_to_season.get(stat['league_id'])
+            
+            if not week or not season_year:
+                continue
+                
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
+            
+            # Store weekly points
+            key = (stat['league_id'], player_id, season_year, week)
+            weekly_points_data[key] = weekly_points
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -550,43 +960,76 @@ class EdwEtlProcessor:
         manager_keys = self.dim_mappings.get('manager_keys', {})
         week_keys = self.dim_mappings.get('week_keys', {})
         
+        debug_count = 0
+        filtered_league = 0
+        missing_season = 0
+        missing_keys = 0
+        successful = 0
+        
         for roster in rosters_data:
+            debug_count += 1
+            
             # Only include rosters from leagues of record
             if roster['league_id'] not in league_of_record_ids:
+                filtered_league += 1
                 continue
                 
-            # Extract league info to get season
-            season_year = None
-            for league in self.data.get('leagues', []):
-                if league['league_id'] == roster['league_id']:
-                    season_year = int(league['season'])
-                    break
-            
+            season_year = league_to_season.get(roster['league_id'])
             if not season_year:
+                missing_season += 1
                 continue
                 
             league_key = league_keys.get(roster['league_id'])
-            team_key = team_keys.get(roster['team_id'])
             
-            # Extract numeric player ID from Yahoo format
-            raw_player_id = roster['player_id']
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
+            # Map team_id to full team_id format for lookup (same pattern as transform_fact_draft)
+            raw_team_id = roster['team_id']
+            league_id = roster['league_id']
+            # Construct full team_id: league_id + ".t." + team_id
+            full_team_id = f"{league_id}.t.{raw_team_id}"
+            team_key = team_keys.get(full_team_id)
             
+            # Player ID is already numeric in roster data
+            numeric_player_id = str(roster['player_id'])
             player_key = player_keys.get(numeric_player_id)
             week_key = week_keys.get((season_year, roster['week']))
             
-            # Get manager_key from team's manager_name
+            # Get manager_key from team data (roster doesn't have manager_name)
             manager_key = None
-            raw_manager_name = roster.get('manager_name')
-            if raw_manager_name:
-                consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
-                manager_key = manager_keys.get(consolidated_manager_name)
+            raw_manager_name = None  # Initialize to avoid reference errors
+            for team in self.data.get('teams', []):
+                if team['team_id'] == full_team_id:  # Use full_team_id for lookup
+                    raw_manager_name = team.get('manager_name')
+                    if raw_manager_name:
+                        consolidated_manager_name = self.get_manager_name_by_team_id(full_team_id, raw_manager_name)
+                        manager_key = manager_keys.get(consolidated_manager_name)
+                    break
             
             if not all([league_key, team_key, player_key, week_key, manager_key]):
+                missing_keys += 1
                 continue
+            
+            successful += 1
+            
+            # Calculate roster status flags
+            player_status = roster.get('status', 'active')
+            player_position = roster.get('position', 'BN')
+            is_starter = roster.get('is_starter', False)
+            
+            # Determine bench and IR status
+            is_bench = (player_status == 'bench') or (not is_starter)
+            is_ir = (player_position in ['IR', 'INJ', 'INJURED']) or (player_status in ['ir', 'injured', 'inactive'])
+            
+            # Get acquisition info from our built data (use full_team_id to match transactions)
+            acq_key = (league_id, full_team_id, numeric_player_id, season_year)
+            acquisition_info = acquisition_data.get(acq_key, {
+                'type': None,
+                'date': None,
+                'cost': None
+            })
+            
+            # Get weekly points from statistics data
+            points_key = (league_id, numeric_player_id, season_year, roster['week'])
+            weekly_points = weekly_points_data.get(points_key, 0.0)
             
             facts.append({
                 'league_key': league_key,
@@ -595,17 +1038,20 @@ class EdwEtlProcessor:
                 'player_key': player_key,
                 'week_key': week_key,
                 'season_year': season_year,
-                'is_starter': roster.get('is_starter', False),
-                'roster_position': roster.get('selected_position', 'BN'),
-                'weekly_points': float(roster.get('player_points', 0)),
-                'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') else None,
-                'roster_slot_type': roster.get('roster_position'),
-                'ownership_percentage': None,  # Not available in current data
-                'acquisition_type': roster.get('acquisition_type'),
-                'acquisition_date': None  # Not available in current data
+                'is_starter': is_starter,
+                'is_bench': is_bench,
+                'is_ir': is_ir,
+                'roster_position': player_position,
+                'weekly_points': weekly_points,  # Now from statistics data
+                'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
+                'acquisition_type': acquisition_info['type'],  # Now from transactions/drafts
+                'acquisition_date': acquisition_info['date'],  # Now from transactions/drafts
+                'acquisition_cost': acquisition_info['cost']   # Now from transactions/drafts (FAAB)
             })
         
         logger.info(f"📋 Transformed {len(facts)} roster facts from {len(rosters_data)} roster records")
+        logger.info(f"🔍 Roster Debug: filtered_league={filtered_league}, missing_season={missing_season}, missing_keys={missing_keys}, successful={successful}")
+        logger.info(f"📊 Enhanced with {len(acquisition_data)} acquisition records and {len(weekly_points_data)} weekly points")
         return facts
     
     def transform_fact_matchup(self) -> List[Dict]:
@@ -651,12 +1097,12 @@ class EdwEtlProcessor:
                 if team['team_id'] == matchup['team1_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(matchup['team1_id'], raw_manager_name)
                         manager1_key = manager_keys.get(consolidated_manager_name)
                 elif team['team_id'] == matchup['team2_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(matchup['team2_id'], raw_manager_name)
                         manager2_key = manager_keys.get(consolidated_manager_name)
             
             if not all([league_key, team1_key, team2_key, week_key, manager1_key, manager2_key]):
@@ -699,7 +1145,7 @@ class EdwEtlProcessor:
                 'is_tie': bool(team1_points == team2_points),
                 'margin_of_victory': float(abs(team1_points - team2_points)),
                 'matchup_type': str(matchup_type),
-                'is_playoffs': bool(matchup_type in ['playoffs', 'championship', 'consolation']),
+                'is_playoffs': bool(matchup_type in ['playoffs', 'championship']),
                 'is_championship': bool(matchup_type == 'championship'),
                 'is_consolation': bool(matchup_type == 'consolation')
             })
@@ -766,6 +1212,9 @@ class EdwEtlProcessor:
             else:  # January-August = previous NFL season
                 season_year = transaction_date.year - 1
             
+            # Find transaction week using dim_week data
+            transaction_week = self.get_week_from_date(transaction_date, season_year)
+            
             # Get manager keys for from/to teams
             from_manager_key = None
             to_manager_key = None
@@ -775,7 +1224,7 @@ class EdwEtlProcessor:
                     if team['team_id'] == transaction['source_team_id']:
                         raw_manager_name = team.get('manager_name')
                         if raw_manager_name:
-                            consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                            consolidated_manager_name = self.get_manager_name_by_team_id(transaction['source_team_id'], raw_manager_name)
                             from_manager_key = manager_keys.get(consolidated_manager_name)
                         break
                         
@@ -784,27 +1233,32 @@ class EdwEtlProcessor:
                     if team['team_id'] == transaction['destination_team_id']:
                         raw_manager_name = team.get('manager_name')
                         if raw_manager_name:
-                            consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                            consolidated_manager_name = self.get_manager_name_by_team_id(transaction['destination_team_id'], raw_manager_name)
                             to_manager_key = manager_keys.get(consolidated_manager_name)
                         break
             
-            # Generate a unique transaction_id
-            transaction_id = f"{transaction['league_id']}_{transaction['player_id']}_{transaction_date.strftime('%Y%m%d')}_{transaction['type']}"
+            # Handle faab_bid properly - check for None vs 0
+            faab_bid_value = transaction.get('faab_bid')
+            if faab_bid_value is not None and faab_bid_value != '':
+                try:
+                    faab_bid = float(faab_bid_value)
+                except (ValueError, TypeError):
+                    faab_bid = None
+            else:
+                faab_bid = None
             
             facts.append({
-                'transaction_id': transaction_id,
                 'league_key': int(league_key),
                 'player_key': int(player_key),
                 'season_year': int(season_year),
                 'transaction_date': transaction_date,
-                'transaction_week': None,  # Not available in data
+                'transaction_week': transaction_week,  # Now calculated using dim_week
                 'transaction_type': str(transaction['type']),
                 'from_team_key': int(team_keys.get(transaction.get('source_team_id'))) if team_keys.get(transaction.get('source_team_id')) else None,
                 'to_team_key': int(team_keys.get(transaction.get('destination_team_id'))) if team_keys.get(transaction.get('destination_team_id')) else None,
                 'from_manager_key': int(from_manager_key) if from_manager_key else None,
                 'to_manager_key': int(to_manager_key) if to_manager_key else None,
-                'faab_bid': float(transaction.get('faab_bid', 0)) if transaction.get('faab_bid') else None,
-                'waiver_priority': None,  # Not available in data
+                'faab_bid': faab_bid,  # Properly handled None vs 0
                 'trade_group_id': None,  # Not available in data
                 'transaction_status': str(transaction.get('status', 'completed'))
             })
@@ -812,19 +1266,130 @@ class EdwEtlProcessor:
         return facts
     
     def transform_fact_draft(self) -> List[Dict]:
-        """Transform draft pick data into fact_draft format"""
+        """Transform draft picks into fact_draft format with performance metrics"""
         facts = []
         
         if not self.data:
-            logger.warning("⚠️ No data available for draft fact transformation")
+            logger.warning("⚠️ No data available for draft transformation")
             return facts
 
         # Build set of league of record IDs for efficient lookup
         league_of_record_ids = set()
+        league_to_season = {}
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        if not league_of_record_ids:
+            logger.warning("⚠️ No league of record data found")
+            return facts
+
+        # Build player performance lookup following business rules:
+        # - season_points: from public.statistics (fact_stats)
+        # - fantasy_games_played: count of non-bench weeks from rosters (starting lineup games)
+        # - points_per_week: season_points / total_weeks_in_season (average weekly impact)
+        player_performance = {}
+        
+        # Get season weeks count for points_per_game calculation
+        season_weeks = {}
+        for league in self.data.get('leagues', []):
+            season_year = int(league['season'])
+            if league_year := league_to_season.get(league['league_id']):
+                # Get total weeks for this season (varies by year)
+                if season_year <= 2009 or season_year in [2006, 2007]:
+                    season_weeks[season_year] = 15  # Shorter seasons
+                elif season_year <= 2021:
+                    season_weeks[season_year] = 16  # Standard 16-week seasons
+                else:
+                    season_weeks[season_year] = 17  # Modern 17-week seasons
+        
+        logger.info("📊 Loading player performance data from public.statistics...")
+        try:
+            with self.engine.connect() as conn:
+                # Aggregate weekly points to get season totals
+                league_ids_str = "', '".join(league_of_record_ids)
+                sql = f"""
+                    SELECT 
+                        s.league_id,
+                        s.player_id,
+                        s.season_year,
+                        SUM(s.weekly_fantasy_points) as total_fantasy_points
+                    FROM public.statistics s
+                    WHERE s.league_id IN ('{league_ids_str}')
+                    GROUP BY s.league_id, s.player_id, s.season_year
+                """
+                
+                result = conn.execute(text(sql))
+                for row in result:
+                    league_id = row[0]
+                    player_id = str(row[1])
+                    season_year = row[2]
+                    total_points = float(row[3] or 0)
+                    
+                    perf_key = (league_id, season_year, player_id)
+                    player_performance[perf_key] = {
+                        'season_points': total_points,
+                        'games_played': 0,  # Will calculate from roster data
+                        'points_per_game': 0.0  # Will calculate
+                    }
+                
+                logger.info(f"✅ Loaded season_points for {len(player_performance)} player-season combinations")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load from public.statistics: {e}")
+            logger.info("📊 Season points will default to 0")
+        
+        # Calculate fantasy_games_played from roster data (starter positions only)
+        logger.info("📊 Calculating fantasy_games_played from roster data (starter positions only)...")
+        fantasy_games_played_counts = {}
+        
+        for roster in self.data.get('rosters', []):
+            if roster['league_id'] not in league_of_record_ids:
+                continue
+            # Only count players who were in starting positions
+            if not roster.get('is_starter', False):
+                continue
+                
+            season_year = league_to_season.get(roster['league_id'])
+            if not season_year:
+                continue
+                
+            # Extract numeric player ID
+            raw_player_id = roster['player_id']
+            if '.p.' in raw_player_id:
+                player_id = raw_player_id.split('.p.')[-1]
+            else:
+                player_id = raw_player_id
+            
+            perf_key = (roster['league_id'], season_year, player_id)
+            if perf_key not in fantasy_games_played_counts:
+                fantasy_games_played_counts[perf_key] = 0
+            fantasy_games_played_counts[perf_key] += 1
+        
+        # Apply fantasy_games_played counts to performance data
+        for perf_key, count in fantasy_games_played_counts.items():
+            if perf_key in player_performance:
+                player_performance[perf_key]['games_played'] = count
+        
+        # Calculate points_per_week = season_points / total_weeks_in_season
+        for perf_key, perf_data in player_performance.items():
+            season_year = perf_key[1]
+            total_weeks = season_weeks.get(season_year, 17)  # Default to 17 weeks
+            season_points = perf_data['season_points']
+            
+            if total_weeks > 0:
+                perf_data['points_per_week'] = season_points / total_weeks
+            else:
+                perf_data['points_per_week'] = 0.0
+        
+        logger.info(f"📊 Built performance data for {len(player_performance)} player-season combinations")
+        logger.info(f"📊 Fantasy games played calculated from {len(fantasy_games_played_counts)} starting roster entries")
+
+        # Ensure dimension mappings are cached
+        if not self.dim_mappings:
+            self.cache_dimension_mappings()
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -853,7 +1418,7 @@ class EdwEtlProcessor:
                 if team['team_id'] == full_team_id:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(full_team_id, raw_manager_name)
                         manager_key = manager_keys.get(consolidated_manager_name)
                     break
             
@@ -861,19 +1426,23 @@ class EdwEtlProcessor:
                 logger.debug(f"⚠️ Missing keys for draft pick: league={league_key}, team={team_key} (raw={raw_team_id}, full={full_team_id}), player={player_key}, manager={manager_key}")
                 continue
             
-            # Extract season from extracted_at timestamp
-            try:
-                if 'extracted_at' in draft_pick:
-                    extracted_date = datetime.fromisoformat(draft_pick['extracted_at'].replace('T', ' ').replace('Z', '')).date()
-                    season_year = extracted_date.year
-                    if extracted_date.month >= 9:  # September or later = current NFL season
-                        season_year = extracted_date.year
-                    else:  # January-August = previous NFL season  
-                        season_year = extracted_date.year - 1
-                else:
-                    season_year = 2024  # Default fallback
-            except (ValueError, KeyError):
-                season_year = 2024  # Default fallback
+            # Get season year from league data (not extracted_at timestamp!)
+            season_year = league_to_season.get(league_id, 2024)
+            
+            # Get player performance data for this season
+            # Match player_id format - extract numeric ID from draft pick
+            draft_player_id = draft_pick['player_id']
+            if '.p.' in draft_player_id:
+                numeric_player_id = draft_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = draft_player_id
+                
+            perf_key = (league_id, season_year, numeric_player_id)
+            perf_data = player_performance.get(perf_key, {
+                'season_points': 0.0,
+                'games_played': 0,
+                'points_per_week': 0.0
+            })
             
             facts.append({
                 'league_key': int(league_key),
@@ -886,12 +1455,475 @@ class EdwEtlProcessor:
                 'pick_in_round': int(draft_pick.get('pick_in_round', (draft_pick['pick_number'] - 1) % 12 + 1)),
                 'draft_cost': float(draft_pick.get('cost', 0)) if draft_pick.get('cost') else None,
                 'is_keeper_pick': bool(draft_pick.get('is_keeper', False)),
-                'season_points': None,  # Will be calculated later
-                'games_played': None,
-                'points_per_game': None
+                'season_points': float(perf_data['season_points']),
+                'fantasy_games_played': int(perf_data['games_played']),
+                'points_per_week': float(perf_data['points_per_week'])
             })
         
         return facts
+    
+    def transform_fact_player_statistics(self) -> List[Dict]:
+        """Transform player statistics data into weekly fact_player_statistics format"""
+        facts = []
+        
+        if not self.data:
+            logger.warning("⚠️ No data available for player statistics transformation")
+            return facts
+
+        # Build set of league of record IDs for efficient lookup
+        league_of_record_ids = set()
+        league_to_season = {}
+        for league in self.data.get('leagues', []):
+            season_year = int(league['season'])
+            if self.is_league_of_record(league['league_id'], season_year):
+                league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        if not league_of_record_ids:
+            logger.warning("⚠️ No league of record data found")
+            return facts
+
+        # Process statistics data
+        statistics_data = self.data.get('statistics', [])
+        if not statistics_data:
+            logger.warning("⚠️ No statistics data found")
+            return facts
+
+        logger.info(f"📊 Processing {len(statistics_data)} weekly player statistics records...")
+
+        # Aggregate by player-season for season-level rankings
+        player_season_totals = {}
+        
+        # First pass: aggregate weekly data to season totals for ranking purposes
+        for stat in statistics_data:
+            league_id = stat['league_id']
+            if league_id not in league_of_record_ids:
+                continue
+
+            season_year = league_to_season.get(league_id)
+            if not season_year:
+                continue
+
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
+            position_type = stat.get('position_type', 'Unknown')
+            player_id = stat['player_id']
+            
+            # Aggregate to season level for rankings
+            season_key = (league_id, player_id, season_year, position_type)
+            if season_key not in player_season_totals:
+                player_season_totals[season_key] = {
+                    'total_points': 0,
+                    'weeks_played': 0,
+                    'position_type': position_type
+                }
+            
+            player_season_totals[season_key]['total_points'] += weekly_points
+            player_season_totals[season_key]['weeks_played'] += 1
+
+        # Calculate season-level rankings
+        league_season_rankings = {}
+        position_season_rankings = {}
+        
+        # Group for league rankings
+        league_season_players = {}
+        for (league_id, player_id, season_year, position_type), totals in player_season_totals.items():
+            league_season_key = (league_id, season_year)
+            if league_season_key not in league_season_players:
+                league_season_players[league_season_key] = []
+            league_season_players[league_season_key].append(
+                (player_id, totals['total_points'])
+            )
+
+        # Calculate league rankings
+        for league_season_key, players in league_season_players.items():
+            sorted_players = sorted(players, key=lambda x: x[1], reverse=True)
+            for rank, (player_id, points) in enumerate(sorted_players, 1):
+                ranking_key = (league_season_key[0], player_id, league_season_key[1])
+                league_season_rankings[ranking_key] = rank
+
+        # Group for position rankings
+        position_season_players = {}
+        for (league_id, player_id, season_year, position_type), totals in player_season_totals.items():
+            position_key = (league_id, season_year, position_type)
+            if position_key not in position_season_players:
+                position_season_players[position_key] = []
+            position_season_players[position_key].append(
+                (player_id, totals['total_points'])
+            )
+
+        # Calculate position rankings
+        for position_key, players in position_season_players.items():
+            sorted_players = sorted(players, key=lambda x: x[1], reverse=True)
+            for rank, (player_id, points) in enumerate(sorted_players, 1):
+                ranking_key = (position_key[0], player_id, position_key[1])
+                position_season_rankings[ranking_key] = rank
+
+        # Second pass: create weekly fact records with season-level context
+        for stat in statistics_data:
+            league_id = stat['league_id']
+            if league_id not in league_of_record_ids:
+                continue
+
+            season_year = league_to_season.get(league_id)
+            if not season_year:
+                continue
+
+            # Get dimension keys
+            league_key = self.dim_mappings['league_keys'].get(league_id)
+            if not league_key:
+                continue
+
+            # Extract player ID (handle Yahoo format)
+            raw_player_id = stat['player_id']
+            if '.p.' in raw_player_id:
+                numeric_player_id = raw_player_id.split('.p.')[-1]
+            else:
+                numeric_player_id = raw_player_id
+
+            player_key = self.dim_mappings['player_keys'].get(numeric_player_id)
+            if not player_key:
+                continue
+
+            # Weekly stats
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
+            week_number = int(stat.get('week_number', 1))
+            position_type = stat.get('position_type', 'Unknown')
+
+            # Get season-level rankings
+            ranking_key = (league_id, stat['player_id'], season_year)
+            league_rank = league_season_rankings.get(ranking_key)
+            position_rank = position_season_rankings.get(ranking_key)
+
+            # Get season totals for calculations
+            season_key = (league_id, stat['player_id'], season_year, position_type)
+            season_totals = player_season_totals.get(season_key, {
+                'total_points': weekly_points,
+                'weeks_played': 1
+            })
+
+            # Calculate season-level metrics
+            season_total_points = season_totals['total_points']
+            weeks_played = season_totals['weeks_played']
+            avg_points_per_game = season_total_points / weeks_played if weeks_played > 0 else 0
+
+            # Calculate points above replacement for this week
+            # Use bottom 25% of position as replacement level
+            position_key = (league_id, season_year, position_type)
+            if position_key in position_season_players:
+                position_players = position_season_players[position_key]
+                if len(position_players) > 3:
+                    replacement_threshold = int(len(position_players) * 0.75)
+                    sorted_position = sorted(position_players, key=lambda x: x[1], reverse=True)
+                    replacement_season_total = sorted_position[replacement_threshold][1] if replacement_threshold < len(sorted_position) else 0
+                    replacement_weekly_avg = replacement_season_total / 17  # Assume 17 weeks
+                    points_above_replacement = weekly_points - replacement_weekly_avg
+                else:
+                    points_above_replacement = weekly_points
+            else:
+                points_above_replacement = weekly_points
+
+            # Calculate weekly consistency score (simplified for weekly data)
+            consistency_score = self._calculate_weekly_consistency_score(
+                weekly_points, avg_points_per_game, position_type
+            )
+
+            # Calculate draft value score based on season performance
+            draft_value_score = self._calculate_draft_value_score(
+                league_id, numeric_player_id, season_year, season_total_points, position_rank
+            )
+
+            # Create weekly fact record (no calculated fields)
+            fact = {
+                'league_key': league_key,
+                'player_key': player_key,
+                'season_year': season_year,
+                'week_number': week_number,
+                'weekly_fantasy_points': weekly_points,
+                'position_type': position_type,
+                'position_rank': position_rank,  # Season-level rank
+                'league_rank': league_rank,     # Season-level rank
+                'points_above_replacement': round(points_above_replacement, 2),
+                'source_stat_id': stat.get('stat_id'),
+                'game_code': stat.get('game_code', 'nfl')
+            }
+
+            facts.append(fact)
+
+        logger.info(f"✅ Player statistics facts transformed: {len(facts)} records")
+        return facts
+
+    def _calculate_consistency_score(self, total_points: float, points_per_game: float, 
+                                   position_type: str, games_played: int) -> float:
+        """
+        Calculate consistency score using simplified method without weekly data.
+        
+        This uses position-based variance estimates since we don't have weekly data.
+        Lower scores indicate more consistent performance.
+        """
+        if total_points <= 0 or games_played <= 0:
+            return None
+        
+        # Position-based consistency multipliers (estimated from historical data)
+        # QBs tend to be more consistent, RBs/WRs more volatile, K/DEF very volatile
+        position_volatility = {
+            'O': 0.25,    # Offensive players (QB, RB, WR, TE) - moderate volatility
+            'K': 0.45,    # Kickers - high volatility  
+            'DT': 0.40,   # Defense/Team - high volatility
+            'DP': 0.35,   # Individual defensive players - moderate-high volatility
+        }
+        
+        base_volatility = position_volatility.get(position_type, 0.30)
+        
+        # Estimate standard deviation as percentage of points per game
+        estimated_std_dev = points_per_game * base_volatility
+        
+        # Normalize by points per game to get coefficient of variation
+        consistency_score = estimated_std_dev / points_per_game if points_per_game > 0 else None
+        
+        return consistency_score
+
+    def _calculate_weekly_consistency_score(self, weekly_points: float, season_avg: float, 
+                                          position_type: str) -> float:
+        """
+        Calculate weekly consistency score by comparing this week's performance to season average.
+        
+        Returns a score indicating how much this week deviates from the player's season average.
+        Lower scores indicate performance closer to average (more consistent).
+        """
+        if season_avg <= 0:
+            return None
+        
+        # Calculate deviation from season average as percentage
+        deviation = abs(weekly_points - season_avg) / season_avg
+        
+        # Position-based volatility expectations
+        position_volatility = {
+            'O': 0.30,    # Offensive players - moderate expected volatility
+            'K': 0.50,    # Kickers - high volatility  
+            'DT': 0.45,   # Defense/Team - high volatility
+            'DP': 0.40,   # Individual defensive players - moderate-high volatility
+        }
+        
+        expected_volatility = position_volatility.get(position_type, 0.35)
+        
+        # Normalize deviation by expected volatility for this position
+        consistency_score = deviation / expected_volatility
+        
+        return consistency_score
+
+    def _calculate_draft_value_score(self, league_id: str, player_id: str, season_year: int, 
+                                   fantasy_points: float, position_rank: int) -> float:
+        """
+        Calculate draft value score by comparing actual performance to draft position.
+        
+        Positive scores indicate player outperformed their draft position.
+        Negative scores indicate player underperformed their draft position.
+        """
+        try:
+            # Get draft data for this player
+            draft_info = None
+            for draft_pick in self.data.get('draft_picks', []):
+                if (draft_pick.get('league_id') == league_id and 
+                    draft_pick.get('season_year') == season_year):
+                    
+                    # Handle Yahoo player ID format
+                    draft_player_id = draft_pick.get('player_id', '')
+                    if '.p.' in draft_player_id:
+                        draft_numeric_id = draft_player_id.split('.p.')[-1]
+                    else:
+                        draft_numeric_id = draft_player_id
+                    
+                    if draft_numeric_id == player_id:
+                        draft_info = draft_pick
+                        break
+            
+            if not draft_info:
+                return None  # Player wasn't drafted
+            
+            draft_position = draft_info.get('pick_number', 0)
+            if draft_position <= 0:
+                return None
+            
+            # Calculate expected points based on draft position
+            # Use a logarithmic decay model: early picks should score much more
+            # This is a simplified model - could be enhanced with historical ADP data
+            max_expected_points = 400  # Top pick expected points
+            min_expected_points = 50   # Last pick expected points
+            total_picks = 200  # Assume ~200 total picks across all leagues
+            
+            # Logarithmic decay from max to min
+            import math
+            decay_factor = math.log(total_picks) / (max_expected_points - min_expected_points)
+            expected_points = max_expected_points - (math.log(draft_position) / decay_factor)
+            expected_points = max(expected_points, min_expected_points)
+            
+            # Calculate value score as percentage above/below expected
+            if expected_points > 0:
+                value_score = (fantasy_points - expected_points) / expected_points
+            else:
+                value_score = 0
+            
+            return value_score
+            
+        except Exception as e:
+            logger.debug(f"Could not calculate draft value score for player {player_id}: {e}")
+            return None
+    
+    def _calculate_playoff_probability(self, win_percentage: float, current_rank: int, 
+                                     total_teams: int, current_week: int, weekly_points: float) -> float:
+        """
+        Calculate playoff probability based on multiple factors.
+        
+        Factors considered:
+        1. Current standings position (most important)
+        2. Win percentage vs. historical playoff cutoffs
+        3. Weeks remaining in season
+        4. Points scored relative to league average (tiebreaker factor)
+        """
+        try:
+            # Default values if inputs are invalid
+            if not all([win_percentage is not None, current_rank, total_teams]):
+                return 0.0
+            
+            # Standard fantasy football assumptions
+            playoff_teams = max(4, total_teams // 3)  # Typically 4-6 teams make playoffs
+            
+            # Determine playoff start week from actual data
+            playoff_start_week = self._get_playoff_start_week()
+            
+            if current_week is None:
+                # Better fallback: use a conservative mid-season estimate
+                # This affects the "weeks remaining" calculation for probability
+                logger.debug(f"⚠️ Using fallback week 10 for playoff probability calculation")
+                current_week = 10  # Conservative mid-season estimate
+            
+            weeks_remaining = max(0, playoff_start_week - current_week)
+            
+            # Factor 1: Current standings position (40% weight)
+            if current_rank <= playoff_teams:
+                position_factor = 1.0 - (current_rank - 1) / playoff_teams  # 1.0 for 1st, decreasing
+            else:
+                # Teams outside playoff spots - exponentially decreasing probability
+                spots_out = current_rank - playoff_teams
+                position_factor = max(0.0, 0.5 * (0.7 ** spots_out))
+            
+            # Factor 2: Win percentage vs historical benchmarks (30% weight)
+            # Historical data: ~0.600+ win% almost always makes playoffs, ~0.400- rarely does
+            if win_percentage >= 0.700:
+                record_factor = 1.0
+            elif win_percentage >= 0.600:
+                record_factor = 0.9
+            elif win_percentage >= 0.500:
+                record_factor = 0.7
+            elif win_percentage >= 0.400:
+                record_factor = 0.4
+            else:
+                record_factor = 0.1
+            
+            # Factor 3: Time remaining adjustment (20% weight)
+            if weeks_remaining > 8:
+                # Early season - lots of time to change position
+                time_factor = 0.5 + (weeks_remaining / 20)  # More volatility early
+            elif weeks_remaining > 4:
+                # Mid season - moderate adjustments
+                time_factor = 0.7 + (weeks_remaining / 40)
+            elif weeks_remaining > 0:
+                # Late season - position matters more
+                time_factor = 0.9 + (weeks_remaining / 100)
+            else:
+                # Season over or playoffs started
+                time_factor = 1.0 if current_rank <= playoff_teams else 0.0
+            
+            # Factor 4: Points differential (10% weight) - simplified
+            # Assume league average is around 100-120 points
+            league_avg_points = 110
+            if weekly_points > league_avg_points * 1.1:  # 10% above average
+                points_factor = 1.1
+            elif weekly_points > league_avg_points * 0.9:  # Within 10% of average
+                points_factor = 1.0
+            else:  # Below average scoring
+                points_factor = 0.9
+            
+            # Combine factors with weights
+            playoff_probability = (
+                position_factor * 0.40 +
+                record_factor * 0.30 +
+                time_factor * 0.20 +
+                points_factor * 0.10
+            )
+            
+            # Ensure probability is between 0 and 1
+            playoff_probability = max(0.0, min(1.0, playoff_probability))
+            
+            return round(playoff_probability, 4)
+            
+        except Exception as e:
+            logger.debug(f"Could not calculate playoff probability: {e}")
+            return 0.0
+    
+    def _get_playoff_start_week(self) -> int:
+        """
+        Determine when playoffs start based on actual matchup data.
+        
+        Logic:
+        1. Look for first week where matchup_type != 'regular'
+        2. If no playoff data found, use current/future rule: week 15 (week 14 is last regular season)
+        3. Playoffs are always 3 weeks long, so can work backwards from season end
+        """
+        try:
+            # Look through matchup data to find playoff start
+            playoff_weeks = set()
+            season_end_weeks = {}  # Track the last week for each season
+            
+            for matchup in self.data.get('matchups', []):
+                # Get season from league data
+                season_year = None
+                for league in self.data.get('leagues', []):
+                    if league['league_id'] == matchup['league_id']:
+                        season_year = int(league['season'])
+                        break
+                
+                if not season_year:
+                    continue
+                
+                week_num = matchup['week']
+                
+                # Track the highest week number for each season (season end)
+                if season_year not in season_end_weeks:
+                    season_end_weeks[season_year] = week_num
+                else:
+                    season_end_weeks[season_year] = max(season_end_weeks[season_year], week_num)
+                
+                # Look for non-regular matchups (playoffs)
+                matchup_type = matchup.get('matchup_type', 'regular')
+                is_playoffs = matchup.get('is_playoffs', False)
+                
+                if matchup_type != 'regular' or is_playoffs:
+                    playoff_weeks.add(week_num)
+            
+            # Determine playoff start week
+            if playoff_weeks:
+                # Use the earliest playoff week found in data
+                playoff_start_week = min(playoff_weeks)
+                logger.debug(f"📊 Detected playoff start week: {playoff_start_week} from matchup data")
+                return playoff_start_week
+            elif season_end_weeks:
+                # Work backwards: playoffs are 3 weeks, so playoff start = season_end - 2
+                max_season_end = max(season_end_weeks.values())
+                playoff_start_week = max_season_end - 2  # 3-week playoffs
+                logger.debug(f"📊 Calculated playoff start week: {playoff_start_week} (working backwards from week {max_season_end})")
+                return playoff_start_week
+            else:
+                # Current/future default: 17-week season with 3-week playoffs
+                # Regular season ends week 14, playoffs start week 15
+                playoff_start_week = 15
+                logger.debug(f"📊 Using default playoff start week: {playoff_start_week} (current/future seasons)")
+                return playoff_start_week
+                
+        except Exception as e:
+            logger.debug(f"Could not determine playoff start week: {e}")
+            # Safe default for current/future seasons
+            return 15
     
     def transform_fact_team_performance(self) -> List[Dict]:
         """Transform team performance data from matchups and rosters"""
@@ -912,6 +1944,35 @@ class EdwEtlProcessor:
             if self.is_league_of_record(league['league_id'], season_year):
                 league_to_season[league['league_id']] = season_year
                 league_of_record_ids.add(league['league_id'])
+        
+        # First pass: collect playoff team information (exclude consolation)
+        playoff_teams_by_season = {}  # {(league_id, season_year): set of team_ids}
+        
+        for matchup in self.data.get('matchups', []):
+            # Only include matchups from leagues of record
+            if matchup['league_id'] not in league_of_record_ids:
+                continue
+                
+            season_year = league_to_season.get(matchup['league_id'], 2024)
+            
+            # Check if this is a real playoff game (not consolation)
+            is_playoffs = matchup.get('is_playoffs', False)
+            is_consolation = matchup.get('is_consolation', False)
+            matchup_type = matchup.get('matchup_type', 'regular')
+            
+            # Real playoffs: is_playoffs=True AND not consolation
+            if is_playoffs and not is_consolation and matchup_type != 'consolation':
+                league_season_key = (matchup['league_id'], season_year)
+                if league_season_key not in playoff_teams_by_season:
+                    playoff_teams_by_season[league_season_key] = set()
+                
+                # Both teams in this playoff matchup made the playoffs
+                playoff_teams_by_season[league_season_key].add(matchup['team1_id'])
+                playoff_teams_by_season[league_season_key].add(matchup['team2_id'])
+        
+        # Log playoff team detection results
+        total_playoff_teams = sum(len(teams) for teams in playoff_teams_by_season.values())
+        logger.info(f"📊 Detected {total_playoff_teams} playoff teams across {len(playoff_teams_by_season)} league-seasons (excluding consolation)")
         
         # Process matchups for wins/losses/points (only for leagues of record)
         for matchup in self.data.get('matchups', []):
@@ -948,6 +2009,64 @@ class EdwEtlProcessor:
                 else:
                     team_performance[key]['ties'] = 1
         
+        # Calculate running averages for weekly_points before creating facts
+        logger.info(f"📊 Calculating running averages for weekly points...")
+        
+        # Group team performance by team and season for running average calculation
+        team_season_weeks = {}
+        for perf in team_performance.values():
+            team_season_key = (perf['team_id'], perf['league_id'], perf['season_year'])
+            if team_season_key not in team_season_weeks:
+                team_season_weeks[team_season_key] = []
+            team_season_weeks[team_season_key].append({
+                'week': perf['week'],
+                'weekly_points': perf['weekly_points'],
+                'points_against': perf['points_against']
+            })
+        
+        # Calculate running averages and win percentages for each team-season
+        running_averages = {}
+        running_win_percentages = {}
+        for team_season_key, weeks in team_season_weeks.items():
+            # Sort weeks in ascending order
+            weeks.sort(key=lambda x: x['week'])
+            
+            cumulative_points = 0
+            cumulative_wins = 0
+            cumulative_losses = 0
+            cumulative_ties = 0
+            
+            for i, week_data in enumerate(weeks):
+                # Calculate running average points
+                cumulative_points += week_data['weekly_points']
+                weeks_played = i + 1
+                running_avg = cumulative_points / weeks_played
+                
+                # Calculate running win percentage
+                # Need to get wins/losses/ties for this week from team_performance
+                team_id, league_id, season_year = team_season_key
+                week_num = week_data['week']
+                perf_key = (team_id, season_year, week_num)
+                
+                if perf_key in team_performance:
+                    cumulative_wins += team_performance[perf_key]['wins']
+                    cumulative_losses += team_performance[perf_key]['losses']
+                    cumulative_ties += team_performance[perf_key]['ties']
+                
+                # Calculate win percentage: (wins + 0.5 * ties) / (total games)
+                total_games = cumulative_wins + cumulative_losses + cumulative_ties
+                if total_games > 0:
+                    win_percentage = (cumulative_wins + 0.5 * cumulative_ties) / total_games
+                else:
+                    win_percentage = 0.0
+                
+                # Store both metrics for this team-season-week
+                lookup_key = (team_season_key[0], team_season_key[1], team_season_key[2], week_data['week'])
+                running_averages[lookup_key] = running_avg
+                running_win_percentages[lookup_key] = win_percentage
+        
+        logger.info(f"✅ Calculated running averages and win percentages for {len(running_averages)} team-week combinations")
+        
         # Convert to fact format with dimension keys (use cached mappings)
         league_keys = self.dim_mappings.get('league_keys', {})
         team_keys = self.dim_mappings.get('team_keys', {})
@@ -966,12 +2085,24 @@ class EdwEtlProcessor:
                 if team['team_id'] == perf['team_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(perf['team_id'], raw_manager_name)
                         manager_key = manager_keys.get(consolidated_manager_name)
                     break
             
             if not all([team_key, league_key, week_key, manager_key]):
                 continue
+            
+            # Get the running average and win percentage for this team-week
+            running_avg_key = (perf['team_id'], perf['league_id'], perf['season_year'], perf['week'])
+            weekly_points_running_avg = running_averages.get(running_avg_key, perf['weekly_points'])
+            running_win_pct = running_win_percentages.get(running_avg_key, 0.0)
+            
+            # Determine if this team made the playoffs (real playoffs, not consolation)
+            league_season_key = (perf['league_id'], perf['season_year'])
+            playoff_teams = playoff_teams_by_season.get(league_season_key, set())
+            is_playoff_team = perf['team_id'] in playoff_teams
+            
+
             
             facts.append({
                 'team_key': team_key,
@@ -982,21 +2113,74 @@ class EdwEtlProcessor:
                 'wins': perf['wins'],
                 'losses': perf['losses'],
                 'ties': perf['ties'],
-                'points_for': perf['weekly_points'],  # Fixed: Set to actual weekly points
+                'points_for': perf['weekly_points'],  # This week's actual points
                 'points_against': perf['points_against'],
-                'weekly_points': perf['weekly_points'],
-                'weekly_rank': None,
+                'weekly_points': weekly_points_running_avg,  # Running average from season start to this week
+                'weekly_rank': None,  # Will be calculated below
                 'season_rank': None,
-                'win_percentage': None,
+                'win_percentage': running_win_pct,  # Running win percentage from season start to this week
                 'point_differential': perf['weekly_points'] - perf['points_against'],
-                'avg_points_per_game': None,
                 'playoff_probability': None,
-                'is_playoff_team': False,
-                'playoff_seed': None,
-                'waiver_priority': None,
-                'faab_balance': None
+                'is_playoff_team': is_playoff_team  # True if team played in real playoffs (not consolation)
             })
         
+        # Calculate weekly rankings and playoff probabilities by league and week
+        logger.info(f"📊 Calculating weekly rankings and playoff probabilities for {len(facts)} team performance records...")
+        
+        # Group facts by league and week for ranking
+        weekly_groups = {}
+        for i, fact in enumerate(facts):
+            group_key = (fact['league_key'], fact['week_key'])
+            if group_key not in weekly_groups:
+                weekly_groups[group_key] = []
+            weekly_groups[group_key].append((i, fact))
+        
+        # Calculate weekly rank and playoff probability within each group
+        for group_key, group_facts in weekly_groups.items():
+            # Sort by weekly points (descending - highest points gets rank 1)
+            sorted_facts = sorted(group_facts, key=lambda x: x[1]['weekly_points'], reverse=True)
+            
+            # Get league and week info for playoff probability calculation
+            league_key, week_key = group_key
+            total_teams = len(group_facts)
+            
+            # Get current week number for remaining weeks calculation
+            current_week = None
+            
+            # Direct lookup from week_key mapping (more efficient)
+            for (season_year, week_num), w_key in self.dim_mappings['week_keys'].items():
+                if w_key == week_key:
+                    current_week = week_num
+                    break
+            
+            # If still None, log warning for debugging
+            if current_week is None:
+                logger.warning(f"⚠️ Could not determine week number for week_key {week_key}")
+                logger.debug(f"Available week_keys: {list(self.dim_mappings['week_keys'].values())[:10]}...")
+            
+            # Assign ranks and calculate playoff probabilities
+            current_rank = 1
+            prev_points = None
+            
+            for rank_position, (fact_index, fact) in enumerate(sorted_facts):
+                if prev_points is not None and fact['weekly_points'] != prev_points:
+                    current_rank = rank_position + 1
+                
+                facts[fact_index]['weekly_rank'] = current_rank
+                
+                # Calculate playoff probability
+                playoff_prob = self._calculate_playoff_probability(
+                    fact['win_percentage'],
+                    current_rank,
+                    total_teams,
+                    current_week,
+                    fact['weekly_points']
+                )
+                facts[fact_index]['playoff_probability'] = playoff_prob
+                
+                prev_points = fact['weekly_points']
+        
+        logger.info(f"✅ Weekly rankings and playoff probabilities calculated for {len(weekly_groups)} league-week combinations")
         return facts
     
     def load_dimensions(self) -> bool:
@@ -1181,6 +2365,7 @@ class EdwEtlProcessor:
                 ("fact_matchup", self.transform_fact_matchup),
                 ("fact_transaction", self.transform_fact_transaction),
                 ("fact_draft", self.transform_fact_draft),
+                ("fact_player_statistics", self.transform_fact_player_statistics),
                 ("fact_team_performance", self.transform_fact_team_performance)
             ]
             
@@ -1703,7 +2888,7 @@ class EdwEtlProcessor:
                         logger.info(f"⚡ Inserting {len(df)} new records...")
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
                         
-                    elif table_name in ['fact_transaction', 'fact_draft']:
+                    elif table_name in ['fact_transaction', 'fact_draft', 'fact_player_statistics']:
                         # Append-only tables: use bulk insert (let database handle duplicates)
                         logger.info(f"🔄 Using bulk insert for append-only table {table_name}")
                         
@@ -1711,9 +2896,33 @@ class EdwEtlProcessor:
                         if 'transaction_id' in df.columns:
                             df = df.drop('transaction_id', axis=1)
                             
-                        # Use bulk insert
-                        df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
-                        logger.info(f"✅ Bulk inserted {len(df)} records")
+                        # For statistics, use UPSERT strategy since we may update stats
+                        if table_name == 'fact_player_statistics':
+                            logger.info(f"🔄 Using UPSERT strategy for {table_name}")
+                            # Convert DataFrame to records for individual upsert
+                            for _, row in df.iterrows():
+                                upsert_sql = text("""
+                                    INSERT INTO edw.fact_player_statistics 
+                                    (league_key, player_key, season_year, week_number, weekly_fantasy_points, position_type, 
+                                     position_rank, league_rank, points_above_replacement, source_stat_id, game_code)
+                                    VALUES (:league_key, :player_key, :season_year, :week_number, :weekly_fantasy_points, :position_type,
+                                            :position_rank, :league_rank, :points_above_replacement, :source_stat_id, :game_code)
+                                    ON CONFLICT (league_key, player_key, season_year, week_number) 
+                                    DO UPDATE SET
+                                        weekly_fantasy_points = EXCLUDED.weekly_fantasy_points,
+                                        position_type = EXCLUDED.position_type,
+                                        position_rank = EXCLUDED.position_rank,
+                                        league_rank = EXCLUDED.league_rank,
+                                        points_above_replacement = EXCLUDED.points_above_replacement,
+                                        source_stat_id = EXCLUDED.source_stat_id,
+                                        updated_at = CURRENT_TIMESTAMP
+                                """)
+                                conn.execute(upsert_sql, row.to_dict())
+                            logger.info(f"✅ Upserted {len(df)} statistics records")
+                        else:
+                            # Use bulk insert for other tables
+                            df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
+                            logger.info(f"✅ Bulk inserted {len(df)} records")
                         
                     else:
                         logger.warning(f"⚠️ No incremental loading strategy for {table_name}, using bulk insert")
@@ -1800,6 +3009,29 @@ class EdwEtlProcessor:
         }
         
         return name_mapping.get(manager_name, manager_name)
+    
+    def get_manager_name_by_team_id(self, team_id: str, original_manager_name: str) -> str:
+        """Get correct manager name based on team_id overrides, then apply consolidation"""
+        # Bobby's team IDs (override hidden manager names)
+        bobby_team_ids = {
+            "124.l.109785.t.3",
+            "273.l.107980.t.9", 
+            "314.l.319572.t.5",
+            "348.l.655822.t.2",
+            "359.l.696366.t.8",
+            "380.l.1143665.t.8",
+            "199.l.42364.t.3",
+            "222.l.222935.t.6",
+            "257.l.89145.t.4",
+            "199.l.42364.t.9"
+        }
+        
+        # Override manager name for Bobby's teams
+        if team_id in bobby_team_ids:
+            return 'Bobby'
+        
+        # Apply normal consolidation for other teams
+        return self.consolidate_manager_name(original_manager_name)
 
     def transform_managers(self) -> List[Dict]:
         """Transform manager data for dim_manager table - only from leagues of record with name consolidation"""
@@ -1837,9 +3069,10 @@ class EdwEtlProcessor:
             
             filtered_teams += 1    
             manager_name = team.get('manager_name')
+            team_id = team['team_id']
             if manager_name and manager_name.strip():
                 raw_name = manager_name.strip()
-                canonical_name = self.consolidate_manager_name(raw_name)
+                canonical_name = self.get_manager_name_by_team_id(team_id, raw_name)
                 raw_managers.add(raw_name)
                 canonical_managers.add(canonical_name)  # Only canonical names in final set
         
@@ -1860,7 +3093,8 @@ class EdwEtlProcessor:
                     continue
                     
                 raw_team_name = team.get('manager_name', '').strip()
-                if raw_team_name and self.consolidate_manager_name(raw_team_name) == canonical_name:
+                team_id = team['team_id']
+                if raw_team_name and self.get_manager_name_by_team_id(team_id, raw_team_name) == canonical_name:
                     # Track which name variations we found for this canonical manager
                     if raw_team_name not in name_variations_found:
                         name_variations_found.append(raw_team_name)
@@ -1911,6 +3145,17 @@ class EdwEtlProcessor:
             # Convert canonical name to a stable, URL-friendly manager ID
             manager_id = canonical_name.lower().replace(' ', '_').replace("'", '').replace('.', '').replace('-', '_')
             
+            # Set is_current and include_in_analysis based on specified criteria
+            current_manager_ids = {
+                'craig', 'erik_snow', 'gabe_flores', 'gabe_the_younger', 
+                'israel', 'luke_s', 'nick', 'omar', 'trevor', 'troy_colvin'
+            }
+            
+            analysis_manager_ids = current_manager_ids | {'bobby'}  # All current managers plus Bobby
+            
+            is_current = manager_id in current_manager_ids
+            include_in_analysis = manager_id in analysis_manager_ids
+            
             # Use collected manager data or reasonable defaults
             manager_record = {
                 'manager_name': canonical_name,  # Use canonical name
@@ -1919,8 +3164,8 @@ class EdwEtlProcessor:
                 'last_season_year': last_season,
                 'total_seasons': total_seasons,
                 'total_leagues': total_leagues,
-                'is_current': True,  # Default - will be manually updated
-                'include_in_analysis': True,  # Default - will be manually updated
+                'is_current': is_current,  # Based on specified current managers
+                'include_in_analysis': include_in_analysis,  # Current managers + Bobby
                 'email': manager_data.get('email'),  # Email if available
                 'display_name': manager_data.get('display_name', canonical_name),  # Prefer nickname, fallback to canonical name
                 'profile_image_url': manager_data.get('profile_image_url'),  # Profile image if available
@@ -2169,6 +3414,19 @@ class EdwEtlProcessor:
                 FROM player_transaction_stats
                 GROUP BY player_key
             ),
+            player_fantasy_performance AS (
+                SELECT 
+                    fps.player_key,
+                    fps.season_year,
+                    SUM(fps.weekly_fantasy_points) as total_fantasy_points,
+                    COUNT(CASE WHEN fps.weekly_fantasy_points > 0 THEN 1 END) as games_played,
+                    AVG(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END) as avg_points_per_game,
+                    MAX(fps.weekly_fantasy_points) as best_weekly_score,
+                    MIN(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END) as worst_weekly_score,
+                    COALESCE(STDDEV(CASE WHEN fps.weekly_fantasy_points > 0 THEN fps.weekly_fantasy_points END), 0) as consistency_rating
+                FROM edw.fact_player_statistics fps
+                GROUP BY fps.player_key, fps.season_year
+            ),
             player_season_combined AS (
                 SELECT 
                     COALESCE(pds.player_key, pts.player_key) as player_key,
@@ -2198,11 +3456,11 @@ class EdwEtlProcessor:
                 psc.earliest_draft_pick,
                 psc.latest_draft_pick,
                 psc.avg_auction_value,
-                0.0 as total_fantasy_points,  -- No roster data available
-                0.0 as avg_points_per_game,
-                0.0 as best_weekly_score,
-                0.0 as worst_weekly_score,
-                0.0 as consistency_rating,
+                COALESCE(fps.total_fantasy_points, 0.0) as total_fantasy_points,
+                COALESCE(fps.avg_points_per_game, 0.0) as avg_points_per_game,
+                COALESCE(fps.best_weekly_score, 0.0) as best_weekly_score,
+                COALESCE(fps.worst_weekly_score, 0.0) as worst_weekly_score,
+                COALESCE(fps.consistency_rating, 0.0) as consistency_rating,
                 CASE 
                     WHEN psc.times_drafted > 0 THEN 0.8  -- Assume high ownership if drafted
                     WHEN psc.waiver_pickups > 0 THEN 0.3  -- Lower ownership for waiver pickups
@@ -2227,10 +3485,12 @@ class EdwEtlProcessor:
                     WHEN psc.waiver_pickups > 0 
                     THEN ROUND(psc.waiver_pickups * 10, 4)
                     ELSE 0
-                END as waiver_pickup_value
+                END as waiver_pickup_value,
+                COALESCE(fps.games_played, 0) as games_played
             FROM player_season_combined psc
             LEFT JOIN player_career_stats pcs ON psc.player_key = pcs.player_key
             LEFT JOIN player_career_transactions pct ON psc.player_key = pct.player_key
+            LEFT JOIN player_fantasy_performance fps ON psc.player_key = fps.player_key AND psc.season_year = fps.season_year
             WHERE psc.times_drafted > 0 OR psc.waiver_pickups > 0
             ORDER BY psc.season_year DESC, psc.times_drafted DESC, psc.avg_draft_position ASC
             """
@@ -2261,7 +3521,8 @@ class EdwEtlProcessor:
                     'starter_percentage': row[17],
                     'points_above_replacement': row[18],
                     'draft_value_score': row[19],
-                    'waiver_pickup_value': row[20]
+                    'waiver_pickup_value': row[20],
+                    'games_played': row[21] if len(row) > 21 else 0  # Add games_played from fantasy performance
                 })
         
         logger.info(f"🏪 Generated {len(marts)} player value records")
@@ -2813,7 +4074,7 @@ def main():
     
     # Run ETL
     try:
-        etl = EdwEtlProcessor(database_url, data_file)
+        etl = EdwEtlProcessor(database_url, data_file, args.force_rebuild)
         
         if etl.run_etl():
             logger.info("🎊 Fantasy Football EDW is ready for your web app!")

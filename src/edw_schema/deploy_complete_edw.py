@@ -58,7 +58,9 @@ class EdwDeployment:
             'matchups': 1499,
             'transactions': 9691,
             'draft_picks': 3192,
-            'teams': 196
+            'teams': 196,
+            'player_statistics': 40715,  # Based on recent ETL run
+            'team_performance': 2998     # Based on recent ETL run
         }
     
     def connect_database(self) -> bool:
@@ -102,8 +104,9 @@ class EdwDeployment:
             
             # 2. Check which tables exist
             expected_tables = ['dim_season', 'dim_league', 'dim_team', 'dim_player', 'dim_manager', 'dim_week',
-                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft',
-                             'mart_league_summary', 'mart_manager_performance', 'mart_player_value', 'mart_weekly_power_rankings']
+                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft', 
+                             'fact_player_statistics', 'mart_league_summary', 'mart_manager_performance', 
+                             'mart_player_value', 'mart_weekly_power_rankings']
             
             cur.execute("""
                 SELECT table_name 
@@ -405,7 +408,9 @@ class EdwDeployment:
                     'fact_roster': None,  # Variable based on roster data availability
                     'fact_matchup': self.expected_counts['matchups'],
                     'fact_transaction': self.expected_counts['transactions'],
-                    'fact_draft': self.expected_counts['draft_picks']
+                    'fact_draft': self.expected_counts['draft_picks'],
+                    'fact_player_statistics': self.expected_counts['player_statistics'],
+                    'fact_team_performance': self.expected_counts['team_performance']
                 }
                 
                 total_fact_records = 0
@@ -415,9 +420,11 @@ class EdwDeployment:
                     total_fact_records += actual
                     
                     if expected and actual < expected * 0.9:
-                        logger.warning(f"  ⚠️ {table}: {actual} records (expected: ~{expected})")
+                        logger.warning(f"  ⚠️ {table}: {actual} records (expected: >= {expected})")
+                        # Don't fail verification for variable count tables, just warn
                     else:
-                        logger.info(f"  ✅ {table}: {actual} records")
+                        logger.info(f"  ✅ {table}: {actual} records" + 
+                                   (f" (expected: >= {expected})" if expected else ""))
                 
                 # 3. Enhanced analytical views verification
                 logger.info("👁️ Verifying analytical views...")

@@ -4,9 +4,8 @@
 -- Designed for high-performance analytics and web application serving
 -- Includes: Dimension tables, Fact tables, Data Marts, and Optimized Views
 -- 
--- NOTE: ROSTER FUNCTIONALITY DISABLED
--- fact_roster table and related indexes commented out due to removal 
--- of roster extraction from data pipeline for API efficiency
+-- NOTE: ROSTER FUNCTIONALITY ENABLED
+-- fact_roster table included for weekly player performance analytics
 -- 
 -- Author: AI Assistant
 -- Date: 2025-06-06
@@ -155,7 +154,7 @@ CREATE INDEX idx_current_week ON dim_week (is_current_week);
 -- FACT TABLES (Transactional/Event Data)
 -- ============================================================================
 
--- Fact: Roster Data (Player assignments) - DISABLED: roster extraction removed
+-- Fact: Roster Data (Player assignments) - ENABLED: weekly player performance
 CREATE TABLE fact_roster (
     roster_key SERIAL PRIMARY KEY,
     team_key INTEGER NOT NULL,
@@ -178,7 +177,6 @@ CREATE TABLE fact_roster (
     
     -- Performance
     weekly_points DECIMAL(8,2),
-    games_played INTEGER DEFAULT 0,
     projected_points DECIMAL(8,2),
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -192,7 +190,7 @@ CREATE TABLE fact_roster (
     UNIQUE(team_key, player_key, week_key)
 );
 
--- Fact: Team Performance (Weekly snapshots)
+-- Fact: Team Performance (Weekly performance tracking)
 CREATE TABLE fact_team_performance (
     performance_key SERIAL PRIMARY KEY,
     team_key INTEGER NOT NULL,
@@ -201,27 +199,27 @@ CREATE TABLE fact_team_performance (
     week_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
     
-    -- Performance Metrics
+    -- Game Results
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
     ties INTEGER DEFAULT 0,
-    points_for DECIMAL(10,2) DEFAULT 0,
-    points_against DECIMAL(10,2) DEFAULT 0,
-    weekly_points DECIMAL(10,2) DEFAULT 0,
+    
+    -- Points
+    points_for DECIMAL(10,2),
+    points_against DECIMAL(10,2),
+    weekly_points DECIMAL(10,2), -- Running average from season start
+    
+    -- Rankings
     weekly_rank INTEGER,
     season_rank INTEGER,
     
     -- Advanced Metrics
     win_percentage DECIMAL(5,4),
     point_differential DECIMAL(10,2),
-    avg_points_per_game DECIMAL(8,2),
     playoff_probability DECIMAL(5,4),
     
     -- Status Fields
     is_playoff_team BOOLEAN DEFAULT FALSE,
-    playoff_seed INTEGER,
-    waiver_priority INTEGER,
-    faab_balance DECIMAL(10,2),
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -241,7 +239,7 @@ CREATE INDEX idx_manager_season_perf ON fact_team_performance (manager_key, seas
 CREATE INDEX idx_league_week_perf ON fact_team_performance (league_key, week_key);
 CREATE INDEX idx_performance_metrics ON fact_team_performance (points_for, points_against);
 CREATE INDEX idx_weekly_rank ON fact_team_performance (weekly_rank);
-CREATE INDEX idx_playoff_teams ON fact_team_performance (is_playoff_team, playoff_seed);
+CREATE INDEX idx_playoff_teams ON fact_team_performance (is_playoff_team);
 
 -- Fact: Matchup Results (Game outcomes)
 CREATE TABLE fact_matchup (
@@ -272,6 +270,9 @@ CREATE TABLE fact_matchup (
     
     -- Game Type
     matchup_type VARCHAR(20) DEFAULT 'regular', -- regular, playoffs, championship, consolation
+    is_playoffs BOOLEAN DEFAULT FALSE,
+    is_championship BOOLEAN DEFAULT FALSE,
+    is_consolation BOOLEAN DEFAULT FALSE,
     
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -381,8 +382,8 @@ CREATE TABLE fact_draft (
     
     -- Performance Tracking
     season_points DECIMAL(10,2),
-    games_played INTEGER,
-    points_per_game DECIMAL(8,2),
+    fantasy_games_played INTEGER,
+    points_per_week DECIMAL(8,2),
     draft_grade VARCHAR(5), -- A+, A, B+, B, C+, C, D+, D, F
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -405,7 +406,55 @@ CREATE INDEX idx_manager_draft ON fact_draft (manager_key, season_year);
 CREATE INDEX idx_player_draft ON fact_draft (player_key);
 CREATE INDEX idx_keepers ON fact_draft (is_keeper_pick);
 CREATE INDEX idx_auction_costs ON fact_draft (draft_cost);
-CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_game);
+CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_week);
+
+-- Fact: Player Statistics (Season-level player performance)
+CREATE TABLE fact_player_statistics (
+    stat_key SERIAL PRIMARY KEY,
+    league_key INTEGER NOT NULL,
+    player_key INTEGER NOT NULL,
+    season_year INTEGER NOT NULL,
+    
+    -- Basic Stats
+    total_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0,
+    position_type VARCHAR(10), -- O (Offense), K (Kicker), DEF (Defense)
+    
+    -- Performance Metrics
+    games_played INTEGER,
+    points_per_game DECIMAL(8,2),
+    consistency_score DECIMAL(8,4), -- Standard deviation of weekly scores
+    
+    -- Ranking Metrics (within league/position)
+    position_rank INTEGER,
+    league_rank INTEGER,
+    
+    -- Value Metrics
+    points_above_replacement DECIMAL(10,2),
+    draft_value_score DECIMAL(8,4), -- Actual vs expected performance
+    
+    -- Source Data
+    source_stat_id VARCHAR(100), -- Reference to original public.statistics record
+    game_code VARCHAR(10) DEFAULT 'nfl',
+    
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
+    FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
+    
+    UNIQUE(league_key, player_key, season_year)
+);
+
+-- Indexes for fact_player_statistics
+CREATE INDEX idx_player_stats_season ON fact_player_statistics (season_year);
+CREATE INDEX idx_player_stats_league ON fact_player_statistics (league_key, season_year);
+CREATE INDEX idx_player_stats_player ON fact_player_statistics (player_key, season_year);
+CREATE INDEX idx_player_stats_position ON fact_player_statistics (position_type, season_year);
+CREATE INDEX idx_player_stats_points ON fact_player_statistics (total_fantasy_points);
+CREATE INDEX idx_player_stats_ranking ON fact_player_statistics (league_key, position_rank);
+CREATE INDEX idx_player_stats_performance ON fact_player_statistics (points_per_game, consistency_score);
+CREATE INDEX idx_player_stats_source ON fact_player_statistics (source_stat_id);
 
 -- ============================================================================
 -- DATA MARTS (Pre-aggregated for Web App Performance)
@@ -826,6 +875,7 @@ COMMENT ON TABLE fact_matchup IS 'Head-to-head matchup results and statistics';
 COMMENT ON TABLE fact_roster IS 'Player ownership and roster decisions';
 COMMENT ON TABLE fact_transaction IS 'All player movement transactions';
 COMMENT ON TABLE fact_draft IS 'Draft results with value analysis';
+COMMENT ON TABLE fact_player_statistics IS 'Season-level player fantasy statistics and performance metrics';
 
 COMMENT ON TABLE mart_league_summary IS 'Pre-aggregated league statistics for dashboards';
 COMMENT ON TABLE mart_manager_performance IS 'Career manager statistics across all leagues';
