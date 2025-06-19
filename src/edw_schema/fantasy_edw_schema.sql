@@ -177,7 +177,6 @@ CREATE TABLE fact_roster (
     
     -- Performance
     weekly_points DECIMAL(8,2),
-    games_played INTEGER DEFAULT 0,
     projected_points DECIMAL(8,2),
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

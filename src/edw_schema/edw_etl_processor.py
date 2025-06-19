@@ -773,7 +773,7 @@ class EdwEtlProcessor:
         return transformed
     
     def transform_fact_roster(self) -> List[Dict]:
-        """Transform roster data into fact_roster format"""
+        """Transform roster data into fact_roster format with proper data sources"""
         facts = []
         
         if not self.data:
@@ -786,12 +786,99 @@ class EdwEtlProcessor:
             logger.info("🏈 No roster data available - skipping fact_roster")
             return facts
 
+        logger.info(f"📋 Processing {len(rosters_data)} roster records with enhanced data sources...")
+
         # Build set of league of record IDs for efficient lookup
         league_of_record_ids = set()
+        league_to_season = {}
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+                league_to_season[league['league_id']] = season_year
+
+        # Build acquisition data from transactions and drafts
+        acquisition_data = {}
+        logger.info("📊 Building acquisition data from transactions and drafts...")
+        
+        # Process draft data for acquisition info
+        for draft in self.data.get('draft_picks', []):
+            if draft['league_id'] not in league_of_record_ids:
+                continue
+            
+            player_id = str(draft['player_id'])
+            team_id = f"{draft['league_id']}.t.{draft['team_id']}"
+            season_year = league_to_season.get(draft['league_id'])
+            
+            if not season_year:
+                continue
+                
+            # Store draft acquisition info
+            key = (draft['league_id'], team_id, player_id, season_year)
+            acquisition_data[key] = {
+                'type': 'draft',
+                'date': None,  # Draft date not available in current data
+                'cost': float(draft.get('cost', 0)) if draft.get('cost') else 0.0
+            }
+        
+        # Process transaction data for acquisition info
+        for transaction in self.data.get('transactions', []):
+            if transaction['league_id'] not in league_of_record_ids:
+                continue
+                
+            # Extract numeric player_id from full format (e.g., "153.p.7755" -> "7755")
+            raw_player_id = transaction['player_id']
+            if '.p.' in raw_player_id:
+                player_id = raw_player_id.split('.p.')[-1]
+            else:
+                player_id = str(raw_player_id)
+                
+            to_team_id = transaction.get('destination_team_id')  # Already in full format
+            season_year = league_to_season.get(transaction['league_id'])
+            
+            if not to_team_id or not season_year:
+                continue
+            
+            # Map transaction type (Fixed: use actual transaction types from database)
+            trans_type = transaction.get('type', 'unknown')
+            if trans_type in ['add', 'add/drop']:
+                acq_type = 'waiver'  # Yahoo adds are typically waiver/FAAB
+            elif trans_type in ['trade']:
+                acq_type = 'trade'
+            elif trans_type in ['drop']:
+                acq_type = None  # Don't track drops as acquisitions
+                continue
+            else:
+                acq_type = 'unknown'
+            
+            # Store transaction acquisition info (to_team_id already in full format)
+            key = (transaction['league_id'], to_team_id, player_id, season_year)
+            acquisition_data[key] = {
+                'type': acq_type,
+                'date': transaction.get('timestamp'),  # Fixed: use timestamp
+                'cost': float(transaction.get('faab_bid', 0)) if transaction.get('faab_bid') else 0.0
+            }
+        
+        # Build weekly points data from statistics
+        weekly_points_data = {}
+        logger.info("📊 Building weekly points data from statistics...")
+        
+        for stat in self.data.get('statistics', []):
+            if stat['league_id'] not in league_of_record_ids:
+                continue
+                
+            player_id = str(stat['player_id'])
+            week = stat.get('week_number')  # Fixed: use week_number instead of week
+            season_year = league_to_season.get(stat['league_id'])
+            
+            if not week or not season_year:
+                continue
+                
+            weekly_points = float(stat.get('weekly_fantasy_points', 0))
+            
+            # Store weekly points
+            key = (stat['league_id'], player_id, season_year, week)
+            weekly_points_data[key] = weekly_points
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -812,21 +899,11 @@ class EdwEtlProcessor:
             # Only include rosters from leagues of record
             if roster['league_id'] not in league_of_record_ids:
                 filtered_league += 1
-                if debug_count <= 5:  # Only show first 5 for debugging
-                    logger.debug(f"🔍 Roster {debug_count}: Filtered league {roster['league_id']}")
                 continue
                 
-            # Extract league info to get season
-            season_year = None
-            for league in self.data.get('leagues', []):
-                if league['league_id'] == roster['league_id']:
-                    season_year = int(league['season'])
-                    break
-            
+            season_year = league_to_season.get(roster['league_id'])
             if not season_year:
                 missing_season += 1
-                if debug_count <= 5:  # Only show first 5 for debugging
-                    logger.debug(f"🔍 Roster {debug_count}: Missing season for league {roster['league_id']}")
                 continue
                 
             league_key = league_keys.get(roster['league_id'])
@@ -856,8 +933,6 @@ class EdwEtlProcessor:
             
             if not all([league_key, team_key, player_key, week_key, manager_key]):
                 missing_keys += 1
-                if debug_count <= 5:  # Only show first 5 for debugging
-                    logger.debug(f"🔍 Roster {debug_count}: Missing keys - league:{league_key}, team:{team_key}(raw={raw_team_id}, full={full_team_id}), player:{player_key}({numeric_player_id}), week:{week_key}({season_year},{roster['week']}), manager:{manager_key}({raw_manager_name or 'N/A'})")
                 continue
             
             successful += 1
@@ -867,12 +942,21 @@ class EdwEtlProcessor:
             player_position = roster.get('position', 'BN')
             is_starter = roster.get('is_starter', False)
             
-            # Determine bench status: not a starter OR explicitly marked as bench
+            # Determine bench and IR status
             is_bench = (player_status == 'bench') or (not is_starter)
-            
-            # Determine IR status: check for IR-related positions
-            # Note: Yahoo typically uses "IR" position or specific status for injured reserve
             is_ir = (player_position in ['IR', 'INJ', 'INJURED']) or (player_status in ['ir', 'injured', 'inactive'])
+            
+            # Get acquisition info from our built data (use full_team_id to match transactions)
+            acq_key = (league_id, full_team_id, numeric_player_id, season_year)
+            acquisition_info = acquisition_data.get(acq_key, {
+                'type': None,
+                'date': None,
+                'cost': None
+            })
+            
+            # Get weekly points from statistics data
+            points_key = (league_id, numeric_player_id, season_year, roster['week'])
+            weekly_points = weekly_points_data.get(points_key, 0.0)
             
             facts.append({
                 'league_key': league_key,
@@ -885,14 +969,16 @@ class EdwEtlProcessor:
                 'is_bench': is_bench,
                 'is_ir': is_ir,
                 'roster_position': player_position,
-                'weekly_points': float(roster.get('actual_points', 0)) if roster.get('actual_points') is not None else 0.0,
+                'weekly_points': weekly_points,  # Now from statistics data
                 'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
-                'acquisition_type': roster.get('acquisition_type'),
-                'acquisition_date': None  # Not available in current data
+                'acquisition_type': acquisition_info['type'],  # Now from transactions/drafts
+                'acquisition_date': acquisition_info['date'],  # Now from transactions/drafts
+                'acquisition_cost': acquisition_info['cost']   # Now from transactions/drafts (FAAB)
             })
         
         logger.info(f"📋 Transformed {len(facts)} roster facts from {len(rosters_data)} roster records")
         logger.info(f"🔍 Roster Debug: filtered_league={filtered_league}, missing_season={missing_season}, missing_keys={missing_keys}, successful={successful}")
+        logger.info(f"📊 Enhanced with {len(acquisition_data)} acquisition records and {len(weekly_points_data)} weekly points")
         return facts
     
     def transform_fact_matchup(self) -> List[Dict]:
