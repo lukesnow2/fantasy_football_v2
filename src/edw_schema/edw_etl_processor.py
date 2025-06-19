@@ -1684,6 +1684,162 @@ class EdwEtlProcessor:
             logger.debug(f"Could not calculate draft value score for player {player_id}: {e}")
             return None
     
+    def _calculate_playoff_probability(self, win_percentage: float, current_rank: int, 
+                                     total_teams: int, current_week: int, weekly_points: float) -> float:
+        """
+        Calculate playoff probability based on multiple factors.
+        
+        Factors considered:
+        1. Current standings position (most important)
+        2. Win percentage vs. historical playoff cutoffs
+        3. Weeks remaining in season
+        4. Points scored relative to league average (tiebreaker factor)
+        """
+        try:
+            # Default values if inputs are invalid
+            if not all([win_percentage is not None, current_rank, total_teams]):
+                return 0.0
+            
+            # Standard fantasy football assumptions
+            playoff_teams = max(4, total_teams // 3)  # Typically 4-6 teams make playoffs
+            
+            # Determine playoff start week from actual data
+            playoff_start_week = self._get_playoff_start_week()
+            
+            if current_week is None:
+                # Better fallback: use a conservative mid-season estimate
+                # This affects the "weeks remaining" calculation for probability
+                logger.debug(f"⚠️ Using fallback week 10 for playoff probability calculation")
+                current_week = 10  # Conservative mid-season estimate
+            
+            weeks_remaining = max(0, playoff_start_week - current_week)
+            
+            # Factor 1: Current standings position (40% weight)
+            if current_rank <= playoff_teams:
+                position_factor = 1.0 - (current_rank - 1) / playoff_teams  # 1.0 for 1st, decreasing
+            else:
+                # Teams outside playoff spots - exponentially decreasing probability
+                spots_out = current_rank - playoff_teams
+                position_factor = max(0.0, 0.5 * (0.7 ** spots_out))
+            
+            # Factor 2: Win percentage vs historical benchmarks (30% weight)
+            # Historical data: ~0.600+ win% almost always makes playoffs, ~0.400- rarely does
+            if win_percentage >= 0.700:
+                record_factor = 1.0
+            elif win_percentage >= 0.600:
+                record_factor = 0.9
+            elif win_percentage >= 0.500:
+                record_factor = 0.7
+            elif win_percentage >= 0.400:
+                record_factor = 0.4
+            else:
+                record_factor = 0.1
+            
+            # Factor 3: Time remaining adjustment (20% weight)
+            if weeks_remaining > 8:
+                # Early season - lots of time to change position
+                time_factor = 0.5 + (weeks_remaining / 20)  # More volatility early
+            elif weeks_remaining > 4:
+                # Mid season - moderate adjustments
+                time_factor = 0.7 + (weeks_remaining / 40)
+            elif weeks_remaining > 0:
+                # Late season - position matters more
+                time_factor = 0.9 + (weeks_remaining / 100)
+            else:
+                # Season over or playoffs started
+                time_factor = 1.0 if current_rank <= playoff_teams else 0.0
+            
+            # Factor 4: Points differential (10% weight) - simplified
+            # Assume league average is around 100-120 points
+            league_avg_points = 110
+            if weekly_points > league_avg_points * 1.1:  # 10% above average
+                points_factor = 1.1
+            elif weekly_points > league_avg_points * 0.9:  # Within 10% of average
+                points_factor = 1.0
+            else:  # Below average scoring
+                points_factor = 0.9
+            
+            # Combine factors with weights
+            playoff_probability = (
+                position_factor * 0.40 +
+                record_factor * 0.30 +
+                time_factor * 0.20 +
+                points_factor * 0.10
+            )
+            
+            # Ensure probability is between 0 and 1
+            playoff_probability = max(0.0, min(1.0, playoff_probability))
+            
+            return round(playoff_probability, 4)
+            
+        except Exception as e:
+            logger.debug(f"Could not calculate playoff probability: {e}")
+            return 0.0
+    
+    def _get_playoff_start_week(self) -> int:
+        """
+        Determine when playoffs start based on actual matchup data.
+        
+        Logic:
+        1. Look for first week where matchup_type != 'regular'
+        2. If no playoff data found, use current/future rule: week 15 (week 14 is last regular season)
+        3. Playoffs are always 3 weeks long, so can work backwards from season end
+        """
+        try:
+            # Look through matchup data to find playoff start
+            playoff_weeks = set()
+            season_end_weeks = {}  # Track the last week for each season
+            
+            for matchup in self.data.get('matchups', []):
+                # Get season from league data
+                season_year = None
+                for league in self.data.get('leagues', []):
+                    if league['league_id'] == matchup['league_id']:
+                        season_year = int(league['season'])
+                        break
+                
+                if not season_year:
+                    continue
+                
+                week_num = matchup['week']
+                
+                # Track the highest week number for each season (season end)
+                if season_year not in season_end_weeks:
+                    season_end_weeks[season_year] = week_num
+                else:
+                    season_end_weeks[season_year] = max(season_end_weeks[season_year], week_num)
+                
+                # Look for non-regular matchups (playoffs)
+                matchup_type = matchup.get('matchup_type', 'regular')
+                is_playoffs = matchup.get('is_playoffs', False)
+                
+                if matchup_type != 'regular' or is_playoffs:
+                    playoff_weeks.add(week_num)
+            
+            # Determine playoff start week
+            if playoff_weeks:
+                # Use the earliest playoff week found in data
+                playoff_start_week = min(playoff_weeks)
+                logger.debug(f"📊 Detected playoff start week: {playoff_start_week} from matchup data")
+                return playoff_start_week
+            elif season_end_weeks:
+                # Work backwards: playoffs are 3 weeks, so playoff start = season_end - 2
+                max_season_end = max(season_end_weeks.values())
+                playoff_start_week = max_season_end - 2  # 3-week playoffs
+                logger.debug(f"📊 Calculated playoff start week: {playoff_start_week} (working backwards from week {max_season_end})")
+                return playoff_start_week
+            else:
+                # Current/future default: 17-week season with 3-week playoffs
+                # Regular season ends week 14, playoffs start week 15
+                playoff_start_week = 15
+                logger.debug(f"📊 Using default playoff start week: {playoff_start_week} (current/future seasons)")
+                return playoff_start_week
+                
+        except Exception as e:
+            logger.debug(f"Could not determine playoff start week: {e}")
+            # Safe default for current/future seasons
+            return 15
+    
     def transform_fact_team_performance(self) -> List[Dict]:
         """Transform team performance data from matchups and rosters"""
         facts = []
@@ -1703,6 +1859,35 @@ class EdwEtlProcessor:
             if self.is_league_of_record(league['league_id'], season_year):
                 league_to_season[league['league_id']] = season_year
                 league_of_record_ids.add(league['league_id'])
+        
+        # First pass: collect playoff team information (exclude consolation)
+        playoff_teams_by_season = {}  # {(league_id, season_year): set of team_ids}
+        
+        for matchup in self.data.get('matchups', []):
+            # Only include matchups from leagues of record
+            if matchup['league_id'] not in league_of_record_ids:
+                continue
+                
+            season_year = league_to_season.get(matchup['league_id'], 2024)
+            
+            # Check if this is a real playoff game (not consolation)
+            is_playoffs = matchup.get('is_playoffs', False)
+            is_consolation = matchup.get('is_consolation', False)
+            matchup_type = matchup.get('matchup_type', 'regular')
+            
+            # Real playoffs: is_playoffs=True AND not consolation
+            if is_playoffs and not is_consolation and matchup_type != 'consolation':
+                league_season_key = (matchup['league_id'], season_year)
+                if league_season_key not in playoff_teams_by_season:
+                    playoff_teams_by_season[league_season_key] = set()
+                
+                # Both teams in this playoff matchup made the playoffs
+                playoff_teams_by_season[league_season_key].add(matchup['team1_id'])
+                playoff_teams_by_season[league_season_key].add(matchup['team2_id'])
+        
+        # Log playoff team detection results
+        total_playoff_teams = sum(len(teams) for teams in playoff_teams_by_season.values())
+        logger.info(f"📊 Detected {total_playoff_teams} playoff teams across {len(playoff_teams_by_season)} league-seasons (excluding consolation)")
         
         # Process matchups for wins/losses/points (only for leagues of record)
         for matchup in self.data.get('matchups', []):
@@ -1739,6 +1924,64 @@ class EdwEtlProcessor:
                 else:
                     team_performance[key]['ties'] = 1
         
+        # Calculate running averages for weekly_points before creating facts
+        logger.info(f"📊 Calculating running averages for weekly points...")
+        
+        # Group team performance by team and season for running average calculation
+        team_season_weeks = {}
+        for perf in team_performance.values():
+            team_season_key = (perf['team_id'], perf['league_id'], perf['season_year'])
+            if team_season_key not in team_season_weeks:
+                team_season_weeks[team_season_key] = []
+            team_season_weeks[team_season_key].append({
+                'week': perf['week'],
+                'weekly_points': perf['weekly_points'],
+                'points_against': perf['points_against']
+            })
+        
+        # Calculate running averages and win percentages for each team-season
+        running_averages = {}
+        running_win_percentages = {}
+        for team_season_key, weeks in team_season_weeks.items():
+            # Sort weeks in ascending order
+            weeks.sort(key=lambda x: x['week'])
+            
+            cumulative_points = 0
+            cumulative_wins = 0
+            cumulative_losses = 0
+            cumulative_ties = 0
+            
+            for i, week_data in enumerate(weeks):
+                # Calculate running average points
+                cumulative_points += week_data['weekly_points']
+                weeks_played = i + 1
+                running_avg = cumulative_points / weeks_played
+                
+                # Calculate running win percentage
+                # Need to get wins/losses/ties for this week from team_performance
+                team_id, league_id, season_year = team_season_key
+                week_num = week_data['week']
+                perf_key = (team_id, season_year, week_num)
+                
+                if perf_key in team_performance:
+                    cumulative_wins += team_performance[perf_key]['wins']
+                    cumulative_losses += team_performance[perf_key]['losses']
+                    cumulative_ties += team_performance[perf_key]['ties']
+                
+                # Calculate win percentage: (wins + 0.5 * ties) / (total games)
+                total_games = cumulative_wins + cumulative_losses + cumulative_ties
+                if total_games > 0:
+                    win_percentage = (cumulative_wins + 0.5 * cumulative_ties) / total_games
+                else:
+                    win_percentage = 0.0
+                
+                # Store both metrics for this team-season-week
+                lookup_key = (team_season_key[0], team_season_key[1], team_season_key[2], week_data['week'])
+                running_averages[lookup_key] = running_avg
+                running_win_percentages[lookup_key] = win_percentage
+        
+        logger.info(f"✅ Calculated running averages and win percentages for {len(running_averages)} team-week combinations")
+        
         # Convert to fact format with dimension keys (use cached mappings)
         league_keys = self.dim_mappings.get('league_keys', {})
         team_keys = self.dim_mappings.get('team_keys', {})
@@ -1764,6 +2007,18 @@ class EdwEtlProcessor:
             if not all([team_key, league_key, week_key, manager_key]):
                 continue
             
+            # Get the running average and win percentage for this team-week
+            running_avg_key = (perf['team_id'], perf['league_id'], perf['season_year'], perf['week'])
+            weekly_points_running_avg = running_averages.get(running_avg_key, perf['weekly_points'])
+            running_win_pct = running_win_percentages.get(running_avg_key, 0.0)
+            
+            # Determine if this team made the playoffs (real playoffs, not consolation)
+            league_season_key = (perf['league_id'], perf['season_year'])
+            playoff_teams = playoff_teams_by_season.get(league_season_key, set())
+            is_playoff_team = perf['team_id'] in playoff_teams
+            
+
+            
             facts.append({
                 'team_key': team_key,
                 'manager_key': manager_key,
@@ -1773,21 +2028,74 @@ class EdwEtlProcessor:
                 'wins': perf['wins'],
                 'losses': perf['losses'],
                 'ties': perf['ties'],
-                'points_for': perf['weekly_points'],  # Fixed: Set to actual weekly points
+                'points_for': perf['weekly_points'],  # This week's actual points
                 'points_against': perf['points_against'],
-                'weekly_points': perf['weekly_points'],
-                'weekly_rank': None,
+                'weekly_points': weekly_points_running_avg,  # Running average from season start to this week
+                'weekly_rank': None,  # Will be calculated below
                 'season_rank': None,
-                'win_percentage': None,
+                'win_percentage': running_win_pct,  # Running win percentage from season start to this week
                 'point_differential': perf['weekly_points'] - perf['points_against'],
-                'avg_points_per_game': None,
                 'playoff_probability': None,
-                'is_playoff_team': False,
-                'playoff_seed': None,
-                'waiver_priority': None,
-                'faab_balance': None
+                'is_playoff_team': is_playoff_team  # True if team played in real playoffs (not consolation)
             })
         
+        # Calculate weekly rankings and playoff probabilities by league and week
+        logger.info(f"📊 Calculating weekly rankings and playoff probabilities for {len(facts)} team performance records...")
+        
+        # Group facts by league and week for ranking
+        weekly_groups = {}
+        for i, fact in enumerate(facts):
+            group_key = (fact['league_key'], fact['week_key'])
+            if group_key not in weekly_groups:
+                weekly_groups[group_key] = []
+            weekly_groups[group_key].append((i, fact))
+        
+        # Calculate weekly rank and playoff probability within each group
+        for group_key, group_facts in weekly_groups.items():
+            # Sort by weekly points (descending - highest points gets rank 1)
+            sorted_facts = sorted(group_facts, key=lambda x: x[1]['weekly_points'], reverse=True)
+            
+            # Get league and week info for playoff probability calculation
+            league_key, week_key = group_key
+            total_teams = len(group_facts)
+            
+            # Get current week number for remaining weeks calculation
+            current_week = None
+            
+            # Direct lookup from week_key mapping (more efficient)
+            for (season_year, week_num), w_key in self.dim_mappings['week_keys'].items():
+                if w_key == week_key:
+                    current_week = week_num
+                    break
+            
+            # If still None, log warning for debugging
+            if current_week is None:
+                logger.warning(f"⚠️ Could not determine week number for week_key {week_key}")
+                logger.debug(f"Available week_keys: {list(self.dim_mappings['week_keys'].values())[:10]}...")
+            
+            # Assign ranks and calculate playoff probabilities
+            current_rank = 1
+            prev_points = None
+            
+            for rank_position, (fact_index, fact) in enumerate(sorted_facts):
+                if prev_points is not None and fact['weekly_points'] != prev_points:
+                    current_rank = rank_position + 1
+                
+                facts[fact_index]['weekly_rank'] = current_rank
+                
+                # Calculate playoff probability
+                playoff_prob = self._calculate_playoff_probability(
+                    fact['win_percentage'],
+                    current_rank,
+                    total_teams,
+                    current_week,
+                    fact['weekly_points']
+                )
+                facts[fact_index]['playoff_probability'] = playoff_prob
+                
+                prev_points = fact['weekly_points']
+        
+        logger.info(f"✅ Weekly rankings and playoff probabilities calculated for {len(weekly_groups)} league-week combinations")
         return facts
     
     def load_dimensions(self) -> bool:

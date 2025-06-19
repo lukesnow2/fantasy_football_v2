@@ -190,7 +190,7 @@ CREATE TABLE fact_roster (
     UNIQUE(team_key, player_key, week_key)
 );
 
--- Fact: Team Performance (Weekly snapshots)
+-- Fact: Team Performance (Weekly performance tracking)
 CREATE TABLE fact_team_performance (
     performance_key SERIAL PRIMARY KEY,
     team_key INTEGER NOT NULL,
@@ -199,27 +199,27 @@ CREATE TABLE fact_team_performance (
     week_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
     
-    -- Performance Metrics
+    -- Game Results
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
     ties INTEGER DEFAULT 0,
-    points_for DECIMAL(10,2) DEFAULT 0,
-    points_against DECIMAL(10,2) DEFAULT 0,
-    weekly_points DECIMAL(10,2) DEFAULT 0,
+    
+    -- Points
+    points_for DECIMAL(10,2),
+    points_against DECIMAL(10,2),
+    weekly_points DECIMAL(10,2), -- Running average from season start
+    
+    -- Rankings
     weekly_rank INTEGER,
     season_rank INTEGER,
     
     -- Advanced Metrics
     win_percentage DECIMAL(5,4),
     point_differential DECIMAL(10,2),
-    avg_points_per_game DECIMAL(8,2),
     playoff_probability DECIMAL(5,4),
     
     -- Status Fields
     is_playoff_team BOOLEAN DEFAULT FALSE,
-    playoff_seed INTEGER,
-    waiver_priority INTEGER,
-    faab_balance DECIMAL(10,2),
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -239,7 +239,7 @@ CREATE INDEX idx_manager_season_perf ON fact_team_performance (manager_key, seas
 CREATE INDEX idx_league_week_perf ON fact_team_performance (league_key, week_key);
 CREATE INDEX idx_performance_metrics ON fact_team_performance (points_for, points_against);
 CREATE INDEX idx_weekly_rank ON fact_team_performance (weekly_rank);
-CREATE INDEX idx_playoff_teams ON fact_team_performance (is_playoff_team, playoff_seed);
+CREATE INDEX idx_playoff_teams ON fact_team_performance (is_playoff_team);
 
 -- Fact: Matchup Results (Game outcomes)
 CREATE TABLE fact_matchup (
