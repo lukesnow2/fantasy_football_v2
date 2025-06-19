@@ -650,10 +650,11 @@ class EdwEtlProcessor:
             if team['league_id'] not in league_of_record_ids:
                 continue
             
-            # Consolidate manager name and lookup manager_key
+            # Get manager name using team_id override logic, then consolidation
             raw_manager_name = team.get('manager_name')
+            team_id = team['team_id']
             if raw_manager_name:
-                consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                consolidated_manager_name = self.get_manager_name_by_team_id(team_id, raw_manager_name)
                 manager_key = manager_keys.get(consolidated_manager_name)
             else:
                 consolidated_manager_name = None
@@ -927,7 +928,7 @@ class EdwEtlProcessor:
                 if team['team_id'] == full_team_id:  # Use full_team_id for lookup
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(full_team_id, raw_manager_name)
                         manager_key = manager_keys.get(consolidated_manager_name)
                     break
             
@@ -1024,12 +1025,12 @@ class EdwEtlProcessor:
                 if team['team_id'] == matchup['team1_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(matchup['team1_id'], raw_manager_name)
                         manager1_key = manager_keys.get(consolidated_manager_name)
                 elif team['team_id'] == matchup['team2_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(matchup['team2_id'], raw_manager_name)
                         manager2_key = manager_keys.get(consolidated_manager_name)
             
             if not all([league_key, team1_key, team2_key, week_key, manager1_key, manager2_key]):
@@ -1148,7 +1149,7 @@ class EdwEtlProcessor:
                     if team['team_id'] == transaction['source_team_id']:
                         raw_manager_name = team.get('manager_name')
                         if raw_manager_name:
-                            consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                            consolidated_manager_name = self.get_manager_name_by_team_id(transaction['source_team_id'], raw_manager_name)
                             from_manager_key = manager_keys.get(consolidated_manager_name)
                         break
                         
@@ -1157,7 +1158,7 @@ class EdwEtlProcessor:
                     if team['team_id'] == transaction['destination_team_id']:
                         raw_manager_name = team.get('manager_name')
                         if raw_manager_name:
-                            consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                            consolidated_manager_name = self.get_manager_name_by_team_id(transaction['destination_team_id'], raw_manager_name)
                             to_manager_key = manager_keys.get(consolidated_manager_name)
                         break
             
@@ -1333,7 +1334,7 @@ class EdwEtlProcessor:
                 if team['team_id'] == full_team_id:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(full_team_id, raw_manager_name)
                         manager_key = manager_keys.get(consolidated_manager_name)
                     break
             
@@ -2000,7 +2001,7 @@ class EdwEtlProcessor:
                 if team['team_id'] == perf['team_id']:
                     raw_manager_name = team.get('manager_name')
                     if raw_manager_name:
-                        consolidated_manager_name = self.consolidate_manager_name(raw_manager_name)
+                        consolidated_manager_name = self.get_manager_name_by_team_id(perf['team_id'], raw_manager_name)
                         manager_key = manager_keys.get(consolidated_manager_name)
                     break
             
@@ -2924,6 +2925,29 @@ class EdwEtlProcessor:
         }
         
         return name_mapping.get(manager_name, manager_name)
+    
+    def get_manager_name_by_team_id(self, team_id: str, original_manager_name: str) -> str:
+        """Get correct manager name based on team_id overrides, then apply consolidation"""
+        # Bobby's team IDs (override hidden manager names)
+        bobby_team_ids = {
+            "124.l.109785.t.3",
+            "273.l.107980.t.9", 
+            "314.l.319572.t.5",
+            "348.l.655822.t.2",
+            "359.l.696366.t.8",
+            "380.l.1143665.t.8",
+            "199.l.42364.t.3",
+            "222.l.222935.t.6",
+            "257.l.89145.t.4",
+            "199.l.42364.t.9"
+        }
+        
+        # Override manager name for Bobby's teams
+        if team_id in bobby_team_ids:
+            return 'Bobby'
+        
+        # Apply normal consolidation for other teams
+        return self.consolidate_manager_name(original_manager_name)
 
     def transform_managers(self) -> List[Dict]:
         """Transform manager data for dim_manager table - only from leagues of record with name consolidation"""
@@ -2961,9 +2985,10 @@ class EdwEtlProcessor:
             
             filtered_teams += 1    
             manager_name = team.get('manager_name')
+            team_id = team['team_id']
             if manager_name and manager_name.strip():
                 raw_name = manager_name.strip()
-                canonical_name = self.consolidate_manager_name(raw_name)
+                canonical_name = self.get_manager_name_by_team_id(team_id, raw_name)
                 raw_managers.add(raw_name)
                 canonical_managers.add(canonical_name)  # Only canonical names in final set
         
@@ -2984,7 +3009,8 @@ class EdwEtlProcessor:
                     continue
                     
                 raw_team_name = team.get('manager_name', '').strip()
-                if raw_team_name and self.consolidate_manager_name(raw_team_name) == canonical_name:
+                team_id = team['team_id']
+                if raw_team_name and self.get_manager_name_by_team_id(team_id, raw_team_name) == canonical_name:
                     # Track which name variations we found for this canonical manager
                     if raw_team_name not in name_variations_found:
                         name_variations_found.append(raw_team_name)
@@ -3035,6 +3061,17 @@ class EdwEtlProcessor:
             # Convert canonical name to a stable, URL-friendly manager ID
             manager_id = canonical_name.lower().replace(' ', '_').replace("'", '').replace('.', '').replace('-', '_')
             
+            # Set is_current and include_in_analysis based on specified criteria
+            current_manager_ids = {
+                'craig', 'erik_snow', 'gabe_flores', 'gabe_the_younger', 
+                'israel', 'luke_s', 'nick', 'omar', 'trevor', 'troy_colvin'
+            }
+            
+            analysis_manager_ids = current_manager_ids | {'bobby'}  # All current managers plus Bobby
+            
+            is_current = manager_id in current_manager_ids
+            include_in_analysis = manager_id in analysis_manager_ids
+            
             # Use collected manager data or reasonable defaults
             manager_record = {
                 'manager_name': canonical_name,  # Use canonical name
@@ -3043,8 +3080,8 @@ class EdwEtlProcessor:
                 'last_season_year': last_season,
                 'total_seasons': total_seasons,
                 'total_leagues': total_leagues,
-                'is_current': True,  # Default - will be manually updated
-                'include_in_analysis': True,  # Default - will be manually updated
+                'is_current': is_current,  # Based on specified current managers
+                'include_in_analysis': include_in_analysis,  # Current managers + Bobby
                 'email': manager_data.get('email'),  # Email if available
                 'display_name': manager_data.get('display_name', canonical_name),  # Prefer nickname, fallback to canonical name
                 'profile_image_url': manager_data.get('profile_image_url'),  # Profile image if available
