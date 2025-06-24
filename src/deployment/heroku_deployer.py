@@ -163,9 +163,9 @@ class HerokuPostgresDeployer:
                             'matchup_id': f"{league_id}_W{week}_{match_key}",
                             'league_id': league_id,
                             'week': int(week),
-                            'is_playoffs': matchup.get('is_playoffs', '0') == '1',
+                            'is_playoffs': self._detect_playoff_game(matchup),
                             'is_championship': self._detect_championship_game(matchup, week),
-                            'is_consolation': matchup.get('is_consolation', '0') == '1',
+                            'is_consolation': self._detect_consolation_game(matchup),
                             'winner_team_id': matchup.get('winner_team_key'),
                             'team1_id': None,
                             'team2_id': None,
@@ -336,6 +336,226 @@ class HerokuPostgresDeployer:
             logger.error(f"❌ Upload failed: {e}")
             return False
     
+    def fix_data_quality_issues(self) -> bool:
+        """Fix data quality issues found during analysis"""
+        try:
+            logger.info("🔧 Fixing data quality issues...")
+            
+            with self.engine.connect() as conn:
+                # Fix 1: 2005-2007 consolation data (set is_consolation = FALSE for pre-consolation era)
+                early_league_ids = ['175.l.658531', '153.l.76788', '124.l.109785']
+                
+                total_updated = 0
+                for league_id in early_league_ids:
+                    result = conn.execute(text('''
+                        UPDATE matchups 
+                        SET is_consolation = FALSE 
+                        WHERE league_id = :league_id 
+                          AND is_playoffs = TRUE
+                    '''), {'league_id': league_id})
+                    
+                    rows_updated = result.rowcount
+                    total_updated += rows_updated
+                    if rows_updated > 0:
+                        logger.info(f"  📊 {league_id}: Fixed {rows_updated} playoff games (set is_consolation = FALSE)")
+                
+                if total_updated > 0:
+                    logger.info(f"✅ Fixed {total_updated} 2005-2007 consolation flags")
+                else:
+                    logger.info("✅ 2005-2007 consolation flags already correct")
+                
+                conn.commit()
+                
+            return True
+        except Exception as e:
+            logger.error(f"❌ Data quality fix failed: {e}")
+            return False
+    
+    def fix_championship_flags(self) -> bool:
+        """Fix championship flags using proper playoff progression logic"""
+        try:
+            logger.info("🏆 Fixing championship flags...")
+            
+            # Historical league of record IDs (2005-2024)
+            HISTORICAL_LEAGUE_IDS = {
+                "449.l.674707",    # Idaho's DEI Quota (2024)
+                "423.l.841006",    # Move the Raiders to PDX (2023)
+                "414.l.1194955",   # Wet Hot Tahoe Summer (2022)
+                "406.l.1065326",   # Rocky Mountain High (2021)
+                "399.l.837311",    # The Lost Year (2020)
+                "390.l.777720",    # Women & Women First (2019)
+                "380.l.1143665",   # Sleepless In Seattle (2018)
+                "371.l.1025465",   # Go Fuck Yourself San Diego (2017)
+                "359.l.696366",    # The Great SF Draft (2016)
+                "348.l.655822",    # Luke's Kingdom (2015)
+                "331.l.355899",    # 10 Years 10 Assholes (2014)
+                "314.l.319572",    # Rosterbaters Anonymous (2013)
+                "273.l.107980",    # The League About Nothing (2012)
+                "257.l.89145",     # Lock It Up (2011)
+                "242.l.413666",    # Round 6 (2010)
+                "222.l.222935",    # Engaged (2009)
+                "199.l.42364",     # The Draft (2008)
+                "175.l.658531",    # Oakdale Park (2007)
+                "153.l.76788",     # Oakdale Park (2006)
+                "124.l.109785"     # Oakdale Park (2005)
+            }
+            
+            with self.engine.connect() as conn:
+                # Get league-season combinations for leagues of record only
+                result = conn.execute(text("""
+                    SELECT DISTINCT m.league_id, l.season 
+                    FROM matchups m
+                    JOIN leagues l ON m.league_id = l.league_id
+                    WHERE l.game_code = 'nfl'
+                      AND m.league_id = ANY(:league_ids)
+                    ORDER BY l.season DESC, m.league_id
+                """), {"league_ids": list(HISTORICAL_LEAGUE_IDS)})
+                
+                league_seasons = list(result)
+                success_count = 0
+                
+                for league_id, season_year in league_seasons:
+                    if self._fix_league_championship(conn, league_id, season_year):
+                        success_count += 1
+                
+                conn.commit()
+                logger.info(f"✅ Fixed championships for {success_count}/{len(league_seasons)} league-seasons")
+                
+            return True
+        except Exception as e:
+            logger.error(f"❌ Championship fix failed: {e}")
+            return False
+    
+    def _fix_league_championship(self, conn, league_id: str, season_year: int) -> bool:
+        """Fix championship flags using proper playoff bracket logic"""
+        try:
+            # Step 1: Find playoff weeks (excluding consolation)
+            playoff_result = conn.execute(text("""
+                SELECT DISTINCT week
+                FROM matchups
+                WHERE league_id = :league_id AND is_playoffs = TRUE AND is_consolation = FALSE
+                ORDER BY week
+            """), {"league_id": league_id})
+            
+            playoff_weeks = sorted([row[0] for row in playoff_result])
+            if len(playoff_weeks) < 3:
+                logger.warning(f"⚠️ {league_id} {season_year}: only {len(playoff_weeks)} playoff weeks, need 3")
+                return False
+            
+            # Step 2: Define the three key weeks
+            championship_week = playoff_weeks[-1]      # Last week = championship + 3rd place
+            semifinals_week = playoff_weeks[-2]        # Second to last = semifinals + 5th place  
+            quarterfinals_week = playoff_weeks[-3]     # Third to last = quarterfinals
+            
+            logger.info(f"  📅 {league_id} {season_year}: Quarters={quarterfinals_week}, Semis={semifinals_week}, Championship={championship_week}")
+            
+            # Step 3: Find quarterfinals winners and losers
+            quarterfinals_result = conn.execute(text("""
+                SELECT team1_id, team2_id, winner_team_id, team1_score, team2_score
+                FROM matchups
+                WHERE league_id = :league_id AND week = :week
+                  AND is_playoffs = TRUE AND is_consolation = FALSE
+            """), {"league_id": league_id, "week": quarterfinals_week})
+            
+            quarterfinals_winners = set()
+            quarterfinals_losers = set()
+            
+            for team1_id, team2_id, winner_team_id, team1_score, team2_score in quarterfinals_result:
+                # Determine winner if not explicitly set
+                if not winner_team_id:
+                    if team1_score > team2_score:
+                        winner_team_id = team1_id
+                    elif team2_score > team1_score:
+                        winner_team_id = team2_id
+                
+                if winner_team_id:
+                    quarterfinals_winners.add(winner_team_id)
+                    # Add the loser
+                    loser_team_id = team2_id if winner_team_id == team1_id else team1_id
+                    quarterfinals_losers.add(loser_team_id)
+            
+            logger.info(f"  🏆 Found {len(quarterfinals_winners)} quarterfinals winners, {len(quarterfinals_losers)} losers")
+            
+            # Step 4: Find semifinals winners (exclude 5th place game)
+            semifinals_result = conn.execute(text("""
+                SELECT team1_id, team2_id, winner_team_id, team1_score, team2_score, matchup_id
+                FROM matchups
+                WHERE league_id = :league_id AND week = :week
+                  AND is_playoffs = TRUE AND is_consolation = FALSE
+            """), {"league_id": league_id, "week": semifinals_week})
+            
+            semifinals_winners = set()
+            
+            for team1_id, team2_id, winner_team_id, team1_score, team2_score, matchup_id in semifinals_result:
+                # Check if this is a semifinals game or 5th place game
+                team1_won_quarters = team1_id in quarterfinals_winners
+                team2_won_quarters = team2_id in quarterfinals_winners
+                team1_lost_quarters = team1_id in quarterfinals_losers
+                team2_lost_quarters = team2_id in quarterfinals_losers
+                
+                # Semifinals game = at least one team won quarterfinals
+                # 5th place game = both teams lost quarterfinals
+                if team1_won_quarters or team2_won_quarters:
+                    # This is a semifinals game - determine winner
+                    if not winner_team_id:
+                        if team1_score > team2_score:
+                            winner_team_id = team1_id
+                        elif team2_score > team1_score:
+                            winner_team_id = team2_id
+                    
+                    if winner_team_id:
+                        semifinals_winners.add(winner_team_id)
+                    logger.info(f"  🏆 Semifinals game: {team1_id} vs {team2_id}, winner: {winner_team_id}")
+                elif team1_lost_quarters and team2_lost_quarters:
+                    logger.info(f"  5️⃣ 5th place game: {team1_id} vs {team2_id}")
+            
+            logger.info(f"  🏆 Found {len(semifinals_winners)} semifinals winners")
+            
+            # Step 5: Find championship game = both teams are semifinals winners
+            championship_result = conn.execute(text("""
+                SELECT team1_id, team2_id, matchup_id
+                FROM matchups
+                WHERE league_id = :league_id AND week = :week
+                  AND is_playoffs = TRUE AND is_consolation = FALSE
+            """), {"league_id": league_id, "week": championship_week})
+            
+            championship_matchup_id = None
+            
+            for team1_id, team2_id, matchup_id in championship_result:
+                team1_won_semis = team1_id in semifinals_winners
+                team2_won_semis = team2_id in semifinals_winners
+                
+                if team1_won_semis and team2_won_semis:
+                    championship_matchup_id = matchup_id
+                    logger.info(f"  🏆 Championship game found: {team1_id} vs {team2_id}")
+                    break
+                else:
+                    logger.info(f"  🥉 3rd place game: {team1_id} vs {team2_id}")
+            
+            # Step 6: Update the database
+            if championship_matchup_id:
+                # Reset all championships for this league
+                conn.execute(text("""
+                    UPDATE matchups SET is_championship = FALSE 
+                    WHERE league_id = :league_id
+                """), {"league_id": league_id})
+                
+                # Set the correct championship
+                conn.execute(text("""
+                    UPDATE matchups SET is_championship = TRUE 
+                    WHERE matchup_id = :matchup_id
+                """), {"matchup_id": championship_matchup_id})
+                
+                logger.info(f"  ✅ {league_id} {season_year}: Championship fixed using bracket logic")
+                return True
+            else:
+                logger.warning(f"  ⚠️ {league_id} {season_year}: Could not determine championship using bracket logic")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"  ❌ {league_id} {season_year}: {e}")
+            return False
+
     def verify_and_summarize(self) -> bool:
         """Verify upload and create summary"""
         try:
@@ -375,6 +595,28 @@ class HerokuPostgresDeployer:
                 except:
                     logger.info("League summary not available")
                 
+                # Championship verification
+                try:
+                    result = conn.execute(text("""
+                        SELECT m.league_id, l.season, COUNT(*) as championship_count
+                        FROM matchups m
+                        JOIN leagues l ON m.league_id = l.league_id
+                        WHERE m.is_championship = TRUE AND l.game_code = 'nfl'
+                        GROUP BY m.league_id, l.season
+                        HAVING COUNT(*) != 1
+                        ORDER BY l.season DESC, m.league_id
+                    """))
+                    
+                    problem_leagues = list(result)
+                    if problem_leagues:
+                        logger.info(f"\n⚠️ CHAMPIONSHIP ISSUES ({len(problem_leagues)} leagues):")
+                        for league_id, season, count in problem_leagues:
+                            logger.info(f"  {league_id} {season}: {count} championships")
+                    else:
+                        logger.info(f"\n✅ CHAMPIONSHIP STATUS: All leagues have exactly 1 championship!")
+                except:
+                    logger.info("Championship verification not available")
+                
                 logger.info(f"\nGRAND TOTAL: {total_db_records:,} database records")
                 logger.info("=" * 50)
             
@@ -391,6 +633,8 @@ class HerokuPostgresDeployer:
             ("Create Schema", self.create_schema),
             ("Preprocess Data", self.preprocess_data),
             ("Upload Data", self.upload_data),
+            ("Fix Data Quality", self.fix_data_quality_issues),
+            ("Fix Championship Flags", self.fix_championship_flags),
             ("Verify & Summarize", self.verify_and_summarize)
         ]
         
@@ -404,42 +648,39 @@ class HerokuPostgresDeployer:
 
     def _detect_championship_game(self, matchup, week):
         """
-        Detect if a matchup is a championship game based on week number and playoff status.
+        NEVER mark games as championship during initial processing.
+        Championship detection will be done post-processing based on playoff progression.
         
-        Championship detection logic:
-        1. Must be a playoff game (is_playoffs = True)
-        2. Must be in the final week of playoffs (typically week 16 or 17)
-        3. Week 17 is almost always championship for modern leagues
-        4. Week 16 can be championship for shorter seasons
+        Logic: Championships are determined by tracking teams who win 3 consecutive playoff weeks.
+        This requires all playoff data to be processed first, so we'll handle it separately.
         """
-        # Must be a playoff game first
-        is_playoffs = matchup.get('is_playoffs', '0') == '1'
-        if not is_playoffs:
-            return False
-        
-        # Check for explicit championship indicator in Yahoo API data
-        # Some Yahoo leagues may have this field
-        if 'is_championship' in matchup:
-            return matchup.get('is_championship', '0') == '1'
-        
-        # Week-based championship detection
-        week_num = int(week)
-        
-        # Week 17 is championship week for most modern leagues (2021+)
-        if week_num == 17:
+        # During initial flattening, never mark as championship
+        # We'll determine championships later based on playoff progression
+        return False
+
+    def _detect_playoff_game(self, matchup):
+        """Detect if a matchup is a playoff game using matchup_type field"""
+        # Primary method: Check matchup_type field
+        matchup_type = matchup.get('matchup_type', '').lower()
+        if matchup_type in ['playoffs', 'championship']:
             return True
         
-        # Week 16 was championship week for many leagues (pre-2021)
-        # and still is for some shorter seasons
-        if week_num == 16:
-            # Additional logic: if it's playoffs and week 16, likely championship
-            # unless there's evidence of week 17 playoffs
+        # Secondary method: Check for explicit playoff indicator in Yahoo API data
+        if 'is_playoffs' in matchup:
+            return matchup.get('is_playoffs', '0') == '1'
+        
+        return False
+
+    def _detect_consolation_game(self, matchup):
+        """Detect if a matchup is a consolation game using matchup_type field"""
+        # Primary method: Check matchup_type field
+        matchup_type = matchup.get('matchup_type', '').lower()
+        if matchup_type == 'consolation':
             return True
         
-        # Week 15 can be championship for very short seasons
-        if week_num == 15:
-            # Only if it's playoffs - this is rare but possible
-            return True
+        # Secondary method: Check for explicit consolation indicator in Yahoo API data
+        if 'is_consolation' in matchup:
+            return matchup.get('is_consolation', '0') == '1'
         
         return False
 

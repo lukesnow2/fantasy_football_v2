@@ -620,15 +620,13 @@ class EdwEtlProcessor:
                 if row:
                     return row[0]
                 else:
-                    # If no exact match found, find the closest week
+                    # If no exact match found, find the closest week by date
                     # This handles edge cases where transaction might fall between weeks
                     result = conn.execute(text("""
-                        SELECT week_number,
-                               ABS(EXTRACT(EPOCH FROM (week_start_date - :transaction_date))) as start_diff,
-                               ABS(EXTRACT(EPOCH FROM (week_end_date - :transaction_date))) as end_diff
+                        SELECT week_number
                         FROM edw.dim_week 
                         WHERE season_year = :season_year 
-                        ORDER BY LEAST(start_diff, end_diff) 
+                        ORDER BY ABS(week_start_date - :transaction_date)
                         LIMIT 1
                     """), {
                         "season_year": season_year,
@@ -648,6 +646,45 @@ class EdwEtlProcessor:
             # Fallback to simple calculation if database query fails
             return self.calculate_week_from_date_fallback(transaction_date, season_year)
     
+    def get_week_from_preloaded_data(self, transaction_date: date, season_year: int, week_lookup: dict) -> int:
+        """Fast in-memory lookup of week number from preloaded week data"""
+        
+        # Get weeks for this season
+        season_weeks = week_lookup.get(season_year, [])
+        if not season_weeks:
+            # Fallback to calculation if no weeks available for this season
+            return self.calculate_week_from_date_fallback(transaction_date, season_year)
+        
+        # Find the week that contains this date
+        for week_info in season_weeks:
+            if week_info['start_date'] <= transaction_date <= week_info['end_date']:
+                return week_info['week_number']
+        
+        # If no exact match, find the closest week
+        closest_week = None
+        min_diff = float('inf')
+        
+        for week_info in season_weeks:
+            start_diff = abs((transaction_date - week_info['start_date']).days)
+            end_diff = abs((transaction_date - week_info['end_date']).days)
+            week_diff = min(start_diff, end_diff)
+            
+            if week_diff < min_diff:
+                min_diff = week_diff
+                closest_week = week_info['week_number']
+        
+        return closest_week if closest_week else 1
+
+    def get_championship_week_for_season(self, season_year: int) -> int:
+        """Get the championship week number for a given season"""
+        # Championship week logic based on season structure
+        if season_year <= 2009 or season_year in [2006, 2007]:
+            return 16  # Shorter seasons had championship in week 16
+        elif season_year <= 2021:
+            return 16  # Standard seasons had championship in week 16
+        else:
+            return 17  # Modern seasons have championship in week 17
+
     def calculate_week_from_date_fallback(self, transaction_date: date, season_year: int) -> int:
         """Fallback method to calculate week if dim_week lookup fails"""
         from datetime import date, timedelta
@@ -1111,12 +1148,18 @@ class EdwEtlProcessor:
             team1_points = float(matchup.get('team1_score', 0))
             team2_points = float(matchup.get('team2_score', 0))
             
-            # Determine matchup type based on flags
-            if matchup.get('is_championship', False):
+            # Determine matchup type based on operational flags (SIMPLIFIED)
+            # The operational data is already fixed, so just trust it
+            is_source_championship = matchup.get('is_championship', False)
+            is_consolation = matchup.get('is_consolation', False)
+            is_playoffs = matchup.get('is_playoffs', False)
+            
+            # Simple logic: trust the operational data
+            if is_source_championship:
                 matchup_type = 'championship'
-            elif matchup.get('is_consolation', False):
+            elif is_consolation:
                 matchup_type = 'consolation'
-            elif matchup.get('is_playoffs', False):
+            elif is_playoffs:
                 matchup_type = 'playoffs'
             else:
                 matchup_type = 'regular'
@@ -1150,7 +1193,137 @@ class EdwEtlProcessor:
                 'is_consolation': bool(matchup_type == 'consolation')
             })
         
+        # No post-processing needed - operational data is already correct
         return facts
+    
+    def _fix_championship_duplicates(self, facts: List[Dict]) -> List[Dict]:
+        """
+        Fix championship duplicates using proper playoff bracket logic.
+        Championship game = teams that won semifinals (second-to-last week).
+        """
+        # Group potential championships by league and season
+        potential_championships = {}
+        regular_facts = []
+        
+        for fact in facts:
+            if fact['matchup_type'] == 'potential_championship':
+                key = (fact['league_key'], fact['season_year'])
+                if key not in potential_championships:
+                    potential_championships[key] = []
+                potential_championships[key].append(fact)
+            else:
+                regular_facts.append(fact)
+        
+        # For each league-season, use bracket logic to identify championship
+        for key, candidates in potential_championships.items():
+            league_key, season_year = key
+            
+            if len(candidates) == 1:
+                candidates[0]['matchup_type'] = 'championship'
+                candidates[0]['is_championship'] = True
+                regular_facts.append(candidates[0])
+            else:
+                logger.info(f"🏆 Resolving {len(candidates)} championship candidates for league {league_key} season {season_year}")
+                
+                # Step 1: Find the three key weeks
+                championship_week = self.get_championship_week_for_season(season_year)
+                semifinals_week = championship_week - 1
+                quarterfinals_week = championship_week - 2
+                
+                # Step 2: Get week keys for lookups
+                championship_week_key = self.dim_mappings['week_keys'].get((season_year, championship_week))
+                semifinals_week_key = self.dim_mappings['week_keys'].get((season_year, semifinals_week))
+                quarterfinals_week_key = self.dim_mappings['week_keys'].get((season_year, quarterfinals_week))
+                
+                # Step 3: Find quarterfinals winners and losers
+                quarterfinals_winners = set()
+                quarterfinals_losers = set()
+                
+                for fact in facts:
+                    if (fact['league_key'] == league_key and 
+                        fact['season_year'] == season_year and 
+                        fact['week_key'] == quarterfinals_week_key and
+                        fact['is_playoffs'] and 
+                        not fact['is_consolation']):
+                        
+                        # This is a quarterfinals game - get the winner
+                        if fact['winner_team_key']:
+                            quarterfinals_winners.add(fact['winner_team_key'])
+                            # Add the loser (the team that didn't win)
+                            if fact['team1_key'] == fact['winner_team_key']:
+                                quarterfinals_losers.add(fact['team2_key'])
+                            else:
+                                quarterfinals_losers.add(fact['team1_key'])
+                
+                logger.info(f"  🏆 Found {len(quarterfinals_winners)} quarterfinals winners, {len(quarterfinals_losers)} losers")
+                
+                # Step 4: Find semifinals winners (exclude 5th place game)
+                semifinals_winners = set()
+                
+                for fact in facts:
+                    if (fact['league_key'] == league_key and 
+                        fact['season_year'] == season_year and 
+                        fact['week_key'] == semifinals_week_key and
+                        fact['is_playoffs'] and 
+                        not fact['is_consolation']):
+                        
+                        # Check if this is a semifinals game or 5th place game
+                        team1_won_quarters = fact['team1_key'] in quarterfinals_winners
+                        team2_won_quarters = fact['team2_key'] in quarterfinals_winners
+                        team1_lost_quarters = fact['team1_key'] in quarterfinals_losers
+                        team2_lost_quarters = fact['team2_key'] in quarterfinals_losers
+                        
+                        # Semifinals game = at least one team won quarterfinals
+                        # 5th place game = both teams lost quarterfinals
+                        if team1_won_quarters or team2_won_quarters:
+                            # This is a semifinals game - record the winner
+                            if fact['winner_team_key']:
+                                semifinals_winners.add(fact['winner_team_key'])
+                            logger.info(f"  🏆 Semifinals game: teams {fact['team1_key']} vs {fact['team2_key']}")
+                        elif team1_lost_quarters and team2_lost_quarters:
+                            logger.info(f"  5️⃣ 5th place game: teams {fact['team1_key']} vs {fact['team2_key']}")
+                
+                logger.info(f"  🏆 Found {len(semifinals_winners)} semifinals winners")
+                
+                # Step 5: Championship game = game with both teams being semifinals winners
+                championship_candidate = None
+                for candidate in candidates:
+                    team1_won_semis = candidate['team1_key'] in semifinals_winners
+                    team2_won_semis = candidate['team2_key'] in semifinals_winners
+                    
+                    if team1_won_semis and team2_won_semis:
+                        championship_candidate = candidate
+                        logger.info(f"  🏆 Championship identified: both teams won semifinals")
+                        break
+                    else:
+                        logger.info(f"  🥉 3rd place game: teams {candidate['team1_key']} vs {candidate['team2_key']}")
+                
+                # Step 6: Mark championship and convert others
+                if championship_candidate:
+                    championship_candidate['matchup_type'] = 'championship'
+                    championship_candidate['is_championship'] = True
+                    regular_facts.append(championship_candidate)
+                    
+                    # Convert others to regular playoff games (3rd place, etc.)
+                    for candidate in candidates:
+                        if candidate != championship_candidate:
+                            candidate['matchup_type'] = 'playoffs'
+                            candidate['is_championship'] = False
+                            regular_facts.append(candidate)
+                else:
+                    # Fallback: if logic fails, pick the first one and log warning
+                    logger.warning(f"  ⚠️ Could not determine championship using bracket logic for league {league_key} season {season_year}")
+                    candidates[0]['matchup_type'] = 'championship'
+                    candidates[0]['is_championship'] = True
+                    regular_facts.append(candidates[0])
+                    
+                    for candidate in candidates[1:]:
+                        candidate['matchup_type'] = 'playoffs'
+                        candidate['is_championship'] = False
+                        regular_facts.append(candidate)
+        
+        logger.info(f"🏆 Fixed championship duplicates: {len(potential_championships)} league-seasons processed")
+        return regular_facts
     
     def transform_fact_transaction(self) -> List[Dict]:
         """Transform transaction data into fact_transaction format"""
@@ -1166,6 +1339,36 @@ class EdwEtlProcessor:
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+
+        # Preload dim_week data to avoid N+1 queries
+        logger.info("📅 Preloading week data for fast transaction week lookup...")
+        week_lookup = {}
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT season_year, week_number, week_start_date, week_end_date 
+                    FROM edw.dim_week 
+                    ORDER BY season_year, week_number
+                """))
+                
+                for row in result:
+                    season_year = row[0]
+                    week_number = row[1]
+                    week_start = row[2]
+                    week_end = row[3]
+                    
+                    if season_year not in week_lookup:
+                        week_lookup[season_year] = []
+                    week_lookup[season_year].append({
+                        'week_number': week_number,
+                        'start_date': week_start,
+                        'end_date': week_end
+                    })
+                    
+            logger.info(f"✅ Loaded week data for {len(week_lookup)} seasons")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not preload week data: {e}")
+            week_lookup = {}
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -1212,8 +1415,12 @@ class EdwEtlProcessor:
             else:  # January-August = previous NFL season
                 season_year = transaction_date.year - 1
             
-            # Find transaction week using dim_week data
-            transaction_week = self.get_week_from_date(transaction_date, season_year)
+            # Ensure we don't assign transactions to seasons before our earliest league (2005)
+            if season_year < 2005:
+                season_year = 2005
+            
+            # Find transaction week using preloaded week data
+            transaction_week = self.get_week_from_preloaded_data(transaction_date, season_year, week_lookup)
             
             # Get manager keys for from/to teams
             from_manager_key = None
@@ -3177,12 +3384,150 @@ class EdwEtlProcessor:
         return managers
 
     def transform_mart_league_summary(self) -> List[Dict]:
-        """Transform data for mart_league_summary"""
+        """Transform data for mart_league_summary - matches current table schema"""
         marts = []
         
-        # This would aggregate data from fact tables
-        # For now, return empty list as placeholder
-        logger.info("🏪 League summary mart - placeholder implementation")
+        with self.engine.connect() as conn:
+            logger.info("🏪 Calculating league summary statistics...")
+            
+            # Query matching the actual mart_league_summary schema
+            sql = """
+            WITH league_basics AS (
+                SELECT 
+                    dl.league_key,
+                    dl.league_name,
+                    dl.season_year,
+                    dl.num_teams as total_teams,
+                    COUNT(DISTINCT dw.week_number) as total_weeks
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_matchup fm ON dl.league_key = fm.league_key 
+                    AND dl.season_year = fm.season_year
+                LEFT JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                WHERE dl.is_active = TRUE
+                GROUP BY dl.league_key, dl.league_name, dl.season_year, dl.num_teams
+            ),
+            championship_results AS (
+                SELECT DISTINCT ON (dl.league_key)
+                    dl.league_key,
+                    -- Champion info (winner of championship game)
+                    champ_team.team_name as champion_team_name,
+                    champ_mgr.manager_name as champion_manager,
+                    -- Runner-up info (loser of championship game)
+                    runner_team.team_name as runner_up_team_name,
+                    runner_mgr.manager_name as runner_up_manager
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_matchup fm_champ ON dl.league_key = fm_champ.league_key 
+                    AND dl.season_year = fm_champ.season_year 
+                    AND fm_champ.is_championship = TRUE
+                -- Champion team and manager
+                LEFT JOIN edw.dim_team champ_team ON fm_champ.winner_team_key = champ_team.team_key
+                LEFT JOIN edw.dim_manager champ_mgr ON champ_team.manager_name = champ_mgr.manager_name
+                -- Runner-up team and manager (loser of championship)
+                LEFT JOIN edw.dim_team runner_team ON (
+                    CASE WHEN fm_champ.winner_team_key = fm_champ.team1_key 
+                         THEN fm_champ.team2_key 
+                         ELSE fm_champ.team1_key END = runner_team.team_key
+                )
+                LEFT JOIN edw.dim_manager runner_mgr ON runner_team.manager_name = runner_mgr.manager_name
+                WHERE dl.is_active = TRUE
+                ORDER BY dl.league_key, fm_champ.week_key DESC
+            ),
+            scoring_leaders AS (
+                SELECT 
+                    dl.league_key,
+                    -- Highest single week score
+                    MAX(ftp.points_for) as highest_single_week_score,
+                    -- Average weekly score across all teams/weeks
+                    ROUND(AVG(ftp.points_for), 2) as average_weekly_score
+                FROM edw.dim_league dl
+                JOIN edw.fact_team_performance ftp ON dl.league_key = ftp.league_key 
+                    AND dl.season_year = ftp.season_year
+                WHERE dl.is_active = TRUE
+                GROUP BY dl.league_key
+            ),
+            highest_scorer_info AS (
+                SELECT DISTINCT
+                    dl.league_key,
+                    FIRST_VALUE(dt.team_name) OVER (
+                        PARTITION BY dl.league_key 
+                        ORDER BY ftp.points_for DESC
+                    ) as highest_scorer_team,
+                    FIRST_VALUE(dm.manager_name) OVER (
+                        PARTITION BY dl.league_key 
+                        ORDER BY ftp.points_for DESC
+                    ) as highest_scorer_manager
+                FROM edw.dim_league dl
+                JOIN edw.fact_team_performance ftp ON dl.league_key = ftp.league_key 
+                    AND dl.season_year = ftp.season_year
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                WHERE dl.is_active = TRUE
+            ),
+            transaction_activity AS (
+                SELECT 
+                    dl.league_key,
+                    COUNT(ft.transaction_key) as total_transactions,
+                    -- Most active trader (manager with most transactions)
+                    (SELECT dm.manager_name 
+                     FROM edw.fact_transaction ft2
+                     JOIN edw.dim_manager dm ON ft2.to_manager_key = dm.manager_key
+                     WHERE ft2.league_key = dl.league_key AND ft2.season_year = dl.season_year
+                     GROUP BY dm.manager_name
+                     ORDER BY COUNT(ft2.transaction_key) DESC
+                     LIMIT 1) as most_active_trader
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_transaction ft ON dl.league_key = ft.league_key 
+                    AND dl.season_year = ft.season_year
+                WHERE dl.is_active = TRUE
+                GROUP BY dl.league_key, dl.season_year
+            )
+            SELECT 
+                lb.league_key,
+                lb.league_name,
+                lb.season_year,
+                lb.total_teams,
+                lb.total_weeks,
+                cr.champion_team_name,
+                cr.champion_manager,
+                cr.runner_up_team_name,
+                cr.runner_up_manager,
+                hsi.highest_scorer_team,
+                hsi.highest_scorer_manager,
+                sl.highest_single_week_score,
+                sl.average_weekly_score,
+                COALESCE(ta.total_transactions, 0) as total_transactions,
+                ta.most_active_trader
+            FROM league_basics lb
+            LEFT JOIN championship_results cr ON lb.league_key = cr.league_key
+            LEFT JOIN scoring_leaders sl ON lb.league_key = sl.league_key
+            LEFT JOIN highest_scorer_info hsi ON lb.league_key = hsi.league_key
+            LEFT JOIN transaction_activity ta ON lb.league_key = ta.league_key
+            ORDER BY lb.season_year DESC, lb.league_name
+            """
+            
+            result = conn.execute(text(sql))
+            rows = result.fetchall()
+            
+            for row in rows:
+                marts.append({
+                    'league_key': row[0],
+                    'league_name': row[1],
+                    'season_year': row[2],
+                    'total_teams': row[3],
+                    'total_weeks': row[4],
+                    'champion_team_name': row[5],
+                    'champion_manager': row[6],
+                    'runner_up_team_name': row[7],
+                    'runner_up_manager': row[8],
+                    'highest_scorer_team': row[9],
+                    'highest_scorer_manager': row[10],
+                    'highest_single_week_score': row[11],
+                    'average_weekly_score': row[12],
+                    'total_transactions': row[13],
+                    'most_active_trader': row[14]
+                })
+        
+        logger.info(f"🏪 Generated {len(marts)} league summary records")
         return marts
 
     def transform_mart_manager_performance(self) -> List[Dict]:
