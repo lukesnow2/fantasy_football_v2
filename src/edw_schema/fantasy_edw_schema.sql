@@ -272,6 +272,9 @@ CREATE TABLE fact_matchup (
     matchup_type VARCHAR(20) DEFAULT 'regular', -- regular, playoffs, championship, consolation
     is_playoffs BOOLEAN DEFAULT FALSE,
     is_championship BOOLEAN DEFAULT FALSE,
+    is_semifinal BOOLEAN DEFAULT FALSE,
+    is_quarterfinal BOOLEAN DEFAULT FALSE,
+    is_last_place_game BOOLEAN DEFAULT FALSE,
     is_consolation BOOLEAN DEFAULT FALSE,
     
     -- Metadata
@@ -297,6 +300,7 @@ CREATE INDEX idx_matchup_managers ON fact_matchup (manager1_key, manager2_key);
 CREATE INDEX idx_winner ON fact_matchup (winner_team_key);
 CREATE INDEX idx_winner_manager ON fact_matchup (winner_manager_key);
 CREATE INDEX idx_matchup_type ON fact_matchup (matchup_type);
+CREATE INDEX idx_playoff_flags ON fact_matchup (is_playoffs, is_championship, is_semifinal, is_quarterfinal, is_last_place_game);
 
 CREATE INDEX idx_scores ON fact_matchup (team1_points, team2_points);
 

@@ -97,6 +97,9 @@ CREATE TABLE matchups (
     winner_team_id VARCHAR(50),
     is_playoffs BOOLEAN DEFAULT FALSE,
     is_championship BOOLEAN DEFAULT FALSE,
+    is_semifinal BOOLEAN DEFAULT FALSE,
+    is_quarterfinal BOOLEAN DEFAULT FALSE,
+    is_last_place_game BOOLEAN DEFAULT FALSE,
     is_consolation BOOLEAN DEFAULT FALSE,
     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
@@ -108,7 +111,10 @@ CREATE TABLE matchups (
     INDEX idx_team1_matchups (team1_id),
     INDEX idx_team2_matchups (team2_id),
     INDEX idx_playoffs (is_playoffs),
-    INDEX idx_championship (is_championship)
+    INDEX idx_championship (is_championship),
+    INDEX idx_semifinal (is_semifinal),
+    INDEX idx_quarterfinal (is_quarterfinal),
+    INDEX idx_last_place (is_last_place_game)
 );
 
 -- Transactions table (trades, adds, drops, waivers)

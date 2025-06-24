@@ -24,7 +24,7 @@ class HerokuPostgresDeployer:
     # Data type mappings for cleaning
     DATETIME_FIELDS = {'extracted_at', 'timestamp', 'acquisition_date'}
     BOOLEAN_FIELDS = {'is_pro_league', 'is_cash_league', 'is_starter', 'is_playoffs', 
-                      'is_championship', 'is_consolation', 'is_keeper', 'is_auction_draft'}
+                      'is_championship', 'is_semifinal', 'is_quarterfinal', 'is_last_place_game', 'is_consolation', 'is_keeper', 'is_auction_draft'}
     NUMERIC_FIELDS = {'wins', 'losses', 'ties', 'points_for', 'points_against', 
                       'team1_score', 'team2_score', 'faab_bid', 'faab_balance', 
                       'pick_number', 'round_number', 'cost', 'total_fantasy_points', 
@@ -165,6 +165,9 @@ class HerokuPostgresDeployer:
                             'week': int(week),
                             'is_playoffs': self._detect_playoff_game(matchup),
                             'is_championship': self._detect_championship_game(matchup, week),
+                            'is_semifinal': self._detect_semifinal_game(matchup, week),
+                            'is_quarterfinal': self._detect_quarterfinal_game(matchup, week),
+                            'is_last_place_game': self._detect_last_place_game(matchup, week),
                             'is_consolation': self._detect_consolation_game(matchup),
                             'winner_team_id': matchup.get('winner_team_key'),
                             'team1_id': None,
@@ -534,11 +537,40 @@ class HerokuPostgresDeployer:
             
             # Step 6: Update the database
             if championship_matchup_id:
-                # Reset all championships for this league
+                # Reset all playoff round flags for this league
                 conn.execute(text("""
-                    UPDATE matchups SET is_championship = FALSE 
+                    UPDATE matchups SET 
+                        is_championship = FALSE,
+                        is_semifinal = FALSE,
+                        is_quarterfinal = FALSE
                     WHERE league_id = :league_id
                 """), {"league_id": league_id})
+                
+                # Set quarterfinal flags
+                conn.execute(text("""
+                    UPDATE matchups SET is_quarterfinal = TRUE 
+                    WHERE league_id = :league_id AND week = :week
+                      AND is_playoffs = TRUE AND is_consolation = FALSE
+                """), {"league_id": league_id, "week": quarterfinals_week})
+                
+                # Set semifinal flags for games between quarterfinals winners
+                semifinals_result = conn.execute(text("""
+                    SELECT matchup_id, team1_id, team2_id
+                    FROM matchups
+                    WHERE league_id = :league_id AND week = :week
+                      AND is_playoffs = TRUE AND is_consolation = FALSE
+                """), {"league_id": league_id, "week": semifinals_week})
+                
+                for matchup_id, team1_id, team2_id in semifinals_result:
+                    team1_won_quarters = team1_id in quarterfinals_winners
+                    team2_won_quarters = team2_id in quarterfinals_winners
+                    
+                    # Semifinals game = at least one team won quarterfinals
+                    if team1_won_quarters or team2_won_quarters:
+                        conn.execute(text("""
+                            UPDATE matchups SET is_semifinal = TRUE 
+                            WHERE matchup_id = :matchup_id
+                        """), {"matchup_id": matchup_id})
                 
                 # Set the correct championship
                 conn.execute(text("""
@@ -546,7 +578,7 @@ class HerokuPostgresDeployer:
                     WHERE matchup_id = :matchup_id
                 """), {"matchup_id": championship_matchup_id})
                 
-                logger.info(f"  ✅ {league_id} {season_year}: Championship fixed using bracket logic")
+                logger.info(f"  ✅ {league_id} {season_year}: Championship, semifinals, and quarterfinals fixed using bracket logic")
                 return True
             else:
                 logger.warning(f"  ⚠️ {league_id} {season_year}: Could not determine championship using bracket logic")
@@ -682,6 +714,42 @@ class HerokuPostgresDeployer:
         if 'is_consolation' in matchup:
             return matchup.get('is_consolation', '0') == '1'
         
+        return False
+
+    def _detect_semifinal_game(self, matchup, week):
+        """
+        NEVER mark games as semifinal during initial processing.
+        Semifinal detection will be done post-processing based on playoff progression.
+        
+        Logic: Semifinals are determined by tracking teams who won quarterfinals.
+        This requires all playoff data to be processed first, so we'll handle it separately.
+        """
+        # During initial flattening, never mark as semifinal
+        # We'll determine semifinals later based on playoff progression
+        return False
+
+    def _detect_quarterfinal_game(self, matchup, week):
+        """
+        NEVER mark games as quarterfinal during initial processing.
+        Quarterfinal detection will be done post-processing based on playoff progression.
+        
+        Logic: Quarterfinals are determined by finding the earliest playoff week games.
+        This requires all playoff data to be processed first, so we'll handle it separately.
+        """
+        # During initial flattening, never mark as quarterfinal
+        # We'll determine quarterfinals later based on playoff progression
+        return False
+
+    def _detect_last_place_game(self, matchup, week):
+        """
+        NEVER mark games as last place during initial processing.
+        Last place detection will be done post-processing based on consolation bracket progression.
+        
+        Logic: Last place (9th place) games are determined by tracking losers through 
+        the consolation bracket. This requires all consolation data to be processed first.
+        """
+        # During initial flattening, never mark as last place
+        # We'll determine last place games later based on consolation bracket progression
         return False
 
 def auto_detect_data_file(pattern: str) -> str:

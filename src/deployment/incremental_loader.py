@@ -23,7 +23,7 @@ class IncrementalDatabaseLoader:
     # Data type mappings for cleaning
     DATETIME_FIELDS = {'extracted_at', 'timestamp', 'acquisition_date'}
     BOOLEAN_FIELDS = {'is_pro_league', 'is_cash_league', 'is_starter', 'is_playoffs', 
-                      'is_championship', 'is_consolation', 'is_keeper', 'is_auction_draft'}
+                      'is_championship', 'is_semifinal', 'is_quarterfinal', 'is_last_place_game', 'is_consolation', 'is_keeper', 'is_auction_draft'}
     NUMERIC_FIELDS = {'wins', 'losses', 'ties', 'points_for', 'points_against', 
                       'team1_score', 'team2_score', 'faab_bid', 'faab_balance', 
                       'pick_number', 'round_number', 'cost'}
