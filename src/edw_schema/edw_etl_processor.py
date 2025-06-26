@@ -3450,7 +3450,9 @@ class EdwEtlProcessor:
                 FROM edw.dim_league dl
                 JOIN edw.fact_team_performance ftp ON dl.league_key = ftp.league_key 
                     AND dl.season_year = ftp.season_year
-                WHERE dl.is_active = TRUE
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                WHERE dl.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dl.league_key
             ),
             highest_scorer_info AS (
@@ -3469,7 +3471,7 @@ class EdwEtlProcessor:
                     AND dl.season_year = ftp.season_year
                 JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
-                WHERE dl.is_active = TRUE
+                WHERE dl.is_active = TRUE AND dm.include_in_analysis = TRUE
             ),
             transaction_activity AS (
                 SELECT 
@@ -3480,6 +3482,7 @@ class EdwEtlProcessor:
                      FROM edw.fact_transaction ft2
                      JOIN edw.dim_manager dm ON ft2.to_manager_key = dm.manager_key
                      WHERE ft2.league_key = dl.league_key AND ft2.season_year = dl.season_year
+                       AND dm.include_in_analysis = TRUE
                      GROUP BY dm.manager_name
                      ORDER BY COUNT(ft2.transaction_key) DESC
                      LIMIT 1) as most_active_trader
@@ -3566,11 +3569,12 @@ class EdwEtlProcessor:
                     0 as playoff_losses
                 FROM edw.dim_team dt
                 JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
                 LEFT JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
                     AND dl.season_year = ftp.season_year
-                WHERE dt.is_active = TRUE
+                WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dt.manager_name, dl.season_year, dt.league_key
             ),
             transaction_stats AS (
@@ -3581,7 +3585,7 @@ class EdwEtlProcessor:
                     SUM(ft.faab_bid) as total_faab_spent
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
-                WHERE dm.is_active = TRUE AND ft.faab_bid > 0
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE AND ft.faab_bid > 0
                 GROUP BY dm.manager_name
             ),
             draft_stats AS (
@@ -3591,7 +3595,7 @@ class EdwEtlProcessor:
                     AVG(fd.overall_pick) as avg_draft_position
                 FROM edw.dim_manager dm
                 JOIN edw.fact_draft fd ON dm.manager_key = fd.manager_key
-                WHERE dm.is_active = TRUE
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
             manager_aggregates AS (
@@ -3918,10 +3922,12 @@ class EdwEtlProcessor:
                     MIN(ftp.point_differential) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as biggest_loss_margin
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_team_performance opp_ftp ON ftp.league_key = opp_ftp.league_key 
                     AND ftp.week_key = opp_ftp.week_key 
                     AND ftp.team_key != opp_ftp.team_key
-                WHERE dw.week_type = 'regular'
+                WHERE dw.week_type = 'regular' AND dm.include_in_analysis = TRUE
             ),
             power_calculations AS (
                 SELECT 
@@ -4031,7 +4037,7 @@ class EdwEtlProcessor:
                     END as outcome,
                     CASE WHEN fm.is_playoffs = TRUE THEN 1 ELSE 0 END as is_playoff,
                     CASE WHEN fm.is_championship = TRUE THEN 1 ELSE 0 END as is_championship,
-                    CASE WHEN fm.matchup_type = 'semifinal' THEN 1 ELSE 0 END as is_semifinal,
+                    CASE WHEN fm.is_semifinal = TRUE THEN 1 ELSE 0 END as is_semifinal,
                     -- Add row number for streak calculation (ordered by season, week)
                     ROW_NUMBER() OVER (
                         PARTITION BY 
@@ -4042,12 +4048,16 @@ class EdwEtlProcessor:
                 FROM edw.fact_matchup fm
                 JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
                 JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+                JOIN edw.dim_manager dm1 ON dt1.manager_name = dm1.manager_name
+                JOIN edw.dim_manager dm2 ON dt2.manager_name = dm2.manager_name
                 JOIN edw.dim_league dl ON fm.league_key = dl.league_key
                 JOIN edw.dim_week dw ON fm.week_key = dw.week_key
                 JOIN edw.dim_season ds ON fm.season_year = ds.season_year
                 WHERE dt1.manager_name != dt2.manager_name
                     AND dt1.is_active = TRUE 
                     AND dt2.is_active = TRUE
+                    AND dm1.include_in_analysis = TRUE
+                    AND dm2.include_in_analysis = TRUE
             ),
             manager_pairs AS (
                 SELECT 
