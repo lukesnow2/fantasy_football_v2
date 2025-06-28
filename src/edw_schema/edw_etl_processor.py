@@ -620,15 +620,13 @@ class EdwEtlProcessor:
                 if row:
                     return row[0]
                 else:
-                    # If no exact match found, find the closest week
+                    # If no exact match found, find the closest week by date
                     # This handles edge cases where transaction might fall between weeks
                     result = conn.execute(text("""
-                        SELECT week_number,
-                               ABS(EXTRACT(EPOCH FROM (week_start_date - :transaction_date))) as start_diff,
-                               ABS(EXTRACT(EPOCH FROM (week_end_date - :transaction_date))) as end_diff
+                        SELECT week_number
                         FROM edw.dim_week 
                         WHERE season_year = :season_year 
-                        ORDER BY LEAST(start_diff, end_diff) 
+                        ORDER BY ABS(week_start_date - :transaction_date)
                         LIMIT 1
                     """), {
                         "season_year": season_year,
@@ -648,6 +646,45 @@ class EdwEtlProcessor:
             # Fallback to simple calculation if database query fails
             return self.calculate_week_from_date_fallback(transaction_date, season_year)
     
+    def get_week_from_preloaded_data(self, transaction_date: date, season_year: int, week_lookup: dict) -> int:
+        """Fast in-memory lookup of week number from preloaded week data"""
+        
+        # Get weeks for this season
+        season_weeks = week_lookup.get(season_year, [])
+        if not season_weeks:
+            # Fallback to calculation if no weeks available for this season
+            return self.calculate_week_from_date_fallback(transaction_date, season_year)
+        
+        # Find the week that contains this date
+        for week_info in season_weeks:
+            if week_info['start_date'] <= transaction_date <= week_info['end_date']:
+                return week_info['week_number']
+        
+        # If no exact match, find the closest week
+        closest_week = None
+        min_diff = float('inf')
+        
+        for week_info in season_weeks:
+            start_diff = abs((transaction_date - week_info['start_date']).days)
+            end_diff = abs((transaction_date - week_info['end_date']).days)
+            week_diff = min(start_diff, end_diff)
+            
+            if week_diff < min_diff:
+                min_diff = week_diff
+                closest_week = week_info['week_number']
+        
+        return closest_week if closest_week else 1
+
+    def get_championship_week_for_season(self, season_year: int) -> int:
+        """Get the championship week number for a given season"""
+        # Championship week logic based on season structure
+        if season_year <= 2009 or season_year in [2006, 2007]:
+            return 16  # Shorter seasons had championship in week 16
+        elif season_year <= 2021:
+            return 16  # Standard seasons had championship in week 16
+        else:
+            return 17  # Modern seasons have championship in week 17
+
     def calculate_week_from_date_fallback(self, transaction_date: date, season_year: int) -> int:
         """Fallback method to calculate week if dim_week lookup fails"""
         from datetime import date, timedelta
@@ -1111,12 +1148,18 @@ class EdwEtlProcessor:
             team1_points = float(matchup.get('team1_score', 0))
             team2_points = float(matchup.get('team2_score', 0))
             
-            # Determine matchup type based on flags
-            if matchup.get('is_championship', False):
+            # Determine matchup type based on operational flags (SIMPLIFIED)
+            # The operational data is already fixed, so just trust it
+            is_source_championship = matchup.get('is_championship', False)
+            is_consolation = matchup.get('is_consolation', False)
+            is_playoffs = matchup.get('is_playoffs', False)
+            
+            # Simple logic: trust the operational data
+            if is_source_championship:
                 matchup_type = 'championship'
-            elif matchup.get('is_consolation', False):
+            elif is_consolation:
                 matchup_type = 'consolation'
-            elif matchup.get('is_playoffs', False):
+            elif is_playoffs:
                 matchup_type = 'playoffs'
             else:
                 matchup_type = 'regular'
@@ -1127,6 +1170,11 @@ class EdwEtlProcessor:
                 winner_manager_key = manager1_key
             elif team2_points > team1_points:
                 winner_manager_key = manager2_key
+            
+            # Extract playoff flags from operational data
+            is_semifinal = matchup.get('is_semifinal', False)
+            is_quarterfinal = matchup.get('is_quarterfinal', False)
+            is_last_place_game = matchup.get('is_last_place_game', False)
             
             facts.append({
                 'league_key': int(league_key),
@@ -1147,10 +1195,143 @@ class EdwEtlProcessor:
                 'matchup_type': str(matchup_type),
                 'is_playoffs': bool(matchup_type in ['playoffs', 'championship']),
                 'is_championship': bool(matchup_type == 'championship'),
+                'is_semifinal': bool(is_semifinal),
+                'is_quarterfinal': bool(is_quarterfinal),
+                'is_last_place_game': bool(is_last_place_game),
                 'is_consolation': bool(matchup_type == 'consolation')
             })
         
+        # No post-processing needed - operational data is already correct
         return facts
+    
+    def _fix_championship_duplicates(self, facts: List[Dict]) -> List[Dict]:
+        """
+        Fix championship duplicates using proper playoff bracket logic.
+        Championship game = teams that won semifinals (second-to-last week).
+        """
+        # Group potential championships by league and season
+        potential_championships = {}
+        regular_facts = []
+        
+        for fact in facts:
+            if fact['matchup_type'] == 'potential_championship':
+                key = (fact['league_key'], fact['season_year'])
+                if key not in potential_championships:
+                    potential_championships[key] = []
+                potential_championships[key].append(fact)
+            else:
+                regular_facts.append(fact)
+        
+        # For each league-season, use bracket logic to identify championship
+        for key, candidates in potential_championships.items():
+            league_key, season_year = key
+            
+            if len(candidates) == 1:
+                candidates[0]['matchup_type'] = 'championship'
+                candidates[0]['is_championship'] = True
+                regular_facts.append(candidates[0])
+            else:
+                logger.info(f"🏆 Resolving {len(candidates)} championship candidates for league {league_key} season {season_year}")
+                
+                # Step 1: Find the three key weeks
+                championship_week = self.get_championship_week_for_season(season_year)
+                semifinals_week = championship_week - 1
+                quarterfinals_week = championship_week - 2
+                
+                # Step 2: Get week keys for lookups
+                championship_week_key = self.dim_mappings['week_keys'].get((season_year, championship_week))
+                semifinals_week_key = self.dim_mappings['week_keys'].get((season_year, semifinals_week))
+                quarterfinals_week_key = self.dim_mappings['week_keys'].get((season_year, quarterfinals_week))
+                
+                # Step 3: Find quarterfinals winners and losers
+                quarterfinals_winners = set()
+                quarterfinals_losers = set()
+                
+                for fact in facts:
+                    if (fact['league_key'] == league_key and 
+                        fact['season_year'] == season_year and 
+                        fact['week_key'] == quarterfinals_week_key and
+                        fact['is_playoffs'] and 
+                        not fact['is_consolation']):
+                        
+                        # This is a quarterfinals game - get the winner
+                        if fact['winner_team_key']:
+                            quarterfinals_winners.add(fact['winner_team_key'])
+                            # Add the loser (the team that didn't win)
+                            if fact['team1_key'] == fact['winner_team_key']:
+                                quarterfinals_losers.add(fact['team2_key'])
+                            else:
+                                quarterfinals_losers.add(fact['team1_key'])
+                
+                logger.info(f"  🏆 Found {len(quarterfinals_winners)} quarterfinals winners, {len(quarterfinals_losers)} losers")
+                
+                # Step 4: Find semifinals winners (exclude 5th place game)
+                semifinals_winners = set()
+                
+                for fact in facts:
+                    if (fact['league_key'] == league_key and 
+                        fact['season_year'] == season_year and 
+                        fact['week_key'] == semifinals_week_key and
+                        fact['is_playoffs'] and 
+                        not fact['is_consolation']):
+                        
+                        # Check if this is a semifinals game or 5th place game
+                        team1_won_quarters = fact['team1_key'] in quarterfinals_winners
+                        team2_won_quarters = fact['team2_key'] in quarterfinals_winners
+                        team1_lost_quarters = fact['team1_key'] in quarterfinals_losers
+                        team2_lost_quarters = fact['team2_key'] in quarterfinals_losers
+                        
+                        # Semifinals game = at least one team won quarterfinals
+                        # 5th place game = both teams lost quarterfinals
+                        if team1_won_quarters or team2_won_quarters:
+                            # This is a semifinals game - record the winner
+                            if fact['winner_team_key']:
+                                semifinals_winners.add(fact['winner_team_key'])
+                            logger.info(f"  🏆 Semifinals game: teams {fact['team1_key']} vs {fact['team2_key']}")
+                        elif team1_lost_quarters and team2_lost_quarters:
+                            logger.info(f"  5️⃣ 5th place game: teams {fact['team1_key']} vs {fact['team2_key']}")
+                
+                logger.info(f"  🏆 Found {len(semifinals_winners)} semifinals winners")
+                
+                # Step 5: Championship game = game with both teams being semifinals winners
+                championship_candidate = None
+                for candidate in candidates:
+                    team1_won_semis = candidate['team1_key'] in semifinals_winners
+                    team2_won_semis = candidate['team2_key'] in semifinals_winners
+                    
+                    if team1_won_semis and team2_won_semis:
+                        championship_candidate = candidate
+                        logger.info(f"  🏆 Championship identified: both teams won semifinals")
+                        break
+                    else:
+                        logger.info(f"  🥉 3rd place game: teams {candidate['team1_key']} vs {candidate['team2_key']}")
+                
+                # Step 6: Mark championship and convert others
+                if championship_candidate:
+                    championship_candidate['matchup_type'] = 'championship'
+                    championship_candidate['is_championship'] = True
+                    regular_facts.append(championship_candidate)
+                    
+                    # Convert others to regular playoff games (3rd place, etc.)
+                    for candidate in candidates:
+                        if candidate != championship_candidate:
+                            candidate['matchup_type'] = 'playoffs'
+                            candidate['is_championship'] = False
+                            regular_facts.append(candidate)
+                else:
+                    # Fallback: if logic fails, pick the first one and log warning
+                    logger.warning(f"  ⚠️ Could not determine championship using bracket logic for league {league_key} season {season_year}")
+                    candidates[0]['matchup_type'] = 'championship'
+                    candidates[0]['is_championship'] = True
+                    regular_facts.append(candidates[0])
+                    
+                    for candidate in candidates[1:]:
+                        candidate['matchup_type'] = 'playoffs'
+                        candidate['is_championship'] = False
+                        regular_facts.append(candidate)
+        
+        logger.info(f"🏆 Fixed championship duplicates: {len(potential_championships)} league-seasons processed")
+        return regular_facts
     
     def transform_fact_transaction(self) -> List[Dict]:
         """Transform transaction data into fact_transaction format"""
@@ -1166,6 +1347,36 @@ class EdwEtlProcessor:
             season_year = int(league['season'])
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
+
+        # Preload dim_week data to avoid N+1 queries
+        logger.info("📅 Preloading week data for fast transaction week lookup...")
+        week_lookup = {}
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(text("""
+                    SELECT season_year, week_number, week_start_date, week_end_date 
+                    FROM edw.dim_week 
+                    ORDER BY season_year, week_number
+                """))
+                
+                for row in result:
+                    season_year = row[0]
+                    week_number = row[1]
+                    week_start = row[2]
+                    week_end = row[3]
+                    
+                    if season_year not in week_lookup:
+                        week_lookup[season_year] = []
+                    week_lookup[season_year].append({
+                        'week_number': week_number,
+                        'start_date': week_start,
+                        'end_date': week_end
+                    })
+                    
+            logger.info(f"✅ Loaded week data for {len(week_lookup)} seasons")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not preload week data: {e}")
+            week_lookup = {}
 
         # Use cached dimension mappings (no database queries in loop)
         league_keys = self.dim_mappings.get('league_keys', {})
@@ -1212,8 +1423,12 @@ class EdwEtlProcessor:
             else:  # January-August = previous NFL season
                 season_year = transaction_date.year - 1
             
-            # Find transaction week using dim_week data
-            transaction_week = self.get_week_from_date(transaction_date, season_year)
+            # Ensure we don't assign transactions to seasons before our earliest league (2005)
+            if season_year < 2005:
+                season_year = 2005
+            
+            # Find transaction week using preloaded week data
+            transaction_week = self.get_week_from_preloaded_data(transaction_date, season_year, week_lookup)
             
             # Get manager keys for from/to teams
             from_manager_key = None
@@ -3177,12 +3392,153 @@ class EdwEtlProcessor:
         return managers
 
     def transform_mart_league_summary(self) -> List[Dict]:
-        """Transform data for mart_league_summary"""
+        """Transform data for mart_league_summary - matches current table schema"""
         marts = []
         
-        # This would aggregate data from fact tables
-        # For now, return empty list as placeholder
-        logger.info("🏪 League summary mart - placeholder implementation")
+        with self.engine.connect() as conn:
+            logger.info("🏪 Calculating league summary statistics...")
+            
+            # Query matching the actual mart_league_summary schema
+            sql = """
+            WITH league_basics AS (
+                SELECT 
+                    dl.league_key,
+                    dl.league_name,
+                    dl.season_year,
+                    dl.num_teams as total_teams,
+                    COUNT(DISTINCT dw.week_number) as total_weeks
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_matchup fm ON dl.league_key = fm.league_key 
+                    AND dl.season_year = fm.season_year
+                LEFT JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                WHERE dl.is_active = TRUE
+                GROUP BY dl.league_key, dl.league_name, dl.season_year, dl.num_teams
+            ),
+            championship_results AS (
+                SELECT DISTINCT ON (dl.league_key)
+                    dl.league_key,
+                    -- Champion info (winner of championship game)
+                    champ_team.team_name as champion_team_name,
+                    champ_mgr.manager_name as champion_manager,
+                    -- Runner-up info (loser of championship game)
+                    runner_team.team_name as runner_up_team_name,
+                    runner_mgr.manager_name as runner_up_manager
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_matchup fm_champ ON dl.league_key = fm_champ.league_key 
+                    AND dl.season_year = fm_champ.season_year 
+                    AND fm_champ.is_championship = TRUE
+                -- Champion team and manager
+                LEFT JOIN edw.dim_team champ_team ON fm_champ.winner_team_key = champ_team.team_key
+                LEFT JOIN edw.dim_manager champ_mgr ON champ_team.manager_name = champ_mgr.manager_name
+                -- Runner-up team and manager (loser of championship)
+                LEFT JOIN edw.dim_team runner_team ON (
+                    CASE WHEN fm_champ.winner_team_key = fm_champ.team1_key 
+                         THEN fm_champ.team2_key 
+                         ELSE fm_champ.team1_key END = runner_team.team_key
+                )
+                LEFT JOIN edw.dim_manager runner_mgr ON runner_team.manager_name = runner_mgr.manager_name
+                WHERE dl.is_active = TRUE
+                ORDER BY dl.league_key, fm_champ.week_key DESC
+            ),
+            scoring_leaders AS (
+                SELECT 
+                    dl.league_key,
+                    -- Highest single week score
+                    MAX(ftp.points_for) as highest_single_week_score,
+                    -- Average weekly score across all teams/weeks
+                    ROUND(AVG(ftp.points_for), 2) as average_weekly_score
+                FROM edw.dim_league dl
+                JOIN edw.fact_team_performance ftp ON dl.league_key = ftp.league_key 
+                    AND dl.season_year = ftp.season_year
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                WHERE dl.is_active = TRUE AND dm.include_in_analysis = TRUE
+                GROUP BY dl.league_key
+            ),
+            highest_scorer_info AS (
+                SELECT DISTINCT
+                    dl.league_key,
+                    FIRST_VALUE(dt.team_name) OVER (
+                        PARTITION BY dl.league_key 
+                        ORDER BY ftp.points_for DESC
+                    ) as highest_scorer_team,
+                    FIRST_VALUE(dm.manager_name) OVER (
+                        PARTITION BY dl.league_key 
+                        ORDER BY ftp.points_for DESC
+                    ) as highest_scorer_manager
+                FROM edw.dim_league dl
+                JOIN edw.fact_team_performance ftp ON dl.league_key = ftp.league_key 
+                    AND dl.season_year = ftp.season_year
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                WHERE dl.is_active = TRUE AND dm.include_in_analysis = TRUE
+            ),
+            transaction_activity AS (
+                SELECT 
+                    dl.league_key,
+                    COUNT(ft.transaction_key) as total_transactions,
+                    -- Most active trader (manager with most transactions)
+                    (SELECT dm.manager_name 
+                     FROM edw.fact_transaction ft2
+                     JOIN edw.dim_manager dm ON ft2.to_manager_key = dm.manager_key
+                     WHERE ft2.league_key = dl.league_key AND ft2.season_year = dl.season_year
+                       AND dm.include_in_analysis = TRUE
+                     GROUP BY dm.manager_name
+                     ORDER BY COUNT(ft2.transaction_key) DESC
+                     LIMIT 1) as most_active_trader
+                FROM edw.dim_league dl
+                LEFT JOIN edw.fact_transaction ft ON dl.league_key = ft.league_key 
+                    AND dl.season_year = ft.season_year
+                WHERE dl.is_active = TRUE
+                GROUP BY dl.league_key, dl.season_year
+            )
+            SELECT 
+                lb.league_key,
+                lb.league_name,
+                lb.season_year,
+                lb.total_teams,
+                lb.total_weeks,
+                cr.champion_team_name,
+                cr.champion_manager,
+                cr.runner_up_team_name,
+                cr.runner_up_manager,
+                hsi.highest_scorer_team,
+                hsi.highest_scorer_manager,
+                sl.highest_single_week_score,
+                sl.average_weekly_score,
+                COALESCE(ta.total_transactions, 0) as total_transactions,
+                ta.most_active_trader
+            FROM league_basics lb
+            LEFT JOIN championship_results cr ON lb.league_key = cr.league_key
+            LEFT JOIN scoring_leaders sl ON lb.league_key = sl.league_key
+            LEFT JOIN highest_scorer_info hsi ON lb.league_key = hsi.league_key
+            LEFT JOIN transaction_activity ta ON lb.league_key = ta.league_key
+            ORDER BY lb.season_year DESC, lb.league_name
+            """
+            
+            result = conn.execute(text(sql))
+            rows = result.fetchall()
+            
+            for row in rows:
+                marts.append({
+                    'league_key': row[0],
+                    'league_name': row[1],
+                    'season_year': row[2],
+                    'total_teams': row[3],
+                    'total_weeks': row[4],
+                    'champion_team_name': row[5],
+                    'champion_manager': row[6],
+                    'runner_up_team_name': row[7],
+                    'runner_up_manager': row[8],
+                    'highest_scorer_team': row[9],
+                    'highest_scorer_manager': row[10],
+                    'highest_single_week_score': row[11],
+                    'average_weekly_score': row[12],
+                    'total_transactions': row[13],
+                    'most_active_trader': row[14]
+                })
+        
+        logger.info(f"🏪 Generated {len(marts)} league summary records")
         return marts
 
     def transform_mart_manager_performance(self) -> List[Dict]:
@@ -3213,11 +3569,12 @@ class EdwEtlProcessor:
                     0 as playoff_losses
                 FROM edw.dim_team dt
                 JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
                 LEFT JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
                     AND dl.season_year = ftp.season_year
-                WHERE dt.is_active = TRUE
+                WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dt.manager_name, dl.season_year, dt.league_key
             ),
             transaction_stats AS (
@@ -3228,7 +3585,7 @@ class EdwEtlProcessor:
                     SUM(ft.faab_bid) as total_faab_spent
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
-                WHERE dm.is_active = TRUE AND ft.faab_bid > 0
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE AND ft.faab_bid > 0
                 GROUP BY dm.manager_name
             ),
             draft_stats AS (
@@ -3238,7 +3595,7 @@ class EdwEtlProcessor:
                     AVG(fd.overall_pick) as avg_draft_position
                 FROM edw.dim_manager dm
                 JOIN edw.fact_draft fd ON dm.manager_key = fd.manager_key
-                WHERE dm.is_active = TRUE
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
             manager_aggregates AS (
@@ -3565,10 +3922,12 @@ class EdwEtlProcessor:
                     MIN(ftp.point_differential) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as biggest_loss_margin
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_team_performance opp_ftp ON ftp.league_key = opp_ftp.league_key 
                     AND ftp.week_key = opp_ftp.week_key 
                     AND ftp.team_key != opp_ftp.team_key
-                WHERE dw.week_type = 'regular'
+                WHERE dw.week_type = 'regular' AND dm.include_in_analysis = TRUE
             ),
             power_calculations AS (
                 SELECT 
@@ -3678,16 +4037,27 @@ class EdwEtlProcessor:
                     END as outcome,
                     CASE WHEN fm.is_playoffs = TRUE THEN 1 ELSE 0 END as is_playoff,
                     CASE WHEN fm.is_championship = TRUE THEN 1 ELSE 0 END as is_championship,
-                    CASE WHEN fm.matchup_type = 'semifinal' THEN 1 ELSE 0 END as is_semifinal
+                    CASE WHEN fm.is_semifinal = TRUE THEN 1 ELSE 0 END as is_semifinal,
+                    -- Add row number for streak calculation (ordered by season, week)
+                    ROW_NUMBER() OVER (
+                        PARTITION BY 
+                            CASE WHEN dt1.manager_name < dt2.manager_name THEN dt1.manager_name ELSE dt2.manager_name END,
+                            CASE WHEN dt1.manager_name < dt2.manager_name THEN dt2.manager_name ELSE dt1.manager_name END
+                        ORDER BY fm.season_year DESC, dw.week_number DESC
+                    ) as game_recency_rank
                 FROM edw.fact_matchup fm
                 JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
                 JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+                JOIN edw.dim_manager dm1 ON dt1.manager_name = dm1.manager_name
+                JOIN edw.dim_manager dm2 ON dt2.manager_name = dm2.manager_name
                 JOIN edw.dim_league dl ON fm.league_key = dl.league_key
                 JOIN edw.dim_week dw ON fm.week_key = dw.week_key
                 JOIN edw.dim_season ds ON fm.season_year = ds.season_year
                 WHERE dt1.manager_name != dt2.manager_name
                     AND dt1.is_active = TRUE 
                     AND dt2.is_active = TRUE
+                    AND dm1.include_in_analysis = TRUE
+                    AND dm2.include_in_analysis = TRUE
             ),
             manager_pairs AS (
                 SELECT 
@@ -3707,38 +4077,101 @@ class EdwEtlProcessor:
                     is_championship,
                     is_semifinal,
                     manager1,
-                    manager2
+                    manager2,
+                    game_recency_rank,
+                    -- Calculate manager-specific points and outcomes
+                    CASE WHEN manager1 < manager2 THEN team1_points ELSE team2_points END as manager_a_points,
+                    CASE WHEN manager1 < manager2 THEN team2_points ELSE team1_points END as manager_b_points,
+                    CASE 
+                        WHEN (manager1 < manager2 AND outcome = 'manager1_win') 
+                             OR (manager1 > manager2 AND outcome = 'manager2_win') 
+                        THEN 'manager_a_win'
+                        WHEN (manager1 < manager2 AND outcome = 'manager2_win') 
+                             OR (manager1 > manager2 AND outcome = 'manager1_win') 
+                        THEN 'manager_b_win'
+                        ELSE 'tie'
+                    END as normalized_outcome,
+                    team1_points + team2_points as total_game_points
                 FROM manager_matchups
             ),
-            most_important_games AS (
+            h2h_scoring_stats AS (
                 SELECT 
                     manager_a_name,
                     manager_b_name,
-                    FIRST_VALUE(matchup_type) OVER (
-                        PARTITION BY manager_a_name, manager_b_name 
-                        ORDER BY 
-                            CASE WHEN matchup_type = 'championship' THEN 1
-                                 WHEN matchup_type = 'semifinal' THEN 2  
-                                 WHEN is_playoff = 1 THEN 3
-                                 ELSE 4 END,
-                            point_difference DESC
-                    ) as most_important_game_type,
-                    FIRST_VALUE(matchup_identifier) OVER (
-                        PARTITION BY manager_a_name, manager_b_name 
-                        ORDER BY 
-                            CASE WHEN matchup_type = 'championship' THEN 1
-                                 WHEN matchup_type = 'semifinal' THEN 2  
-                                 WHEN is_playoff = 1 THEN 3
-                                 ELSE 4 END,
-                            point_difference DESC
-                    ) as most_important_game_identifier
+                    -- Percentile calculations for high/low scoring games
+                    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY total_game_points) as high_score_threshold,
+                    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY total_game_points) as low_score_threshold,
+                    AVG(total_game_points) as avg_total_points
                 FROM manager_pairs
+                GROUP BY manager_a_name, manager_b_name
+            ),
+            h2h_streaks AS (
+                SELECT 
+                    manager_a_name,
+                    manager_b_name,
+                    -- Calculate current streak for manager A
+                    CASE 
+                        WHEN COUNT(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) > 0 THEN
+                            CASE 
+                                WHEN MAX(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) = 'manager_a_win' THEN
+                                    COUNT(CASE WHEN normalized_outcome = 'manager_a_win' AND 
+                                               game_recency_rank <= (
+                                                   SELECT MIN(sub.game_recency_rank) 
+                                                   FROM manager_pairs sub 
+                                                   WHERE sub.manager_a_name = mp.manager_a_name 
+                                                     AND sub.manager_b_name = mp.manager_b_name 
+                                                     AND sub.normalized_outcome != 'manager_a_win'
+                                                     AND sub.game_recency_rank >= 1
+                                               ) THEN 1 END)
+                                WHEN MAX(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) = 'manager_b_win' THEN
+                                    -COUNT(CASE WHEN normalized_outcome = 'manager_b_win' AND 
+                                                game_recency_rank <= (
+                                                    SELECT MIN(sub.game_recency_rank) 
+                                                    FROM manager_pairs sub 
+                                                    WHERE sub.manager_a_name = mp.manager_a_name 
+                                                      AND sub.manager_b_name = mp.manager_b_name 
+                                                      AND sub.normalized_outcome != 'manager_b_win'
+                                                      AND sub.game_recency_rank >= 1
+                                                ) THEN 1 END)
+                                ELSE 0
+                            END
+                        ELSE 0
+                    END as manager_a_current_streak,
+                    -- Calculate current streak for manager B (opposite of A)
+                    CASE 
+                        WHEN COUNT(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) > 0 THEN
+                            CASE 
+                                WHEN MAX(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) = 'manager_b_win' THEN
+                                    COUNT(CASE WHEN normalized_outcome = 'manager_b_win' AND 
+                                               game_recency_rank <= (
+                                                   SELECT MIN(sub.game_recency_rank) 
+                                                   FROM manager_pairs sub 
+                                                   WHERE sub.manager_a_name = mp.manager_a_name 
+                                                     AND sub.manager_b_name = mp.manager_b_name 
+                                                     AND sub.normalized_outcome != 'manager_b_win'
+                                                     AND sub.game_recency_rank >= 1
+                                               ) THEN 1 END)
+                                WHEN MAX(CASE WHEN game_recency_rank = 1 THEN normalized_outcome END) = 'manager_a_win' THEN
+                                    -COUNT(CASE WHEN normalized_outcome = 'manager_a_win' AND 
+                                                game_recency_rank <= (
+                                                    SELECT MIN(sub.game_recency_rank) 
+                                                    FROM manager_pairs sub 
+                                                    WHERE sub.manager_a_name = mp.manager_a_name 
+                                                      AND sub.manager_b_name = mp.manager_b_name 
+                                                      AND sub.normalized_outcome != 'manager_a_win'
+                                                      AND sub.game_recency_rank >= 1
+                                                ) THEN 1 END)
+                                ELSE 0
+                            END
+                        ELSE 0
+                    END as manager_b_current_streak
+                FROM manager_pairs mp
+                GROUP BY manager_a_name, manager_b_name
             ),
             h2h_detailed AS (
                 SELECT 
                     mp.manager_a_name,
                     mp.manager_b_name,
-                    -- Use consistent manager IDs (take the first one alphabetically)
                     MIN(mp.manager_a_id) as manager_a_id,
                     MIN(mp.manager_b_id) as manager_b_id,
                     COUNT(*) as total_matchups,
@@ -3747,74 +4180,81 @@ class EdwEtlProcessor:
                     COUNT(DISTINCT mp.season_year) as seasons_played_together,
                     COUNT(DISTINCT mp.league_name) as leagues_played_together,
                     
-                    -- Manager A stats (alphabetically first)
-                    SUM(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager1_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager2_win') 
-                        THEN 1 ELSE 0 
-                    END) as manager_a_wins,
-                    SUM(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager2_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager1_win') 
-                        THEN 1 ELSE 0 
-                    END) as manager_a_losses,
-                    SUM(CASE WHEN mp.outcome = 'tie' THEN 1 ELSE 0 END) as manager_a_ties,
-                    SUM(CASE 
-                        WHEN mp.manager1 < mp.manager2 THEN mp.team1_points 
-                        ELSE mp.team2_points 
-                    END) as manager_a_total_points,
-                    MAX(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager1_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager2_win') 
-                        THEN mp.point_difference ELSE 0 
-                    END) as manager_a_biggest_win_margin,
+                    -- Manager A stats
+                    SUM(CASE WHEN mp.normalized_outcome = 'manager_a_win' THEN 1 ELSE 0 END) as manager_a_wins,
+                    SUM(CASE WHEN mp.normalized_outcome = 'manager_b_win' THEN 1 ELSE 0 END) as manager_a_losses,
+                    SUM(CASE WHEN mp.normalized_outcome = 'tie' THEN 1 ELSE 0 END) as manager_a_ties,
+                    SUM(mp.manager_a_points) as manager_a_total_points,
+                    MAX(mp.manager_a_points) as manager_a_highest_score,
+                    MIN(mp.manager_a_points) as manager_a_lowest_score,
+                    MAX(CASE WHEN mp.normalized_outcome = 'manager_a_win' THEN ABS(mp.point_difference) ELSE 0 END) as manager_a_biggest_win_margin,
                     
                     -- Manager B stats  
-                    SUM(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager2_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager1_win') 
-                        THEN 1 ELSE 0 
-                    END) as manager_b_wins,
-                    SUM(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager1_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager2_win') 
-                        THEN 1 ELSE 0 
-                    END) as manager_b_losses,
-                    SUM(CASE 
-                        WHEN mp.manager1 < mp.manager2 THEN mp.team2_points 
-                        ELSE mp.team1_points 
-                    END) as manager_b_total_points,
-                    MAX(CASE 
-                        WHEN (mp.manager1 < mp.manager2 AND mp.outcome = 'manager2_win') 
-                             OR (mp.manager1 > mp.manager2 AND mp.outcome = 'manager1_win') 
-                        THEN mp.point_difference ELSE 0 
-                    END) as manager_b_biggest_win_margin,
+                    SUM(CASE WHEN mp.normalized_outcome = 'manager_b_win' THEN 1 ELSE 0 END) as manager_b_wins,
+                    SUM(CASE WHEN mp.normalized_outcome = 'manager_a_win' THEN 1 ELSE 0 END) as manager_b_losses,
+                    SUM(mp.manager_b_points) as manager_b_total_points,
+                    MAX(mp.manager_b_points) as manager_b_highest_score,
+                    MIN(mp.manager_b_points) as manager_b_lowest_score,
+                    MAX(CASE WHEN mp.normalized_outcome = 'manager_b_win' THEN ABS(mp.point_difference) ELSE 0 END) as manager_b_biggest_win_margin,
                     
                     -- Game analysis
-                    SUM(mp.team1_points + mp.team2_points) as total_points_in_series,
-                    MAX(mp.point_difference) as most_lopsided_game,
-                    MIN(mp.point_difference) as closest_game,
+                    SUM(mp.total_game_points) as total_points_in_series,
+                    MAX(ABS(mp.point_difference)) as most_lopsided_game,
+                    MIN(ABS(mp.point_difference)) as closest_game,
                     SUM(mp.is_playoff) as playoff_matchups,
                     SUM(mp.is_championship) as championship_matchups,
-                    SUM(mp.is_semifinal) as semifinal_matchups
+                    SUM(mp.is_semifinal) as semifinal_matchups,
+                    
+                    -- Pythagorean wins calculation for Manager A
+                    CASE 
+                        WHEN (SUM(mp.manager_a_points) + SUM(mp.manager_b_points)) > 0 THEN
+                            ROUND(
+                                (POWER(SUM(mp.manager_a_points), 2) / 
+                                 (POWER(SUM(mp.manager_a_points), 2) + POWER(SUM(mp.manager_b_points), 2))) * COUNT(*), 
+                                2
+                            )
+                        ELSE 0
+                    END as manager_a_pythagorean_wins,
+                    
+                    -- Pythagorean wins calculation for Manager B
+                    CASE 
+                        WHEN (SUM(mp.manager_a_points) + SUM(mp.manager_b_points)) > 0 THEN
+                            ROUND(
+                                (POWER(SUM(mp.manager_b_points), 2) / 
+                                 (POWER(SUM(mp.manager_a_points), 2) + POWER(SUM(mp.manager_b_points), 2))) * COUNT(*), 
+                                2
+                            )
+                        ELSE 0
+                    END as manager_b_pythagorean_wins,
+                    
+                    -- High/Low scoring games (top/bottom 25%)
+                    SUM(CASE WHEN mp.total_game_points >= hss.high_score_threshold THEN 1 ELSE 0 END) as high_scoring_games,
+                    SUM(CASE WHEN mp.total_game_points <= hss.low_score_threshold THEN 1 ELSE 0 END) as low_scoring_games,
+                    
+                    -- Playoff wins
+                    SUM(CASE WHEN mp.is_playoff = 1 AND mp.normalized_outcome = 'manager_a_win' THEN 1 ELSE 0 END) as manager_a_playoff_wins,
+                    SUM(CASE WHEN mp.is_championship = 1 AND mp.normalized_outcome = 'manager_a_win' THEN 1 ELSE 0 END) as manager_a_championship_wins,
+                    SUM(CASE WHEN mp.is_semifinal = 1 AND mp.normalized_outcome = 'manager_a_win' THEN 1 ELSE 0 END) as manager_a_semifinal_wins,
+                    SUM(CASE WHEN mp.is_playoff = 1 AND mp.normalized_outcome = 'manager_b_win' THEN 1 ELSE 0 END) as manager_b_playoff_wins,
+                    SUM(CASE WHEN mp.is_championship = 1 AND mp.normalized_outcome = 'manager_b_win' THEN 1 ELSE 0 END) as manager_b_championship_wins,
+                    SUM(CASE WHEN mp.is_semifinal = 1 AND mp.normalized_outcome = 'manager_b_win' THEN 1 ELSE 0 END) as manager_b_semifinal_wins
                 FROM manager_pairs mp
+                LEFT JOIN h2h_scoring_stats hss ON mp.manager_a_name = hss.manager_a_name 
+                    AND mp.manager_b_name = hss.manager_b_name
                 GROUP BY 
                     mp.manager_a_name,
                     mp.manager_b_name
-                    -- Removed manager IDs from GROUP BY since we're aggregating them
             ),
             most_important_single AS (
                 SELECT 
                     manager_a_name,
                     manager_b_name,
-                    -- Get the single most important game per pair
                     MIN(CASE 
                         WHEN matchup_type = 'championship' THEN '1_' || matchup_identifier
                         WHEN matchup_type = 'semifinal' THEN '2_' || matchup_identifier
                         WHEN is_playoff = 1 THEN '3_' || matchup_identifier
                         ELSE '4_' || matchup_identifier
                     END) as ranked_game,
-                    -- Extract the actual values
                     SUBSTRING(MIN(CASE 
                         WHEN matchup_type = 'championship' THEN '1_' || matchup_type
                         WHEN matchup_type = 'semifinal' THEN '2_' || matchup_type
@@ -3830,14 +4270,55 @@ class EdwEtlProcessor:
                 FROM manager_pairs
                 GROUP BY manager_a_name, manager_b_name
             ),
+            most_important_details AS (
+                SELECT 
+                    mis.manager_a_name,
+                    mis.manager_b_name,
+                    mis.most_important_game_type,
+                    mis.most_important_game_identifier,
+                    -- Get the actual game details by joining back to manager_pairs
+                    mp.season_year as most_important_game_season,
+                    CASE 
+                        WHEN mp.matchup_identifier LIKE '%W%' THEN 
+                            CAST(SUBSTRING(mp.matchup_identifier FROM 'W(\d+)') AS INTEGER)
+                        ELSE NULL 
+                    END as most_important_game_week,
+                    mp.league_name as most_important_game_league,
+                    CASE 
+                        WHEN mp.normalized_outcome = 'manager_a_win' THEN mp.manager_a_name
+                        WHEN mp.normalized_outcome = 'manager_b_win' THEN mp.manager_b_name
+                        ELSE 'Tie'
+                    END as most_important_game_winner,
+                    CONCAT(
+                        ROUND(mp.manager_a_points, 2), 
+                        ' vs ', 
+                        ROUND(mp.manager_b_points, 2)
+                    ) as most_important_game_score,
+                    ROUND(ABS(mp.point_difference), 2) as most_important_game_margin
+                FROM most_important_single mis
+                LEFT JOIN manager_pairs mp ON mis.manager_a_name = mp.manager_a_name 
+                    AND mis.manager_b_name = mp.manager_b_name
+                    AND mis.most_important_game_identifier = mp.matchup_identifier
+            ),
             h2h_with_most_important AS (
                 SELECT 
                     h2h.*,
-                    mis.most_important_game_type,
-                    mis.most_important_game_identifier
+                    mid.most_important_game_type,
+                    mid.most_important_game_identifier as most_important_game_date,
+                    mid.most_important_game_winner,
+                    mid.most_important_game_score,
+                    mid.most_important_game_margin,
+                    mid.most_important_game_season,
+                    mid.most_important_game_week,
+                    mid.most_important_game_league,
+                    -- Add streaks
+                    COALESCE(hs.manager_a_current_streak, 0) as manager_a_current_streak,
+                    COALESCE(hs.manager_b_current_streak, 0) as manager_b_current_streak
                 FROM h2h_detailed h2h
-                LEFT JOIN most_important_single mis ON h2h.manager_a_name = mis.manager_a_name 
-                    AND h2h.manager_b_name = mis.manager_b_name
+                LEFT JOIN most_important_details mid ON h2h.manager_a_name = mid.manager_a_name 
+                    AND h2h.manager_b_name = mid.manager_b_name
+                LEFT JOIN h2h_streaks hs ON h2h.manager_a_name = hs.manager_a_name 
+                    AND h2h.manager_b_name = hs.manager_b_name
             )
             SELECT 
                 manager_a_name,
@@ -3863,7 +4344,13 @@ class EdwEtlProcessor:
                     THEN ROUND(manager_a_total_points / total_matchups, 2)
                     ELSE 0
                 END as manager_a_avg_points,
+                manager_a_highest_score,
+                manager_a_lowest_score,
+                manager_a_pythagorean_wins,
+                -- Luck factor = actual wins - expected wins
+                ROUND(manager_a_wins - manager_a_pythagorean_wins, 4) as manager_a_luck_factor,
                 manager_a_biggest_win_margin,
+                manager_a_current_streak,
                 manager_b_wins,
                 manager_b_losses,
                 manager_a_ties as manager_b_ties,
@@ -3878,7 +4365,13 @@ class EdwEtlProcessor:
                     THEN ROUND(manager_b_total_points / total_matchups, 2)
                     ELSE 0
                 END as manager_b_avg_points,
+                manager_b_highest_score,
+                manager_b_lowest_score,
+                manager_b_pythagorean_wins,
+                -- Luck factor = actual wins - expected wins
+                ROUND(manager_b_wins - manager_b_pythagorean_wins, 4) as manager_b_luck_factor,
                 manager_b_biggest_win_margin,
+                manager_b_current_streak,
                 CASE 
                     WHEN manager_a_wins > manager_b_wins THEN manager_a_name
                     WHEN manager_b_wins > manager_a_wins THEN manager_b_name
@@ -3891,11 +4384,26 @@ class EdwEtlProcessor:
                 closest_game,
                 total_points_in_series,
                 ROUND(total_points_in_series / total_matchups, 2) as avg_total_points_per_game,
+                high_scoring_games,
+                low_scoring_games,
                 playoff_matchups,
                 championship_matchups,
                 semifinal_matchups,
+                manager_a_playoff_wins,
+                manager_a_championship_wins,
+                manager_a_semifinal_wins,
+                manager_b_playoff_wins,
+                manager_b_championship_wins,
+                manager_b_semifinal_wins,
                 most_important_game_type,
-                most_important_game_identifier as most_important_game_date
+                most_important_game_date,
+                -- Additional columns that still need proper implementation
+                most_important_game_winner,
+                most_important_game_score,
+                most_important_game_margin,
+                most_important_game_season,
+                most_important_game_week,
+                most_important_game_league
             FROM h2h_with_most_important
             WHERE total_matchups >= 2
             ORDER BY total_matchups DESC, point_differential DESC
@@ -3905,7 +4413,7 @@ class EdwEtlProcessor:
             rows = result.fetchall()
             
             for row in rows:
-                # Map all comprehensive H2H columns
+                # Map all comprehensive H2H columns with properly calculated values
                 marts.append({
                     'manager_a_name': row[0],
                     'manager_b_name': row[1],
@@ -3922,52 +4430,51 @@ class EdwEtlProcessor:
                     'manager_a_win_percentage': row[12],
                     'manager_a_total_points': row[13],
                     'manager_a_avg_points': row[14],
-                    'manager_a_biggest_win_margin': row[15],
-                    'manager_b_wins': row[16],
-                    'manager_b_losses': row[17],
-                    'manager_b_ties': row[18],
-                    'manager_b_win_percentage': row[19],
-                    'manager_b_total_points': row[20],
-                    'manager_b_avg_points': row[21],
-                    'manager_b_biggest_win_margin': row[22],
-                    'series_leader': row[23],
-                    'series_record': row[24],
-                    'point_differential': row[25],
-                    'avg_point_differential': row[26],
-                    'most_lopsided_game': row[27],
-                    'closest_game': row[28],
-                    'total_points_in_series': row[29],
-                    'avg_total_points_per_game': row[30],
-                    'playoff_matchups': row[31],
-                    'championship_matchups': row[32],
-                    'semifinal_matchups': row[33],
-                    'most_important_game_type': row[34],
-                    'most_important_game_date': row[35],
-                    # Additional required columns with defaults
-                    'manager_a_highest_score': 0.0,
-                    'manager_a_lowest_score': 0.0,
-                    'manager_a_pythagorean_wins': 0.0,
-                    'manager_a_luck_factor': 0.0,
-                    'manager_a_current_streak': 0,
-                    'manager_b_highest_score': 0.0,
-                    'manager_b_lowest_score': 0.0,
-                    'manager_b_pythagorean_wins': 0.0,
-                    'manager_b_luck_factor': 0.0,
-                    'manager_b_current_streak': 0,
-                    'high_scoring_games': 0,
-                    'low_scoring_games': 0,
-                    'manager_a_playoff_wins': 0,
-                    'manager_a_championship_wins': 0,
-                    'manager_a_semifinal_wins': 0,
-                    'manager_b_playoff_wins': 0,
-                    'manager_b_championship_wins': 0,
-                    'manager_b_semifinal_wins': 0,
-                    'most_important_game_winner': None,
-                    'most_important_game_score': None,
-                    'most_important_game_margin': 0.0,
-                    'most_important_game_season': None,
-                    'most_important_game_week': None,
-                    'most_important_game_league': None
+                    'manager_a_highest_score': row[15],  # Now calculated
+                    'manager_a_lowest_score': row[16],   # Now calculated
+                    'manager_a_pythagorean_wins': row[17],  # Now calculated
+                    'manager_a_luck_factor': row[18],    # Now calculated
+                    'manager_a_biggest_win_margin': row[19],
+                    'manager_a_current_streak': row[20], # Now calculated
+                    'manager_b_wins': row[21],
+                    'manager_b_losses': row[22],
+                    'manager_b_ties': row[23],
+                    'manager_b_win_percentage': row[24],
+                    'manager_b_total_points': row[25],
+                    'manager_b_avg_points': row[26],
+                    'manager_b_highest_score': row[27],  # Now calculated
+                    'manager_b_lowest_score': row[28],   # Now calculated
+                    'manager_b_pythagorean_wins': row[29],  # Now calculated
+                    'manager_b_luck_factor': row[30],    # Now calculated
+                    'manager_b_biggest_win_margin': row[31],
+                    'manager_b_current_streak': row[32], # Now calculated
+                    'series_leader': row[33],
+                    'series_record': row[34],
+                    'point_differential': row[35],
+                    'avg_point_differential': row[36],
+                    'most_lopsided_game': row[37],
+                    'closest_game': row[38],
+                    'total_points_in_series': row[39],
+                    'avg_total_points_per_game': row[40],
+                    'high_scoring_games': row[41],      # Now calculated (top 25%)
+                    'low_scoring_games': row[42],       # Now calculated (bottom 25%)
+                    'playoff_matchups': row[43],
+                    'championship_matchups': row[44],
+                    'semifinal_matchups': row[45],
+                    'manager_a_playoff_wins': row[46],  # Now calculated
+                    'manager_a_championship_wins': row[47],  # Now calculated
+                    'manager_a_semifinal_wins': row[48],     # Now calculated
+                    'manager_b_playoff_wins': row[49],  # Now calculated
+                    'manager_b_championship_wins': row[50],  # Now calculated
+                    'manager_b_semifinal_wins': row[51],     # Now calculated
+                    'most_important_game_type': row[52],
+                    'most_important_game_date': row[53],
+                    'most_important_game_winner': row[54],
+                    'most_important_game_score': row[55],
+                    'most_important_game_margin': row[56],
+                    'most_important_game_season': row[57],
+                    'most_important_game_week': row[58],
+                    'most_important_game_league': row[59]
                 })
         
         logger.info(f"🏪 Generated {len(marts)} head-to-head rivalry records")
