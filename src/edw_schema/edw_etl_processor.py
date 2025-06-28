@@ -3554,28 +3554,36 @@ class EdwEtlProcessor:
                 SELECT 
                     dt.manager_name,
                     dl.season_year,
-                    dt.league_key,
                     SUM(CASE WHEN fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as season_wins,
                     SUM(CASE WHEN fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as season_losses,
                     SUM(CASE WHEN fm.is_tie = TRUE THEN 1 ELSE 0 END) as season_ties,
                     SUM(CASE WHEN fm.team1_key = dt.team_key THEN fm.team1_points 
                              WHEN fm.team2_key = dt.team_key THEN fm.team2_points 
                              ELSE 0 END) as season_points,
-                    COUNT(fm.matchup_key) as games_played,
-                    0 as championships,
-                    0 as championship_games,
-                    COUNT(CASE WHEN ftp.is_playoff_team = TRUE THEN 1 END) as playoff_seasons,
-                    0 as playoff_wins,
-                    0 as playoff_losses
+                    COUNT(DISTINCT fm.matchup_key) as games_played,
+                    SUM(CASE WHEN fm.matchup_type = 'championship' AND fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as championships,
+                    SUM(CASE WHEN fm.matchup_type = 'championship' THEN 1 ELSE 0 END) as championship_games,
+                    SUM(CASE WHEN fm.matchup_type IN ('playoffs', 'championship') AND fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as playoff_wins,
+                    SUM(CASE WHEN fm.matchup_type IN ('playoffs', 'championship') AND fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as playoff_losses
                 FROM edw.dim_team dt
                 JOIN edw.dim_league dl ON dt.league_key = dl.league_key
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
-                LEFT JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
+                WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
+                GROUP BY dt.manager_name, dl.season_year
+            ),
+            playoff_stats AS (
+                SELECT 
+                    dt.manager_name,
+                    COUNT(DISTINCT CASE WHEN ftp.is_playoff_team = TRUE THEN dt.league_key END) as playoff_seasons
+                FROM edw.dim_team dt
+                JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
                     AND dl.season_year = ftp.season_year
                 WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
-                GROUP BY dt.manager_name, dl.season_year, dt.league_key
+                GROUP BY dt.manager_name
             ),
             transaction_stats AS (
                 SELECT 
@@ -3585,7 +3593,7 @@ class EdwEtlProcessor:
                     SUM(ft.faab_bid) as total_faab_spent
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
-                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE AND ft.faab_bid > 0
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
             draft_stats AS (
@@ -3602,7 +3610,12 @@ class EdwEtlProcessor:
                 SELECT 
                     ms.manager_name,
                     COUNT(DISTINCT ms.season_year) as total_seasons,
-                    COUNT(DISTINCT ms.league_key) as total_leagues,
+                    (SELECT COUNT(DISTINCT dt2.league_key) 
+                     FROM edw.dim_team dt2 
+                     JOIN edw.dim_manager dm2 ON dt2.manager_name = dm2.manager_name
+                     WHERE dt2.manager_name = ms.manager_name 
+                       AND dt2.is_active = TRUE 
+                       AND dm2.include_in_analysis = TRUE) as total_leagues,
                     MIN(ms.season_year) as first_season,
                     MAX(ms.season_year) as last_season,
                     SUM(ms.season_wins) as total_wins,
@@ -3613,13 +3626,36 @@ class EdwEtlProcessor:
                     AVG(ms.season_points) as avg_points_per_season,
                     SUM(ms.championships) as championships_won,
                     SUM(ms.championship_games) as championship_appearances,
-                    SUM(ms.playoff_seasons) as playoff_appearances,
+                    COALESCE(ps.playoff_seasons, 0) as playoff_appearances,
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
-                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency
+                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency,
+                    (SELECT fd.season_year 
+                     FROM edw.fact_draft fd 
+                     JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
+                     WHERE dm_sub.manager_name = ms.manager_name
+                     ORDER BY fd.season_points DESC 
+                     LIMIT 1) as best_draft_year,
+                    (SELECT fd.season_year 
+                     FROM edw.fact_draft fd 
+                     JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
+                     WHERE dm_sub.manager_name = ms.manager_name
+                     ORDER BY fd.season_points ASC 
+                     LIMIT 1) as worst_draft_year,
+                    (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
+                     FROM manager_stats ms2 
+                     WHERE ms2.manager_name = ms.manager_name 
+                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
+                     LIMIT 1) as best_season_record,
+                    (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
+                     FROM manager_stats ms2 
+                     WHERE ms2.manager_name = ms.manager_name 
+                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
+                     LIMIT 1) as worst_season_record
                 FROM manager_stats ms
+                LEFT JOIN playoff_stats ps ON ms.manager_name = ps.manager_name
                 WHERE ms.games_played > 0
-                GROUP BY ms.manager_name
+                GROUP BY ms.manager_name, ps.playoff_seasons
             )
             SELECT 
                 ma.manager_name,
@@ -3651,8 +3687,8 @@ class EdwEtlProcessor:
                     ELSE 0
                 END as playoff_win_percentage,
                 COALESCE(ds.avg_draft_position, 0) as avg_draft_grade,
-                NULL as best_draft_year,
-                NULL as worst_draft_year,
+                ma.best_draft_year,
+                ma.worst_draft_year,
                 COALESCE(ts.total_transactions, 0) as total_transactions,
                 CASE 
                     WHEN ma.total_seasons > 0 
@@ -3665,8 +3701,8 @@ class EdwEtlProcessor:
                     ELSE 0
                 END as faab_efficiency_rating,
                 COALESCE(ROUND(ma.win_consistency, 4), 0) as season_consistency_score,
-                NULL as best_season_record,
-                NULL as worst_season_record
+                ma.best_season_record,
+                ma.worst_season_record
             FROM manager_aggregates ma
             LEFT JOIN transaction_stats ts ON ma.manager_name = ts.manager_name
             LEFT JOIN draft_stats ds ON ma.manager_name = ds.manager_name
@@ -3723,7 +3759,7 @@ class EdwEtlProcessor:
             
             # Comprehensive player value analysis with fixed PostgreSQL syntax
             sql = """
-            WITH player_draft_stats AS (
+            WITH             player_draft_stats AS (
                 SELECT 
                     fd.player_key,
                     fd.season_year,
@@ -3754,6 +3790,7 @@ class EdwEtlProcessor:
                     player_key,
                     COUNT(DISTINCT season_year) as total_seasons_drafted,
                     SUM(times_drafted_season) as career_times_drafted,
+                    -- Career-wide draft position metrics across ALL seasons
                     AVG(avg_draft_position_season) as career_avg_draft_position,
                     MIN(earliest_draft_pick_season) as career_earliest_pick,
                     MAX(latest_draft_pick_season) as career_latest_pick,
@@ -3784,23 +3821,60 @@ class EdwEtlProcessor:
                 FROM edw.fact_player_statistics fps
                 GROUP BY fps.player_key, fps.season_year
             ),
+            player_roster_stats AS (
+                SELECT 
+                    fr.player_key,
+                    fr.season_year,
+                    COUNT(DISTINCT fr.team_key) as teams_rostered,
+                    COUNT(DISTINCT fr.league_key) as leagues_played,
+                    COUNT(CASE WHEN fr.is_starter = TRUE THEN 1 END) as weeks_as_starter,
+                    COUNT(*) as total_roster_weeks,
+                    COUNT(CASE WHEN fr.is_starter = TRUE THEN 1 END)::decimal / NULLIF(COUNT(*), 0) as starter_percentage,
+                    -- Calculate ownership percentage within each league, then average across leagues
+                    AVG(team_count_in_league::decimal / total_teams_in_league) as avg_ownership_percentage
+                FROM edw.fact_roster fr
+                JOIN (
+                    -- Get team counts per league for ownership calculation
+                    SELECT 
+                        fr2.player_key,
+                        fr2.season_year,
+                        fr2.league_key,
+                        COUNT(DISTINCT fr2.team_key) as team_count_in_league,
+                        (SELECT COUNT(DISTINCT dt.team_key) 
+                         FROM edw.dim_team dt 
+                         WHERE dt.league_key = fr2.league_key 
+                           AND dt.is_active = TRUE) as total_teams_in_league
+                    FROM edw.fact_roster fr2
+                    GROUP BY fr2.player_key, fr2.season_year, fr2.league_key
+                ) league_ownership ON fr.player_key = league_ownership.player_key 
+                                   AND fr.season_year = league_ownership.season_year 
+                                   AND fr.league_key = league_ownership.league_key
+                GROUP BY fr.player_key, fr.season_year
+            ),
             player_season_combined AS (
                 SELECT 
-                    COALESCE(pds.player_key, pts.player_key) as player_key,
-                    COALESCE(pds.season_year, pts.season_year) as season_year,
+                    COALESCE(pds.player_key, pts.player_key, prs.player_key) as player_key,
+                    COALESCE(pds.season_year, pts.season_year, prs.season_year) as season_year,
                     COALESCE(pds.times_drafted_season, 0) as times_drafted,
                     pds.avg_draft_position_season as avg_draft_position,
                     pds.earliest_draft_pick_season as earliest_draft_pick,
                     pds.latest_draft_pick_season as latest_draft_pick,
                     COALESCE(pds.avg_auction_value_season, 0) as avg_auction_value,
-                    COALESCE(pds.teams_drafted_by_season, pts.teams_acquired_by_season, 0) as total_teams_rostered,
+                    COALESCE(prs.teams_rostered, pds.teams_drafted_by_season, pts.teams_acquired_by_season, 0) as total_teams_rostered,
                     COALESCE(pts.waiver_pickups_season, 0) as waiver_pickups,
                     COALESCE(pts.trades_season, 0) as trades,
                     COALESCE(pts.avg_waiver_cost_season, 0) as avg_waiver_cost,
-                    1 as total_leagues_played  -- Simplified for now
+                    COALESCE(prs.leagues_played, 1) as total_leagues_played,
+                    COALESCE(prs.weeks_as_starter, 0) as weeks_as_starter,
+                    COALESCE(prs.starter_percentage, 0) as starter_percentage,
+                    COALESCE(prs.avg_ownership_percentage, 0) as avg_ownership_percentage
                 FROM player_draft_stats pds
                 FULL OUTER JOIN player_transaction_stats pts ON pds.player_key = pts.player_key AND pds.season_year = pts.season_year
-                WHERE COALESCE(pds.times_drafted_season, 0) > 0 OR COALESCE(pts.waiver_pickups_season, 0) > 0
+                FULL OUTER JOIN player_roster_stats prs ON COALESCE(pds.player_key, pts.player_key) = prs.player_key 
+                                                        AND COALESCE(pds.season_year, pts.season_year) = prs.season_year
+                WHERE COALESCE(pds.times_drafted_season, 0) > 0 
+                   OR COALESCE(pts.waiver_pickups_season, 0) > 0 
+                   OR COALESCE(prs.teams_rostered, 0) > 0
             )
             SELECT 
                 psc.player_key,
@@ -3809,38 +3883,34 @@ class EdwEtlProcessor:
                 psc.total_teams_rostered,
                 psc.total_leagues_played,
                 psc.times_drafted,
-                psc.avg_draft_position,
-                psc.earliest_draft_pick,
-                psc.latest_draft_pick,
+                COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position) as career_avg_draft_position,
+                COALESCE(pcs.career_earliest_pick, psc.earliest_draft_pick) as career_earliest_draft_pick,
+                COALESCE(pcs.career_latest_pick, psc.latest_draft_pick) as career_latest_draft_pick,
                 psc.avg_auction_value,
                 COALESCE(fps.total_fantasy_points, 0.0) as total_fantasy_points,
                 COALESCE(fps.avg_points_per_game, 0.0) as avg_points_per_game,
                 COALESCE(fps.best_weekly_score, 0.0) as best_weekly_score,
                 COALESCE(fps.worst_weekly_score, 0.0) as worst_weekly_score,
                 COALESCE(fps.consistency_rating, 0.0) as consistency_rating,
+                psc.avg_ownership_percentage,
+                psc.weeks_as_starter,
+                psc.starter_percentage,
+                -- Calculate points above replacement using actual performance vs career draft position
                 CASE 
-                    WHEN psc.times_drafted > 0 THEN 0.8  -- Assume high ownership if drafted
-                    WHEN psc.waiver_pickups > 0 THEN 0.3  -- Lower ownership for waiver pickups
-                    ELSE 0.0
-                END as avg_ownership_percentage,
-                0 as weeks_as_starter,  -- No roster data available
-                CASE 
-                    WHEN psc.times_drafted > 0 THEN 0.6  -- Assume decent starter rate if drafted
-                    ELSE 0.0
-                END as starter_percentage,
-                CASE 
-                    WHEN psc.avg_draft_position > 0 
-                    THEN ROUND((200 - psc.avg_draft_position) * 1.5, 4)
+                    WHEN COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position) > 0 AND fps.total_fantasy_points > 0
+                    THEN ROUND(fps.total_fantasy_points - (200 - COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position)) * 2.0, 4)
                     ELSE 0
                 END as points_above_replacement,
+                -- Calculate draft value based on actual points vs expected points for career draft position
                 CASE 
-                    WHEN psc.avg_draft_position > 0 
-                    THEN ROUND(150 / psc.avg_draft_position, 4)
+                    WHEN COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position) > 0 AND fps.total_fantasy_points > 0
+                    THEN ROUND(fps.total_fantasy_points / GREATEST(COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position), 1), 4)
                     ELSE 0
                 END as draft_value_score,
+                -- Calculate waiver value based on actual fantasy points earned
                 CASE 
-                    WHEN psc.waiver_pickups > 0 
-                    THEN ROUND(psc.waiver_pickups * 10, 4)
+                    WHEN psc.waiver_pickups > 0 AND fps.total_fantasy_points > 0
+                    THEN ROUND(fps.total_fantasy_points / psc.waiver_pickups, 4)
                     ELSE 0
                 END as waiver_pickup_value,
                 COALESCE(fps.games_played, 0) as games_played
@@ -3849,7 +3919,7 @@ class EdwEtlProcessor:
             LEFT JOIN player_career_transactions pct ON psc.player_key = pct.player_key
             LEFT JOIN player_fantasy_performance fps ON psc.player_key = fps.player_key AND psc.season_year = fps.season_year
             WHERE psc.times_drafted > 0 OR psc.waiver_pickups > 0
-            ORDER BY psc.season_year DESC, psc.times_drafted DESC, psc.avg_draft_position ASC
+            ORDER BY psc.season_year DESC, psc.times_drafted DESC, COALESCE(pcs.career_avg_draft_position, psc.avg_draft_position) ASC
             """
             
             result = conn.execute(text(sql))
@@ -3864,9 +3934,9 @@ class EdwEtlProcessor:
                     'total_teams_rostered': row[3],
                     'total_leagues_played': row[4],
                     'times_drafted': row[5] or 0,
-                    'avg_draft_position': row[6],
-                    'earliest_draft_pick': row[7],
-                    'latest_draft_pick': row[8],
+                    'career_avg_draft_position': row[6],
+                    'career_earliest_draft_pick': row[7],
+                    'career_latest_draft_pick': row[8],
                     'avg_auction_value': row[9] or 0.0,
                     'total_fantasy_points': row[10],
                     'avg_points_per_game': row[11],
