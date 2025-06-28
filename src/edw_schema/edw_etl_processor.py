@@ -3554,17 +3554,15 @@ class EdwEtlProcessor:
                 SELECT 
                     dt.manager_name,
                     dl.season_year,
-                    dt.league_key,
                     SUM(CASE WHEN fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as season_wins,
                     SUM(CASE WHEN fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as season_losses,
                     SUM(CASE WHEN fm.is_tie = TRUE THEN 1 ELSE 0 END) as season_ties,
                     SUM(CASE WHEN fm.team1_key = dt.team_key THEN fm.team1_points 
                              WHEN fm.team2_key = dt.team_key THEN fm.team2_points 
                              ELSE 0 END) as season_points,
-                    COUNT(fm.matchup_key) as games_played,
+                    COUNT(DISTINCT fm.matchup_key) as games_played,
                     0 as championships,
                     0 as championship_games,
-                    COUNT(CASE WHEN ftp.is_playoff_team = TRUE THEN 1 END) as playoff_seasons,
                     0 as playoff_wins,
                     0 as playoff_losses
                 FROM edw.dim_team dt
@@ -3572,10 +3570,20 @@ class EdwEtlProcessor:
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
-                LEFT JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
+                WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
+                GROUP BY dt.manager_name, dl.season_year
+            ),
+            playoff_stats AS (
+                SELECT 
+                    dt.manager_name,
+                    COUNT(DISTINCT CASE WHEN ftp.is_playoff_team = TRUE THEN dt.league_key END) as playoff_seasons
+                FROM edw.dim_team dt
+                JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key 
                     AND dl.season_year = ftp.season_year
                 WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
-                GROUP BY dt.manager_name, dl.season_year, dt.league_key
+                GROUP BY dt.manager_name
             ),
             transaction_stats AS (
                 SELECT 
@@ -3602,7 +3610,12 @@ class EdwEtlProcessor:
                 SELECT 
                     ms.manager_name,
                     COUNT(DISTINCT ms.season_year) as total_seasons,
-                    COUNT(DISTINCT ms.league_key) as total_leagues,
+                    (SELECT COUNT(DISTINCT dt2.league_key) 
+                     FROM edw.dim_team dt2 
+                     JOIN edw.dim_manager dm2 ON dt2.manager_name = dm2.manager_name
+                     WHERE dt2.manager_name = ms.manager_name 
+                       AND dt2.is_active = TRUE 
+                       AND dm2.include_in_analysis = TRUE) as total_leagues,
                     MIN(ms.season_year) as first_season,
                     MAX(ms.season_year) as last_season,
                     SUM(ms.season_wins) as total_wins,
@@ -3613,13 +3626,14 @@ class EdwEtlProcessor:
                     AVG(ms.season_points) as avg_points_per_season,
                     SUM(ms.championships) as championships_won,
                     SUM(ms.championship_games) as championship_appearances,
-                    SUM(ms.playoff_seasons) as playoff_appearances,
+                    COALESCE(ps.playoff_seasons, 0) as playoff_appearances,
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
                     STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency
                 FROM manager_stats ms
+                LEFT JOIN playoff_stats ps ON ms.manager_name = ps.manager_name
                 WHERE ms.games_played > 0
-                GROUP BY ms.manager_name
+                GROUP BY ms.manager_name, ps.playoff_seasons
             )
             SELECT 
                 ma.manager_name,
