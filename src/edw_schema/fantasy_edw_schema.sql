@@ -563,9 +563,9 @@ CREATE TABLE mart_player_value (
     
     -- Draft Metrics
     times_drafted INTEGER DEFAULT 0,
-    avg_draft_position DECIMAL(8,2),
-    earliest_draft_pick INTEGER,
-    latest_draft_pick INTEGER,
+    career_avg_draft_position DECIMAL(8,2),
+    career_earliest_draft_pick INTEGER,
+    career_latest_draft_pick INTEGER,
     avg_auction_value DECIMAL(10,2),
     
     -- Performance
@@ -590,7 +590,7 @@ CREATE TABLE mart_player_value (
 );
 
 CREATE INDEX idx_player_value_season ON mart_player_value (season_year);
-CREATE INDEX idx_draft_metrics ON mart_player_value (avg_draft_position, times_drafted);
+CREATE INDEX idx_draft_metrics ON mart_player_value (career_avg_draft_position, times_drafted);
 CREATE INDEX idx_value_performance ON mart_player_value (total_fantasy_points, consistency_rating);
 CREATE INDEX idx_value_scores ON mart_player_value (draft_value_score, waiver_pickup_value);
 
@@ -799,13 +799,13 @@ SELECT
     dp.player_name,
     dp.primary_position,
     mpv.season_year,
-    mpv.avg_draft_position,
+    mpv.career_avg_draft_position,
     mpv.total_fantasy_points,
     mpv.draft_value_score,
     mpv.waiver_pickup_value,
     CASE 
-        WHEN mpv.avg_draft_position > 100 AND mpv.draft_value_score > 2.0 THEN 'Major Breakout'
-        WHEN mpv.avg_draft_position > 50 AND mpv.draft_value_score > 1.5 THEN 'Solid Breakout'
+        WHEN mpv.career_avg_draft_position > 100 AND mpv.draft_value_score > 2.0 THEN 'Major Breakout'
+        WHEN mpv.career_avg_draft_position > 50 AND mpv.draft_value_score > 1.5 THEN 'Solid Breakout'
         WHEN mpv.waiver_pickup_value > 1.5 THEN 'Waiver Wire Gem'
         ELSE 'Standard Performance'
     END as breakout_type
