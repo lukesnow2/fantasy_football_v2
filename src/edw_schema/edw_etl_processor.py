@@ -3561,10 +3561,10 @@ class EdwEtlProcessor:
                              WHEN fm.team2_key = dt.team_key THEN fm.team2_points 
                              ELSE 0 END) as season_points,
                     COUNT(DISTINCT fm.matchup_key) as games_played,
-                    0 as championships,
-                    0 as championship_games,
-                    0 as playoff_wins,
-                    0 as playoff_losses
+                    SUM(CASE WHEN fm.matchup_type = 'championship' AND fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as championships,
+                    SUM(CASE WHEN fm.matchup_type = 'championship' THEN 1 ELSE 0 END) as championship_games,
+                    SUM(CASE WHEN fm.matchup_type IN ('playoffs', 'championship') AND fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as playoff_wins,
+                    SUM(CASE WHEN fm.matchup_type IN ('playoffs', 'championship') AND fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as playoff_losses
                 FROM edw.dim_team dt
                 JOIN edw.dim_league dl ON dt.league_key = dl.league_key
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
@@ -3593,7 +3593,7 @@ class EdwEtlProcessor:
                     SUM(ft.faab_bid) as total_faab_spent
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
-                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE AND ft.faab_bid > 0
+                WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
             draft_stats AS (
@@ -3629,7 +3629,29 @@ class EdwEtlProcessor:
                     COALESCE(ps.playoff_seasons, 0) as playoff_appearances,
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
-                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency
+                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency,
+                    (SELECT fd.season_year 
+                     FROM edw.fact_draft fd 
+                     JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
+                     WHERE dm_sub.manager_name = ms.manager_name
+                     ORDER BY fd.season_points DESC 
+                     LIMIT 1) as best_draft_year,
+                    (SELECT fd.season_year 
+                     FROM edw.fact_draft fd 
+                     JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
+                     WHERE dm_sub.manager_name = ms.manager_name
+                     ORDER BY fd.season_points ASC 
+                     LIMIT 1) as worst_draft_year,
+                    (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
+                     FROM manager_stats ms2 
+                     WHERE ms2.manager_name = ms.manager_name 
+                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
+                     LIMIT 1) as best_season_record,
+                    (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
+                     FROM manager_stats ms2 
+                     WHERE ms2.manager_name = ms.manager_name 
+                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
+                     LIMIT 1) as worst_season_record
                 FROM manager_stats ms
                 LEFT JOIN playoff_stats ps ON ms.manager_name = ps.manager_name
                 WHERE ms.games_played > 0
@@ -3665,8 +3687,8 @@ class EdwEtlProcessor:
                     ELSE 0
                 END as playoff_win_percentage,
                 COALESCE(ds.avg_draft_position, 0) as avg_draft_grade,
-                NULL as best_draft_year,
-                NULL as worst_draft_year,
+                ma.best_draft_year,
+                ma.worst_draft_year,
                 COALESCE(ts.total_transactions, 0) as total_transactions,
                 CASE 
                     WHEN ma.total_seasons > 0 
@@ -3679,8 +3701,8 @@ class EdwEtlProcessor:
                     ELSE 0
                 END as faab_efficiency_rating,
                 COALESCE(ROUND(ma.win_consistency, 4), 0) as season_consistency_score,
-                NULL as best_season_record,
-                NULL as worst_season_record
+                ma.best_season_record,
+                ma.worst_season_record
             FROM manager_aggregates ma
             LEFT JOIN transaction_stats ts ON ma.manager_name = ts.manager_name
             LEFT JOIN draft_stats ds ON ma.manager_name = ds.manager_name
