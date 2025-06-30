@@ -114,6 +114,41 @@ class EdwEtlProcessor:
         }
     }
     
+    # Smart View Management: Maps views to their table dependencies
+    VIEW_DEPENDENCIES = {
+        # EDW Analytical Views
+        'vw_current_season_dashboard': {
+            'depends_on_tables': ['fact_team_performance', 'dim_team', 'dim_league', 'dim_week', 'fact_draft'],
+            'depends_on_marts': [],
+            'refresh_priority': 'HIGH',  # Critical for dashboards
+            'description': 'Current season team performance dashboard'
+        },
+        'vw_manager_hall_of_fame': {
+            'depends_on_tables': ['fact_team_performance', 'dim_team', 'dim_league'],
+            'depends_on_marts': ['mart_manager_performance'],
+            'refresh_priority': 'MEDIUM',
+            'description': 'Manager career statistics and rankings'
+        },
+        'vw_league_competitiveness': {
+            'depends_on_tables': ['fact_matchup'],
+            'depends_on_marts': ['mart_league_summary'],
+            'refresh_priority': 'LOW',
+            'description': 'League competitiveness analysis'
+        },
+        'vw_player_breakout_analysis': {
+            'depends_on_tables': ['dim_player'],
+            'depends_on_marts': ['mart_player_value'],
+            'refresh_priority': 'LOW',
+            'description': 'Player breakout and value analysis'
+        },
+        'vw_trade_analysis': {
+            'depends_on_tables': ['fact_transaction', 'dim_league', 'dim_player', 'dim_team'],
+            'depends_on_marts': [],
+            'refresh_priority': 'MEDIUM',
+            'description': 'Trade transaction analysis'
+        }
+    }
+    
     def __init__(self, database_url: str = None, data_file: str = None, force_rebuild: bool = False):
         self.database_url = database_url or os.getenv('DATABASE_URL')
         self.data_file = data_file
@@ -130,6 +165,13 @@ class EdwEtlProcessor:
             'errors': []
         }
         self.changed_tables = set()  # Track which operational tables changed
+        self.refreshed_tables = set()  # Track which EDW tables were refreshed
+        self.view_refresh_stats = {
+            'views_checked': 0,
+            'views_refreshed': 0,
+            'views_skipped': 0,
+            'views_failed': 0
+        }
         
         if not self.database_url:
             raise ValueError("DATABASE_URL required: set as environment variable or pass directly")
@@ -2530,6 +2572,9 @@ class EdwEtlProcessor:
             self.session.commit()
             logger.info("✅ All dimensions loaded successfully")
             
+            # Track refreshed dimension tables for smart view management
+            self.refreshed_tables.update(['dim_season', 'dim_week', 'dim_league', 'dim_player', 'dim_manager', 'dim_team'])
+            
             # Cache dimension key mappings for efficient fact processing
             self.cache_dimension_mappings()
             
@@ -2590,6 +2635,7 @@ class EdwEtlProcessor:
                     data = transform_method()
                     if self.load_fact_table(table_name, data):
                         logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
                     else:
                         logger.error(f"  ❌ Failed to load {table_name}")
                         return False
@@ -2624,6 +2670,7 @@ class EdwEtlProcessor:
                     data = transform_method()
                     if self.load_mart_table(table_name, data):
                         logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
                     else:
                         logger.error(f"  ❌ Failed to load {table_name}")
                         return False
@@ -3010,7 +3057,8 @@ class EdwEtlProcessor:
             ("Detect Operational Changes", self.detect_operational_changes),
             ("Load Dimensions", self.load_dimensions),
             ("Load Facts", self.load_facts),
-            ("Load Marts", self.load_marts)
+            ("Load Marts", self.load_marts),
+            ("Refresh Analytical Views", self.refresh_analytical_views)
         ]
         
         for step_name, step_func in steps:
@@ -3025,6 +3073,7 @@ class EdwEtlProcessor:
         logger.info(f"🗄️ Enterprise Data Warehouse is ready for analytics!")
         
         self.log_league_filtering_config()
+        self.log_view_refresh_summary()
         
         return True
     
@@ -3189,6 +3238,298 @@ class EdwEtlProcessor:
         else:
             logger.info("  🚫 No manually excluded leagues")
         logger.info("  ℹ️  To exclude a future league, add its ID to EXCLUDED_LEAGUE_IDS")
+
+    def determine_views_to_refresh(self) -> Dict[str, Dict]:
+        """
+        Intelligently determine which views need refreshing based on changed tables.
+        
+        Returns:
+            Dict mapping view names to their refresh metadata
+        """
+        views_to_refresh = {}
+        
+        if self.force_rebuild:
+            # Force rebuild: refresh all views
+            logger.info("🔄 Force rebuild mode: All views will be refreshed")
+            for view_name, config in self.VIEW_DEPENDENCIES.items():
+                views_to_refresh[view_name] = {
+                    'reason': 'force_rebuild',
+                    'priority': config['refresh_priority'],
+                    'description': config['description']
+                }
+            return views_to_refresh
+        
+        # Check if any changed tables affect each view
+        for view_name, config in self.VIEW_DEPENDENCIES.items():
+            reasons = []
+            
+            # Check table dependencies
+            for table in config['depends_on_tables']:
+                if table in self.refreshed_tables:
+                    reasons.append(f"table_{table}_changed")
+            
+            # Check mart dependencies
+            for mart in config['depends_on_marts']:
+                if mart in self.refreshed_tables:
+                    reasons.append(f"mart_{mart}_changed")
+            
+            # If any dependencies changed, mark for refresh
+            if reasons:
+                views_to_refresh[view_name] = {
+                    'reason': ', '.join(reasons),
+                    'priority': config['refresh_priority'],
+                    'description': config['description']
+                }
+        
+        return views_to_refresh
+
+    def refresh_analytical_views(self) -> bool:
+        """
+        Smart analytical view refresh - only refreshes views affected by data changes.
+        
+        Returns:
+            bool: Success status
+        """
+        try:
+            logger.info("🔍 Analyzing view refresh requirements...")
+            
+            # Determine which views need refreshing
+            views_to_refresh = self.determine_views_to_refresh()
+            
+            if not views_to_refresh:
+                logger.info("✅ No views require refreshing - all analytical views are current")
+                self.view_refresh_stats['views_checked'] = len(self.VIEW_DEPENDENCIES)
+                return True
+            
+            logger.info(f"🔧 Refreshing {len(views_to_refresh)} analytical views...")
+            
+            # Sort views by priority (HIGH -> MEDIUM -> LOW)
+            priority_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
+            sorted_views = sorted(
+                views_to_refresh.items(),
+                key=lambda x: priority_order.get(x[1]['priority'], 3)
+            )
+            
+            with self.engine.connect() as conn:
+                success_count = 0
+                
+                for view_name, metadata in sorted_views:
+                    try:
+                        logger.info(f"  📊 Refreshing {view_name} ({metadata['priority']} priority)...")
+                        logger.info(f"      Reason: {metadata['reason']}")
+                        logger.info(f"      Description: {metadata['description']}")
+                        
+                        if self._refresh_single_view(conn, view_name):
+                            success_count += 1
+                            self.view_refresh_stats['views_refreshed'] += 1
+                        else:
+                            self.view_refresh_stats['views_failed'] += 1
+                            
+                    except Exception as e:
+                        logger.error(f"  ❌ Failed to refresh {view_name}: {e}")
+                        self.view_refresh_stats['views_failed'] += 1
+                
+                # Update stats
+                self.view_refresh_stats['views_checked'] = len(self.VIEW_DEPENDENCIES)
+                self.view_refresh_stats['views_skipped'] = len(self.VIEW_DEPENDENCIES) - len(views_to_refresh)
+                
+                conn.commit()
+                
+                if success_count == len(views_to_refresh):
+                    logger.info(f"✅ Successfully refreshed {success_count} analytical views")
+                    return True
+                else:
+                    logger.warning(f"⚠️ Refreshed {success_count}/{len(views_to_refresh)} views ({self.view_refresh_stats['views_failed']} failed)")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ View refresh process failed: {e}")
+            return False
+
+    def _refresh_single_view(self, conn, view_name: str) -> bool:
+        """
+        Refresh a single analytical view with proper error handling.
+        
+        Args:
+            conn: Database connection
+            view_name: Name of the view to refresh
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Get view definition based on view name
+            view_sql = self._get_view_definition(view_name)
+            
+            if not view_sql:
+                logger.error(f"  ❌ No definition found for view: {view_name}")
+                return False
+            
+            # Drop existing view
+            conn.execute(text(f'DROP VIEW IF EXISTS edw.{view_name}'))
+            
+            # Create new view
+            conn.execute(text(view_sql))
+            
+            logger.info(f"  ✅ {view_name} refreshed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"  ❌ Failed to refresh {view_name}: {e}")
+            return False
+
+    def _get_view_definition(self, view_name: str) -> str:
+        """
+        Get the SQL definition for a specific view.
+        
+        Args:
+            view_name: Name of the view
+            
+        Returns:
+            str: SQL CREATE VIEW statement
+        """
+        view_definitions = {
+            'vw_current_season_dashboard': """
+                CREATE VIEW edw.vw_current_season_dashboard AS
+                SELECT 
+                    dl.league_name,
+                    dl.season_year,
+                    dt.team_name,
+                    dt.manager_name,
+                    ftp.wins,
+                    ftp.losses,
+                    ftp.ties,
+                    ftp.points_for,
+                    ftp.points_against,
+                    ftp.point_differential,
+                    ftp.win_percentage,
+                    ftp.season_rank,
+                    ftp.playoff_probability,
+                    ftp.is_playoff_team,
+                    ftp.playoff_seed
+                FROM edw.fact_team_performance ftp
+                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                  AND dt.is_active = TRUE
+                ORDER BY dl.league_name, ftp.season_rank
+            """,
+            
+            'vw_manager_hall_of_fame': """
+                CREATE VIEW edw.vw_manager_hall_of_fame AS
+                WITH manager_stats AS (
+                    SELECT 
+                        dt.manager_name,
+                        COUNT(DISTINCT dl.season_year) as total_seasons,
+                        SUM(CASE WHEN ftp.season_rank = 1 THEN 1 ELSE 0 END) as championships_won,
+                        AVG(ftp.win_percentage) as career_win_percentage,
+                        SUM(ftp.points_for) as total_points_scored,
+                        AVG(ftp.points_for) as avg_points_per_season,
+                        SUM(CASE WHEN ftp.is_playoff_team THEN 1 ELSE 0 END) as playoff_appearances,
+                        STDDEV(ftp.win_percentage) as season_consistency_score
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dt.manager_name IS NOT NULL
+                    GROUP BY dt.manager_name
+                )
+                SELECT 
+                    manager_name,
+                    total_seasons,
+                    championships_won,
+                    career_win_percentage,
+                    total_points_scored,
+                    avg_points_per_season,
+                    playoff_appearances,
+                    season_consistency_score,
+                    RANK() OVER (ORDER BY championships_won DESC, career_win_percentage DESC) as hall_of_fame_rank
+                FROM manager_stats
+                WHERE total_seasons >= 3
+                ORDER BY hall_of_fame_rank
+            """,
+            
+            'vw_league_competitiveness': """
+                CREATE VIEW edw.vw_league_competitiveness AS
+                SELECT 
+                    mls.league_name,
+                    mls.season_year,
+                    mls.competitive_balance_index,
+                    mls.avg_margin_of_victory,
+                    mls.close_games_count,
+                    mls.blowout_games_count,
+                    mls.total_transactions,
+                    mls.waiver_activity_index,
+                    CASE 
+                        WHEN mls.competitive_balance_index < 0.15 THEN 'Highly Competitive'
+                        WHEN mls.competitive_balance_index < 0.25 THEN 'Competitive'
+                        WHEN mls.competitive_balance_index < 0.35 THEN 'Moderately Competitive'
+                        ELSE 'Low Competition'
+                    END as competitiveness_tier
+                FROM edw.mart_league_summary mls
+                ORDER BY mls.competitive_balance_index ASC
+            """,
+            
+            'vw_player_breakout_analysis': """
+                CREATE VIEW edw.vw_player_breakout_analysis AS
+                SELECT 
+                    dp.player_name,
+                    dp.primary_position,
+                    mpv.season_year,
+                    mpv.career_avg_draft_position,
+                    mpv.total_fantasy_points,
+                    mpv.draft_value_score,
+                    mpv.waiver_pickup_value,
+                    CASE 
+                        WHEN mpv.career_avg_draft_position > 100 AND mpv.draft_value_score > 2.0 THEN 'Major Breakout'
+                        WHEN mpv.career_avg_draft_position > 50 AND mpv.draft_value_score > 1.5 THEN 'Solid Breakout'
+                        WHEN mpv.waiver_pickup_value > 1.5 THEN 'Waiver Wire Gem'
+                        ELSE 'Standard Performance'
+                    END as breakout_type
+                FROM edw.mart_player_value mpv
+                JOIN edw.dim_player dp ON mpv.player_key = dp.player_key
+                WHERE mpv.draft_value_score > 1.3 OR mpv.waiver_pickup_value > 1.3
+                ORDER BY mpv.draft_value_score DESC
+            """,
+            
+            'vw_trade_analysis': """
+                CREATE VIEW edw.vw_trade_analysis AS
+                SELECT 
+                    dl.league_name,
+                    dl.season_year,
+                    ft.transaction_date,
+                    dp.player_name,
+                    dt1.team_name as from_team,
+                    dt1.manager_name as from_manager,
+                    dt2.team_name as to_team,
+                    dt2.manager_name as to_manager,
+                    ft.trade_group_id,
+                    COUNT(*) OVER (PARTITION BY ft.trade_group_id) as players_in_trade
+                FROM edw.fact_transaction ft
+                JOIN edw.dim_league dl ON ft.league_key = dl.league_key
+                JOIN edw.dim_player dp ON ft.player_key = dp.player_key
+                LEFT JOIN edw.dim_team dt1 ON ft.from_team_key = dt1.team_key
+                LEFT JOIN edw.dim_team dt2 ON ft.to_team_key = dt2.team_key
+                WHERE ft.transaction_type = 'trade'
+                ORDER BY dl.league_name, ft.transaction_date DESC
+            """
+        }
+        
+        return view_definitions.get(view_name, "")
+
+    def log_view_refresh_summary(self):
+        """Log summary of view refresh operations"""
+        logger.info("\n🔧 VIEW REFRESH SUMMARY:")
+        logger.info(f"  📊 Views Checked: {self.view_refresh_stats['views_checked']}")
+        logger.info(f"  ✅ Views Refreshed: {self.view_refresh_stats['views_refreshed']}")
+        logger.info(f"  ⏭️ Views Skipped: {self.view_refresh_stats['views_skipped']}")
+        if self.view_refresh_stats['views_failed'] > 0:
+            logger.warning(f"  ❌ Views Failed: {self.view_refresh_stats['views_failed']}")
+        
+        if self.view_refresh_stats['views_refreshed'] > 0:
+            logger.info("  🎯 Smart refresh successful - only affected views were updated")
+        elif self.view_refresh_stats['views_skipped'] > 0:
+            logger.info("  ⚡ No refresh needed - all views are current with latest data")
 
     def consolidate_manager_name(self, manager_name: str) -> str:
         """Consolidate duplicate manager names to canonical names"""

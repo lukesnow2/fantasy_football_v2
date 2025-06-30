@@ -87,7 +87,7 @@ heroku_deploy() {
     
     log_success "Retrieved DATABASE_URL from Heroku"
     log_info "Running complete deployment..."
-    python3 deploy_complete_edw.py --force-rebuild
+    python3 ../../scripts/deploy_complete_edw.py --force-rebuild
 }
 
 # Function for quick verification
@@ -141,17 +141,17 @@ main() {
         "deploy")
             log_info "Starting complete EDW deployment..."
             check_database_url
-            python3 deploy_complete_edw.py
+            python3 ../../scripts/deploy_complete_edw.py
             ;;
         "rebuild")
             log_info "Starting complete EDW rebuild..."
             check_database_url
-            python3 deploy_complete_edw.py --force-rebuild
+            python3 ../../scripts/deploy_complete_edw.py --force-rebuild
             ;;
         "verify")
             log_info "Running EDW verification..."
             check_database_url
-            python3 deploy_complete_edw.py --verify-only
+            python3 ../../scripts/deploy_complete_edw.py --verify-only
             ;;
         "heroku-deploy")
             shift
