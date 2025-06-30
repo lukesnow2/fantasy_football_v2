@@ -4094,21 +4094,65 @@ class EdwEtlProcessor:
                     6 as playoff_spots
                 FROM edw.dim_league dl
             ),
+            cumulative_records AS (
+                -- Calculate cumulative wins/losses/ties through each week
+                SELECT 
+                    aw.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    aw.season_year,
+                    SUM(am.team_won) as cumulative_wins,
+                    SUM(CASE WHEN am.team_won = 0 THEN 1 ELSE 0 END) as cumulative_losses,
+                    0 as cumulative_ties,  -- No ties in current data
+                    COUNT(*) as games_played
+                FROM (
+                    SELECT DISTINCT 
+                        ftp.team_key,
+                        aw.league_key,
+                        aw.week_key,
+                        aw.season_year,
+                        aw.week_number
+                    FROM all_weeks aw
+                    CROSS JOIN edw.fact_team_performance ftp
+                    WHERE ftp.league_key = aw.league_key 
+                      AND ftp.season_year = aw.season_year
+                ) aw
+                JOIN actual_matchups am ON aw.team_key = am.team_key 
+                    AND aw.league_key = am.league_key 
+                    AND aw.season_year = am.season_year
+                    AND am.matchup_week <= aw.week_number  -- Cumulative through this week
+                GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
+            ),
             playoff_cutoff_teams AS (
                 -- Get 6th place team's win percentage for games back calculation
                 SELECT 
-                    ftp.league_key,
-                    ftp.week_key,
+                    ws.league_key,
+                    ws.week_key,
                     -- Use win percentage of 6th place team (handles ties better than raw wins)
-                    MAX(CASE WHEN ftp.season_rank = 6 THEN ftp.win_percentage ELSE NULL END) as sixth_place_win_pct,
+                    MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END) as sixth_place_win_pct,
                     -- If no exact 6th place team, use the team closest to 6th place
                     COALESCE(
-                        MAX(CASE WHEN ftp.season_rank = 6 THEN ftp.win_percentage ELSE NULL END),
-                        MAX(CASE WHEN ftp.season_rank <= 6 THEN ftp.win_percentage ELSE NULL END)
+                        MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END),
+                        MAX(CASE WHEN ws.season_rank <= 6 THEN ws.win_percentage ELSE NULL END)
                     ) as playoff_cutoff_win_pct
-                FROM edw.fact_team_performance ftp
-                WHERE ftp.season_rank <= 8  -- Only look at teams reasonably close to playoffs
-                GROUP BY ftp.league_key, ftp.week_key
+                FROM (
+                    SELECT 
+                        ftp.league_key,
+                        ftp.week_key,
+                        ftp.season_rank,
+                        -- Calculate win percentage from cumulative records
+                        CASE 
+                            WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                                (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                            ELSE 0.0
+                        END as win_percentage
+                    FROM edw.fact_team_performance ftp
+                    LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
+                        AND ftp.league_key = cr.league_key 
+                        AND ftp.week_key = cr.week_key
+                    WHERE ftp.season_rank <= 8  -- Only look at teams reasonably close to playoffs
+                ) ws
+                GROUP BY ws.league_key, ws.week_key
             ),
             weekly_stats AS (
                 SELECT 
@@ -4116,26 +4160,37 @@ class EdwEtlProcessor:
                     ftp.week_key,
                     ftp.team_key,
                     ftp.season_year,
-                    ftp.wins,
-                    ftp.losses,
+                    -- Use cumulative record instead of weekly record
+                    COALESCE(cr.cumulative_wins, 0) as wins,
+                    COALESCE(cr.cumulative_losses, 0) as losses,
+                    COALESCE(cr.cumulative_ties, 0) as ties,
+                    -- Calculate cumulative win percentage
+                    CASE 
+                        WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                            (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                        ELSE 0.0
+                    END as win_percentage,
                     ftp.points_for,
                     ftp.points_against,
-                    ftp.win_percentage,
                     ftp.season_rank,
                     ftp.playoff_probability,
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
                     COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
-                    COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(ftp.wins + ftp.losses, 0)) as recent_form_score,
-                    COALESCE(tsap.pythagorean_wins, ftp.wins) as pythagorean_wins,
+                    COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(COALESCE(cr.games_played, 1), 0)) as recent_form_score,
+                    COALESCE(tsap.pythagorean_wins, COALESCE(cr.cumulative_wins, 0)) as pythagorean_wins,
                     -- Previous rank for rank change calculation
                     LAG(ftp.season_rank) OVER (PARTITION BY ftp.team_key, ftp.league_key ORDER BY dw.week_number) as prev_rank,
                     ls.playoff_spots,
                     ls.num_teams,
                     -- Calculate games back using win percentage (more accurate with ties)
                     GREATEST(0, 
-                        ROUND((COALESCE(pct.playoff_cutoff_win_pct, 0.6) - ftp.win_percentage) * 
-                              (ftp.wins + ftp.losses + ftp.ties), 1)
+                        ROUND((COALESCE(pct.playoff_cutoff_win_pct, 0.6) - 
+                               CASE 
+                                   WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                                       (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                                   ELSE 0.0
+                               END) * COALESCE(cr.games_played, 0), 1)
                     ) as games_back_from_playoffs,
                     -- Calculate weeks remaining using actual season data
                     GREATEST(0, 
@@ -4147,6 +4202,9 @@ class EdwEtlProcessor:
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 JOIN edw.dim_season ds ON ftp.season_year = ds.season_year
                 JOIN league_settings ls ON ftp.league_key = ls.league_key AND ftp.season_year = ls.season_year
+                LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
+                    AND ftp.league_key = cr.league_key 
+                    AND ftp.week_key = cr.week_key
                 LEFT JOIN team_sos_and_pyth tsap ON ftp.team_key = tsap.team_key 
                     AND ftp.league_key = tsap.league_key 
                     AND ftp.week_key = tsap.week_key
@@ -4166,7 +4224,7 @@ class EdwEtlProcessor:
                      (ws.points_for / NULLIF(MAX(ws.points_for) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.3 +
                      (ws.recent_form_score / NULLIF(MAX(ws.recent_form_score) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.2 +
                      (1.0 - COALESCE(ws.strength_of_schedule, 0.5)) * 0.1) as power_score,
-                    -- Luck factor (actual wins vs expected wins based on matchups)
+                    -- Luck factor (actual cumulative wins vs expected wins based on matchups)
                     ws.wins - ws.pythagorean_wins as luck_factor,
                     -- Rank change from previous week
                     COALESCE(ws.prev_rank - ws.season_rank, 0) as rank_change,
@@ -4250,6 +4308,10 @@ class EdwEtlProcessor:
                 rp.power_rank,
                 rp.record_rank,
                 rp.points_rank,
+                rp.wins,
+                rp.losses,
+                COALESCE(rp.ties, 0) as ties,
+                ROUND(rp.win_percentage, 4) as win_percentage,
                 ROUND(rp.power_score, 4) as power_score,
                 ROUND(rp.strength_of_schedule, 4) as strength_of_schedule,
                 ROUND(rp.recent_form_score, 2) as recent_form_score,
@@ -4268,7 +4330,7 @@ class EdwEtlProcessor:
             rows = result.fetchall()
             
             for row in rows:
-                # Map all corrected power ranking metrics
+                # Map all corrected power ranking metrics including season record
                 marts.append({
                     'league_key': row[0],
                     'week_key': row[1],
@@ -4276,16 +4338,20 @@ class EdwEtlProcessor:
                     'power_rank': row[3],
                     'record_rank': row[4],
                     'points_rank': row[5],
-                    'power_score': row[6],
-                    'strength_of_schedule': row[7],
-                    'recent_form_score': row[8],
-                    'projection_score': row[9],
-                    'rank_change': row[10],
-                    'biggest_win_margin': row[11],
-                    'biggest_loss_margin': row[12],
-                    'pythagorean_wins': row[13],
-                    'luck_factor': row[14],
-                    'playoff_odds': row[15]
+                    'wins': row[6],
+                    'losses': row[7],
+                    'ties': row[8],
+                    'win_percentage': row[9],
+                    'power_score': row[10],
+                    'strength_of_schedule': row[11],
+                    'recent_form_score': row[12],
+                    'projection_score': row[13],
+                    'rank_change': row[14],
+                    'biggest_win_margin': row[15],
+                    'biggest_loss_margin': row[16],
+                    'pythagorean_wins': row[17],
+                    'luck_factor': row[18],
+                    'playoff_odds': row[19]
                 })
         
         logger.info(f"🏪 Generated {len(marts)} weekly power ranking records with FIXED pythagorean wins and playoff odds")

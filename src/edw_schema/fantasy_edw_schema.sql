@@ -605,6 +605,12 @@ CREATE TABLE mart_weekly_power_rankings (
     record_rank INTEGER,
     points_rank INTEGER,
     
+    -- Season Record (cumulative through this week)
+    wins INTEGER NOT NULL,
+    losses INTEGER NOT NULL,
+    ties INTEGER DEFAULT 0,
+    win_percentage DECIMAL(8,4),
+    
     -- Metrics
     power_score DECIMAL(10,4),
     strength_of_schedule DECIMAL(8,4),
