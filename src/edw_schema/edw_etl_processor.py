@@ -3498,6 +3498,79 @@ class EdwEtlProcessor:
             
             'vw_league_competitiveness': """
                 CREATE VIEW edw.vw_league_competitiveness AS
+                WITH season_team_totals AS (
+                    -- Get season totals per team (aggregate weekly data)
+                    SELECT 
+                        ftp.league_key,
+                        dl.season_year,
+                        ftp.team_key,
+                        SUM(ftp.wins) as season_wins,
+                        SUM(ftp.losses) as season_losses,
+                        SUM(ftp.ties) as season_ties,
+                        SUM(ftp.points_for) as season_points,
+                        CASE 
+                            WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                            THEN ROUND((SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)), 4)
+                            ELSE 0
+                        END as season_win_pct
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.league_key, dl.season_year, ftp.team_key
+                ),
+                competitiveness_metrics AS (
+                    SELECT 
+                        league_key,
+                        season_year,
+                        
+                        -- Component 1: Win Percentage Parity (lower std dev = more competitive)
+                        GREATEST(0, 100 - (STDDEV(season_win_pct) * 300)) as win_parity_score,
+                        
+                        -- Component 2: Point Spread Tightness (smaller gap = more competitive)  
+                        GREATEST(0, 100 - ((MAX(season_points) - MIN(season_points)) / AVG(season_points) * 100)) as point_spread_score,
+                        
+                        -- Component 3: Playoff Race Drama (teams within 1 game of 6th place)
+                        (SELECT COUNT(*) * 10.0  -- Scale to 0-100 (10 teams max = 100)
+                         FROM season_team_totals stt2 
+                         WHERE stt2.league_key = stt.league_key 
+                           AND stt2.season_year = stt.season_year
+                           AND stt2.season_wins >= (
+                               SELECT season_wins 
+                               FROM season_team_totals stt3 
+                               WHERE stt3.league_key = stt.league_key 
+                                 AND stt3.season_year = stt.season_year 
+                               ORDER BY season_wins DESC, season_points DESC 
+                               LIMIT 1 OFFSET 5  -- 6th place
+                           ) - 1  -- Within 1 game
+                        ) as playoff_race_score
+                        
+                    FROM season_team_totals stt
+                    GROUP BY league_key, season_year
+                ),
+                close_games_metrics AS (
+                    SELECT 
+                        fm.league_key,
+                        fm.season_year,
+                        
+                        -- Component 4: Close Games Frequency (< 15 point margin)
+                        ROUND(
+                            COUNT(CASE WHEN fm.margin_of_victory <= 15 THEN 1 END) * 100.0 / COUNT(*),
+                            1
+                        ) as close_games_score
+                        
+                    FROM edw.fact_matchup fm
+                    WHERE fm.margin_of_victory IS NOT NULL
+                    GROUP BY fm.league_key, fm.season_year
+                ),
+                activity_scoring_percentiles AS (
+                    SELECT 
+                        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY total_transactions) as trans_q1,
+                        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY total_transactions) as trans_median,
+                        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY total_transactions) as trans_q3,
+                        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY average_weekly_score) as score_q1,
+                        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY average_weekly_score) as score_median,
+                        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY average_weekly_score) as score_q3
+                    FROM edw.mart_league_summary
+                )
                 SELECT 
                     mls.league_name,
                     mls.season_year,
@@ -3510,19 +3583,71 @@ class EdwEtlProcessor:
                     mls.highest_single_week_score,
                     mls.average_weekly_score,
                     mls.most_active_trader,
+                    
+                    -- Improved Activity Tier (quartile-based)
                     CASE 
-                        WHEN mls.total_transactions > 50 THEN 'Highly Active'
-                        WHEN mls.total_transactions > 20 THEN 'Active'
-                        WHEN mls.total_transactions > 10 THEN 'Moderately Active'
+                        WHEN mls.total_transactions >= asp.trans_q3 THEN 'Elite Active'
+                        WHEN mls.total_transactions >= asp.trans_median THEN 'Highly Active'
+                        WHEN mls.total_transactions >= asp.trans_q1 THEN 'Active'
                         ELSE 'Low Activity'
                     END as activity_tier,
+                    
+                    -- Improved Scoring Tier (quartile-based)
                     CASE 
-                        WHEN mls.average_weekly_score > 120 THEN 'High Scoring'
-                        WHEN mls.average_weekly_score > 100 THEN 'Average Scoring'
+                        WHEN mls.average_weekly_score >= asp.score_q3 THEN 'Elite Scoring'
+                        WHEN mls.average_weekly_score >= asp.score_median THEN 'High Scoring'
+                        WHEN mls.average_weekly_score >= asp.score_q1 THEN 'Average Scoring'
                         ELSE 'Low Scoring'
-                    END as scoring_tier
+                    END as scoring_tier,
+                    
+                    -- NEW: Competitiveness Index (0-100 scale)
+                    ROUND(
+                        COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25),
+                            0
+                        ),
+                        1
+                    ) as competitiveness_index,
+                    
+                    -- NEW: Difficulty to Win Rating
+                    CASE 
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 70 THEN 'Brutal'
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 60 THEN 'Competitive'
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 50 THEN 'Moderate'
+                        ELSE 'Easy'
+                    END as difficulty_to_win,
+                    
+                    -- Component scores for analysis
+                    ROUND(cm.win_parity_score, 1) as win_parity_score,
+                    ROUND(cm.point_spread_score, 1) as point_spread_score,
+                    ROUND(cm.playoff_race_score, 1) as playoff_race_score,
+                    ROUND(cgm.close_games_score, 1) as close_games_score
+                    
                 FROM edw.mart_league_summary mls
-                ORDER BY mls.season_year DESC, mls.total_transactions DESC
+                CROSS JOIN activity_scoring_percentiles asp
+                LEFT JOIN competitiveness_metrics cm ON mls.league_key = cm.league_key 
+                    AND mls.season_year = cm.season_year
+                LEFT JOIN close_games_metrics cgm ON mls.league_key = cgm.league_key 
+                    AND mls.season_year = cgm.season_year
+                ORDER BY mls.season_year DESC, competitiveness_index DESC
             """,
             
             'vw_player_breakout_analysis': """
