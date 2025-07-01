@@ -69,9 +69,10 @@ class IncrementalDatabaseLoader:
         }
     }
     
-    def __init__(self, data_file: str, database_url: str = None):
+    def __init__(self, data_file: str, database_url: str = None, schema: str = 'public'):
         self.data_file = data_file
         self.database_url = database_url or os.getenv('DATABASE_URL')
+        self.schema = schema
         self.engine = None
         self.data = None
         self.load_stats = {
@@ -94,10 +95,13 @@ class IncrementalDatabaseLoader:
             url = self.database_url.replace('postgres://', 'postgresql://', 1)
             self.engine = create_engine(url)
             
-            # Test connection
+            # Test connection and set search path
             with self.engine.connect() as conn:
+                # Set search path to use specified schema
+                conn.execute(text(f"SET search_path TO {self.schema}"))
                 version = conn.execute(text("SELECT version()")).fetchone()[0]
                 logger.info(f"✅ Connected: {version.split()[0:2]}")
+                logger.info(f"📊 Using schema: {self.schema}")
             
             return True
         except Exception as e:
@@ -161,6 +165,9 @@ class IncrementalDatabaseLoader:
             with self.engine.connect() as conn:
                 trans = conn.begin()
                 try:
+                    # Set search path for this transaction
+                    conn.execute(text(f"SET search_path TO {self.schema}"))
+                    
                     # Get existing primary keys
                     existing_keys_query = f"SELECT {primary_key} FROM {table_name}"
                     existing_keys = set(row[0] for row in conn.execute(text(existing_keys_query)))
@@ -220,6 +227,9 @@ class IncrementalDatabaseLoader:
                 with self.engine.connect() as conn:
                     trans = conn.begin()
                     try:
+                        # Set search path for this transaction
+                        conn.execute(text(f"SET search_path TO {self.schema}"))
+                        
                         # Delete existing records for these periods
                         deleted_count = 0
                         for period in periods_to_update:
@@ -263,26 +273,36 @@ class IncrementalDatabaseLoader:
             primary_key = strategy['primary_key']
             
             with self.engine.connect() as conn:
-                # Get existing primary keys to avoid duplicates
-                existing_keys_query = f"SELECT {primary_key} FROM {table_name}"
-                existing_keys = set(row[0] for row in conn.execute(text(existing_keys_query)))
-                
-                # Filter out existing records
-                new_records = df[~df[primary_key].isin(existing_keys)]
-                
-                if not new_records.empty:
-                    new_records.to_sql(table_name, conn, if_exists='append', 
-                                      index=False, method='multi')
-                    logger.info(f"    ✅ Appended {len(new_records)} new records")
-                    self.load_stats['records_inserted'] += len(new_records)
-                else:
-                    logger.info(f"    ✅ No new records to append (all exist)")
-                
-                skipped = len(df) - len(new_records)
-                if skipped > 0:
-                    logger.info(f"    ⏭️ Skipped {skipped} existing records")
-                
-                return True
+                trans = conn.begin()
+                try:
+                    # Set search path for this transaction
+                    conn.execute(text(f"SET search_path TO {self.schema}"))
+                    
+                    # Get existing primary keys to avoid duplicates
+                    existing_keys_query = f"SELECT {primary_key} FROM {table_name}"
+                    existing_keys = set(row[0] for row in conn.execute(text(existing_keys_query)))
+                    
+                    # Filter out existing records
+                    new_records = df[~df[primary_key].isin(existing_keys)]
+                    
+                    if not new_records.empty:
+                        new_records.to_sql(table_name, conn, if_exists='append', 
+                                          index=False, method='multi')
+                        logger.info(f"    ✅ Appended {len(new_records)} new records")
+                        self.load_stats['records_inserted'] += len(new_records)
+                    else:
+                        logger.info(f"    ✅ No new records to append (all exist)")
+                    
+                    skipped = len(df) - len(new_records)
+                    if skipped > 0:
+                        logger.info(f"    ⏭️ Skipped {skipped} existing records")
+                    
+                    trans.commit()
+                    return True
+                    
+                except Exception as e:
+                    trans.rollback()
+                    raise e
                 
         except Exception as e:
             logger.error(f"❌ APPEND_ONLY failed for {table_name}: {e}")
@@ -332,10 +352,13 @@ class IncrementalDatabaseLoader:
             
             # Check if tables exist
             with self.engine.connect() as conn:
-                tables_query = """
+                # Set search path for this connection
+                conn.execute(text(f"SET search_path TO {self.schema}"))
+                
+                tables_query = f"""
                     SELECT table_name 
                     FROM information_schema.tables 
-                    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+                    WHERE table_schema = '{self.schema}' AND table_type = 'BASE TABLE'
                 """
                 existing_tables = set(row[0] for row in conn.execute(text(tables_query)))
                 
@@ -412,8 +435,12 @@ class IncrementalDatabaseLoader:
             logger.info("🔍 Verifying and summarizing...")
             
             with self.engine.connect() as conn:
+                # Set search path for this connection
+                conn.execute(text(f"SET search_path TO {self.schema}"))
+                
                 logger.info("\n📊 INCREMENTAL LOADING SUMMARY:")
                 logger.info("=" * 60)
+                logger.info(f"Schema: {self.schema}")
                 
                 # Loading statistics
                 stats = self.load_stats
@@ -428,7 +455,7 @@ class IncrementalDatabaseLoader:
                         logger.info(f"  - {error}")
                 
                 # Current database state
-                logger.info(f"\n📈 CURRENT DATABASE STATE:")
+                logger.info(f"\n📈 CURRENT DATABASE STATE ({self.schema} schema):")
                 total_db_records = 0
                 
                 for table_name in self.TABLE_STRATEGIES.keys():
@@ -544,8 +571,16 @@ def main():
                        help='Skip EDW processing (only load operational data)')
     parser.add_argument('--edw-only', action='store_true',
                        help='Only process EDW updates (skip operational loading)')
+    parser.add_argument('--dev', action='store_true',
+                       help='Use dev schema instead of public (for testing)')
+    parser.add_argument('--schema', default='public',
+                       help='Database schema to use (default: public)')
     
     args = parser.parse_args()
+    
+    # Handle dev flag
+    if args.dev:
+        args.schema = 'dev'
     
     # Determine EDW processing mode
     run_edw = not args.skip_edw
@@ -590,13 +625,14 @@ def main():
     else:
         logger.info(f"🚀 Starting incremental database loading")
         logger.info(f"📊 Data file: {data_file}")
+        logger.info(f"📊 Schema: {args.schema}")
         if run_edw:
             logger.info("🏢 EDW processing: ENABLED")
         else:
             logger.info("🏢 EDW processing: DISABLED")
         
         try:
-            loader = IncrementalDatabaseLoader(data_file, args.database_url)
+            loader = IncrementalDatabaseLoader(data_file, args.database_url, schema=args.schema)
             
             if loader.deploy_incremental(run_edw=run_edw):
                 logger.info("🏆 Incremental loading system operational!")
