@@ -3310,9 +3310,9 @@ class EdwEtlProcessor:
                 key=lambda x: priority_order.get(x[1]['priority'], 3)
             )
             
+            success_count = 0
+            
             with self.engine.connect() as conn:
-                success_count = 0
-                
                 for view_name, metadata in sorted_views:
                     try:
                         logger.info(f"  📊 Refreshing {view_name} ({metadata['priority']} priority)...")
@@ -3334,13 +3334,13 @@ class EdwEtlProcessor:
                 self.view_refresh_stats['views_skipped'] = len(self.VIEW_DEPENDENCIES) - len(views_to_refresh)
                 
                 conn.commit()
-                
-                if success_count == len(views_to_refresh):
-                    logger.info(f"✅ Successfully refreshed {success_count} analytical views")
-                    return True
-                else:
-                    logger.warning(f"⚠️ Refreshed {success_count}/{len(views_to_refresh)} views ({self.view_refresh_stats['views_failed']} failed)")
-                    return False
+            
+            if success_count == len(views_to_refresh):
+                logger.info(f"✅ Successfully refreshed {success_count} analytical views")
+                return True
+            else:
+                logger.warning(f"⚠️ Refreshed {success_count}/{len(views_to_refresh)} views ({self.view_refresh_stats['views_failed']} failed)")
+                return False
                     
         except Exception as e:
             logger.error(f"❌ View refresh process failed: {e}")
@@ -3391,29 +3391,40 @@ class EdwEtlProcessor:
         view_definitions = {
             'vw_current_season_dashboard': """
                 CREATE VIEW edw.vw_current_season_dashboard AS
+                WITH latest_team_performance AS (
+                    SELECT 
+                        ftp.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ftp.team_key, ftp.league_key 
+                            ORDER BY dw.week_number DESC
+                        ) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                )
                 SELECT 
                     dl.league_name,
                     dl.season_year,
                     dt.team_name,
                     dt.manager_name,
-                    ftp.wins,
-                    ftp.losses,
-                    ftp.ties,
-                    ftp.points_for,
-                    ftp.points_against,
-                    ftp.point_differential,
-                    ftp.win_percentage,
-                    ftp.season_rank,
-                    ftp.playoff_probability,
-                    ftp.is_playoff_team,
-                    ftp.playoff_seed
-                FROM edw.fact_team_performance ftp
-                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
-                JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
-                JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
-                WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                    ltp.wins,
+                    ltp.losses,
+                    ltp.ties,
+                    ltp.points_for,
+                    ltp.points_against,
+                    ltp.point_differential,
+                    ltp.win_percentage,
+                    ltp.season_rank,
+                    ltp.playoff_probability,
+                    ltp.is_playoff_team,
+                    ltp.playoff_seed
+                FROM latest_team_performance ltp
+                JOIN edw.dim_team dt ON ltp.team_key = dt.team_key
+                JOIN edw.dim_league dl ON ltp.league_key = dl.league_key
+                WHERE ltp.rn = 1
                   AND dt.is_active = TRUE
-                ORDER BY dl.league_name, ftp.season_rank
+                ORDER BY dl.league_name, ltp.season_rank
             """,
             
             'vw_manager_hall_of_fame': """
@@ -3454,20 +3465,28 @@ class EdwEtlProcessor:
                 SELECT 
                     mls.league_name,
                     mls.season_year,
-                    mls.competitive_balance_index,
-                    mls.avg_margin_of_victory,
-                    mls.close_games_count,
-                    mls.blowout_games_count,
+                    mls.total_teams,
+                    mls.total_weeks,
                     mls.total_transactions,
-                    mls.waiver_activity_index,
+                    mls.champion_manager,
+                    mls.runner_up_manager,
+                    mls.highest_scorer_manager,
+                    mls.highest_single_week_score,
+                    mls.average_weekly_score,
+                    mls.most_active_trader,
                     CASE 
-                        WHEN mls.competitive_balance_index < 0.15 THEN 'Highly Competitive'
-                        WHEN mls.competitive_balance_index < 0.25 THEN 'Competitive'
-                        WHEN mls.competitive_balance_index < 0.35 THEN 'Moderately Competitive'
-                        ELSE 'Low Competition'
-                    END as competitiveness_tier
+                        WHEN mls.total_transactions > 50 THEN 'Highly Active'
+                        WHEN mls.total_transactions > 20 THEN 'Active'
+                        WHEN mls.total_transactions > 10 THEN 'Moderately Active'
+                        ELSE 'Low Activity'
+                    END as activity_tier,
+                    CASE 
+                        WHEN mls.average_weekly_score > 120 THEN 'High Scoring'
+                        WHEN mls.average_weekly_score > 100 THEN 'Average Scoring'
+                        ELSE 'Low Scoring'
+                    END as scoring_tier
                 FROM edw.mart_league_summary mls
-                ORDER BY mls.competitive_balance_index ASC
+                ORDER BY mls.season_year DESC, mls.total_transactions DESC
             """,
             
             'vw_player_breakout_analysis': """
