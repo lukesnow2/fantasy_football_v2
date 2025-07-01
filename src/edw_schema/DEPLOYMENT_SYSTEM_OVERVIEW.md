@@ -9,7 +9,7 @@ The Fantasy Football Enterprise Data Warehouse (EDW) now includes a complete, fo
 ```
 src/edw_schema/
 ├── deploy.sh                           # Simple deployment wrapper script
-├── deploy_complete_edw.py               # Complete deployment workflow
+├── manual_schema_deploy.py              # Schema-only deployment
 ├── edw_etl_processor.py                 # Core ETL with league filtering
 ├── fantasy_edw_schema.sql               # Database schema definition
 ├── verify_edw_data.py                   # Standalone verification
@@ -17,6 +17,9 @@ src/edw_schema/
 ├── EDW_VERIFICATION_CHECKLIST.md       # Deployment checklist
 ├── DEPLOYMENT_SYSTEM_OVERVIEW.md       # This overview
 └── debug_*.py                           # Debugging utilities
+
+scripts/
+└── deploy_complete_edw.py               # Main deployment orchestrator
 ```
 
 ## 🚀 Quick Start Commands
@@ -43,7 +46,7 @@ src/edw_schema/
 ```bash
 # Manual deployment with options
 export DATABASE_URL=$(heroku config:get DATABASE_URL --app your-app)
-python3 deploy_complete_edw.py --force-rebuild
+python3 ../../scripts/deploy_complete_edw.py --force-rebuild
 
 # Standalone verification
 python3 verify_edw_data.py
@@ -146,7 +149,7 @@ EXCLUDED_LEAGUE_IDS = {
 
 ### Deployment Options
 ```python
-# In deploy_complete_edw.py
+# In scripts/deploy_complete_edw.py
 class CompleteEdwDeployment:
     def __init__(self, database_url: str, force_rebuild: bool = False):
         self.force_rebuild = force_rebuild  # Clean rebuild option

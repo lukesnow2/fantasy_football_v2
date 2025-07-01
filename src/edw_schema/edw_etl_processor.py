@@ -114,6 +114,41 @@ class EdwEtlProcessor:
         }
     }
     
+    # Smart View Management: Maps views to their table dependencies
+    VIEW_DEPENDENCIES = {
+        # EDW Analytical Views
+        'vw_current_season_dashboard': {
+            'depends_on_tables': ['fact_team_performance', 'dim_team', 'dim_league', 'dim_week', 'fact_draft'],
+            'depends_on_marts': [],
+            'refresh_priority': 'HIGH',  # Critical for dashboards
+            'description': 'Current season team performance dashboard'
+        },
+        'vw_manager_hall_of_fame': {
+            'depends_on_tables': ['fact_team_performance', 'dim_team', 'dim_league'],
+            'depends_on_marts': ['mart_manager_performance'],
+            'refresh_priority': 'MEDIUM',
+            'description': 'Manager career statistics and rankings'
+        },
+        'vw_league_competitiveness': {
+            'depends_on_tables': ['fact_matchup'],
+            'depends_on_marts': ['mart_league_summary'],
+            'refresh_priority': 'LOW',
+            'description': 'League competitiveness analysis'
+        },
+        'vw_player_breakout_analysis': {
+            'depends_on_tables': ['dim_player'],
+            'depends_on_marts': ['mart_player_value'],
+            'refresh_priority': 'LOW',
+            'description': 'Player breakout and value analysis'
+        },
+        'vw_trade_analysis': {
+            'depends_on_tables': ['fact_transaction', 'dim_league', 'dim_player', 'dim_team'],
+            'depends_on_marts': [],
+            'refresh_priority': 'MEDIUM',
+            'description': 'Trade transaction analysis'
+        }
+    }
+    
     def __init__(self, database_url: str = None, data_file: str = None, force_rebuild: bool = False):
         self.database_url = database_url or os.getenv('DATABASE_URL')
         self.data_file = data_file
@@ -130,6 +165,13 @@ class EdwEtlProcessor:
             'errors': []
         }
         self.changed_tables = set()  # Track which operational tables changed
+        self.refreshed_tables = set()  # Track which EDW tables were refreshed
+        self.view_refresh_stats = {
+            'views_checked': 0,
+            'views_refreshed': 0,
+            'views_skipped': 0,
+            'views_failed': 0
+        }
         
         if not self.database_url:
             raise ValueError("DATABASE_URL required: set as environment variable or pass directly")
@@ -2530,6 +2572,9 @@ class EdwEtlProcessor:
             self.session.commit()
             logger.info("✅ All dimensions loaded successfully")
             
+            # Track refreshed dimension tables for smart view management
+            self.refreshed_tables.update(['dim_season', 'dim_week', 'dim_league', 'dim_player', 'dim_manager', 'dim_team'])
+            
             # Cache dimension key mappings for efficient fact processing
             self.cache_dimension_mappings()
             
@@ -2590,6 +2635,7 @@ class EdwEtlProcessor:
                     data = transform_method()
                     if self.load_fact_table(table_name, data):
                         logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
                     else:
                         logger.error(f"  ❌ Failed to load {table_name}")
                         return False
@@ -2624,6 +2670,7 @@ class EdwEtlProcessor:
                     data = transform_method()
                     if self.load_mart_table(table_name, data):
                         logger.info(f"  ✅ {table_name.title()}: {len(data)} processed")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
                     else:
                         logger.error(f"  ❌ Failed to load {table_name}")
                         return False
@@ -3010,7 +3057,8 @@ class EdwEtlProcessor:
             ("Detect Operational Changes", self.detect_operational_changes),
             ("Load Dimensions", self.load_dimensions),
             ("Load Facts", self.load_facts),
-            ("Load Marts", self.load_marts)
+            ("Load Marts", self.load_marts),
+            ("Refresh Analytical Views", self.refresh_analytical_views)
         ]
         
         for step_name, step_func in steps:
@@ -3025,6 +3073,7 @@ class EdwEtlProcessor:
         logger.info(f"🗄️ Enterprise Data Warehouse is ready for analytics!")
         
         self.log_league_filtering_config()
+        self.log_view_refresh_summary()
         
         return True
     
@@ -3189,6 +3238,796 @@ class EdwEtlProcessor:
         else:
             logger.info("  🚫 No manually excluded leagues")
         logger.info("  ℹ️  To exclude a future league, add its ID to EXCLUDED_LEAGUE_IDS")
+
+    def determine_views_to_refresh(self) -> Dict[str, Dict]:
+        """
+        Intelligently determine which views need refreshing based on changed tables.
+        
+        Returns:
+            Dict mapping view names to their refresh metadata
+        """
+        views_to_refresh = {}
+        
+        if self.force_rebuild:
+            # Force rebuild: refresh all views
+            logger.info("🔄 Force rebuild mode: All views will be refreshed")
+            for view_name, config in self.VIEW_DEPENDENCIES.items():
+                views_to_refresh[view_name] = {
+                    'reason': 'force_rebuild',
+                    'priority': config['refresh_priority'],
+                    'description': config['description']
+                }
+            return views_to_refresh
+        
+        # Check if any changed tables affect each view
+        for view_name, config in self.VIEW_DEPENDENCIES.items():
+            reasons = []
+            
+            # Check table dependencies
+            for table in config['depends_on_tables']:
+                if table in self.refreshed_tables:
+                    reasons.append(f"table_{table}_changed")
+            
+            # Check mart dependencies
+            for mart in config['depends_on_marts']:
+                if mart in self.refreshed_tables:
+                    reasons.append(f"mart_{mart}_changed")
+            
+            # If any dependencies changed, mark for refresh
+            if reasons:
+                views_to_refresh[view_name] = {
+                    'reason': ', '.join(reasons),
+                    'priority': config['refresh_priority'],
+                    'description': config['description']
+                }
+        
+        return views_to_refresh
+
+    def refresh_analytical_views(self) -> bool:
+        """
+        Smart analytical view refresh - only refreshes views affected by data changes.
+        
+        Returns:
+            bool: Success status
+        """
+        try:
+            logger.info("🔍 Analyzing view refresh requirements...")
+            
+            # Determine which views need refreshing
+            views_to_refresh = self.determine_views_to_refresh()
+            
+            if not views_to_refresh:
+                logger.info("✅ No views require refreshing - all analytical views are current")
+                self.view_refresh_stats['views_checked'] = len(self.VIEW_DEPENDENCIES)
+                return True
+            
+            logger.info(f"🔧 Refreshing {len(views_to_refresh)} analytical views...")
+            
+            # Sort views by priority (HIGH -> MEDIUM -> LOW)
+            priority_order = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2}
+            sorted_views = sorted(
+                views_to_refresh.items(),
+                key=lambda x: priority_order.get(x[1]['priority'], 3)
+            )
+            
+            success_count = 0
+            
+            with self.engine.connect() as conn:
+                for view_name, metadata in sorted_views:
+                    try:
+                        logger.info(f"  📊 Refreshing {view_name} ({metadata['priority']} priority)...")
+                        logger.info(f"      Reason: {metadata['reason']}")
+                        logger.info(f"      Description: {metadata['description']}")
+                        
+                        if self._refresh_single_view(conn, view_name):
+                            success_count += 1
+                            self.view_refresh_stats['views_refreshed'] += 1
+                        else:
+                            self.view_refresh_stats['views_failed'] += 1
+                            
+                    except Exception as e:
+                        logger.error(f"  ❌ Failed to refresh {view_name}: {e}")
+                        self.view_refresh_stats['views_failed'] += 1
+                
+                # Update stats
+                self.view_refresh_stats['views_checked'] = len(self.VIEW_DEPENDENCIES)
+                self.view_refresh_stats['views_skipped'] = len(self.VIEW_DEPENDENCIES) - len(views_to_refresh)
+                
+                conn.commit()
+            
+            if success_count == len(views_to_refresh):
+                logger.info(f"✅ Successfully refreshed {success_count} analytical views")
+                return True
+            else:
+                logger.warning(f"⚠️ Refreshed {success_count}/{len(views_to_refresh)} views ({self.view_refresh_stats['views_failed']} failed)")
+                return False
+                    
+        except Exception as e:
+            logger.error(f"❌ View refresh process failed: {e}")
+            return False
+
+    def _refresh_single_view(self, conn, view_name: str) -> bool:
+        """
+        Refresh a single analytical view with proper error handling.
+        
+        Args:
+            conn: Database connection
+            view_name: Name of the view to refresh
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            # Get view definition based on view name
+            view_sql = self._get_view_definition(view_name)
+            
+            if not view_sql:
+                logger.error(f"  ❌ No definition found for view: {view_name}")
+                return False
+            
+            # Drop existing view
+            conn.execute(text(f'DROP VIEW IF EXISTS edw.{view_name}'))
+            
+            # Create new view
+            conn.execute(text(view_sql))
+            
+            logger.info(f"  ✅ {view_name} refreshed successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"  ❌ Failed to refresh {view_name}: {e}")
+            return False
+
+    def _get_view_definition(self, view_name: str) -> str:
+        """
+        Get the SQL definition for a specific view.
+        
+        Args:
+            view_name: Name of the view
+            
+        Returns:
+            str: SQL CREATE VIEW statement
+        """
+        view_definitions = {
+            'vw_current_season_dashboard': """
+                CREATE VIEW edw.vw_current_season_dashboard AS
+                WITH season_totals AS (
+                    SELECT 
+                        ftp.team_key,
+                        ftp.league_key,
+                        SUM(ftp.wins) as total_wins,
+                        SUM(ftp.losses) as total_losses,
+                        SUM(ftp.ties) as total_ties,
+                        SUM(ftp.points_for) as total_points_for,
+                        SUM(ftp.points_against) as total_points_against,
+                        SUM(ftp.point_differential) as total_point_differential,
+                        CASE 
+                            WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                            THEN ROUND((SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)), 4)
+                            ELSE 0
+                        END as season_win_percentage
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                    GROUP BY ftp.team_key, ftp.league_key
+                ),
+                latest_week_rankings AS (
+                    SELECT 
+                        ftp.team_key,
+                        ftp.league_key,
+                        ftp.playoff_probability,
+                        ftp.is_playoff_team,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY ftp.team_key, ftp.league_key 
+                            ORDER BY dw.week_number DESC
+                        ) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                ),
+                ranked_teams AS (
+                    SELECT 
+                        st.*,
+                        lwr.playoff_probability,
+                        lwr.is_playoff_team,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY st.league_key 
+                            ORDER BY st.season_win_percentage DESC, st.total_points_for DESC
+                        ) as calculated_season_rank
+                    FROM season_totals st
+                    JOIN latest_week_rankings lwr ON st.team_key = lwr.team_key 
+                        AND st.league_key = lwr.league_key 
+                        AND lwr.rn = 1
+                )
+                SELECT 
+                    dl.league_name,
+                    dl.season_year,
+                    dt.team_name,
+                    dt.manager_name,
+                    rt.total_wins as wins,
+                    rt.total_losses as losses,
+                    rt.total_ties as ties,
+                    rt.total_points_for as points_for,
+                    rt.total_points_against as points_against,
+                    rt.total_point_differential as point_differential,
+                    rt.season_win_percentage as win_percentage,
+                    rt.calculated_season_rank as season_rank,
+                    rt.playoff_probability,
+                    rt.is_playoff_team,
+                    rt.calculated_season_rank as playoff_seed
+                FROM ranked_teams rt
+                JOIN edw.dim_team dt ON rt.team_key = dt.team_key
+                JOIN edw.dim_league dl ON rt.league_key = dl.league_key
+                WHERE dt.is_active = TRUE
+                ORDER BY dl.league_name, rt.calculated_season_rank
+            """,
+            
+            'vw_manager_hall_of_fame': """
+                CREATE VIEW edw.vw_manager_hall_of_fame AS
+                WITH manager_championships AS (
+                    -- Count championships from mart_league_summary
+                    SELECT 
+                        champion_manager as manager_name,
+                        COUNT(*) as championships_won
+                    FROM edw.mart_league_summary
+                    WHERE champion_manager IS NOT NULL
+                    GROUP BY champion_manager
+                ),
+                manager_stats AS (
+                    SELECT 
+                        dt.manager_name,
+                        COUNT(DISTINCT dl.season_year) as total_seasons,
+                        SUM(ftp.wins) as career_wins,
+                        SUM(ftp.losses) as career_losses,
+                        SUM(ftp.ties) as career_ties,
+                        ROUND(
+                            CASE 
+                                WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                                THEN (SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties))
+                                ELSE 0
+                            END, 3
+                        ) as career_win_percentage,
+                        SUM(ftp.points_for) as total_points_scored,
+                        ROUND(AVG(ftp.points_for), 1) as avg_points_per_game,
+                        COUNT(DISTINCT CASE WHEN ftp.is_playoff_team THEN dl.season_year END) as playoff_appearances,
+                        ROUND(STDDEV(ftp.win_percentage), 3) as season_consistency_score
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    LEFT JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                    WHERE dt.manager_name IS NOT NULL
+                      AND (
+                          dm.include_in_analysis = 'Y'
+                          OR EXISTS (
+                              SELECT 1 FROM edw.mart_league_summary mls 
+                              WHERE mls.champion_manager = dt.manager_name
+                          )
+                      )
+                    GROUP BY dt.manager_name
+                )
+                SELECT 
+                    ms.manager_name,
+                    ms.total_seasons::INT as total_seasons,
+                    COALESCE(mc.championships_won, 0)::INT as championships_won,
+                    ms.career_wins::INT as career_wins,
+                    ms.career_losses::INT as career_losses,
+                    ms.career_ties::INT as career_ties,
+                    ms.career_win_percentage::DECIMAL(6,3) as career_win_percentage,
+                    ms.total_points_scored::DECIMAL(10,2) as total_points_scored,
+                    ms.avg_points_per_game::DECIMAL(6,1) as avg_points_per_game,
+                    ms.playoff_appearances::INT as playoff_appearances,
+                    ms.season_consistency_score::DECIMAL(6,3) as season_consistency_score,
+                    -- Hall of Fame Index: 60% Championships + 40% Win Percentage
+                    ROUND(
+                        (COALESCE(mc.championships_won, 0)::decimal / NULLIF((SELECT MAX(championships_won) FROM manager_championships), 0) * 0.6) + 
+                        (ms.career_win_percentage * 0.4),
+                        3
+                    )::DECIMAL(6,3) as hall_of_fame_index,
+                    RANK() OVER (ORDER BY 
+                        (COALESCE(mc.championships_won, 0)::decimal / NULLIF((SELECT MAX(championships_won) FROM manager_championships), 0) * 0.6) + 
+                        (ms.career_win_percentage * 0.4) DESC
+                    )::INT as hall_of_fame_rank
+                FROM manager_stats ms
+                LEFT JOIN manager_championships mc ON ms.manager_name = mc.manager_name
+                WHERE ms.total_seasons >= 3
+                ORDER BY hall_of_fame_rank
+            """,
+            
+            'vw_league_competitiveness': """
+                CREATE VIEW edw.vw_league_competitiveness AS
+                WITH season_team_totals AS (
+                    -- Get season totals per team (aggregate weekly data)
+                    SELECT 
+                        ftp.league_key,
+                        dl.season_year,
+                        ftp.team_key,
+                        SUM(ftp.wins) as season_wins,
+                        SUM(ftp.losses) as season_losses,
+                        SUM(ftp.ties) as season_ties,
+                        SUM(ftp.points_for) as season_points,
+                        CASE 
+                            WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                            THEN ROUND((SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)), 4)
+                            ELSE 0
+                        END as season_win_pct
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.league_key, dl.season_year, ftp.team_key
+                ),
+                competitiveness_metrics AS (
+                    SELECT 
+                        league_key,
+                        season_year,
+                        
+                        -- Component 1: Win Percentage Parity (lower std dev = more competitive)
+                        GREATEST(0, 100 - (STDDEV(season_win_pct) * 300)) as win_parity_score,
+                        
+                        -- Component 2: Point Spread Tightness (smaller gap = more competitive)  
+                        GREATEST(0, 100 - ((MAX(season_points) - MIN(season_points)) / AVG(season_points) * 100)) as point_spread_score,
+                        
+                        -- Component 3: Playoff Race Drama (teams within 1 game of 6th place)
+                        (SELECT COUNT(*) * 10.0  -- Scale to 0-100 (10 teams max = 100)
+                         FROM season_team_totals stt2 
+                         WHERE stt2.league_key = stt.league_key 
+                           AND stt2.season_year = stt.season_year
+                           AND stt2.season_wins >= (
+                               SELECT season_wins 
+                               FROM season_team_totals stt3 
+                               WHERE stt3.league_key = stt.league_key 
+                                 AND stt3.season_year = stt.season_year 
+                               ORDER BY season_wins DESC, season_points DESC 
+                               LIMIT 1 OFFSET 5  -- 6th place
+                           ) - 1  -- Within 1 game
+                        ) as playoff_race_score
+                        
+                    FROM season_team_totals stt
+                    GROUP BY league_key, season_year
+                ),
+                close_games_metrics AS (
+                    SELECT 
+                        fm.league_key,
+                        fm.season_year,
+                        
+                        -- Component 4: Close Games Frequency (< 15 point margin)
+                        ROUND(
+                            COUNT(CASE WHEN fm.margin_of_victory <= 15 THEN 1 END) * 100.0 / COUNT(*),
+                            1
+                        ) as close_games_score
+                        
+                    FROM edw.fact_matchup fm
+                    WHERE fm.margin_of_victory IS NOT NULL
+                    GROUP BY fm.league_key, fm.season_year
+                ),
+                activity_scoring_percentiles AS (
+                    SELECT 
+                        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY total_transactions) as trans_q1,
+                        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY total_transactions) as trans_median,
+                        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY total_transactions) as trans_q3,
+                        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY average_weekly_score) as score_q1,
+                        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY average_weekly_score) as score_median,
+                        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY average_weekly_score) as score_q3
+                    FROM edw.mart_league_summary
+                )
+                SELECT 
+                    mls.league_name,
+                    mls.season_year,
+                    mls.total_teams,
+                    mls.total_weeks,
+                    mls.total_transactions,
+                    mls.champion_manager,
+                    mls.runner_up_manager,
+                    mls.highest_scorer_manager,
+                    mls.highest_single_week_score,
+                    mls.average_weekly_score,
+                    mls.most_active_trader,
+                    
+                    -- Improved Activity Tier (quartile-based)
+                    CASE 
+                        WHEN mls.total_transactions >= asp.trans_q3 THEN 'Elite Active'
+                        WHEN mls.total_transactions >= asp.trans_median THEN 'Highly Active'
+                        WHEN mls.total_transactions >= asp.trans_q1 THEN 'Active'
+                        ELSE 'Low Activity'
+                    END as activity_tier,
+                    
+                    -- Improved Scoring Tier (quartile-based)
+                    CASE 
+                        WHEN mls.average_weekly_score >= asp.score_q3 THEN 'Elite Scoring'
+                        WHEN mls.average_weekly_score >= asp.score_median THEN 'High Scoring'
+                        WHEN mls.average_weekly_score >= asp.score_q1 THEN 'Average Scoring'
+                        ELSE 'Low Scoring'
+                    END as scoring_tier,
+                    
+                    -- NEW: Competitiveness Index (0-100 scale)
+                    ROUND(
+                        COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25),
+                            0
+                        ),
+                        1
+                    ) as competitiveness_index,
+                    
+                    -- NEW: Difficulty to Win Rating
+                    CASE 
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 70 THEN 'Brutal'
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 60 THEN 'Competitive'
+                        WHEN COALESCE(
+                            (cm.win_parity_score * 0.25) + 
+                            (cm.point_spread_score * 0.25) + 
+                            (cm.playoff_race_score * 0.25) + 
+                            (cgm.close_games_score * 0.25), 0
+                        ) >= 50 THEN 'Moderate'
+                        ELSE 'Easy'
+                    END as difficulty_to_win,
+                    
+                    -- Component scores for analysis
+                    ROUND(cm.win_parity_score, 1) as win_parity_score,
+                    ROUND(cm.point_spread_score, 1) as point_spread_score,
+                    ROUND(cm.playoff_race_score, 1) as playoff_race_score,
+                    ROUND(cgm.close_games_score, 1) as close_games_score
+                    
+                FROM edw.mart_league_summary mls
+                CROSS JOIN activity_scoring_percentiles asp
+                LEFT JOIN competitiveness_metrics cm ON mls.league_key = cm.league_key 
+                    AND mls.season_year = cm.season_year
+                LEFT JOIN close_games_metrics cgm ON mls.league_key = cgm.league_key 
+                    AND mls.season_year = cgm.season_year
+                ORDER BY mls.season_year DESC, competitiveness_index DESC
+            """,
+            
+            'vw_player_breakout_analysis': """
+                CREATE VIEW edw.vw_player_breakout_analysis AS
+                SELECT 
+                    dp.player_name,
+                    dp.primary_position,
+                    mpv.season_year,
+                    mpv.career_avg_draft_position,
+                    mpv.total_fantasy_points,
+                    mpv.draft_value_score,
+                    mpv.waiver_pickup_value,
+                    CASE 
+                        WHEN mpv.career_avg_draft_position > 100 AND mpv.draft_value_score > 2.0 THEN 'Major Breakout'
+                        WHEN mpv.career_avg_draft_position > 50 AND mpv.draft_value_score > 1.5 THEN 'Solid Breakout'
+                        WHEN mpv.waiver_pickup_value > 1.5 THEN 'Waiver Wire Gem'
+                        ELSE 'Standard Performance'
+                    END as breakout_type
+                FROM edw.mart_player_value mpv
+                JOIN edw.dim_player dp ON mpv.player_key = dp.player_key
+                WHERE mpv.draft_value_score > 1.3 OR mpv.waiver_pickup_value > 1.3
+                ORDER BY mpv.draft_value_score DESC
+            """,
+            
+            'vw_trade_analysis': """
+                -- CALIBRATED COMPREHENSIVE TRADE ANALYSIS VIEW (v2.0)
+                -- Fixes: Production scaling (0.15), Opportunity cost implementation, Refined thresholds (8-point)
+                -- Components: Production (40%), Playoff Impact (30%), Opportunity Cost (20%), Context (10%)
+                CREATE VIEW edw.vw_trade_analysis AS
+                WITH trade_groups AS (
+                    -- Create synthetic trade group IDs by grouping reciprocal trades
+                    SELECT 
+                        ft.*,
+                        -- Generate consistent trade_group_id for reciprocal trades
+                        CONCAT(
+                            ft.league_key, '_', 
+                            ft.transaction_date, '_',
+                            CASE 
+                                WHEN ft.from_team_key < ft.to_team_key 
+                                THEN CONCAT(ft.from_team_key, '_', ft.to_team_key)
+                                ELSE CONCAT(ft.to_team_key, '_', ft.from_team_key)
+                            END
+                        ) AS synthetic_trade_group_id
+                    FROM edw.fact_transaction ft
+                    WHERE ft.transaction_type = 'trade'
+                ),
+                trade_synthesis AS (
+                    -- Synthesize trades into single rows with player aggregation
+                    SELECT 
+                        tg.synthetic_trade_group_id,
+                        MIN(tg.league_key) as league_key,
+                        MIN(tg.season_year) as season_year,
+                        MIN(tg.transaction_date) as transaction_date,
+                        MIN(tg.transaction_week) as transaction_week,
+                        -- Determine the two teams involved (consistent ordering)
+                        MIN(CASE WHEN tg.from_team_key < tg.to_team_key THEN tg.from_team_key ELSE tg.to_team_key END) as team_a_key,
+                        MAX(CASE WHEN tg.from_team_key < tg.to_team_key THEN tg.to_team_key ELSE tg.from_team_key END) as team_b_key,
+                        MIN(CASE WHEN tg.from_team_key < tg.to_team_key THEN tg.from_manager_key ELSE tg.to_manager_key END) as team_a_manager_key,
+                        MAX(CASE WHEN tg.from_team_key < tg.to_team_key THEN tg.to_manager_key ELSE tg.from_manager_key END) as team_b_manager_key,
+                        -- Count players on each side
+                        COUNT(*) FILTER (WHERE tg.from_team_key = LEAST(tg.from_team_key, tg.to_team_key)) as team_a_player_count,
+                        COUNT(*) FILTER (WHERE tg.from_team_key = GREATEST(tg.from_team_key, tg.to_team_key)) as team_b_player_count,
+                        COUNT(*) as total_players
+                    FROM trade_groups tg
+                    GROUP BY tg.synthetic_trade_group_id
+                ),
+                trade_players AS (
+                    -- Get player names for each side of trade
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        STRING_AGG(
+                            CASE WHEN tg.from_team_key = ts.team_a_key 
+                                 THEN dp.player_name ELSE NULL END, 
+                            ', ' ORDER BY dp.player_name
+                        ) FILTER (WHERE tg.from_team_key = ts.team_a_key) as team_a_gives,
+                        STRING_AGG(
+                            CASE WHEN tg.from_team_key = ts.team_b_key 
+                                 THEN dp.player_name ELSE NULL END, 
+                            ', ' ORDER BY dp.player_name
+                        ) FILTER (WHERE tg.from_team_key = ts.team_b_key) as team_b_gives
+                    FROM trade_synthesis ts
+                    JOIN trade_groups tg ON ts.synthetic_trade_group_id = tg.synthetic_trade_group_id
+                    JOIN edw.dim_player dp ON tg.player_key = dp.player_key
+                    GROUP BY ts.synthetic_trade_group_id
+                ),
+                fantasy_production AS (
+                    -- Calculate fantasy points for traded players after trade date (40% weight)
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        -- Team A production (players they received)
+                        COALESCE(SUM(
+                            CASE WHEN tg.to_team_key = ts.team_a_key 
+                                 THEN fps.weekly_fantasy_points ELSE 0 END
+                        ), 0) as team_a_production,
+                        -- Team B production (players they received)  
+                        COALESCE(SUM(
+                            CASE WHEN tg.to_team_key = ts.team_b_key 
+                                 THEN fps.weekly_fantasy_points ELSE 0 END
+                        ), 0) as team_b_production
+                    FROM trade_synthesis ts
+                    JOIN trade_groups tg ON ts.synthetic_trade_group_id = tg.synthetic_trade_group_id
+                    LEFT JOIN edw.fact_player_statistics fps ON (
+                        fps.player_key = tg.player_key 
+                        AND fps.league_key = tg.league_key
+                        AND fps.season_year = tg.season_year
+                        AND fps.week_number >= tg.transaction_week
+                    )
+                    GROUP BY ts.synthetic_trade_group_id
+                ),
+                opportunity_cost AS (
+                    -- Evaluate pre-trade value differential (20% weight)
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        -- Average pre-trade weekly points of players traded away
+                        AVG(CASE WHEN tg.from_team_key = ts.team_a_key 
+                                 THEN fps.weekly_fantasy_points ELSE NULL END) as team_a_gave_avg_value,
+                        AVG(CASE WHEN tg.from_team_key = ts.team_b_key 
+                                 THEN fps.weekly_fantasy_points ELSE NULL END) as team_b_gave_avg_value
+                    FROM trade_synthesis ts
+                    JOIN trade_groups tg ON ts.synthetic_trade_group_id = tg.synthetic_trade_group_id
+                    LEFT JOIN edw.fact_player_statistics fps ON (
+                        fps.player_key = tg.player_key 
+                        AND fps.league_key = tg.league_key
+                        AND fps.season_year = tg.season_year
+                        AND fps.week_number < tg.transaction_week
+                        AND fps.week_number >= GREATEST(1, tg.transaction_week - 4)  -- Last 4 weeks before trade
+                    )
+                    GROUP BY ts.synthetic_trade_group_id
+                ),
+                playoff_impact AS (
+                    -- Analyze playoff implications (30% weight)
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        -- Check if teams made playoffs
+                        MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_a_made_playoffs,
+                        MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_b_made_playoffs,
+                        -- Check championship outcomes  
+                        MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.season_rank = 1 THEN 1 ELSE 0 END) as team_a_champion,
+                        MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.season_rank = 1 THEN 1 ELSE 0 END) as team_b_champion
+                    FROM trade_synthesis ts
+                    LEFT JOIN edw.fact_team_performance ftp ON (
+                        ftp.league_key = ts.league_key 
+                        AND ftp.season_year = ts.season_year
+                        AND ftp.team_key IN (ts.team_a_key, ts.team_b_key)
+                    )
+                    GROUP BY ts.synthetic_trade_group_id
+                ),
+                contextual_factors AS (
+                    -- Trade timing context (10% weight)
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        ts.transaction_week,
+                        -- Late season trades are more impactful
+                        CASE 
+                            WHEN ts.transaction_week >= 10 THEN 1.5
+                            WHEN ts.transaction_week >= 6 THEN 1.2  
+                            ELSE 1.0 
+                        END as timing_multiplier,
+                        -- Current season status for dynamic evaluation
+                        CASE 
+                            WHEN ts.season_year < EXTRACT(YEAR FROM CURRENT_DATE) THEN 'Complete'
+                            WHEN ts.season_year = EXTRACT(YEAR FROM CURRENT_DATE) THEN 'In Progress'
+                            ELSE 'Future'
+                        END as evaluation_status
+                    FROM trade_synthesis ts
+                )
+                SELECT 
+                    dl.league_name,
+                    ts.season_year,
+                    ts.transaction_date,
+                    ts.transaction_week,
+                    dta.team_name as team_a_name,
+                    dma.manager_name as team_a_manager,
+                    tp.team_a_gives,
+                    dtb.team_name as team_b_name, 
+                    dmb.manager_name as team_b_manager,
+                    tp.team_b_gives,
+                    CONCAT(ts.team_a_player_count, '-for-', ts.team_b_player_count) as trade_type,
+                    ts.total_players,
+                    
+                    -- Production metrics
+                    ROUND(fp.team_a_production, 1) as team_a_production,
+                    ROUND(fp.team_b_production, 1) as team_b_production,
+                    ROUND(fp.team_a_production - fp.team_b_production, 1) as production_differential,
+                    
+                    -- Opportunity cost metrics (NEW)
+                    ROUND(COALESCE(oc.team_a_gave_avg_value, 0), 1) as team_a_pre_trade_avg,
+                    ROUND(COALESCE(oc.team_b_gave_avg_value, 0), 1) as team_b_pre_trade_avg,
+                    ROUND(COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0), 1) as opportunity_differential,
+                    
+                    -- Playoff outcomes
+                    pi.team_a_made_playoffs,
+                    pi.team_b_made_playoffs,
+                    pi.team_a_champion,
+                    pi.team_b_champion,
+                    
+                    -- Component Scores (0-100 scale) - CALIBRATED
+                    ROUND(LEAST(100, GREATEST(0, 
+                        50 + (fp.team_a_production - fp.team_b_production) * 0.15  -- Reduced from 0.3
+                    )), 1) as team_a_production_score,
+                    
+                    ROUND(CASE 
+                        WHEN pi.team_a_champion = 1 THEN 85  -- Reduced from 90
+                        WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70  -- Reduced from 75
+                        WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30  -- Increased from 25
+                        ELSE 50
+                    END, 1) as team_a_playoff_score,
+                    
+                    -- IMPLEMENTED Opportunity Cost Score (20% weight)
+                    ROUND(LEAST(100, GREATEST(0,
+                        50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2
+                    )), 1) as team_a_opportunity_score,
+                    
+                    ROUND(50 + (cf.timing_multiplier - 1) * 25, 1) as team_a_context_score,
+                    
+                    -- Final Weighted Score (0-100) - REFINED FORMULA
+                    ROUND(
+                        LEAST(100, GREATEST(0, 
+                            (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
+                            CASE 
+                                WHEN pi.team_a_champion = 1 THEN 85
+                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
+                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
+                                ELSE 50
+                            END * 0.30 +
+                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
+                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
+                        )), 1
+                    ) as team_a_final_score,
+                    
+                    ROUND(
+                        LEAST(100, GREATEST(0, 
+                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
+                            CASE 
+                                WHEN pi.team_b_champion = 1 THEN 85
+                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
+                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
+                                ELSE 50
+                            END * 0.30 +
+                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
+                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
+                        )), 1
+                    ) as team_b_final_score,
+                    
+                    -- Winner determination - REFINED THRESHOLDS
+                    CASE 
+                        WHEN ABS((50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
+                            CASE 
+                                WHEN pi.team_a_champion = 1 THEN 85
+                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
+                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
+                                ELSE 50
+                            END * 0.30 +
+                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
+                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10 -
+                            
+                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 -
+                            CASE 
+                                WHEN pi.team_b_champion = 1 THEN 85
+                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
+                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
+                                ELSE 50
+                            END * 0.30 -
+                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 -
+                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10) >= 8 
+                        THEN 
+                            CASE WHEN (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
+                                CASE 
+                                    WHEN pi.team_a_champion = 1 THEN 85
+                                    WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
+                                    WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
+                                    ELSE 50
+                                END * 0.30 +
+                                (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
+                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10 > 
+                                (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
+                                CASE 
+                                    WHEN pi.team_b_champion = 1 THEN 85
+                                    WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
+                                    WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
+                                    ELSE 50
+                                END * 0.30 +
+                                (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
+                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10
+                            THEN dma.manager_name 
+                            ELSE dmb.manager_name 
+                            END
+                        ELSE 'Even Trade'
+                    END as trade_winner,
+                    
+                    -- Trade analysis summary
+                    CASE 
+                        WHEN ABS(fp.team_a_production - fp.team_b_production) >= 50.0 THEN 
+                            CONCAT('Production-driven: ', 
+                                CASE WHEN fp.team_a_production > fp.team_b_production THEN dma.manager_name ELSE dmb.manager_name END,
+                                ' gained ', ROUND(ABS(fp.team_a_production - fp.team_b_production), 1), ' more points')
+                        WHEN (pi.team_a_champion = 1 OR pi.team_b_champion = 1) THEN 
+                            CONCAT('Championship impact: ', 
+                                CASE WHEN pi.team_a_champion = 1 THEN dma.manager_name ELSE dmb.manager_name END,
+                                ' won title')
+                        WHEN (pi.team_a_made_playoffs != pi.team_b_made_playoffs) THEN
+                            CONCAT('Playoff impact: ',
+                                CASE WHEN pi.team_a_made_playoffs = 1 THEN dma.manager_name ELSE dmb.manager_name END,
+                                ' made playoffs')
+                        ELSE 'Balanced trade with minimal impact'
+                    END as trade_analysis,
+                    
+                    -- Evaluation status
+                    cf.evaluation_status,
+                    
+                    ts.synthetic_trade_group_id as trade_group_id
+                    
+                FROM trade_synthesis ts
+                JOIN edw.dim_league dl ON ts.league_key = dl.league_key
+                LEFT JOIN edw.dim_team dta ON ts.team_a_key = dta.team_key
+                LEFT JOIN edw.dim_manager dma ON ts.team_a_manager_key = dma.manager_key
+                LEFT JOIN edw.dim_team dtb ON ts.team_b_key = dtb.team_key
+                LEFT JOIN edw.dim_manager dmb ON ts.team_b_manager_key = dmb.manager_key
+                LEFT JOIN trade_players tp ON ts.synthetic_trade_group_id = tp.synthetic_trade_group_id
+                LEFT JOIN fantasy_production fp ON ts.synthetic_trade_group_id = fp.synthetic_trade_group_id
+                LEFT JOIN opportunity_cost oc ON ts.synthetic_trade_group_id = oc.synthetic_trade_group_id
+                LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
+                LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
+                ORDER BY dl.league_name, ts.transaction_date DESC
+            """
+        }
+        
+        return view_definitions.get(view_name, "")
+
+    def log_view_refresh_summary(self):
+        """Log summary of view refresh operations"""
+        logger.info("\n🔧 VIEW REFRESH SUMMARY:")
+        logger.info(f"  📊 Views Checked: {self.view_refresh_stats['views_checked']}")
+        logger.info(f"  ✅ Views Refreshed: {self.view_refresh_stats['views_refreshed']}")
+        logger.info(f"  ⏭️ Views Skipped: {self.view_refresh_stats['views_skipped']}")
+        if self.view_refresh_stats['views_failed'] > 0:
+            logger.warning(f"  ❌ Views Failed: {self.view_refresh_stats['views_failed']}")
+        
+        if self.view_refresh_stats['views_refreshed'] > 0:
+            logger.info("  🎯 Smart refresh successful - only affected views were updated")
+        elif self.view_refresh_stats['views_skipped'] > 0:
+            logger.info("  ⚡ No refresh needed - all views are current with latest data")
 
     def consolidate_manager_name(self, manager_name: str) -> str:
         """Consolidate duplicate manager names to canonical names"""
@@ -3962,71 +4801,344 @@ class EdwEtlProcessor:
         with self.engine.connect() as conn:
             logger.info("🏪 Calculating weekly power rankings...")
             
-            # Comprehensive power rankings with advanced metrics
+            # Fixed comprehensive power rankings with corrected calculations
             sql = """
-            WITH weekly_stats AS (
+            WITH all_weeks AS (
+                -- Get all league/week combinations for cumulative calculation
+                SELECT DISTINCT 
+                    ftp.league_key,
+                    ftp.season_year,
+                    ftp.week_key,
+                    dw.week_number
+                FROM edw.fact_team_performance ftp
+                JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                WHERE dw.week_type = 'regular'
+            ),
+            actual_matchups AS (
+                -- Get actual head-to-head matchups to calculate correct SOS and pythagorean wins
+                SELECT 
+                    fm.league_key,
+                    fm.week_key,
+                    fm.season_year,
+                    fm.team1_key as team_key,
+                    fm.team2_key as opponent_key,
+                    fm.team1_points as team_points,
+                    fm.team2_points as opponent_points,
+                    CASE WHEN fm.winner_team_key = fm.team1_key THEN 1 ELSE 0 END as team_won,
+                    dw.week_number,
+                    dw.week_number as matchup_week
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                WHERE dw.week_type = 'regular'
+                
+                UNION ALL
+                
+                SELECT 
+                    fm.league_key,
+                    fm.week_key,
+                    fm.season_year,
+                    fm.team2_key as team_key,
+                    fm.team1_key as opponent_key,
+                    fm.team2_points as team_points,
+                    fm.team1_points as opponent_points,
+                    CASE WHEN fm.winner_team_key = fm.team2_key THEN 1 ELSE 0 END as team_won,
+                    dw.week_number,
+                    dw.week_number as matchup_week
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                WHERE dw.week_type = 'regular'
+            ),
+            opponent_records AS (
+                -- Calculate win percentages for strength of schedule
+                SELECT 
+                    ftp.team_key,
+                    ftp.league_key,
+                    ftp.week_key,
+                    ftp.win_percentage as opponent_win_pct
+                FROM edw.fact_team_performance ftp
+            ),
+            team_sos_and_pyth AS (
+                -- Calculate cumulative strength of schedule and actual pythagorean wins
+                SELECT 
+                    aw.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    aw.season_year,
+                    AVG(opr.opponent_win_pct) as strength_of_schedule,
+                    -- Calculate actual pythagorean wins based on point scoring
+                    SUM(am.team_points) as total_points_for,
+                    SUM(am.opponent_points) as total_points_against,
+                    COUNT(*) as games_played,
+                    -- Pythagorean expectation formula: (PF^2) / (PF^2 + PA^2) * Games
+                    CASE 
+                        WHEN SUM(am.team_points) > 0 AND SUM(am.opponent_points) > 0 THEN
+                            (POWER(SUM(am.team_points), 2) / 
+                             (POWER(SUM(am.team_points), 2) + POWER(SUM(am.opponent_points), 2))) * COUNT(*)
+                        ELSE SUM(am.team_won)  -- Fallback to actual wins if no points
+                    END as pythagorean_wins
+                FROM (
+                    SELECT DISTINCT 
+                        ftp.team_key,
+                        aw.league_key,
+                        aw.week_key,
+                        aw.season_year,
+                        aw.week_number
+                    FROM all_weeks aw
+                    CROSS JOIN edw.fact_team_performance ftp
+                    WHERE ftp.league_key = aw.league_key 
+                      AND ftp.season_year = aw.season_year
+                ) aw
+                JOIN actual_matchups am ON aw.team_key = am.team_key 
+                    AND aw.league_key = am.league_key 
+                    AND aw.season_year = am.season_year
+                    AND am.matchup_week <= aw.week_number  -- Cumulative through this week
+                JOIN opponent_records opr ON am.opponent_key = opr.team_key 
+                    AND am.league_key = opr.league_key 
+                    AND am.week_key = opr.week_key
+                GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
+            ),
+            recent_performance AS (
+                -- Calculate recent form (last 3 weeks of actual scoring, cumulative view)
+                SELECT 
+                    aw.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    AVG(am.team_points) as recent_form_score
+                FROM (
+                    SELECT DISTINCT 
+                        ftp.team_key,
+                        aw.league_key,
+                        aw.week_key,
+                        aw.season_year,
+                        aw.week_number
+                    FROM all_weeks aw
+                    CROSS JOIN edw.fact_team_performance ftp
+                    WHERE ftp.league_key = aw.league_key 
+                      AND ftp.season_year = aw.season_year
+                ) aw
+                JOIN actual_matchups am ON aw.team_key = am.team_key 
+                    AND aw.league_key = am.league_key 
+                    AND aw.season_year = am.season_year
+                    AND am.matchup_week >= GREATEST(1, aw.week_number - 2)  -- Last 3 weeks
+                    AND am.matchup_week <= aw.week_number
+                GROUP BY aw.team_key, aw.league_key, aw.week_key
+            ),
+            league_settings AS (
+                -- League settings for playoff odds calculation (10-team league, 6 playoff spots)
+                SELECT 
+                    dl.league_key,
+                    dl.season_year,
+                    dl.num_teams,
+                    -- Your league structure: 10 teams, 6 playoff spots
+                    6 as playoff_spots
+                FROM edw.dim_league dl
+            ),
+            cumulative_records AS (
+                -- Calculate cumulative wins/losses/ties through each week
+                SELECT 
+                    aw.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    aw.season_year,
+                    SUM(am.team_won) as cumulative_wins,
+                    SUM(CASE WHEN am.team_won = 0 THEN 1 ELSE 0 END) as cumulative_losses,
+                    0 as cumulative_ties,  -- No ties in current data
+                    COUNT(*) as games_played
+                FROM (
+                    SELECT DISTINCT 
+                        ftp.team_key,
+                        aw.league_key,
+                        aw.week_key,
+                        aw.season_year,
+                        aw.week_number
+                    FROM all_weeks aw
+                    CROSS JOIN edw.fact_team_performance ftp
+                    WHERE ftp.league_key = aw.league_key 
+                      AND ftp.season_year = aw.season_year
+                ) aw
+                JOIN actual_matchups am ON aw.team_key = am.team_key 
+                    AND aw.league_key = am.league_key 
+                    AND aw.season_year = am.season_year
+                    AND am.matchup_week <= aw.week_number  -- Cumulative through this week
+                GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
+            ),
+            playoff_cutoff_teams AS (
+                -- Get 6th place team's win percentage for games back calculation
+                SELECT 
+                    ws.league_key,
+                    ws.week_key,
+                    -- Use win percentage of 6th place team (handles ties better than raw wins)
+                    MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END) as sixth_place_win_pct,
+                    -- If no exact 6th place team, use the team closest to 6th place
+                    COALESCE(
+                        MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END),
+                        MAX(CASE WHEN ws.season_rank <= 6 THEN ws.win_percentage ELSE NULL END)
+                    ) as playoff_cutoff_win_pct
+                FROM (
+                    SELECT 
+                        ftp.league_key,
+                        ftp.week_key,
+                        ftp.season_rank,
+                        -- Calculate win percentage from cumulative records
+                        CASE 
+                            WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                                (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                            ELSE 0.0
+                        END as win_percentage
+                    FROM edw.fact_team_performance ftp
+                    LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
+                        AND ftp.league_key = cr.league_key 
+                        AND ftp.week_key = cr.week_key
+                    WHERE ftp.season_rank <= 8  -- Only look at teams reasonably close to playoffs
+                ) ws
+                GROUP BY ws.league_key, ws.week_key
+            ),
+            weekly_stats AS (
                 SELECT 
                     ftp.league_key,
                     ftp.week_key,
                     ftp.team_key,
                     ftp.season_year,
-                    ftp.wins,
-                    ftp.losses,
+                    -- Use cumulative record instead of weekly record
+                    COALESCE(cr.cumulative_wins, 0) as wins,
+                    COALESCE(cr.cumulative_losses, 0) as losses,
+                    COALESCE(cr.cumulative_ties, 0) as ties,
+                    -- Calculate cumulative win percentage
+                    CASE 
+                        WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                            (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                        ELSE 0.0
+                    END as win_percentage,
                     ftp.points_for,
                     ftp.points_against,
-                    ftp.win_percentage,
                     ftp.season_rank,
-                    ftp.weekly_rank,
+                    ftp.playoff_probability,
                     dw.week_number,
-                    -- Calculate strength of schedule (avg opponent win %)
-                    AVG(opp_ftp.win_percentage) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as strength_of_schedule,
-                    -- Recent form (last 3 weeks performance)
-                    AVG(ftp.weekly_points) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS 2 PRECEDING) as recent_form_score,
-                    -- Expected wins based on points
-                    SUM(CASE WHEN ftp.weekly_points > opp_ftp.weekly_points THEN 1.0 ELSE 0.0 END) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as pythagorean_wins,
-                    -- Rank change calculation  
+                    -- Use actual SOS and pythagorean wins from corrected calculations
+                    COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
+                    COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(COALESCE(cr.games_played, 1), 0)) as recent_form_score,
+                    COALESCE(tsap.pythagorean_wins, COALESCE(cr.cumulative_wins, 0)) as pythagorean_wins,
+                    -- Previous rank for rank change calculation
                     LAG(ftp.season_rank) OVER (PARTITION BY ftp.team_key, ftp.league_key ORDER BY dw.week_number) as prev_rank,
-                    -- Biggest margins
-                    -- Biggest margins (using point_differential since weekly_points_against doesn't exist)
-                    MAX(ftp.point_differential) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as biggest_win_margin,
-                    MIN(ftp.point_differential) OVER (PARTITION BY ftp.team_key ORDER BY dw.week_number ROWS UNBOUNDED PRECEDING) as biggest_loss_margin
+                    ls.playoff_spots,
+                    ls.num_teams,
+                    -- Calculate games back using win percentage (more accurate with ties)
+                    GREATEST(0, 
+                        ROUND((COALESCE(pct.playoff_cutoff_win_pct, 0.6) - 
+                               CASE 
+                                   WHEN COALESCE(cr.games_played, 0) > 0 THEN
+                                       (COALESCE(cr.cumulative_wins, 0) + 0.5 * COALESCE(cr.cumulative_ties, 0)) / cr.games_played
+                                   ELSE 0.0
+                               END) * COALESCE(cr.games_played, 0), 1)
+                    ) as games_back_from_playoffs,
+                    -- Calculate weeks remaining using actual season data
+                    GREATEST(0, 
+                        COALESCE(ds.championship_week, 16) - 1 - dw.week_number
+                    ) as weeks_remaining
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
                 JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                 JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
-                LEFT JOIN edw.fact_team_performance opp_ftp ON ftp.league_key = opp_ftp.league_key 
-                    AND ftp.week_key = opp_ftp.week_key 
-                    AND ftp.team_key != opp_ftp.team_key
-                WHERE dw.week_type = 'regular' AND dm.include_in_analysis = TRUE
+                JOIN edw.dim_season ds ON ftp.season_year = ds.season_year
+                JOIN league_settings ls ON ftp.league_key = ls.league_key AND ftp.season_year = ls.season_year
+                LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
+                    AND ftp.league_key = cr.league_key 
+                    AND ftp.week_key = cr.week_key
+                LEFT JOIN team_sos_and_pyth tsap ON ftp.team_key = tsap.team_key 
+                    AND ftp.league_key = tsap.league_key 
+                    AND ftp.week_key = tsap.week_key
+                LEFT JOIN recent_performance rp ON ftp.team_key = rp.team_key 
+                    AND ftp.league_key = rp.league_key 
+                    AND ftp.week_key = rp.week_key
+                LEFT JOIN playoff_cutoff_teams pct ON ftp.league_key = pct.league_key 
+                    AND ftp.week_key = pct.week_key
+                WHERE dw.week_type = 'regular' 
+                  AND dm.include_in_analysis = TRUE
             ),
             power_calculations AS (
                 SELECT 
                     ws.*,
-                    -- Power score calculation (weighted: 40% record, 30% points, 20% recent form, 10% SOS)
+                    -- Improved power score calculation (weighted: 40% record, 30% points, 20% recent form, 10% SOS)
                     (ws.win_percentage * 0.4 + 
                      (ws.points_for / NULLIF(MAX(ws.points_for) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.3 +
                      (ws.recent_form_score / NULLIF(MAX(ws.recent_form_score) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.2 +
-                     (1 - ws.strength_of_schedule) * 0.1) as power_score,
-                    -- Luck factor (actual wins vs expected wins)  
+                     (1.0 - COALESCE(ws.strength_of_schedule, 0.5)) * 0.1) as power_score,
+                    -- Luck factor (actual cumulative wins vs expected wins based on matchups)
                     ws.wins - ws.pythagorean_wins as luck_factor,
-                    -- Rank change
+                    -- Rank change from previous week
                     COALESCE(ws.prev_rank - ws.season_rank, 0) as rank_change,
-                    -- Playoff probability (simplified)
+                    -- Improved playoff probability based on rank, games back, and realistic scenarios
                     CASE 
-                        WHEN ws.season_rank <= 6 THEN 0.9
-                        WHEN ws.season_rank <= 8 THEN 0.6  
-                        WHEN ws.season_rank <= 10 THEN 0.3
-                        ELSE 0.1
-                    END as playoff_odds
+                        WHEN ws.season_rank <= ws.playoff_spots THEN 
+                            -- Teams in playoff position: high probability, increases with week and position
+                            LEAST(0.98, 0.65 + (ws.week_number * 0.025) + 
+                                  ((ws.playoff_spots - ws.season_rank + 1.0) / ws.playoff_spots * 0.20))
+                        WHEN ws.weeks_remaining <= 0 THEN
+                            -- Season over: 100% if in playoffs, 0% if not
+                            CASE WHEN ws.season_rank <= ws.playoff_spots THEN 1.0 ELSE 0.0 END
+                        WHEN ws.games_back_from_playoffs > (ws.weeks_remaining * 1.5) THEN
+                            -- Mathematically very difficult (would need other teams to lose most games)
+                            GREATEST(0.01, 0.05 - (ws.week_number * 0.002))
+                        ELSE
+                            -- Teams that can realistically catch up: factor in games back vs time remaining
+                            CASE 
+                                WHEN ws.games_back_from_playoffs <= 0.5 THEN 
+                                    -- Tied or virtually tied for last playoff spot
+                                    GREATEST(0.40, 0.75 - (ws.week_number * 0.02))
+                                WHEN ws.games_back_from_playoffs <= 1.0 THEN
+                                    -- 1 game back: good odds early, declining late
+                                    GREATEST(0.15, 0.60 - (ws.week_number * 0.035) - (ws.games_back_from_playoffs * 0.10))
+                                WHEN ws.games_back_from_playoffs <= 2.0 THEN
+                                    -- 2 games back: moderate odds early, low odds late
+                                    GREATEST(0.08, 0.40 - (ws.week_number * 0.030) - (ws.games_back_from_playoffs * 0.08))
+                                WHEN ws.games_back_from_playoffs <= 3.0 THEN
+                                    -- 3 games back: low odds, very time sensitive
+                                    GREATEST(0.03, 0.25 - (ws.week_number * 0.025) - (ws.games_back_from_playoffs * 0.06))
+                                ELSE
+                                    -- 4+ games back: minimal odds, need early season + help
+                                    GREATEST(0.01, 0.15 - (ws.week_number * 0.020) - (ws.games_back_from_playoffs * 0.04))
+                            END
+                    END as calculated_playoff_odds
                 FROM weekly_stats ws
+            ),
+            matchup_margins AS (
+                -- Calculate cumulative biggest win/loss margins from all matchups through each week
+                SELECT 
+                    aw.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    MAX(CASE WHEN am.team_won = 1 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_win_margin,
+                    MAX(CASE WHEN am.team_won = 0 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_loss_margin
+                FROM (
+                    SELECT DISTINCT 
+                        ftp.team_key,
+                        aw.league_key,
+                        aw.week_key,
+                        aw.season_year,
+                        aw.week_number
+                    FROM all_weeks aw
+                    CROSS JOIN edw.fact_team_performance ftp
+                    WHERE ftp.league_key = aw.league_key 
+                      AND ftp.season_year = aw.season_year
+                ) aw
+                JOIN actual_matchups am ON aw.team_key = am.team_key 
+                    AND aw.league_key = am.league_key 
+                    AND aw.season_year = am.season_year
+                    AND am.matchup_week <= aw.week_number  -- Cumulative through this week
+                GROUP BY aw.team_key, aw.league_key, aw.week_key
             ),
             ranked_power AS (
                 SELECT 
                     pc.*,
+                    COALESCE(mm.biggest_win_margin, 0) as biggest_win_margin,
+                    COALESCE(mm.biggest_loss_margin, 0) as biggest_loss_margin,
                     ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.power_score DESC) as power_rank,
                     ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.win_percentage DESC, pc.points_for DESC) as record_rank,
                     ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.points_for DESC) as points_rank
                 FROM power_calculations pc
+                LEFT JOIN matchup_margins mm ON pc.team_key = mm.team_key 
+                    AND pc.league_key = mm.league_key 
+                    AND pc.week_key = mm.week_key
             )
             SELECT 
                 rp.league_key,
@@ -4035,16 +5147,20 @@ class EdwEtlProcessor:
                 rp.power_rank,
                 rp.record_rank,
                 rp.points_rank,
+                rp.wins,
+                rp.losses,
+                COALESCE(rp.ties, 0) as ties,
+                ROUND(rp.win_percentage, 4) as win_percentage,
                 ROUND(rp.power_score, 4) as power_score,
                 ROUND(rp.strength_of_schedule, 4) as strength_of_schedule,
-                ROUND(rp.recent_form_score, 4) as recent_form_score,
-                ROUND(rp.power_score * 0.8, 4) as projection_score,  -- Simplified projection
+                ROUND(rp.recent_form_score, 2) as recent_form_score,
+                ROUND(rp.power_score * 0.85 + rp.win_percentage * 0.15, 4) as projection_score,
                 rp.rank_change,
                 ROUND(rp.biggest_win_margin, 2) as biggest_win_margin,
-                ROUND(ABS(rp.biggest_loss_margin), 2) as biggest_loss_margin,
+                ROUND(rp.biggest_loss_margin, 2) as biggest_loss_margin,
                 ROUND(rp.pythagorean_wins, 2) as pythagorean_wins,
-                ROUND(rp.luck_factor, 4) as luck_factor,
-                ROUND(rp.playoff_odds, 4) as playoff_odds
+                ROUND(rp.luck_factor, 2) as luck_factor,
+                ROUND(rp.calculated_playoff_odds, 4) as playoff_odds
             FROM ranked_power rp
             ORDER BY rp.league_key, rp.week_key, rp.power_rank
             """
@@ -4053,7 +5169,7 @@ class EdwEtlProcessor:
             rows = result.fetchall()
             
             for row in rows:
-                # Map all comprehensive power ranking metrics
+                # Map all corrected power ranking metrics including season record
                 marts.append({
                     'league_key': row[0],
                     'week_key': row[1],
@@ -4061,19 +5177,23 @@ class EdwEtlProcessor:
                     'power_rank': row[3],
                     'record_rank': row[4],
                     'points_rank': row[5],
-                    'power_score': row[6],
-                    'strength_of_schedule': row[7],
-                    'recent_form_score': row[8],
-                    'projection_score': row[9],
-                    'rank_change': row[10],
-                    'biggest_win_margin': row[11],
-                    'biggest_loss_margin': row[12],
-                    'pythagorean_wins': row[13],
-                    'luck_factor': row[14],
-                    'playoff_odds': row[15]
+                    'wins': row[6],
+                    'losses': row[7],
+                    'ties': row[8],
+                    'win_percentage': row[9],
+                    'power_score': row[10],
+                    'strength_of_schedule': row[11],
+                    'recent_form_score': row[12],
+                    'projection_score': row[13],
+                    'rank_change': row[14],
+                    'biggest_win_margin': row[15],
+                    'biggest_loss_margin': row[16],
+                    'pythagorean_wins': row[17],
+                    'luck_factor': row[18],
+                    'playoff_odds': row[19]
                 })
         
-        logger.info(f"🏪 Generated {len(marts)} weekly power ranking records")
+        logger.info(f"🏪 Generated {len(marts)} weekly power ranking records with FIXED pythagorean wins and playoff odds")
         return marts
 
     def transform_mart_manager_h2h(self) -> List[Dict]:

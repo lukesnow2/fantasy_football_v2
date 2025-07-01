@@ -22,7 +22,10 @@ import logging
 import argparse
 from datetime import datetime
 from sqlalchemy import create_engine, text
-from edw_etl_processor import EdwEtlProcessor
+
+# Add project root to Python path for importing from src
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.edw_schema.edw_etl_processor import EdwEtlProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -555,7 +558,6 @@ def main():
         if args.verify_only:
             logger.info("🔍 Running enhanced verification only...")
             if (deployment.connect_database() and 
-                deployment.fix_analytical_views() and 
                 deployment.verify_deployment()):
                 deployment.print_deployment_summary()
                 logger.info("✅ Enhanced verification completed successfully")

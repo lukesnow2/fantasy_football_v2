@@ -5,7 +5,7 @@ This directory contains the production-ready Fantasy Football EDW deployment sys
 ## 🏗️ Core Files
 
 ### **Deployment & Operations**
-- **`deploy_complete_edw.py`** - Main deployment script with enhanced verification
+- **`manual_schema_deploy.py`** - Schema-only deployment (if needed)
 - **`deploy.sh`** - Shell wrapper for easy deployment commands
 - **`edw_etl_processor.py`** - Core ETL processor with league of record filtering
 
