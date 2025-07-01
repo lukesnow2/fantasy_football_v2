@@ -1,116 +1,79 @@
-# 🏈 The League: Fantasy Football Data Pipeline
+# 🏈 The League: Fantasy Football Analytics Platform
 
-A fully automated, enterprise-grade system for incremental extraction and analysis of 20+ years of Yahoo Fantasy Football data.
+A fully automated system that extracts, processes, and analyzes 20+ years of Yahoo Fantasy Football data to provide comprehensive league insights and historical analytics.
 
-[![Status](https://img.shields.io/badge/Status-Production-success)](docs/PROJECT_STATUS.md)
-[![Pipeline](https://img.shields.io/badge/Pipeline-Automated-brightgreen)](https://github.com/lukesnow-1/the-league/actions)
-[![Data Coverage](https://img.shields.io/badge/Data-2004--2025-blue)](#data-coverage)
+## What This Project Does
 
-## 🚀 What This Is
+This platform automatically:
+- **Extracts** complete fantasy football data from Yahoo's API (leagues, rosters, transactions, drafts)
+- **Processes** 20+ years of historical data with incremental updates 
+- **Analyzes** performance trends, draft patterns, and competitive dynamics
+- **Maintains** a live PostgreSQL database with 16,000+ records across 26 leagues
+- **Runs automatically** via GitHub Actions during fantasy season
 
-An **enterprise-grade incremental data pipeline** that:
-- 📈 **Incrementally extracts** only new fantasy football data (95% faster)
-- 🏈 **Auto-detects** new leagues and extracts complete draft data  
-- 🗄️ **Deploys** with hybrid loading strategies and zero-duplicate guarantees
-- ⚡ **Runs weekly** during fantasy season via GitHub Actions automation
-- 📧 **Sends notifications** on success/failure
-- 🔐 **Security hardened** with comprehensive credential protection
+## Key Features
 
-## 📊 Complete Dataset
+- ✅ **Complete Historical Dataset**: 2004-2025 fantasy data across 26 leagues
+- ✅ **Automated Pipeline**: Weekly data updates with zero maintenance  
+- ✅ **Performance Optimized**: 95% faster than traditional extraction methods
+- ✅ **Data Integrity**: Zero duplicates with comprehensive validation
+- ✅ **Live Database**: Real-time PostgreSQL with analytics views
+- ✅ **Security Hardened**: Protected credentials and clean git history
 
-**Current Production Data:**
-- **26 Fantasy Leagues** (2004-2025)  
-- **16,000+ Records** across 6 normalized tables
-- **100% Data Integrity** - zero duplicates detected
-- **Live PostgreSQL Database** with advanced analytics views
-
-## ⚡ Quick Start
+## Quick Start
 
 ### 1. Setup Authentication
 ```bash
 # Copy template and add your Yahoo API credentials
 cp data/templates/config.template.json config.json
-# oauth2.json will be created automatically during first run
+# Edit config.json with your Yahoo API credentials
 ```
 
-### 2. Install & Test
+### 2. Install and Test
 ```bash
 pip install -r requirements.txt
-
-# Test incremental extraction (works year-round)
 python3 scripts/weekly_extraction.py --force
 ```
 
-### 3. Deploy Database
+### 3. Deploy to Database
 ```bash
 export DATABASE_URL="your-postgres-url"
 python3 src/deployment/incremental_loader.py --data-file data/current/data.json
 ```
 
-## 🤖 Automated Production
-
-**Zero-maintenance automation** via GitHub Actions:
-- **📅 Scheduled**: Every Sunday 6 AM PST (Aug 18 - Jan 18)
-- **⚡ Incremental**: Only extracts new data since last run
-- **🚀 Fast**: 2-5 minutes vs. hours for full extraction
-- **📧 Monitored**: Email alerts for success/failure
-
-## 🏗️ Architecture
+## Architecture
 
 ```
-📁 src/                    # Core modules
-├── extractors/           # Data extraction (incremental + historical)
-├── deployment/           # Database deployment with hybrid loading  
-├── auth/                # OAuth authentication
-└── utils/               # Database schema & utilities
-
-📁 scripts/               # Entry points
-├── weekly_extraction.py  # Primary incremental system
-├── deploy.py            # Database deployment
-└── duplicate_detector.py # Data integrity validation
+┌─────────────────┐    ┌──────────────┐    ┌─────────────────┐
+│   Yahoo API     │───▶│  Extractors  │───▶│   PostgreSQL    │
+│                 │    │              │    │   Database      │
+└─────────────────┘    └──────────────┘    └─────────────────┘
+                              │                       │
+                       ┌──────────────┐        ┌─────────────┐
+                       │ GitHub       │        │ Analytics   │
+                       │ Actions      │        │ Views       │
+                       └──────────────┘        └─────────────┘
 ```
 
-## 🔥 Key Features
+## What's Included
 
-### Incremental Processing
-- **95% performance improvement** over full extraction
-- **Smart baseline loading** with historical data
-- **New league detection** and automatic draft extraction
-- **Current season focus** instead of 20+ year scans
+- **Data Extraction**: Automated incremental updates from Yahoo Fantasy API
+- **Database Management**: PostgreSQL schema with optimized loading strategies  
+- **Analytics Engine**: Pre-built views for league analysis and insights
+- **Automation**: GitHub Actions for scheduled data updates
+- **Security**: OAuth authentication with credential protection
 
-### Hybrid Loading System
-- **Table-specific strategies**: UPSERT, INCREMENTAL_APPEND, APPEND_ONLY
-- **Zero-duplicate guarantees** with comprehensive validation
-- **Optimized performance** with minimal database I/O
+## Use Cases
 
-### Enterprise Security
-- **Git history cleaned** of all sensitive data using BFG Repo-Cleaner
-- **Template-based setup** prevents credential commits
-- **OAuth token management** with automatic refresh
+- **League Commissioners**: Track historical performance and league health
+- **Fantasy Players**: Analyze draft patterns and trading behaviors  
+- **Data Analysts**: Rich dataset for fantasy football research
+- **Developers**: Example of production data pipeline architecture
 
-## 📚 Documentation
+## Documentation
 
-### **Core Documentation**
-- **[Technical Guide](docs/TECHNICAL_GUIDE.md)** - Complete system architecture, extraction systems, and performance optimizations
-- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - Setup procedures, database deployment, and EDW integration
-- **[Project Status](docs/PROJECT_STATUS.md)** - Current operational status and consolidation updates
-- **[Security Guidelines](SECURITY.md)** - Credential protection and security best practices
-
-### **Key Features Covered**
-- 🔥 **Consolidated Extraction**: Single interface for all extraction scenarios
-- 🛡️ **Hybrid Loading**: Table-specific deployment strategies  
-- 📦 **Database Streaming**: Direct PostgreSQL integration with resume capability
-- 🏗️ **EDW Integration**: Enterprise data warehouse with automated deployment
-- ⚡ **Performance Optimizations**: 95% faster processing through smart caching
-
-## 📈 Production Status
-
-✅ **Fully Operational Enterprise System**
-- 🔥 **Incremental extraction**: Live and optimized
-- 🛡️ **Hybrid loading**: Zero-duplicate guarantees  
-- 🗄️ **Live PostgreSQL**: Complete dataset with 100% integrity
-- 🤖 **GitHub Actions**: Active automation with monitoring
-- 🔐 **Security hardened**: Credentials protected, git history cleaned
+- **[Setup Guide](docs/SETUP_GUIDE.md)** - Installation and configuration
+- **[Security Notes](SECURITY.md)** - Credential protection guidelines
 
 ---
 
