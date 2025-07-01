@@ -3391,9 +3391,32 @@ class EdwEtlProcessor:
         view_definitions = {
             'vw_current_season_dashboard': """
                 CREATE VIEW edw.vw_current_season_dashboard AS
-                WITH latest_team_performance AS (
+                WITH season_totals AS (
                     SELECT 
-                        ftp.*,
+                        ftp.team_key,
+                        ftp.league_key,
+                        SUM(ftp.wins) as total_wins,
+                        SUM(ftp.losses) as total_losses,
+                        SUM(ftp.ties) as total_ties,
+                        SUM(ftp.points_for) as total_points_for,
+                        SUM(ftp.points_against) as total_points_against,
+                        SUM(ftp.point_differential) as total_point_differential,
+                        CASE 
+                            WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                            THEN ROUND((SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)), 4)
+                            ELSE 0
+                        END as season_win_percentage
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                    GROUP BY ftp.team_key, ftp.league_key
+                ),
+                latest_week_rankings AS (
+                    SELECT 
+                        ftp.team_key,
+                        ftp.league_key,
+                        ftp.playoff_probability,
+                        ftp.is_playoff_team,
                         ROW_NUMBER() OVER (
                             PARTITION BY ftp.team_key, ftp.league_key 
                             ORDER BY dw.week_number DESC
@@ -3402,29 +3425,42 @@ class EdwEtlProcessor:
                     JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
                     WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+                ),
+                ranked_teams AS (
+                    SELECT 
+                        st.*,
+                        lwr.playoff_probability,
+                        lwr.is_playoff_team,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY st.league_key 
+                            ORDER BY st.season_win_percentage DESC, st.total_points_for DESC
+                        ) as calculated_season_rank
+                    FROM season_totals st
+                    JOIN latest_week_rankings lwr ON st.team_key = lwr.team_key 
+                        AND st.league_key = lwr.league_key 
+                        AND lwr.rn = 1
                 )
                 SELECT 
                     dl.league_name,
                     dl.season_year,
                     dt.team_name,
                     dt.manager_name,
-                    ltp.wins,
-                    ltp.losses,
-                    ltp.ties,
-                    ltp.points_for,
-                    ltp.points_against,
-                    ltp.point_differential,
-                    ltp.win_percentage,
-                    ltp.season_rank,
-                    ltp.playoff_probability,
-                    ltp.is_playoff_team,
-                    ltp.playoff_seed
-                FROM latest_team_performance ltp
-                JOIN edw.dim_team dt ON ltp.team_key = dt.team_key
-                JOIN edw.dim_league dl ON ltp.league_key = dl.league_key
-                WHERE ltp.rn = 1
-                  AND dt.is_active = TRUE
-                ORDER BY dl.league_name, ltp.season_rank
+                    rt.total_wins as wins,
+                    rt.total_losses as losses,
+                    rt.total_ties as ties,
+                    rt.total_points_for as points_for,
+                    rt.total_points_against as points_against,
+                    rt.total_point_differential as point_differential,
+                    rt.season_win_percentage as win_percentage,
+                    rt.calculated_season_rank as season_rank,
+                    rt.playoff_probability,
+                    rt.is_playoff_team,
+                    rt.calculated_season_rank as playoff_seed
+                FROM ranked_teams rt
+                JOIN edw.dim_team dt ON rt.team_key = dt.team_key
+                JOIN edw.dim_league dl ON rt.league_key = dl.league_key
+                WHERE dt.is_active = TRUE
+                ORDER BY dl.league_name, rt.calculated_season_rank
             """,
             
             'vw_manager_hall_of_fame': """
