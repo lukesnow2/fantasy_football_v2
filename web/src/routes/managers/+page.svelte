@@ -1,0 +1,320 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { Trophy, Target, TrendingUp, Award, User, Crown, BarChart3, Calendar, Users } from 'lucide-svelte';
+	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
+	import { getTierColor, getWinPercentageColor, getChampionshipBadge, getInitials } from '$lib/utils/managerUtils';
+
+	let managerData: any = null;
+	let loading = true;
+	let selectedManagerName = '';
+
+	// Load manager performance data
+	async function loadManagerData() {
+		loading = true;
+		try {
+			const response = await fetch('/api/managers/performance?analysis=all');
+			if (response.ok) {
+				managerData = await response.json();
+				console.log('Manager data loaded:', managerData);
+				// Set first manager as default
+				if (managerData?.data?.rankings?.length > 0) {
+					selectedManagerName = managerData.data.rankings[0].manager_name;
+				}
+			} else {
+				console.error('Failed to fetch manager data:', response.status, response.statusText);
+			}
+		} catch (err) {
+			console.error('Error fetching manager data:', err);
+		} finally {
+			loading = false;
+		}
+	}
+
+	onMount(loadManagerData);
+
+	$: managers = managerData?.data?.rankings || [];
+	$: currentManager = managers.find((m: any) => m.manager_name === selectedManagerName) || managers[0];
+
+	function selectManager(managerName: string) {
+		selectedManagerName = managerName;
+	}
+
+	function getManagerAchievements(managerName: string): string[] {
+		const achievements = managerData?.data?.achievements?.find(
+			(a: any) => a.manager_name === managerName
+		);
+		return achievements?.all_achievements || [];
+	}
+</script>
+
+<div class="min-h-screen bg-slate-900 flex">
+	{#if loading}
+		<div class="flex items-center justify-center w-full h-screen">
+			<div class="text-2xl text-slate-400">Loading manager profiles...</div>
+		</div>
+	{:else if currentManager}
+		<!-- Left Sidebar - Manager Selector -->
+		<div class="w-20 bg-slate-800/50 border-r border-slate-700/50 flex flex-col items-center py-6 space-y-3 overflow-y-auto">
+			{#each managers as manager}
+				<button
+					on:click={() => selectManager(manager.manager_name)}
+					class="relative group"
+					title={manager.manager_name}
+				>
+					<!-- Profile Picture -->
+					<ManagerProfilePicture 
+						managerName={manager.manager_name}
+						size="small"
+						className="transition-all duration-200 
+							{manager.manager_name === selectedManagerName 
+								? 'ring-2 ring-blue-400 scale-110' 
+								: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
+					/>
+					
+
+				</button>
+			{/each}
+		</div>
+
+		<!-- Main Content Area -->
+		<div class="flex-1 flex flex-col">
+			<!-- Header -->
+			<div class="bg-slate-800/30 border-b border-slate-700/50 px-8 py-6">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-6">
+						<!-- Large Profile Picture -->
+						<ManagerProfilePicture 
+							managerName={currentManager.manager_name}
+							size="medium"
+							className="ring-2 ring-slate-600"
+						/>
+						
+						<!-- Manager Info -->
+						<div>
+							<h1 class="text-4xl font-bold text-white mb-2">
+								{currentManager.manager_name}
+								{#if currentManager.total_championships > 0}
+									<span class="ml-3">{getChampionshipBadge(currentManager.total_championships)}</span>
+								{/if}
+							</h1>
+																			<div class="flex items-center gap-4">
+								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getTierColor(currentManager.tier_classification)}">
+									{currentManager.tier_classification}
+								</span>
+								<span class="text-slate-400">
+									{currentManager.first_season} - {currentManager.last_season}
+								</span>
+							</div>
+						</div>
+					</div>
+					
+					<!-- Quick Stats -->
+					<div class="text-right">
+						<div class="flex items-baseline justify-end gap-6 mb-1">
+							<div class="text-3xl font-bold text-slate-300">
+								<span class="text-green-400">{currentManager.total_wins || 0}</span>-<span class="text-red-400">{currentManager.total_losses || 0}</span>-<span class="text-amber-400">{currentManager.total_ties || 0}</span>
+							</div>
+							<div class="text-3xl font-bold {getWinPercentageColor(parseFloat(currentManager.win_percentage || 0))}">
+								{parseFloat(currentManager.win_percentage || 0).toFixed(3)}
+							</div>
+						</div>
+						<div class="text-slate-400 text-sm">Win Rate</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Main Stats Grid -->
+			<div class="flex-1 p-8 overflow-y-auto">
+				<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+					
+					<!-- Left Column: Core Stats -->
+					<div class="lg:col-span-2 space-y-6">
+						
+						<!-- League Tenure & Impact -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
+								<BarChart3 class="w-5 h-5 text-blue-400 mr-2" />
+								League Tenure & Impact
+							</h3>
+							<div class="grid grid-cols-4 gap-6">
+								<div class="text-center">
+									<div class="text-3xl font-bold text-purple-400">{currentManager.total_seasons}</div>
+									<div class="text-slate-400 font-medium">Seasons</div>
+								</div>
+								<div class="text-center">
+									<div class="text-3xl font-bold text-blue-400">{currentManager.playoff_appearances || 0}</div>
+									<div class="text-slate-400 font-medium">Playoffs</div>
+								</div>
+								<div class="text-center">
+									<div class="text-3xl font-bold text-amber-400">{currentManager.total_championships || 0}</div>
+									<div class="text-slate-400 font-medium">Championships</div>
+								</div>
+								<div class="text-center">
+									<div class="text-3xl font-bold text-green-400">{currentManager.total_transactions || 0}</div>
+									<div class="text-slate-400 font-medium">Transactions</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Performance Metrics -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
+								<Target class="w-5 h-5 text-green-400 mr-2" />
+								Scoring Performance
+							</h3>
+							<div class="grid grid-cols-3 gap-6">
+								<div class="text-center">
+									<div class="text-2xl font-bold text-blue-400">{parseFloat(currentManager.avg_points_for || 0).toFixed(1)}</div>
+									<div class="text-slate-400 text-sm">Avg Points/Season</div>
+								</div>
+								<div class="text-center">
+									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avg_points_per_game || 0).toFixed(1)}</div>
+									<div class="text-slate-400 text-sm">Avg Points/Game</div>
+								</div>
+								<div class="text-center">
+									<div class="text-2xl font-bold text-purple-400">{parseFloat(currentManager.total_points_scored || 0).toLocaleString()}</div>
+									<div class="text-slate-400 text-sm">Career Points</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- League Rankings -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
+								<Crown class="w-5 h-5 text-amber-400 mr-2" />
+								League Rankings
+							</h3>
+							<div class="grid grid-cols-4 gap-4">
+								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
+									<div class="text-xl font-bold text-amber-400">#{currentManager.championship_rank}</div>
+									<div class="text-slate-400 text-sm">Championships</div>
+								</div>
+								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
+									<div class="text-xl font-bold text-blue-400">#{currentManager.win_pct_rank}</div>
+									<div class="text-slate-400 text-sm">Win Rate</div>
+								</div>
+								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
+									<div class="text-xl font-bold text-green-400">#{currentManager.scoring_rank}</div>
+									<div class="text-slate-400 text-sm">Scoring</div>
+								</div>
+								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
+									<div class="text-xl font-bold text-purple-400">#{currentManager.playoff_rank}</div>
+									<div class="text-slate-400 text-sm">Playoffs</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Right Column: Additional Stats -->
+					<div class="space-y-6">
+						
+						<!-- Season Performance Range -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
+								<TrendingUp class="w-5 h-5 text-green-400 mr-2" />
+								Career Range
+							</h3>
+							<div class="space-y-4">
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Best Season</span>
+									<span class="text-lg font-bold text-green-400">{currentManager.best_season_record || 'N/A'}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Worst Season</span>
+									<span class="text-lg font-bold text-red-400">{currentManager.worst_season_record || 'N/A'}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Best Draft Year</span>
+									<span class="text-lg font-bold text-blue-400">{currentManager.best_draft_year || 'N/A'}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Worst Draft Year</span>
+									<span class="text-lg font-bold text-amber-400">{currentManager.worst_draft_year || 'N/A'}</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Advanced Metrics -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
+								<TrendingUp class="w-5 h-5 text-purple-400 mr-2" />
+								Advanced Metrics
+							</h3>
+							<div class="space-y-4">
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Draft Grade</span>
+									<span class="text-lg font-bold text-green-400">{parseFloat(currentManager.avg_draft_grade || 0).toFixed(1)}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">FAAB Efficiency</span>
+									<span class="text-lg font-bold text-blue-400">{parseFloat(currentManager.faab_efficiency_rating || 0).toFixed(1)}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Consistency Score</span>
+									<span class="text-lg font-bold text-purple-400">{parseFloat(currentManager.season_consistency_score || 0).toFixed(1)}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Avg Transactions</span>
+									<span class="text-lg font-bold text-amber-400">{parseFloat(currentManager.avg_transactions_per_season || 0).toFixed(1)}</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Career Highlights -->
+						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
+								<Award class="w-5 h-5 text-yellow-400 mr-2" />
+								Career Highlights
+							</h3>
+							<div class="space-y-3">
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Best Season</span>
+									<span class="text-sm font-bold text-green-400">{currentManager.best_season_record || 'N/A'}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Best Draft Year</span>
+									<span class="text-sm font-bold text-blue-400">{currentManager.best_draft_year || 'N/A'}</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span class="text-slate-400">Total Transactions</span>
+									<span class="text-sm font-bold text-purple-400">{currentManager.total_transactions || 0}</span>
+								</div>
+							</div>
+						</div>
+
+						<!-- Achievements -->
+						{#if currentManager}
+							{@const achievements = getManagerAchievements(currentManager.manager_name)}
+							{#if achievements.length > 0}
+								<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
+									<h3 class="text-lg font-bold text-white mb-4">Achievements</h3>
+									<div class="flex flex-wrap gap-2">
+										{#each achievements as achievement}
+											<span class="px-2 py-1 bg-amber-400/10 text-amber-400 rounded-md border border-amber-400/20 text-xs font-medium">
+												{achievement}
+											</span>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						{/if}
+					</div>
+				</div>
+
+				<!-- View Full Profile Button -->
+				<div class="text-center mt-8">
+					<button 
+						class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg"
+						on:click={() => window.location.href = `/managers/${encodeURIComponent(currentManager.manager_name)}`}
+					>
+						View Detailed Profile & History
+					</button>
+				</div>
+			</div>
+		</div>
+	{:else}
+		<div class="flex items-center justify-center w-full h-screen">
+			<div class="text-2xl text-slate-400">No manager data available</div>
+		</div>
+	{/if}
+</div>
