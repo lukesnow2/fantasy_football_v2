@@ -7,7 +7,7 @@ export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const season = url.searchParams.get('season') || 'all';
 		const manager = url.searchParams.get('manager');
-		const limit = parseInt(url.searchParams.get('limit') || '100');
+		const limit = parseInt(url.searchParams.get('limit') || '1000');
 		const analysis = url.searchParams.get('analysis') || 'overview';
 
 		// Base trade analysis query with proper SQL syntax
