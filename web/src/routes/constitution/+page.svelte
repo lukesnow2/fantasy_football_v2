@@ -28,6 +28,12 @@
 	let effectiveSeason = new Date().getFullYear() + 1;
 	let showProposalForm = false;
 	let pendingProposals: any[] = [];
+	let amendments: any[] = [];
+	let loading = false;
+	
+	// Mock current user (in real app, this would come from auth)
+	const currentUser = 'Luke S.';
+	const currentUserId = 'user-1';
 
 	// Table of contents
 	const tableOfContents = [
@@ -84,6 +90,26 @@
 		showProposalForm = false;
 	}
 
+	// Load data from API
+	async function loadData() {
+		loading = true;
+		try {
+			// Load proposals
+			const proposalsResponse = await fetch('/api/rule-proposals');
+			const proposalsData = await proposalsResponse.json();
+			pendingProposals = proposalsData.filter((p: any) => p.status === 'pending');
+			
+			// Load amendments
+			const amendmentsResponse = await fetch('/api/rule-proposals?type=amendments');
+			const amendmentsData = await amendmentsResponse.json();
+			amendments = amendmentsData;
+		} catch (error) {
+			console.error('Error loading data:', error);
+		} finally {
+			loading = false;
+		}
+	}
+
 	// Submit proposal
 	async function submitProposal() {
 		if (!editingRule || !proposalText.trim() || !proposalRationale.trim()) {
@@ -93,56 +119,65 @@
 		const section = constitutionSections.find(s => s.id === editingRule!.sectionId);
 		if (!section) return;
 
-		const proposal = {
-			id: `proposal-${Date.now()}`,
-			sectionId: editingRule.sectionId,
-			sectionTitle: section.title,
-			ruleIndex: editingRule.ruleIndex,
-			type: proposalType,
-			currentText: proposalType === 'edit' ? section.content[editingRule.ruleIndex] : null,
-			proposedText: proposalText,
-			rationale: proposalRationale,
-			effectiveSeason,
-			submittedBy: 'Current User', // TODO: Get from auth
-			submittedAt: new Date().toISOString(),
-			status: 'pending',
-			votes: { yes: 0, no: 0, abstain: 0 },
-			comments: []
-		};
+		loading = true;
+		try {
+			const response = await fetch('/api/rule-proposals', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'create',
+					type: proposalType,
+					sectionId: editingRule.sectionId,
+					sectionTitle: section.title,
+					ruleIndex: editingRule.ruleIndex >= 0 ? editingRule.ruleIndex : undefined,
+					originalText: proposalType === 'edit' ? section.content[editingRule.ruleIndex] : undefined,
+					proposedText: proposalText,
+					rationale: proposalRationale,
+					effectiveSeason,
+					submittedBy: currentUser
+				})
+			});
 
-		// Add to pending proposals
-		pendingProposals = [...pendingProposals, proposal];
-
-		// Store in localStorage for demo
-		localStorage.setItem('constitution-proposals', JSON.stringify(pendingProposals));
-
-		cancelEdit();
-	}
-
-	// Load pending proposals
-	onMount(() => {
-		const saved = localStorage.getItem('constitution-proposals');
-		if (saved) {
-			pendingProposals = JSON.parse(saved);
+			if (response.ok) {
+				await loadData(); // Refresh data
+				cancelEdit();
+			}
+		} catch (error) {
+			console.error('Error submitting proposal:', error);
+		} finally {
+			loading = false;
 		}
-	});
+	}
 
 	// Vote on proposal
-	function voteOnProposal(proposalId: string, vote: 'yes' | 'no' | 'abstain') {
-		pendingProposals = pendingProposals.map(p => {
-			if (p.id === proposalId) {
-				return {
-					...p,
-					votes: {
-						...p.votes,
-						[vote]: p.votes[vote] + 1
-					}
-				};
+	async function voteOnProposal(proposalId: string, vote: 'yes' | 'no' | 'abstain') {
+		loading = true;
+		try {
+			const response = await fetch('/api/rule-proposals', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'vote',
+					proposalId,
+					vote,
+					voterId: currentUserId
+				})
+			});
+
+			if (response.ok) {
+				await loadData(); // Refresh data
 			}
-			return p;
-		});
-		localStorage.setItem('constitution-proposals', JSON.stringify(pendingProposals));
+		} catch (error) {
+			console.error('Error voting on proposal:', error);
+		} finally {
+			loading = false;
+		}
 	}
+
+	// Load data on mount
+	onMount(() => {
+		loadData();
+	});
 
 	// Get proposals for a specific rule
 	function getProposalsForRule(sectionId: string, ruleIndex: number) {
@@ -169,14 +204,26 @@
 			title: "Article 1: League Makeup and Construction",
 			icon: Trophy,
 			content: [
-				"10 team league, no divisions",
-				"League buy-in: $100",
-				"Payout: 60% First, 30% Second, 10% Third",
-				"Roster: QB, WR, WR, RB, RB, TE, W/R/T, K, DEF, IR, IR",
-				"Playoffs: Weeks 14-16, 6 teams, top 2 get byes",
-				"New owners require 2/3 approval (minimum 5 votes)",
-				"Co-managing requires 50% approval before draft",
-				"The Snow Rule: 10th place team can leave for one season or negotiate co-management"
+				"I. 10 team",
+				"II. No divisions", 
+				"III. League buy-in is $100",
+				"IV. Payout structure:",
+				"    a. 60% First Place",
+				"    b. 30% Second Place", 
+				"    c. 10% Third Place",
+				"V. Scoring system",
+				"    a. See Appendix 1",
+				"VI. Roster Spots",
+				"    a. QB, WR, WR, RB, RB, TE, W/R/T, K, DEF, IR, IR",
+				"VII. Adding owners to the league",
+				"    a. Requires a 2/3 approval of new owner, with a minimum of 5 affirmative votes.",
+				"    b. Co-managing is acceptable; however, the co-manager must be approved by 50% of the members before the first pick of the draft.",
+				"    c. The Snow Rule: In order to reintroduce Israel Flores, charter member, into the 2013 Fantasy Season, the league will implement a relegation policy, where the 10th place team, as determined by the consolation bracket, will have the option to",
+				"        i. Leave the league for one season",
+				"        ii. Or negotiate a co-management with another manager",
+				"        iii. If no managers can reach an agreement with the said 10th place member. The 9th place manager will be forced to co-manager with the 10th",
+				"        iv. This system will be abolished as soon as it becomes no longer necessary.",
+				"VIII. Playoffs go from week 14-16, 6 teams, with the first two seeds getting byes."
 			]
 		},
 		{
@@ -184,12 +231,11 @@
 			title: "Article 2: Trades",
 			icon: Target,
 			content: [
-				"The Rowley Rule: Only players for players - no cash/favors",
-				"Penalties: Loss of 3rd round pick to expulsion",
-				"Trade vetoes under commissioner's jurisdiction",
-				"Appeals: 24 hours in League Lounge with logical reasoning",
-				"Appeal success: Majority vote within 48 hours",
-				"Trade deadline: After Week 10"
+				"I. The Rowley Rule: Trades cannot be completed for anything other than other players. Cash money, favors, or anything other than another legal NFL player cannot be accepted.",
+				"    a. Penalties range from a loss of a third-round draft pick to expulsion from the league, at the commissioner's discretion.",
+				"II. Trade vetoes will be under the commissioner's jurisdiction.",
+				"    a. In any case, a member of the league can appeal an acceptance or rejection of a trade within 24 hours, in the League Lounge, with logical reasoning that refrains from appeals to emotion. The appeal will stand if a majority of the league members agree within 48 hours, with the voting pool excluding the commissioner and the trading parties.",
+				"III. The trade deadline starts after week 10."
 			]
 		},
 		{
@@ -197,10 +243,9 @@
 			title: "Article 3: Waiver wire",
 			icon: Zap,
 			content: [
-				"FAAB system: $100 budget per player",
-				"Tiebreakers: Waiver priority (opposite of draft order)",
-				"Free agents go on waivers at game time",
-				"Follows normal waiver wire rules"
+				"I. Wavier wires follow a FAAB system with each player starting the year with a $100 budget.",
+				"II. For tiebreakers, waiver priority is initially set as the opposite of the draft order and will determine who gets a player in the case of a tie in the bid.",
+				"III. Free agent players will go on waivers at their respective game times and will follow normal waiver wire rules."
 			]
 		},
 		{
@@ -208,13 +253,17 @@
 			title: "Article 4: The Draft",
 			icon: Calendar,
 			content: [
-				"Date: Weekend before Labor Day weekend",
-				"Draft city: Selected by league champion",
-				"15-round snake draft, 90 seconds per pick",
-				"Draft order: Random selection by independent third party",
-				"No trading draft picks or pick order",
-				"Late arrivals: Picks skipped, added to supplemental round",
-				"Proxy drafting allowed with commissioner approval"
+				"I. The draft will take place the weekend before Labor Day weekend.",
+				"II. The champion of the league will select the draft city from the following list of cities that constitute home cities for the members of the league. As of 2023, this list is as follows: Denver, Portland, Seattle, Boise, and Tahoe.",
+				"III. The draft will be a closed draft, only league members will be admitted. After the draft, there will be an open party with food and drink. There will be no breaks for official meals during the draft.",
+				"IV. 15-round snake draft",
+				"V. The draft order will be selected randomly with an independent third party selecting names out of a bowl. When a manager's name is selected he will then be eligible to select his pick in the draft.",
+				"VI. No trading draft pick order or individual picks",
+				"VII. 90 seconds per pick.",
+				"VIII. For drafting a player that has already been drafted, the first offense will be met with a warning. On the second offense, the manager in question will lose one spot in the draft snake.",
+				"IX. If a manager is late to the draft, their draft pick will be skipped over and added to the end of the draft in a supplemental round. This will occur until the manager arrives.",
+				"    a. Exceptions can be made at the commissioner's discretion",
+				"X. If a manager presents serious or compelling reason(s) to the commissioner to miss the draft, the commissioner's discretion may be used to accept this application. It is the responsibility of the absent manager to present a proxy to the commissioner and for the commissioner to accept the candidate."
 			]
 		},
 		{
@@ -222,10 +271,8 @@
 			title: "Article 5: Commissionership",
 			icon: Users,
 			content: [
-				"Two-year term starting 2012 season",
-				"Election: Simple majority or plurality",
-				"Unopposed incumbent: Must receive one non-self vote",
-				"Impeachment: Super-majority (7 votes)"
+				"I. The commissioner will have a two-year term, which will start at the 2012 season. At the end of the two years, there will be an open election, with the winner being selected by a simple majority or a plurality. If the incumbent runs unopposed, they must receive one vote that is not their own.",
+				"II. The commissioner can be impeached by a super-majority with seven votes voting to impeach the commissioner."
 			]
 		},
 		{
@@ -233,11 +280,10 @@
 			title: "Article 6: Collusion",
 			icon: FileText,
 			content: [
-				"Collusion defined as cooperative action by at least two managers",
-				"Collusion will not be tolerated",
-				"Penalties: 2nd round pick to exclusion from the league",
-				"Commissioner's discretion on penalties",
-				"If commissioner accused: League votes on actions"
+				"I. Collusion is defined as cooperative action by at least two managers working to undermine the fair competitiveness of the league.",
+				"II. Collusion will not be tolerated.",
+				"    a. Penalties: 2nd round pick to exclusion from the league. Commissioner's discretion.",
+				"III. If the commissioner is accused of collusion, the league will vote for the necessary actions. Simple majority for draft pick loss, a super-majority for expulsion."
 			]
 		},
 		{
@@ -245,10 +291,8 @@
 			title: "Article 7: Line Up rules",
 			icon: FileText,
 			content: [
-				"No OUT, BYE, or empty spots in lineup",
-				"Penalty: $20 per infraction",
-				"24-hour grace period before game",
-				"Revenue used for draft expense aid"
+				"I. No players listed as out, on a bye, or an empty spot may be legally left in the lineup.",
+				"    a. The player is penalized $20 per infraction with a 24-hour grace period before the game to accommodate for last-minute calls. The infraction will be removed from the winnings if the player placed, or added to the next year's buy-in if they did not. The revenue will be used for need-based draft expense aid."
 			]
 		},
 		{
@@ -256,10 +300,10 @@
 			title: "Article 8: Amendments to the Constitution",
 			icon: FileText,
 			content: [
-				"Changing scoring or roster size: Simple majority",
-				"Any other changes: Super-majority",
-				"Changes to league size: Unanimous vote",
-				"Removing managers for non-rule violations: Unanimous vote minus the manager"
+				"I. Changing scoring or roster size will be a simple majority",
+				"II. Any other changes to the constitution will be a super-majority",
+				"III. Changes to league size require a unanimous vote.",
+				"IV. Removing managers for non-rule violations requires a unanimous vote minus the manager in question."
 			]
 		},
 		{
@@ -267,39 +311,65 @@
 			title: "Article 9: Miscellaneous rules",
 			icon: FileText,
 			content: [
-				"Draft tradition: All members take whiskey shot (paid by Snow Bowl Loser)",
-				"Last Place Trophy: Must be posted to social media",
-				"Champion photo: Posted as League Lounge banner",
-				"All members supply alcohol for draft and league functions",
-				"Kicker record bonus: 50 points for longest kick record"
+				"I. At the beginning of the draft, all members will take a shot of whiskey, to be paid for by Snow Bowl Loser. The League champion will select the whiskey of choice for the year, the cost of which cannot exceed $80.",
+				"II. The Last Place Trophy will be shipped to the loser at the loser's expense and must be posted to Facebook (and all social media).",
+				"III. The League Champion will take a photo with the trophy and submit it to the commissioner to be posted as the League Lounge banner photo.",
+				"IV. All members of the League must help supply the alcohol, bringing their favorite six-pack of beer to the draft and all other officially sanctioned league functions unless otherwise recommended by the commissioner or host.",
+				"V. If a kicker sets the record for longest kick, the team with that kicker gets a 50 point bonus."
 			]
 		}
 	];
 
 	const scoringSystem = [
 		{ category: "Passing", rules: [
-			"Yards: 20 yards per point; 1pt at 150yds, 2pts at 250yds, 3pts at 350yds",
-			"Touchdowns: 4 points",
-			"Interceptions: -2 points"
+			"Passing Yards: 20 yards per point; 1 point at 150 yards; 2 points at 250 yards; 3 points at 350 yards",
+			"Passing Touchdowns: 4",
+			"Interceptions: -2"
 		]},
 		{ category: "Rushing", rules: [
-			"Yards: 10 yards per point; 1pt at 100yds, 2pts at 200yds, 3pts at 300yds",
-			"Touchdowns: 6 points"
+			"Rushing Yards: 10 yards per point; 1 point at 100 yards; 2 points at 200 yards; 3 points at 300 yards",
+			"Rushing Touchdowns: 6"
 		]},
 		{ category: "Receiving", rules: [
-			"Receptions: 1 point (PPR)",
-			"Yards: 10 yards per point; 1pt at 100yds, 2pts at 200yds, 3pts at 250yds",
-			"Touchdowns: 6 points"
+			"Receptions: 1",
+			"Reception Yards: 10 yards per point; 1 point at 100 yards; 2 points at 200 yards; 3 points at 250 yards",
+			"Reception Touchdowns: 6"
+		]},
+		{ category: "Other Offense", rules: [
+			"Return Touchdowns: 6",
+			"2-Point Conversions: 2",
+			"Fumbles Lost: -2",
+			"Offensive Fumble Return TD: 6"
 		]},
 		{ category: "Kicking", rules: [
-			"Field Goals: 3 points (0-49 yards), 4 points (50+)",
-			"Missed FGs: -2 (0-19), -1 (20-49), 0 (50+)",
-			"Extra Points: 1 point, -2 if missed"
+			"Field Goals 0-19 Yards: 3",
+			"Field Goals 20-29 Yards: 3",
+			"Field Goals 30-39 Yards: 3",
+			"Field Goals 40-49 Yards: 3",
+			"Field Goals 50+ Yards: 4",
+			"Field Goals Missed 0-19 Yards: -2",
+			"Field Goals Missed 20-29 Yards: -1",
+			"Field Goals Missed 30-39 Yards: -1",
+			"Field Goals Missed 40-49 Yards: -1",
+			"Field Goals Missed 50+ Yards: 0",
+			"Point After Attempt Made: 1",
+			"Point After Attempt Missed: -2"
 		]},
 		{ category: "Defense", rules: [
-			"Sacks: 1 point, Interceptions: 2 points, Fumble Recovery: 2 points",
-			"Touchdowns: 6 points, Safety: 4 points, Block Kick: 2 points",
-			"Points Allowed: 12 (0), 9 (1-6), 5 (7-13), 2 (14-20), 0 (21-27), -1 (28-34), -4 (35+)"
+			"Sack: 1",
+			"Interception: 2",
+			"Fumble Recovery: 2",
+			"Touchdown: 6",
+			"Safety: 4",
+			"Block Kick: 2",
+			"Kickoff and Punt Return Touchdowns: 6",
+			"Points Allowed 0 points: 12",
+			"Points Allowed 1-6 points: 9",
+			"Points Allowed 7-13 points: 5",
+			"Points Allowed 14-20 points: 2",
+			"Points Allowed 21-27 points: 0",
+			"Points Allowed 28-34 points: -1",
+			"Points Allowed 35+ points: -4"
 		]}
 	];
 
@@ -352,6 +422,10 @@
 				<Vote class="h-5 w-5" />
 				<span>Pending Rule Proposals ({pendingProposals.length})</span>
 			</h3>
+			<div class="text-sm text-amber-300 mb-4">
+				<strong>Vote Requirements:</strong> Simple majority (6 votes) for scoring/roster changes, 
+				Super-majority (7 votes) for constitutional changes, Unanimous (10 votes) for league size changes
+			</div>
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 				{#each pendingProposals as proposal}
 					<div class="bg-slate-800/50 border border-slate-600 rounded-lg p-3">
@@ -404,59 +478,86 @@
 				
 				{#if expandedSections[section.id]}
 					<div class="px-6 pb-6 border-t border-slate-700/50">
-						<ul class="space-y-3 mt-4">
+						<div class="space-y-2 mt-4">
 							{#each section.content as rule, ruleIndex}
-								<li class="text-slate-300 flex items-start space-x-3 group">
-									<span class="text-amber-400 mt-0.5 flex-shrink-0">•</span>
-									<div class="flex-grow">
-										<div 
-											class="leading-relaxed {editMode ? 'hover:bg-slate-700/30 p-2 rounded cursor-pointer' : ''} transition-colors relative"
-											on:click={() => editMode && startEdit(section.id, ruleIndex, rule)}
-										>
+								{@const isMainItem = rule.match(/^[IVX]+\./)}
+								{@const isSubItem = rule.match(/^\s+[a-z]\./)}
+								{@const isSubSubItem = rule.match(/^\s+[ivx]+\./)}
+								{@const indentLevel = isSubSubItem ? 'ml-16' : isSubItem ? 'ml-8' : ''}
+								
+								<div class="text-slate-300 group {indentLevel}">
+									<div 
+										class="leading-relaxed {editMode ? 'hover:bg-slate-700/30 p-2 rounded cursor-pointer' : ''} transition-colors relative"
+										on:click={() => editMode && startEdit(section.id, ruleIndex, rule)}
+									>
+										{#if isMainItem}
+											<span class="text-amber-400 font-semibold">{isMainItem[0]}</span>
+											<span class="ml-2">{rule.replace(/^[IVX]+\.\s*/, '')}</span>
+										{:else if isSubItem}
+											{@const subMatch = rule.trim().match(/^[a-z]\./)}
+											<span class="text-amber-400 font-semibold">{subMatch?.[0] ?? ''}</span>
+											<span class="ml-2">{rule.trim().replace(/^[a-z]\.\s*/, '')}</span>
+										{:else if isSubSubItem}
+											{@const subSubMatch = rule.trim().match(/^[ivx]+\./)}
+											<span class="text-amber-400 font-semibold">{subSubMatch?.[0] ?? ''}</span>
+											<span class="ml-2">{rule.trim().replace(/^[ivx]+\.\s*/, '')}</span>
+										{:else}
 											{rule}
-											{#if editMode}
-												<Edit3 class="h-4 w-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" />
-											{/if}
-										</div>
-										
-										<!-- Show proposals for this rule -->
-										{#each getProposalsForRule(section.id, ruleIndex) as proposal}
-											<div class="mt-3 bg-amber-900/10 border border-amber-600/20 rounded-lg p-3">
-												<div class="flex items-center justify-between mb-2">
-													<span class="text-xs text-amber-400 font-medium">PROPOSED CHANGE</span>
-													<span class="text-xs text-slate-400">{proposal.submittedBy}</span>
+										{/if}
+										{#if editMode}
+											<Edit3 class="h-4 w-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" />
+										{/if}
+									</div>
+									
+									<!-- Show proposals for this rule -->
+									{#each getProposalsForRule(section.id, ruleIndex) as proposal}
+										<div class="mt-3 bg-amber-900/10 border border-amber-600/20 rounded-lg p-3">
+											<div class="flex items-center justify-between mb-2">
+												<span class="text-xs text-amber-400 font-medium">PROPOSED CHANGE</span>
+												<span class="text-xs text-slate-400">{proposal.submittedBy}</span>
+											</div>
+											<div class="text-sm text-amber-300 mb-2">{proposal.proposedText}</div>
+											<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
+											<div class="flex items-center justify-between">
+												<div class="flex space-x-2">
+													<button 
+														class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 disabled:opacity-50"
+														on:click={() => voteOnProposal(proposal.id, 'yes')}
+														disabled={loading}
+													>
+														Yes ({proposal.votes.yes})
+													</button>
+													<button 
+														class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 disabled:opacity-50"
+														on:click={() => voteOnProposal(proposal.id, 'no')}
+														disabled={loading}
+													>
+														No ({proposal.votes.no})
+													</button>
+													<button 
+														class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30 disabled:opacity-50"
+														on:click={() => voteOnProposal(proposal.id, 'abstain')}
+														disabled={loading}
+													>
+														Abstain ({proposal.votes.abstain})
+													</button>
 												</div>
-												<div class="text-sm text-amber-300 mb-2">{proposal.proposedText}</div>
-												<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
-												<div class="flex items-center justify-between">
-													<div class="flex space-x-2">
-														<button 
-															class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30"
-															on:click={() => voteOnProposal(proposal.id, 'yes')}
-														>
-															Yes ({proposal.votes.yes})
-														</button>
-														<button 
-															class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30"
-															on:click={() => voteOnProposal(proposal.id, 'no')}
-														>
-															No ({proposal.votes.no})
-														</button>
-														<button 
-															class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30"
-															on:click={() => voteOnProposal(proposal.id, 'abstain')}
-														>
-															Abstain ({proposal.votes.abstain})
-														</button>
-													</div>
-													<span class="text-xs text-slate-500">Effective {proposal.effectiveSeason}</span>
+												<div class="text-right">
+													<div class="text-xs text-slate-500">Effective {proposal.effectiveSeason}</div>
+													{#if proposal.status === 'approved'}
+														<div class="text-xs text-green-400">✓ Approved</div>
+													{:else if proposal.status === 'rejected'}
+														<div class="text-xs text-red-400">✗ Rejected</div>
+													{:else}
+														<div class="text-xs text-amber-400">⏳ Pending</div>
+													{/if}
 												</div>
 											</div>
-										{/each}
-									</div>
-								</li>
+										</div>
+									{/each}
+								</div>
 							{/each}
-						</ul>
+						</div>
 						
 						<!-- Show add proposals for this section -->
 						{#each getAddProposalsForSection(section.id) as proposal}
@@ -470,25 +571,37 @@
 								<div class="flex items-center justify-between">
 									<div class="flex space-x-2">
 										<button 
-											class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30"
+											class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 disabled:opacity-50"
 											on:click={() => voteOnProposal(proposal.id, 'yes')}
+											disabled={loading}
 										>
 											Yes ({proposal.votes.yes})
 										</button>
 										<button 
-											class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30"
+											class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 disabled:opacity-50"
 											on:click={() => voteOnProposal(proposal.id, 'no')}
+											disabled={loading}
 										>
 											No ({proposal.votes.no})
 										</button>
 										<button 
-											class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30"
+											class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30 disabled:opacity-50"
 											on:click={() => voteOnProposal(proposal.id, 'abstain')}
+											disabled={loading}
 										>
 											Abstain ({proposal.votes.abstain})
 										</button>
 									</div>
-									<span class="text-xs text-slate-500">Effective {proposal.effectiveSeason}</span>
+									<div class="text-right">
+										<div class="text-xs text-slate-500">Effective {proposal.effectiveSeason}</div>
+										{#if proposal.status === 'approved'}
+											<div class="text-xs text-green-400">✓ Approved</div>
+										{:else if proposal.status === 'rejected'}
+											<div class="text-xs text-red-400">✗ Rejected</div>
+										{:else}
+											<div class="text-xs text-amber-400">⏳ Pending</div>
+										{/if}
+									</div>
 								</div>
 							</div>
 						{/each}
@@ -532,22 +645,27 @@
 							<h3 class="text-lg font-semibold text-amber-400 border-b border-slate-600 pb-2">
 								{category.category}
 							</h3>
-							<ul class="space-y-3">
+							<div class="space-y-2">
 								{#each category.rules as rule, ruleIndex}
-									<li class="text-slate-300 flex items-start space-x-3 group">
-										<span class="text-amber-400 mt-0.5 flex-shrink-0">•</span>
+									<div class="text-slate-300 group">
 										<div 
 											class="leading-relaxed {editMode ? 'hover:bg-slate-700/30 p-2 rounded cursor-pointer' : ''} transition-colors relative"
 											on:click={() => editMode && startEdit('appendix1', ruleIndex, rule)}
 										>
-											{rule}
+											{#if rule.includes(':')}
+												{@const parts = rule.split(':')}
+												<span class="text-amber-400 font-semibold">{parts[0]}:</span>
+												<span class="ml-1">{parts[1]}</span>
+											{:else}
+												{rule}
+											{/if}
 											{#if editMode}
 												<Edit3 class="h-4 w-4 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" />
 											{/if}
 										</div>
-									</li>
+									</div>
 								{/each}
-							</ul>
+							</div>
 						</div>
 					{/each}
 				</div>
@@ -573,29 +691,39 @@
 		
 		{#if expandedSections['amendments']}
 			<div class="px-6 pb-6 border-t border-slate-700/50">
-				<div class="space-y-4 mt-4">
-					<div class="border-l-4 border-amber-400 pl-4">
-						<div class="flex justify-between items-start">
-							<h3 class="font-semibold text-white">2012</h3>
-							<span class="text-slate-400 text-sm">Original Constitution</span>
-						</div>
-						<p class="text-slate-300 mt-1">League constitution established with 10-team format</p>
+				{#if loading}
+					<div class="flex items-center justify-center py-8">
+						<div class="text-slate-400">Loading amendments...</div>
 					</div>
-					<div class="border-l-4 border-slate-600 pl-4">
-						<div class="flex justify-between items-start">
-							<h3 class="font-semibold text-white">2013</h3>
-							<span class="text-slate-400 text-sm">Snow Rule Added</span>
-						</div>
-						<p class="text-slate-300 mt-1">Relegation policy implemented for charter member return</p>
+				{:else}
+					<div class="space-y-4 mt-4">
+						{#each amendments as amendment}
+							<div class="border-l-4 {amendment.type === 'original' ? 'border-amber-400' : 'border-green-400'} pl-4">
+								<div class="flex justify-between items-start">
+									<h3 class="font-semibold text-white">{amendment.year}</h3>
+									<div class="text-right">
+										<span class="text-slate-400 text-sm">{amendment.title}</span>
+										{#if amendment.voteCount}
+											<div class="text-xs text-slate-500 mt-1">
+												Passed: {amendment.voteCount.yes}Y/{amendment.voteCount.no}N/{amendment.voteCount.abstain}A
+											</div>
+										{/if}
+									</div>
+								</div>
+								<p class="text-slate-300 mt-1">{amendment.description}</p>
+								{#if amendment.type === 'amendment'}
+									<div class="text-xs text-green-400 mt-2">✓ Constitutional Amendment</div>
+								{/if}
+							</div>
+						{/each}
+						
+						{#if amendments.length === 0}
+							<div class="text-slate-400 text-center py-4">
+								No amendments found
+							</div>
+						{/if}
 					</div>
-					<div class="border-l-4 border-slate-600 pl-4">
-						<div class="flex justify-between items-start">
-							<h3 class="font-semibold text-white">2023</h3>
-							<span class="text-slate-400 text-sm">Draft Cities Updated</span>
-						</div>
-						<p class="text-slate-300 mt-1">Draft city list updated: Denver, Portland, Seattle, Boise, Tahoe</p>
-					</div>
-				</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -622,7 +750,7 @@
 					<div>
 						<label class="block text-sm font-medium text-slate-300 mb-2">Current Rule</label>
 						<div class="bg-slate-900/50 border border-slate-600 rounded-lg p-3 text-slate-300 text-sm">
-							{constitutionSections.find(s => s.id === editingRule.sectionId)?.content[editingRule.ruleIndex]}
+							{constitutionSections.find(s => s.id === editingRule?.sectionId)?.content[editingRule?.ruleIndex ?? 0] ?? ''}
 						</div>
 					</div>
 				{/if}
@@ -670,12 +798,12 @@
 					Cancel
 				</button>
 				<button 
-					class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-semibold transition-colors flex items-center space-x-2"
+					class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-semibold transition-colors flex items-center space-x-2 disabled:opacity-50"
 					on:click={submitProposal}
-					disabled={!proposalText.trim() || !proposalRationale.trim()}
+					disabled={!proposalText.trim() || !proposalRationale.trim() || loading}
 				>
 					<Vote class="h-4 w-4" />
-					<span>Submit Proposal</span>
+					<span>{loading ? 'Submitting...' : 'Submit Proposal'}</span>
 				</button>
 			</div>
 		</div>
