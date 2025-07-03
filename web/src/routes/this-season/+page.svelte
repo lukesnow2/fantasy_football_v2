@@ -8,6 +8,8 @@
 	let currentWeek = 1;
 	let loading = true;
 	let error = '';
+	let isFinalStandings = false;
+	let isSeasonComplete = false;
 	
 	// Computed playoff picture data
 	$: playoffPicture = calculatePlayoffPicture(standings, currentWeek);
@@ -82,6 +84,8 @@
 				const standingsData = await standingsResponse.json();
 				standings = standingsData.standings;
 				currentWeek = standingsData.currentWeek || 1;
+				isFinalStandings = standingsData.isFinalStandings || false;
+				isSeasonComplete = standingsData.isSeasonComplete || false;
 			}
 
 			// Fetch recent transactions
@@ -137,7 +141,7 @@
 				<div class="flex items-center justify-between mb-6">
 					<h2 class="text-2xl font-bold text-white flex items-center">
 						<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-						Current Standings
+						{isFinalStandings ? 'Final Standings' : 'Current Standings'}
 					</h2>
 					<span class="text-slate-400 text-sm">Updated 2 hours ago</span>
 				</div>
@@ -151,33 +155,159 @@
 						<div class="text-red-400">{error}</div>
 					</div>
 				{:else}
-					<div class="space-y-2">
-						{#each standings as team}
-							<div class="flex items-center justify-between p-4 rounded-lg 
-								{team.rank <= 4 ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
-								<div class="flex items-center space-x-4">
-									<div class="text-2xl font-bold 
-										{team.rank <= 4 ? 'text-green-400' : 'text-slate-400'}">
-										{team.rank}
-									</div>
-									<div>
-										<div class="font-semibold text-white">{team.teamName}</div>
-										<div class="text-slate-400 text-sm">{team.managerName}</div>
-									</div>
-								</div>
-								<div class="text-right">
-									<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
-									<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
-								</div>
-								<div class="text-right">
-									<div class="font-medium 
-										{team.streak?.startsWith('W') ? 'text-green-400' : 'text-red-400'}">
-										{team.streak || 'TBD'}
-									</div>
+					{#if isFinalStandings && isSeasonComplete}
+						<!-- Final Standings with Playoff Bracket -->
+						<div class="space-y-6">
+							<!-- Championship Results -->
+							<div class="bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 rounded-lg p-4">
+								<h3 class="text-lg font-bold text-amber-400 mb-3 flex items-center">
+									🏆 Championship Results
+								</h3>
+								<div class="space-y-2">
+									{#each standings.filter(team => team.playoffTier === 'Champion' || team.playoffTier === 'Runner-up') as team}
+										<div class="flex items-center justify-between p-3 rounded-lg 
+											{team.playoffTier === 'Champion' ? 'bg-amber-500/20 border border-amber-500/40' : 'bg-slate-600/40'}">
+											<div class="flex items-center space-x-4">
+												<div class="text-2xl font-bold 
+													{team.playoffTier === 'Champion' ? 'text-amber-400' : 'text-slate-300'}">
+													{team.rank}
+												</div>
+												<div>
+													<div class="font-semibold text-white flex items-center">
+														{team.teamName}
+														{#if team.playoffTier === 'Champion'}
+															<span class="ml-2 text-amber-400">👑</span>
+														{/if}
+													</div>
+													<div class="text-slate-400 text-sm">{team.managerName}</div>
+													<div class="text-xs font-medium 
+														{team.playoffTier === 'Champion' ? 'text-amber-300' : 'text-slate-400'}">
+														{team.playoffTier}
+													</div>
+												</div>
+											</div>
+											<div class="text-right">
+												<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+												<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+											</div>
+										</div>
+									{/each}
 								</div>
 							</div>
-						{/each}
-					</div>
+
+							<!-- Semifinalists -->
+							{#if standings.filter(team => team.playoffTier === 'Semifinalist').length > 0}
+								<div class="bg-gradient-to-r from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-lg p-4">
+									<h3 class="text-lg font-bold text-blue-400 mb-3 flex items-center">
+										🥉 Semifinalists
+									</h3>
+									<div class="space-y-2">
+										{#each standings.filter(team => team.playoffTier === 'Semifinalist') as team}
+											<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/40">
+												<div class="flex items-center space-x-4">
+													<div class="text-xl font-bold text-blue-400">{team.rank}</div>
+													<div>
+														<div class="font-semibold text-white">{team.teamName}</div>
+														<div class="text-slate-400 text-sm">{team.managerName}</div>
+														<div class="text-xs text-blue-300 font-medium">{team.playoffTier}</div>
+													</div>
+												</div>
+												<div class="text-right">
+													<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+													<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Quarterfinalists -->
+							{#if standings.filter(team => team.playoffTier === 'Quarterfinalist').length > 0}
+								<div class="bg-gradient-to-r from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-lg p-4">
+									<h3 class="text-lg font-bold text-purple-400 mb-3 flex items-center">
+										⚔️ Quarterfinalists
+									</h3>
+									<div class="space-y-2">
+										{#each standings.filter(team => team.playoffTier === 'Quarterfinalist') as team}
+											<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/40">
+												<div class="flex items-center space-x-4">
+													<div class="text-xl font-bold text-purple-400">{team.rank}</div>
+													<div>
+														<div class="font-semibold text-white">{team.teamName}</div>
+														<div class="text-slate-400 text-sm">{team.managerName}</div>
+														<div class="text-xs text-purple-300 font-medium">{team.playoffTier}</div>
+													</div>
+												</div>
+												<div class="text-right">
+													<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+													<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Non-Playoff Teams -->
+							{#if standings.filter(team => team.playoffTier === 'Regular Season').length > 0}
+								<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
+									<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
+										📋 Regular Season Finish
+									</h3>
+									<div class="space-y-2">
+										{#each standings.filter(team => team.playoffTier === 'Regular Season') as team}
+											<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
+												<div class="flex items-center space-x-4">
+													<div class="text-xl font-bold text-slate-400">{team.rank}</div>
+													<div>
+														<div class="font-semibold text-white">{team.teamName}</div>
+														<div class="text-slate-400 text-sm">{team.managerName}</div>
+													</div>
+												</div>
+												<div class="text-right">
+													<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+													<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<!-- Regular Season Standings -->
+						<div class="space-y-2">
+							{#each standings as team}
+								<div class="flex items-center justify-between p-4 rounded-lg 
+									{team.rank <= 6 ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
+									<div class="flex items-center space-x-4">
+										<div class="text-2xl font-bold 
+											{team.rank <= 6 ? 'text-green-400' : 'text-slate-400'}">
+											{team.rank}
+										</div>
+										<div>
+											<div class="font-semibold text-white">{team.teamName}</div>
+											<div class="text-slate-400 text-sm">{team.managerName}</div>
+											{#if team.rank <= 6}
+												<div class="text-xs text-green-300 font-medium">Playoff Position</div>
+											{/if}
+										</div>
+									</div>
+									<div class="text-right">
+										<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+										<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+									</div>
+									<div class="text-right">
+										<div class="font-medium 
+											{team.streak?.startsWith('W') ? 'text-green-400' : 'text-red-400'}">
+											{team.streak || 'TBD'}
+										</div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 			</section>
 
