@@ -146,6 +146,12 @@ class EdwEtlProcessor:
             'depends_on_marts': [],
             'refresh_priority': 'MEDIUM',
             'description': 'Trade transaction analysis'
+        },
+        'vw_league_record_book': {
+            'depends_on_tables': ['fact_team_performance', 'fact_matchup', 'fact_transaction', 'dim_team', 'dim_league', 'dim_week', 'dim_manager'],
+            'depends_on_marts': ['mart_manager_performance'],
+            'refresh_priority': 'LOW',
+            'description': 'Comprehensive fantasy football league records'
         }
     }
     
@@ -4010,6 +4016,421 @@ class EdwEtlProcessor:
                 LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
                 LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
                 ORDER BY dl.league_name, ts.transaction_date DESC
+            """,
+            
+            'vw_league_record_book': """
+                CREATE VIEW edw.vw_league_record_book AS
+                
+                WITH all_records AS (
+                    -- Most points scored in a season
+                    SELECT 
+                        'Most Points Scored in a Season' as record_name,
+                        CONCAT(ROUND(SUM(ftp.points_for), 1), ' points') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_for) DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Fewest points scored in a season
+                    SELECT 
+                        'Fewest Points Scored in a Season' as record_name,
+                        CONCAT(ROUND(SUM(ftp.points_for), 1), ' points') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_for) ASC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Most points allowed in a season (unluckiest team)
+                    SELECT 
+                        'Most Points Allowed in a Season (Unluckiest Team)' as record_name,
+                        CONCAT(ROUND(SUM(ftp.points_against), 1), ' points allowed') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_against) DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Fewest points allowed in a season (luckiest team)
+                    SELECT 
+                        'Fewest Points Allowed in a Season (Luckiest Team)' as record_name,
+                        CONCAT(ROUND(SUM(ftp.points_against), 1), ' points allowed') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_against) ASC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Best regular-season record (win percentage)
+                    SELECT 
+                        'Best Regular-Season Record' as record_name,
+                        CONCAT(
+                            SUM(ftp.wins), '-', SUM(ftp.losses), 
+                            CASE WHEN SUM(ftp.ties) > 0 THEN CONCAT('-', SUM(ftp.ties)) ELSE '' END,
+                            ' (', ROUND(
+                                CASE 
+                                    WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                                    THEN (SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) * 100
+                                    ELSE 0
+                                END, 1
+                            ), '%)'
+                        ) as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY 
+                            CASE 
+                                WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                                THEN (SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties))
+                                ELSE 0
+                            END DESC,
+                            SUM(ftp.wins) DESC
+                        ) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Worst regular-season record (win percentage)
+                    SELECT 
+                        'Worst Regular-Season Record' as record_name,
+                        CONCAT(
+                            SUM(ftp.wins), '-', SUM(ftp.losses), 
+                            CASE WHEN SUM(ftp.ties) > 0 THEN CONCAT('-', SUM(ftp.ties)) ELSE '' END,
+                            ' (', ROUND(
+                                CASE 
+                                    WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                                    THEN (SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) * 100
+                                    ELSE 0
+                                END, 1
+                            ), '%)'
+                        ) as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY 
+                            CASE 
+                                WHEN (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties)) > 0 
+                                THEN (SUM(ftp.wins) + 0.5 * SUM(ftp.ties))::decimal / (SUM(ftp.wins) + SUM(ftp.losses) + SUM(ftp.ties))
+                                ELSE 0
+                            END ASC,
+                            SUM(ftp.losses) DESC
+                        ) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Largest point differential in a season
+                    SELECT 
+                        'Largest Point Differential in a Season' as record_name,
+                        CONCAT('+', ROUND(SUM(ftp.point_differential), 1)) as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.point_differential) DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Worst point differential in a season
+                    SELECT 
+                        'Worst Point Differential in a Season' as record_name,
+                        CONCAT(ROUND(SUM(ftp.point_differential), 1)) as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.point_differential) ASC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Most trades in a season
+                    SELECT 
+                        'Most Trades in a Season' as record_name,
+                        CONCAT(COUNT(*), ' trades') as record_value,
+                        NULL as team_name,
+                        dm.manager_name,
+                        ft.season_year,
+                        ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rn
+                    FROM edw.fact_transaction ft
+                    JOIN edw.dim_manager dm ON (ft.from_manager_key = dm.manager_key OR ft.to_manager_key = dm.manager_key)
+                    WHERE ft.transaction_type = 'trade'
+                    GROUP BY dm.manager_name, ft.season_year
+                    
+                    UNION ALL
+                    
+                    -- Most waiver pickups in a season
+                    SELECT 
+                        'Most Waiver Pickups in a Season' as record_name,
+                        CONCAT(COUNT(*), ' pickups') as record_value,
+                        NULL as team_name,
+                        dm.manager_name,
+                        ft.season_year,
+                        ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rn
+                    FROM edw.fact_transaction ft
+                    JOIN edw.dim_manager dm ON ft.to_manager_key = dm.manager_key
+                    WHERE ft.transaction_type IN ('waiver', 'free_agent')
+                    GROUP BY dm.manager_name, ft.season_year
+                    
+                    UNION ALL
+                    
+                    -- Most FAAB spent in a season
+                    SELECT 
+                        'Most FAAB Spent in a Season' as record_name,
+                        CONCAT('$', ROUND(SUM(ft.faab_bid), 0)) as record_value,
+                        NULL as team_name,
+                        dm.manager_name,
+                        ft.season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ft.faab_bid) DESC) as rn
+                    FROM edw.fact_transaction ft
+                    JOIN edw.dim_manager dm ON ft.to_manager_key = dm.manager_key
+                    WHERE ft.transaction_type IN ('waiver', 'free_agent') 
+                        AND ft.faab_bid IS NOT NULL 
+                        AND ft.faab_bid > 0
+                    GROUP BY dm.manager_name, ft.season_year
+                    
+                    UNION ALL
+                    
+                    -- Most weeks as top scorer in a season
+                    SELECT 
+                        'Most Weeks as Top Scorer in a Season' as record_name,
+                        CONCAT(COUNT(*), ' weeks') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE ftp.weekly_rank = 1
+                    GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
+                    
+                    UNION ALL
+                    
+                    -- Highest single game score
+                    SELECT 
+                        'Highest Single Game Score' as record_name,
+                        CONCAT(ROUND(ftp.points_for, 1), ' points (Week ', dw.week_number, ')') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY ftp.points_for DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                    
+                    UNION ALL
+                    
+                    -- Lowest single game score
+                    SELECT 
+                        'Lowest Single Game Score' as record_name,
+                        CONCAT(ROUND(ftp.points_for, 1), ' points (Week ', dw.week_number, ')') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        dl.season_year,
+                        ROW_NUMBER() OVER (ORDER BY ftp.points_for ASC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
+                    WHERE ftp.points_for > 0
+                    
+                    UNION ALL
+                    
+                    -- Biggest blowout (single game)
+                    SELECT 
+                        'Biggest Blowout (Single Game)' as record_name,
+                        CONCAT(ROUND(fm.margin_of_victory, 1), ' point margin (Week ', dw.week_number, ')') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        fm.season_year,
+                        ROW_NUMBER() OVER (ORDER BY fm.margin_of_victory DESC) as rn
+                    FROM edw.fact_matchup fm
+                    JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
+                    JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                    WHERE fm.margin_of_victory > 0
+                    
+                    UNION ALL
+                    
+                    -- Closest win (single game)
+                    SELECT 
+                        'Closest Win (Single Game)' as record_name,
+                        CONCAT(ROUND(fm.margin_of_victory, 1), ' point margin (Week ', dw.week_number, ')') as record_value,
+                        dt.team_name,
+                        dt.manager_name,
+                        fm.season_year,
+                        ROW_NUMBER() OVER (ORDER BY fm.margin_of_victory ASC) as rn
+                    FROM edw.fact_matchup fm
+                    JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
+                    JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                    WHERE fm.margin_of_victory > 0
+                    
+                    UNION ALL
+                    
+                    -- Highest scoring game (combined points)
+                    SELECT 
+                        'Highest Scoring Game (Combined Points)' as record_name,
+                        CONCAT(ROUND(fm.total_points, 1), ' total points (Week ', dw.week_number, ')') as record_value,
+                        CONCAT(dt1.team_name, ' vs ', dt2.team_name) as team_name,
+                        CONCAT(dt1.manager_name, ' vs ', dt2.manager_name) as manager_name,
+                        fm.season_year,
+                        ROW_NUMBER() OVER (ORDER BY fm.total_points DESC) as rn
+                    FROM edw.fact_matchup fm
+                    JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+                    JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+                    JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                    
+                    UNION ALL
+                    
+                    -- Lowest scoring game (combined points)
+                    SELECT 
+                        'Lowest Scoring Game (Combined Points)' as record_name,
+                        CONCAT(ROUND(fm.total_points, 1), ' total points (Week ', dw.week_number, ')') as record_value,
+                        CONCAT(dt1.team_name, ' vs ', dt2.team_name) as team_name,
+                        CONCAT(dt1.manager_name, ' vs ', dt2.manager_name) as manager_name,
+                        fm.season_year,
+                        ROW_NUMBER() OVER (ORDER BY fm.total_points ASC) as rn
+                    FROM edw.fact_matchup fm
+                    JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+                    JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+                    JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+                    WHERE fm.total_points > 0
+                    
+                    UNION ALL
+                    
+                    -- Most championships (career)
+                    SELECT 
+                        'Most Championships (Career)' as record_name,
+                        CONCAT(championships_won, ' championships') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY championships_won DESC, career_win_percentage DESC) as rn
+                    FROM edw.mart_manager_performance
+                    
+                    UNION ALL
+                    
+                    -- Most championship appearances (career)
+                    SELECT 
+                        'Most Championship Appearances (Career)' as record_name,
+                        CONCAT(championship_appearances, ' appearances') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY championship_appearances DESC, championships_won DESC) as rn
+                    FROM edw.mart_manager_performance
+                    
+                    UNION ALL
+                    
+                    -- Most playoff appearances (career)
+                    SELECT 
+                        'Most Playoff Appearances (Career)' as record_name,
+                        CONCAT(playoff_appearances, ' appearances') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY playoff_appearances DESC, championships_won DESC) as rn
+                    FROM edw.mart_manager_performance
+                    
+                    UNION ALL
+                    
+                    -- Best career win percentage (min 3 seasons)
+                    SELECT 
+                        'Best Career Win Percentage (Min 3 Seasons)' as record_name,
+                        CONCAT(ROUND(career_win_percentage * 100, 1), '%') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY career_win_percentage DESC, total_wins DESC) as rn
+                    FROM edw.mart_manager_performance
+                    WHERE total_seasons >= 3
+                    
+                    UNION ALL
+                    
+                    -- Most career points
+                    SELECT 
+                        'Most Career Points' as record_name,
+                        CONCAT(ROUND(total_points_scored, 1), ' points') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY total_points_scored DESC) as rn
+                    FROM edw.mart_manager_performance
+                    
+                    UNION ALL
+                    
+                    -- Most career points allowed (unluckiest manager)
+                    SELECT 
+                        'Most Career Points Allowed (Unluckiest Manager)' as record_name,
+                        CONCAT(ROUND(SUM(ftp.points_against), 1), ' points allowed') as record_value,
+                        NULL as team_name,
+                        dt.manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_against) DESC) as rn
+                    FROM edw.fact_team_performance ftp
+                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
+                    GROUP BY dt.manager_name
+                    
+                    UNION ALL
+                    
+                    -- Most career transactions
+                    SELECT 
+                        'Most Career Transactions' as record_name,
+                        CONCAT(total_transactions, ' transactions') as record_value,
+                        NULL as team_name,
+                        manager_name,
+                        NULL as season_year,
+                        ROW_NUMBER() OVER (ORDER BY total_transactions DESC) as rn
+                    FROM edw.mart_manager_performance
+                )
+                SELECT 
+                    record_name,
+                    record_value,
+                    team_name,
+                    manager_name,
+                    season_year
+                FROM all_records
+                WHERE rn = 1
+                ORDER BY 
+                    CASE 
+                        WHEN record_name LIKE '%Season%' OR record_name LIKE '%Weeks%' THEN 1
+                        WHEN record_name LIKE '%Single%' OR record_name LIKE '%Game%' OR record_name LIKE '%Blowout%' OR record_name LIKE '%Combined%' OR record_name LIKE '%Closest%' THEN 2
+                        ELSE 3
+                    END,
+                    record_name
             """
         }
         

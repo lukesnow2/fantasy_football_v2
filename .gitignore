@@ -31,7 +31,6 @@ out/
 
 # Web directories (if they contain build artifacts)
 fantasy-league-web/
-web/
 
 # Node.js
 node_modules/
@@ -45,7 +44,6 @@ out/
 
 # Web directories (if they contain build artifacts)
 fantasy-league-web/
-web/
 
 # Python
 __pycache__/
@@ -89,4 +87,7 @@ ENV/
 # Windows
 Thumbs.db
 ehthumbs.db
-Desktop.ini 
+Desktop.ini
+
+# Note: web/ directory is now tracked in git
+# It has its own .gitignore that excludes build artifacts (node_modules, .svelte-kit, .env, etc.) 
