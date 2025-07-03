@@ -51,13 +51,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			...mgr,
 			// Overall ranking based on combined factors
 			overall_rank: index + 1,
-			// Championship ranking
-			championship_rank: [...managerStats].sort((a: any, b: any) => (Number(b.championships_won) || 0) - (Number(a.championships_won) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Win percentage ranking
-			win_pct_rank: [...managerStats].sort((a: any, b: any) => (Number(b.career_win_percentage) || 0) - (Number(a.career_win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Scoring ranking
-			scoring_rank: [...managerStats].sort((a: any, b: any) => (Number(b.avg_points_per_season) || 0) - (Number(a.avg_points_per_season) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Playoff ranking
+			// Championship ranking - using correct field name from SQL alias
+			championship_rank: [...managerStats].sort((a: any, b: any) => (Number(b.total_championships) || 0) - (Number(a.total_championships) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			// Win percentage ranking - using correct field name from SQL alias
+			win_pct_rank: [...managerStats].sort((a: any, b: any) => (Number(b.win_percentage) || 0) - (Number(a.win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			// Scoring ranking - using correct field name from SQL alias
+			scoring_rank: [...managerStats].sort((a: any, b: any) => (Number(b.avg_points_for) || 0) - (Number(a.avg_points_for) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			// Playoff ranking - this one was already correct
 			playoff_rank: [...managerStats].sort((a: any, b: any) => (Number(b.playoff_win_percentage) || 0) - (Number(a.playoff_win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Tier classification based on performance
 			tier_classification: mgr.manager_name === 'Bobby' ? 'League Alum' : (() => {
