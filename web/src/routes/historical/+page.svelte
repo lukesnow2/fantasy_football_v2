@@ -5,9 +5,11 @@
 	
 	let h2hData: any = null;
 	let overviewData: any = null;
+	let recordBookData: any = null;
 	let loading = true;
 	let loadingH2H = false;
 	let loadingOverview = false;
+	let loadingRecords = false;
 	let selectedSeason = 'all';
 
 	const headToHeadMatrix = [
@@ -73,14 +75,7 @@
 		{ year: 2023, manager: "Emma", grade: "A", hits: 4, misses: 1, notes: "RB1 jackpot" },
 	];
 
-	const leagueRecords = [
-		{ record: "Highest Single Season Points", holder: "Mike (2023)", value: "1,847.3", year: "2023" },
-		{ record: "Most Championships", holder: "Mike", value: "3", year: "2018-2023" },
-		{ record: "Longest Win Streak", holder: "Sarah", value: "11 games", year: "2022-2023" },
-		{ record: "Most Trades in Season", holder: "Chris (2021)", value: "17", year: "2021" },
-		{ record: "Highest Playoff Score", holder: "Jake", value: "178.9", year: "2022" },
-		{ record: "Most Waiver Pickups", holder: "Alex (2020)", value: "47", year: "2020" },
-	];
+
 
 	let selectedTab = 'overview';
 	const tabs = [
@@ -151,6 +146,26 @@
 		}
 	}
 
+	// Load record book data
+	async function loadRecordBookData() {
+		if (recordBookData) return; // Already loaded
+		
+		loadingRecords = true;
+		try {
+			const response = await fetch('/api/record-book');
+			if (response.ok) {
+				recordBookData = await response.json();
+				console.log('Record book data loaded:', recordBookData);
+			} else {
+				console.error('Failed to fetch record book data:', response.status, response.statusText);
+			}
+		} catch (err) {
+			console.error('Error fetching record book data:', err);
+		} finally {
+			loadingRecords = false;
+		}
+	}
+
 
 
 	// Helper function to get rivalry tier color
@@ -181,6 +196,8 @@
 			loadH2HData();
 		} else if (tabId === 'overview') {
 			loadOverviewData();
+		} else if (tabId === 'records') {
+			loadRecordBookData();
 		}
 	}
 </script>
@@ -601,29 +618,104 @@
 
 
 	{:else if selectedTab === 'records'}
-		<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-			<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-				<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-				League Record Book
-			</h2>
-			
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-				{#each leagueRecords as record}
-					<div class="bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-lg p-6">
-						<h3 class="font-bold text-white mb-2">{record.record}</h3>
-						<div class="flex items-center justify-between">
-							<div>
-								<div class="text-2xl font-bold text-amber-400">{record.value}</div>
-								<div class="text-slate-300 font-medium">{record.holder}</div>
-							</div>
-							<div class="text-right">
-								<div class="text-slate-400 text-sm">{record.year}</div>
-								<Trophy class="w-6 h-6 text-amber-400 ml-auto mt-1" />
+		{#if loadingRecords}
+			<div class="flex items-center justify-center h-64">
+				<div class="text-slate-400">Loading league record book...</div>
+			</div>
+		{:else if recordBookData?.recordsByCategory}
+			<div class="space-y-8">
+				<!-- Header -->
+				<section class="text-center">
+					<h2 class="text-3xl font-bold text-white mb-4 flex items-center justify-center">
+						<Trophy class="w-8 h-8 text-amber-400 mr-3" />
+						League Record Book
+					</h2>
+					<p class="text-slate-300 max-w-2xl mx-auto">
+						The greatest achievements in league history, organized by category for easy browsing.
+					</p>
+					<div class="mt-4 text-sm text-slate-400">
+						{recordBookData.totalRecords} total records across {recordBookData.categories?.length || 0} categories
+					</div>
+				</section>
+
+				<!-- Categories -->
+				{#each recordBookData.categories || [] as category}
+					{@const categoryRecords = recordBookData.recordsByCategory[category] || []}
+					{@const categoryIcons = {
+						'Scoring Records': '🎯',
+						'Championship Records': '🏆', 
+						'Win/Loss Records': '⚔️',
+						'Transaction Records': '💼',
+						'Draft Records': '📋',
+						'Season Records': '📅',
+						'Other Records': '📊'
+					}}
+					
+					<section class="bg-slate-800/30 rounded-xl border border-slate-700/30 overflow-hidden">
+						<div class="bg-slate-800/50 px-6 py-4 border-b border-slate-700/50">
+							<h3 class="text-xl font-bold text-white flex items-center">
+								<span class="text-2xl mr-3">{categoryIcons[category] || '📊'}</span>
+								{category}
+								<span class="ml-auto text-sm font-normal text-slate-400">
+									{categoryRecords.length} records
+								</span>
+							</h3>
+						</div>
+						
+						<div class="p-6">
+							<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+								{#each categoryRecords as record}
+									<div class="bg-slate-700/20 hover:bg-slate-700/30 rounded-lg p-4 border border-slate-600/30 transition-colors">
+										<div class="flex items-start justify-between">
+											<div class="flex-1 min-w-0">
+												<h4 class="font-semibold text-white mb-1 text-sm leading-tight">
+													{record.record}
+												</h4>
+												<div class="flex items-baseline space-x-2">
+													<span class="text-xl font-bold text-amber-400">
+														{record.value}
+													</span>
+													{#if record.year}
+														<span class="text-xs text-slate-400">
+															({record.year})
+														</span>
+													{/if}
+												</div>
+												<div class="text-sm text-slate-300 font-medium mt-1 truncate">
+													{record.holder}
+												</div>
+											</div>
+											<div class="flex-shrink-0 ml-3">
+												<Trophy class="w-5 h-5 text-amber-400/60" />
+											</div>
+										</div>
+									</div>
+								{/each}
 							</div>
 						</div>
-					</div>
+					</section>
 				{/each}
+
+				<!-- Footer -->
+				{#if recordBookData.lastUpdated}
+					<div class="text-center text-slate-500 text-sm bg-slate-800/20 rounded-lg p-4">
+						<div class="flex items-center justify-center space-x-2">
+							<span>📊</span>
+							<span>Last updated: {new Date(recordBookData.lastUpdated).toLocaleString()}</span>
+						</div>
+					</div>
+				{/if}
 			</div>
-		</section>
+		{:else}
+			<div class="text-center py-8">
+				<div class="text-slate-400">No record book data available</div>
+				<button 
+					class="mt-4 px-4 py-2 bg-amber-500 text-black rounded hover:bg-amber-600"
+					on:click={loadRecordBookData}
+				>
+					Load Record Book
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div> 

@@ -23,10 +23,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			.from(factTransaction)
 			.leftJoin(dimTeam, eq(factTransaction.fromTeamKey, dimTeam.teamKey))
 			.leftJoin(dimManager, eq(factTransaction.fromManagerKey, dimManager.managerKey))
-			.where(and(
-				eq(factTransaction.seasonYear, season),
-				eq(factTransaction.isSuccessful, true)
-			))
+			.where(eq(factTransaction.seasonYear, season))
 			.orderBy(desc(factTransaction.transactionDate))
 			.limit(limit);
 
