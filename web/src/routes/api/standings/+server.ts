@@ -80,6 +80,41 @@ export const GET: RequestHandler = async ({ url }) => {
 		const championshipResult = await db.execute(sql.raw(championshipQuery));
 		const championshipData = championshipResult.length > 0 ? championshipResult[0] : null;
 
+		// Get last place game loser information
+		let lastPlaceGameLoser = null;
+		if (championshipData) {
+			const lastPlaceQuery = `
+				SELECT 
+					CASE 
+						WHEN fm.team1_key = fm.winner_team_key THEN fm.team2_key
+						ELSE fm.team1_key
+					END as loser_team_key,
+					dt_loser.team_name as loser_team_name,
+					dt_loser.manager_name as loser_manager_name
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+				JOIN edw.dim_team dt_loser ON (
+					CASE 
+						WHEN fm.team1_key = fm.winner_team_key THEN fm.team2_key
+						ELSE fm.team1_key
+					END
+				) = dt_loser.team_key
+				WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+				  AND fm.is_last_place_game = true
+				LIMIT 1
+			`;
+			
+			const lastPlaceResult = await db.execute(sql.raw(lastPlaceQuery));
+			if (lastPlaceResult.length > 0) {
+				const loserData = lastPlaceResult[0] as any;
+				lastPlaceGameLoser = {
+					teamKey: loserData.loser_team_key,
+					teamName: loserData.loser_team_name,
+					managerName: loserData.loser_manager_name
+				};
+			}
+		}
+
 		let finalStandings = standings;
 
 		if (championshipData) {
@@ -204,6 +239,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			const pointDifferential = team.pointDifferential ? 
 				parseFloat(team.pointDifferential.toString()).toFixed(1) : '0.0';
 			
+			// Check if this team is the last place game loser
+			const isLastPlaceLoser = lastPlaceGameLoser && 
+				team.teamName === lastPlaceGameLoser.teamName && 
+				team.managerName === lastPlaceGameLoser.managerName;
+			
 			return {
 				teamId: team.seasonRank || (index + 1), // Use actual season rank
 				teamName: team.teamName,
@@ -223,6 +263,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					(parseFloat(team.playoffProbability.toString()) * 100).toFixed(1) : '0.0',
 				playoffTier: team.playoffTier || null, // Championship tier (Champion, Runner-up, etc.)
 				isFinalRank: !!team.finalRank, // Whether this is final playoff ranking
+				isLastPlaceLoser: isLastPlaceLoser, // Whether this team lost the last place game
 				// Mock streak for now - would need to calculate from recent matchups
 				streak: index % 3 === 0 ? `W${Math.floor(Math.random() * 3) + 1}` : `L${Math.floor(Math.random() * 2) + 1}`
 			};
@@ -251,6 +292,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			currentWeek,
 			isSeasonComplete: !!championshipData,
 			isFinalStandings: !!championshipData,
+			lastPlaceGameLoser, // Include the last place game loser info
 			lastUpdated: new Date().toISOString()
 		});
 

@@ -10,6 +10,7 @@
 	let error = '';
 	let isFinalStandings = false;
 	let isSeasonComplete = false;
+	let lastPlaceGameLoser: any = null;
 	
 	// Computed playoff picture data
 	$: playoffPicture = calculatePlayoffPicture(standings, currentWeek);
@@ -86,6 +87,7 @@
 				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
+				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
 			}
 
 			// Fetch recent transactions
@@ -261,7 +263,12 @@
 												<div class="flex items-center space-x-4">
 													<div class="text-xl font-bold text-slate-400">{team.rank}</div>
 													<div>
-														<div class="font-semibold text-white">{team.teamName}</div>
+														<div class="font-semibold text-white flex items-center">
+															{team.teamName}
+															{#if team.isLastPlaceLoser}
+																<span class="ml-2 text-2xl" title="Last Place Game Loser">💩</span>
+															{/if}
+														</div>
 														<div class="text-slate-400 text-sm">{team.managerName}</div>
 													</div>
 												</div>

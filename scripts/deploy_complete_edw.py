@@ -49,8 +49,7 @@ class EdwDeployment:
             'schema_objects': 0,
             'dimension_records': 0,
             'fact_records': 0,
-            'verification_passed': False,
-            'views_fixed': 0
+            'verification_passed': False
         }
         
         # Expected counts for verification
@@ -273,106 +272,28 @@ class EdwDeployment:
             return False
     
     def run_etl(self) -> bool:
-        """Run the ETL process"""
+        """Run ETL process using enhanced EDW ETL processor"""
         try:
-            logger.info("🚀 Running ETL process...")
-            etl = EdwEtlProcessor(self.database_url, force_rebuild=self.force_rebuild)
+            logger.info("🔄 Running EDW ETL process...")
             
-            if etl.run_etl():
-                logger.info("✅ ETL process completed successfully")
+            # Create and configure ETL processor
+            etl_processor = EdwEtlProcessor(database_url=self.database_url)
+            
+            # Connect to database first
+            if not etl_processor.connect():
+                logger.error("❌ ETL processor failed to connect to database")
+                return False
+            
+            # Process operational data to EDW (includes view creation)
+            if etl_processor.process_incremental_edw():
+                logger.info("✅ EDW ETL process completed successfully")
                 return True
             else:
-                logger.error("❌ ETL process failed")
+                logger.error("❌ EDW ETL process failed")
                 return False
+                
         except Exception as e:
-            logger.error(f"❌ ETL process error: {e}")
-            return False
-    
-    def fix_analytical_views(self) -> bool:
-        """Fix analytical views that reference empty mart tables"""
-        try:
-            logger.info("🔧 Fixing analytical views...")
-            
-            with self.engine.connect() as conn:
-                views_fixed = 0
-                
-                # Fix vw_current_season_dashboard with dynamic season rollover
-                logger.info("  📊 Fixing vw_current_season_dashboard...")
-                conn.execute(text('DROP VIEW IF EXISTS edw.vw_current_season_dashboard'))
-                current_season_view = """
-                CREATE VIEW edw.vw_current_season_dashboard AS
-                SELECT 
-                    dl.league_name,
-                    dl.season_year,
-                    dt.team_name,
-                    dt.manager_name,
-                    ftp.wins,
-                    ftp.losses,
-                    ftp.ties,
-                    ftp.points_for,
-                    ftp.points_against,
-                    ftp.point_differential,
-                    ftp.win_percentage,
-                    ftp.season_rank,
-                    ftp.playoff_probability,
-                    ftp.is_playoff_team,
-                    ftp.playoff_seed
-                FROM edw.fact_team_performance ftp
-                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
-                JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
-                JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
-                WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
-                  AND dt.is_active = TRUE
-                ORDER BY dl.league_name, ftp.season_rank
-                """
-                conn.execute(text(current_season_view))
-                views_fixed += 1
-                
-                # Fix vw_manager_hall_of_fame
-                logger.info("  📊 Fixing vw_manager_hall_of_fame...")
-                conn.execute(text('DROP VIEW IF EXISTS edw.vw_manager_hall_of_fame'))
-                hall_of_fame_view = """
-                CREATE VIEW edw.vw_manager_hall_of_fame AS
-                WITH manager_stats AS (
-                    SELECT 
-                        dt.manager_name,
-                        COUNT(DISTINCT dl.season_year) as total_seasons,
-                        SUM(CASE WHEN ftp.season_rank = 1 THEN 1 ELSE 0 END) as championships_won,
-                        AVG(ftp.win_percentage) as career_win_percentage,
-                        SUM(ftp.points_for) as total_points_scored,
-                        AVG(ftp.points_for) as avg_points_per_season,
-                        SUM(CASE WHEN ftp.is_playoff_team THEN 1 ELSE 0 END) as playoff_appearances,
-                        STDDEV(ftp.win_percentage) as season_consistency_score
-                    FROM edw.fact_team_performance ftp
-                    JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
-                    JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
-                    WHERE dt.manager_name IS NOT NULL
-                    GROUP BY dt.manager_name
-                )
-                SELECT 
-                    manager_name,
-                    total_seasons,
-                    championships_won,
-                    career_win_percentage,
-                    total_points_scored,
-                    avg_points_per_season,
-                    playoff_appearances,
-                    season_consistency_score,
-                    RANK() OVER (ORDER BY championships_won DESC, career_win_percentage DESC) as hall_of_fame_rank
-                FROM manager_stats
-                WHERE total_seasons >= 3
-                ORDER BY hall_of_fame_rank
-                """
-                conn.execute(text(hall_of_fame_view))
-                views_fixed += 1
-                
-                conn.commit()
-                self.deployment_stats['views_fixed'] = views_fixed
-                logger.info(f"✅ Fixed {views_fixed} analytical views")
-            
-            return True
-        except Exception as e:
-            logger.error(f"❌ Failed to fix analytical views: {e}")
+            logger.error(f"❌ ETL process failed: {e}")
             return False
     
     def verify_deployment(self) -> bool:
@@ -499,12 +420,10 @@ class EdwDeployment:
         print(f"🏗️ Schema Objects: {self.deployment_stats['schema_objects']} processed")
         print(f"📊 Dimension Records: {self.deployment_stats['dimension_records']:,}")
         print(f"📈 Fact Records: {self.deployment_stats['fact_records']:,}")
-        print(f"🔧 Views Fixed: {self.deployment_stats['views_fixed']}")
         print(f"✅ Verification: {'PASSED' if self.deployment_stats['verification_passed'] else 'FAILED'}")
         
         print("\n🔧 DEPLOYMENT IMPROVEMENTS:")
         print("  📊 Enhanced view verification with data expectations")
-        print("  🛠️ Automatic analytical view fixes")
         print("  🔍 Better error detection and reporting")
         print("  📈 Data quality thresholds")
         print("  🔄 Dynamic season rollover for current season dashboard")
@@ -522,7 +441,6 @@ class EdwDeployment:
             ("Deploy Schema", self.deploy_schema),
             ("Truncate Tables (if requested)", self.truncate_edw_tables),
             ("Run ETL Process", self.run_etl),
-            ("Fix Analytical Views", self.fix_analytical_views),
             ("Verify Deployment", self.verify_deployment)
         ]
         

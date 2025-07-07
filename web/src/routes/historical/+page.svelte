@@ -12,6 +12,82 @@
 	let loadingRecords = false;
 	let selectedSeason = 'all';
 
+	// Head-to-Head filtering state
+	let h2hManagerA = '';
+	let h2hManagerB = '';
+	let availableManagers: string[] = [];
+	let showAllH2H = false; // Track whether to show all results or just top 20
+
+	// Computed filtered head-to-head data
+	$: filteredH2HData = filterH2HData(h2hData?.head_to_head || [], h2hManagerA, h2hManagerB);
+
+	// Computed display data based on filters and show more state
+	$: displayH2HData = getDisplayH2HData(filteredH2HData, h2hManagerA, h2hManagerB, showAllH2H);
+
+	// Function to get display data
+	function getDisplayH2HData(data: any[], managerA: string, managerB: string, showAll: boolean) {
+		if (!data || data.length === 0) return [];
+		
+		// If filters are applied, show all filtered results
+		if (managerA || managerB) {
+			return data;
+		}
+		
+		// If no filters and showAll is false, limit to 20
+		if (!showAll) {
+			return data.slice(0, 20);
+		}
+		
+		// Otherwise show all
+		return data;
+	}
+
+	// Function to filter head-to-head data
+	function filterH2HData(data: any[], managerA: string, managerB: string) {
+		if (!data || data.length === 0) return [];
+		
+		let filtered = data;
+		
+		// Apply specific manager filters
+		if (managerA || managerB) {
+			filtered = filtered.filter(matchup => {
+				const matchupManagers = [matchup.manager_a_name, matchup.manager_b_name];
+				
+				let matchesA = !managerA || matchupManagers.includes(managerA);
+				let matchesB = !managerB || matchupManagers.includes(managerB);
+				
+				// If both managers are selected, ensure both are in the matchup
+				if (managerA && managerB) {
+					return matchupManagers.includes(managerA) && matchupManagers.includes(managerB);
+				}
+				
+				return matchesA && matchesB;
+			});
+		}
+		
+		return filtered;
+	}
+
+	// Function to extract unique managers from h2h data
+	function extractUniqueManagers(h2hData: any[]): string[] {
+		if (!h2hData || h2hData.length === 0) return [];
+		
+		const managers = new Set<string>();
+		h2hData.forEach(matchup => {
+			if (matchup.manager_a_name) managers.add(matchup.manager_a_name);
+			if (matchup.manager_b_name) managers.add(matchup.manager_b_name);
+		});
+		
+		return Array.from(managers).sort();
+	}
+
+	// Clear all filters
+	function clearH2HFilters() {
+		h2hManagerA = '';
+		h2hManagerB = '';
+		showAllH2H = false; // Reset show all when clearing filters
+	}
+
 	const headToHeadMatrix = [
 		{ manager: "Mike", vs: { Sarah: "12-3", Jake: "8-6", Emma: "9-4", Chris: "11-2", Alex: "10-3" } },
 		{ manager: "Sarah", vs: { Mike: "3-12", Jake: "7-7", Emma: "8-5", Chris: "9-4", Alex: "9-4" } },
@@ -110,6 +186,8 @@
 			const response = await fetch('/api/head-to-head?analysis=all');
 			if (response.ok) {
 				h2hData = await response.json();
+				// Extract available managers for filtering
+				availableManagers = extractUniqueManagers(h2hData.head_to_head || []);
 				console.log('H2H data loaded:', h2hData);
 			} else {
 				console.error('Failed to fetch H2H data:', response.status, response.statusText);
@@ -467,6 +545,64 @@
 						Complete Head-to-Head Records
 					</h2>
 					
+					<!-- Filter Controls -->
+					<div class="mb-6 space-y-4">
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<!-- Manager A Selector -->
+							<div>
+								<label for="h2h-manager-a" class="block text-sm font-medium text-slate-300 mb-2">
+									Manager A
+								</label>
+								<select
+									id="h2h-manager-a"
+									bind:value={h2hManagerA}
+									class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+								>
+									<option value="">Any Manager</option>
+									{#each availableManagers as manager}
+										<option value={manager}>{manager}</option>
+									{/each}
+								</select>
+							</div>
+							
+							<!-- Manager B Selector -->
+							<div>
+								<label for="h2h-manager-b" class="block text-sm font-medium text-slate-300 mb-2">
+									Manager B
+								</label>
+								<select
+									id="h2h-manager-b"
+									bind:value={h2hManagerB}
+									class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
+								>
+									<option value="">Any Manager</option>
+									{#each availableManagers as manager}
+										<option value={manager}>{manager}</option>
+									{/each}
+								</select>
+							</div>
+						</div>
+						
+						<!-- Filter Actions -->
+						<div class="flex items-center justify-between">
+							<div class="text-sm text-slate-400">
+								{#if h2hManagerA || h2hManagerB}
+									Showing {displayH2HData.length} of {h2hData?.head_to_head?.length || 0} matchups
+								{:else}
+									Showing {displayH2HData.length} of {filteredH2HData.length} rivalries
+								{/if}
+							</div>
+							{#if h2hManagerA || h2hManagerB}
+								<button
+									on:click={clearH2HFilters}
+									class="text-sm text-amber-400 hover:text-amber-300 font-medium"
+								>
+									Clear Filters
+								</button>
+							{/if}
+						</div>
+					</div>
+					
 					<div class="overflow-x-auto">
 						<table class="w-full text-sm">
 							<thead>
@@ -480,7 +616,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each h2hData.head_to_head.slice(0, 20) as matchup}
+								{#each displayH2HData as matchup}
 									<tr class="border-b border-slate-700/50">
 										<td class="py-3 px-4">
 											<div class="font-bold text-white">{matchup.manager_a_name} vs {matchup.manager_b_name}</div>
@@ -514,9 +650,24 @@
 						</table>
 					</div>
 					
-					{#if h2hData.head_to_head.length > 20}
-						<div class="mt-4 text-center text-slate-400 text-sm">
-							Showing top 20 of {h2hData.head_to_head.length} rivalries
+					<!-- Show More/Less Controls -->
+					{#if !h2hManagerA && !h2hManagerB}
+						<div class="mt-6 text-center">
+							{#if !showAllH2H && filteredH2HData.length > 20}
+								<button
+									on:click={() => showAllH2H = true}
+									class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+								>
+									Show all {filteredH2HData.length} rivalries
+								</button>
+							{:else if showAllH2H}
+								<button
+									on:click={() => showAllH2H = false}
+									class="inline-flex items-center px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
+								>
+									Show top 20
+								</button>
+							{/if}
 						</div>
 					{/if}
 				</section>
@@ -641,7 +792,7 @@
 				<!-- Categories -->
 				{#each recordBookData.categories || [] as category}
 					{@const categoryRecords = recordBookData.recordsByCategory[category] || []}
-					{@const categoryIcons = {
+					{@const categoryIcons: Record<string, string> = {
 						'Scoring Records': '🎯',
 						'Championship Records': '🏆', 
 						'Win/Loss Records': '⚔️',

@@ -2779,6 +2779,26 @@ class EdwEtlProcessor:
                             logger.error(f"❌ Failed to process {table}")
                             return False
             
+            # PHASE 2: Check for additional views that need refreshing based on what was actually processed
+            logger.info("🔍 Checking for additional view dependencies...")
+            views_to_refresh = self.determine_views_to_refresh()
+            
+            if views_to_refresh:
+                additional_views = [view for view in views_to_refresh.keys() if view not in edw_tables_to_process]
+                if additional_views:
+                    logger.info(f"🔧 Found additional views to refresh: {additional_views}")
+                    for view_name in additional_views:
+                        logger.info(f"🔄 Processing additional view: {view_name}")
+                        if self.process_edw_table(view_name):
+                            logger.info(f"✅ Successfully refreshed additional view: {view_name}")
+                        else:
+                            logger.error(f"❌ Failed to refresh additional view: {view_name}")
+                            return False
+                else:
+                    logger.info("✅ No additional views need refreshing")
+            else:
+                logger.info("✅ No views require refreshing based on dependencies")
+            
             # Update metadata for processed operational tables
             for table in self.changed_tables:
                 self.update_metadata(table)
@@ -2818,26 +2838,31 @@ class EdwEtlProcessor:
                 seasons = self.extract_seasons()
                 if seasons:
                     self.load_dimension_table('dim_season', seasons)
+                    self.refreshed_tables.add(table_name)  # Track refreshed table
                     
             elif table_name == 'dim_week':
                 weeks = self.extract_weeks()
                 if weeks:
                     self.load_dimension_table('dim_week', weeks)
+                    self.refreshed_tables.add(table_name)  # Track refreshed table
                     
             elif table_name == 'dim_league':
                 leagues = self.transform_leagues()
                 if leagues:
                     self.load_dimension_table('dim_league', leagues)
+                    self.refreshed_tables.add(table_name)  # Track refreshed table
                     
             elif table_name == 'dim_team':
                 teams = self.transform_teams()
                 if teams:
                     self.load_dimension_table('dim_team', teams)
+                    self.refreshed_tables.add(table_name)  # Track refreshed table
                     
             elif table_name == 'dim_player':
                 players = self.transform_players()
                 if players:
                     self.load_dimension_table('dim_player', players)
+                    self.refreshed_tables.add(table_name)  # Track refreshed table
                     
             return True
             
@@ -3010,9 +3035,38 @@ class EdwEtlProcessor:
             return False
     
     def process_fact_table(self, table_name: str) -> bool:
-        """Process fact table (placeholder for future implementation)"""
-        logger.info(f"📊 Fact table processing for {table_name} - to be implemented")
-        return True
+        """Process fact table with transformation and loading"""
+        try:
+            logger.info(f"📊 Processing fact table: {table_name}")
+            
+            # Get transformation function
+            transform_method_name = f"transform_{table_name}"
+            if hasattr(self, transform_method_name):
+                transform_method = getattr(self, transform_method_name)
+                logger.info(f"🔄 Transforming data for {table_name}...")
+                data = transform_method()
+                
+                if data:
+                    logger.info(f"✅ Transformed {len(data)} records for {table_name}")
+                    # Load the data using load_fact_table
+                    success = self.load_fact_table(table_name, data)
+                    if success:
+                        logger.info(f"✅ Successfully processed fact table: {table_name}")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
+                        return True
+                    else:
+                        logger.error(f"❌ Failed to load fact table: {table_name}")
+                        return False
+                else:
+                    logger.info(f"ℹ️ No data generated for {table_name}")
+                    return True
+            else:
+                logger.warning(f"⚠️ No transformation method found for {table_name}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to process fact table {table_name}: {e}")
+            return False
     
     def process_mart_table(self, table_name: str) -> bool:
         """Process data mart table with transformation and loading"""
@@ -3032,6 +3086,7 @@ class EdwEtlProcessor:
                     success = self.load_mart_table(table_name, data)
                     if success:
                         logger.info(f"✅ Successfully processed mart table: {table_name}")
+                        self.refreshed_tables.add(table_name)  # Track refreshed table
                         return True
                     else:
                         logger.error(f"❌ Failed to load mart table: {table_name}")
@@ -3048,9 +3103,22 @@ class EdwEtlProcessor:
             return False
     
     def refresh_view(self, view_name: str) -> bool:
-        """Refresh materialized view (placeholder for future implementation)"""
-        logger.info(f"👁️ View refresh for {view_name} - to be implemented")
-        return True
+        """Refresh a single analytical view using the complete view refresh system"""
+        try:
+            logger.info(f"🔧 Refreshing view: {view_name}")
+            
+            with self.engine.connect() as conn:
+                success = self._refresh_single_view(conn, view_name)
+                if success:
+                    conn.commit()
+                    logger.info(f"✅ Successfully refreshed {view_name}")
+                else:
+                    logger.error(f"❌ Failed to refresh {view_name}")
+                return success
+                
+        except Exception as e:
+            logger.error(f"❌ Error refreshing view {view_name}: {e}")
+            return False
     
     def run_etl(self) -> bool:
         """Execute complete ETL process"""

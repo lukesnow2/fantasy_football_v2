@@ -8,7 +8,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const limit = parseInt(url.searchParams.get('limit') || '50');
 		const manager = url.searchParams.get('manager');
 
-		// Main Hall of Fame query
+		// Main Hall of Fame query - using ALL restored columns
 		let query = `
 			SELECT 
 				manager_name,
@@ -39,7 +39,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const hallOfFameResult = await db.execute(sql.raw(query));
 		const hallOfFameData = Array.from(hallOfFameResult);
 
-		// Get analytics for the Hall of Fame
+		// Get analytics for the Hall of Fame using restored columns
 		const analyticsQuery = `
 			SELECT 
 				COUNT(*) as total_managers,
@@ -47,7 +47,13 @@ export const GET: RequestHandler = async ({ url }) => {
 				AVG(career_win_percentage) as avg_win_percentage,
 				AVG(total_seasons) as avg_seasons_played,
 				AVG(total_points_scored) as avg_career_points,
+				AVG(avg_points_per_game) as avg_points_per_game,
 				AVG(hall_of_fame_index) as avg_hall_of_fame_index,
+				SUM(career_wins) as total_career_wins,
+				SUM(career_losses) as total_career_losses,
+				SUM(career_ties) as total_career_ties,
+				MAX(career_win_percentage) as highest_win_percentage,
+				MIN(career_win_percentage) as lowest_win_percentage,
 				MAX(hall_of_fame_index) as highest_hall_of_fame_index,
 				MIN(hall_of_fame_index) as lowest_hall_of_fame_index
 			FROM vw_manager_hall_of_fame
@@ -56,7 +62,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const analyticsResult = await db.execute(sql.raw(analyticsQuery));
 		const analytics = Array.from(analyticsResult)[0];
 
-		// Get tier breakdowns
+		// Get tier breakdowns with enhanced metrics
 		const tiersQuery = `
 			SELECT 
 				CASE 
@@ -67,9 +73,13 @@ export const GET: RequestHandler = async ({ url }) => {
 					ELSE 'Developing Legacy'
 				END as tier,
 				COUNT(*) as manager_count,
-				AVG(hall_of_fame_index) as avg_index,
+				AVG(career_win_percentage) as avg_win_pct,
 				AVG(championships_won) as avg_championships,
-				AVG(career_win_percentage) as avg_win_pct
+				AVG(total_seasons) as avg_seasons,
+				AVG(hall_of_fame_index) as avg_hall_of_fame_index,
+				AVG(avg_points_per_game) as avg_points_per_game,
+				SUM(career_wins) as total_wins,
+				SUM(career_losses) as total_losses
 			FROM vw_manager_hall_of_fame
 			GROUP BY 
 				CASE 
@@ -85,7 +95,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const tiersResult = await db.execute(sql.raw(tiersQuery));
 		const tiers = Array.from(tiersResult);
 
-		console.log(`Returning ${hallOfFameData.length} Hall of Fame entries`);
+		console.log(`Returning ${hallOfFameData.length} Hall of Fame entries with complete column set`);
 
 		return json({
 			hall_of_fame: hallOfFameData,
