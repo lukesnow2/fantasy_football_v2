@@ -2,6 +2,7 @@
 	import { BarChart3, TrendingUp, Trophy, Users, Target, Calendar, Zap } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	let h2hData: any = null;
 	let overviewData: any = null;

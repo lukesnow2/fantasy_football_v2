@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import DraftBoard from '$lib/components/DraftBoard.svelte';
 	import DraftAnalysis from '$lib/components/DraftAnalysis.svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	let draftData: any = null;
 	let specificSeasonDraft: any = null;
@@ -315,15 +316,27 @@
 												<div class="font-bold text-blue-400">#{manager.avgPick}</div>
 											</div>
 											<div>
-												<div class="text-gray-400">Steals</div>
+												<div class="text-gray-400">
+													<MetricHelp metricId="draft_steals" position="top" theme="dark" className="text-gray-400" showIcon={false}>
+														Steals
+													</MetricHelp>
+												</div>
 												<div class="font-bold text-green-400">{manager.steals}</div>
 											</div>
 											<div>
-												<div class="text-gray-400">Busts</div>
+												<div class="text-gray-400">
+													<MetricHelp metricId="draft_busts" position="top" theme="dark" className="text-gray-400" showIcon={false}>
+														Busts
+													</MetricHelp>
+												</div>
 												<div class="font-bold text-red-400">{manager.busts}</div>
 											</div>
 											<div>
-												<div class="text-gray-400">Avg PPP</div>
+												<div class="text-gray-400">
+													<MetricHelp metricId="avg_points_per_game" position="top" theme="dark" className="text-gray-400" showIcon={false}>
+														Avg PPP
+													</MetricHelp>
+												</div>
 												<div class="font-bold text-purple-400">{manager.avgPointsPerPick}</div>
 											</div>
 										</div>

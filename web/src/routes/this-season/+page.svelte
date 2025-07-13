@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Calendar, Trophy, TrendingUp, MessageSquare, ExternalLink, Users, Target } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	// Real data from API
 	let standings: any[] = [];

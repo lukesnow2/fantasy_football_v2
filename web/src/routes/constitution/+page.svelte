@@ -15,7 +15,8 @@
 		MessageSquare,
 		X,
 		Check,
-		Clock
+		Clock,
+		Trash2
 	} from 'lucide-svelte';
 	import { onMount } from 'svelte';
 
@@ -32,7 +33,7 @@
 	let loading = false;
 	
 	// Mock current user (in real app, this would come from auth)
-	const currentUser = 'Luke S.';
+	const currentUser = 1; // Manager key instead of name
 	const currentUserId = 'user-1';
 
 	// Table of contents
@@ -94,10 +95,11 @@
 	async function loadData() {
 		loading = true;
 		try {
-			// Load proposals
-			const proposalsResponse = await fetch('/api/rule-proposals');
-			const proposalsData = await proposalsResponse.json();
-			pendingProposals = proposalsData.filter((p: any) => p.status === 'pending');
+					// Load proposals
+		const proposalsResponse = await fetch('/api/rule-proposals');
+		const proposalsData = await proposalsResponse.json();
+		const proposals = proposalsData.proposals || proposalsData; // Handle both formats
+		pendingProposals = proposals.filter((p: any) => p.status === 'pending');
 			
 			// Load amendments
 			const amendmentsResponse = await fetch('/api/rule-proposals?type=amendments');
@@ -174,16 +176,40 @@
 		}
 	}
 
+	// Delete proposal
+	async function deleteProposal(proposalKey: number) {
+		if (!confirm('Are you sure you want to delete this proposal? This action cannot be undone.')) {
+			return;
+		}
+
+		try {
+			const response = await fetch('/api/rule-proposals', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					proposalKey
+				})
+			});
+
+			if (response.ok) {
+				await loadData(); // Refresh proposals
+			}
+		} catch (error) {
+			console.error('Error deleting proposal:', error);
+		}
+	}
+
 	// Load data on mount
 	onMount(() => {
 		loadData();
 	});
 
-	// Get proposals for a specific rule
+	// Get proposals for a specific rule (show all edit proposals for this section)
 	function getProposalsForRule(sectionId: string, ruleIndex: number) {
 		return pendingProposals.filter(p => 
 			p.sectionId === sectionId && 
-			p.ruleIndex === ruleIndex && 
+			p.ruleIndex === ruleIndex &&
+			p.type === 'edit' && 
 			p.status === 'pending'
 		);
 	}
@@ -428,8 +454,15 @@
 			</div>
 			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 				{#each pendingProposals as proposal}
-					<div class="bg-slate-800/50 border border-slate-600 rounded-lg p-3">
-						<div class="text-sm text-slate-400 mb-1">{proposal.sectionTitle}</div>
+					<div class="bg-slate-800/50 border border-slate-600 rounded-lg p-3 relative">
+						<button 
+							class="absolute top-2 right-2 p-1 rounded text-red-300 bg-red-900/30 hover:text-red-200 hover:bg-red-900/50 transition-colors"
+							on:click={() => deleteProposal(proposal.proposalKey)}
+							title="Delete proposal"
+						>
+							<Trash2 class="h-4 w-4" />
+						</button>
+						<div class="text-sm text-slate-400 mb-1 pr-8">{proposal.affectedSection || proposal.sectionId}</div>
 						<div class="text-white font-medium mb-2">
 							{proposal.type === 'add' ? 'Add New Rule' : 'Edit Rule'}
 						</div>
@@ -437,9 +470,9 @@
 						<div class="flex items-center justify-between text-xs">
 							<span class="text-slate-400">Effective {proposal.effectiveSeason}</span>
 							<div class="flex items-center space-x-2">
-								<span class="text-green-400">{proposal.votes.yes}✓</span>
-								<span class="text-red-400">{proposal.votes.no}✗</span>
-								<span class="text-slate-400">{proposal.votes.abstain}~</span>
+								<span class="text-green-400">{proposal.yesVotes}✓</span>
+								<span class="text-red-400">{proposal.noVotes}✗</span>
+								<span class="text-slate-400">{proposal.abstainVotes}~</span>
 							</div>
 						</div>
 					</div>
@@ -511,10 +544,17 @@
 									
 									<!-- Show proposals for this rule -->
 									{#each getProposalsForRule(section.id, ruleIndex) as proposal}
-										<div class="mt-3 bg-amber-900/10 border border-amber-600/20 rounded-lg p-3">
-											<div class="flex items-center justify-between mb-2">
+										<div class="mt-3 bg-amber-900/10 border border-amber-600/20 rounded-lg p-3 relative">
+											<button 
+												class="absolute top-2 right-2 p-1 rounded text-red-300 bg-red-900/30 hover:text-red-200 hover:bg-red-900/50 transition-colors"
+												on:click={() => deleteProposal(proposal.proposalKey)}
+												title="Delete proposal"
+											>
+												<Trash2 class="h-3 w-3" />
+											</button>
+											<div class="flex items-center justify-between mb-2 pr-8">
 												<span class="text-xs text-amber-400 font-medium">PROPOSED CHANGE</span>
-												<span class="text-xs text-slate-400">{proposal.submittedBy}</span>
+												<span class="text-xs text-slate-400">{proposal.submittedByManager || 'Manager ' + proposal.submittedBy}</span>
 											</div>
 											<div class="text-sm text-amber-300 mb-2">{proposal.proposedText}</div>
 											<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
@@ -522,24 +562,24 @@
 												<div class="flex space-x-2">
 													<button 
 														class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 disabled:opacity-50"
-														on:click={() => voteOnProposal(proposal.id, 'yes')}
+														on:click={() => voteOnProposal(proposal.proposalKey, 'yes')}
 														disabled={loading}
 													>
-														Yes ({proposal.votes.yes})
+														Yes ({proposal.yesVotes})
 													</button>
 													<button 
 														class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 disabled:opacity-50"
-														on:click={() => voteOnProposal(proposal.id, 'no')}
+														on:click={() => voteOnProposal(proposal.proposalKey, 'no')}
 														disabled={loading}
 													>
-														No ({proposal.votes.no})
+														No ({proposal.noVotes})
 													</button>
 													<button 
 														class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30 disabled:opacity-50"
-														on:click={() => voteOnProposal(proposal.id, 'abstain')}
+														on:click={() => voteOnProposal(proposal.proposalKey, 'abstain')}
 														disabled={loading}
 													>
-														Abstain ({proposal.votes.abstain})
+														Abstain ({proposal.abstainVotes})
 													</button>
 												</div>
 												<div class="text-right">
@@ -561,10 +601,17 @@
 						
 						<!-- Show add proposals for this section -->
 						{#each getAddProposalsForSection(section.id) as proposal}
-							<div class="mt-4 bg-blue-900/10 border border-blue-600/20 rounded-lg p-3">
-								<div class="flex items-center justify-between mb-2">
+							<div class="mt-4 bg-blue-900/10 border border-blue-600/20 rounded-lg p-3 relative">
+								<button 
+									class="absolute top-2 right-2 p-1 rounded text-red-300 bg-red-900/30 hover:text-red-200 hover:bg-red-900/50 transition-colors"
+									on:click={() => deleteProposal(proposal.proposalKey)}
+									title="Delete proposal"
+								>
+									<Trash2 class="h-3 w-3" />
+								</button>
+								<div class="flex items-center justify-between mb-2 pr-8">
 									<span class="text-xs text-blue-400 font-medium">PROPOSED NEW RULE</span>
-									<span class="text-xs text-slate-400">{proposal.submittedBy}</span>
+									<span class="text-xs text-slate-400">{proposal.submittedByManager || 'Manager ' + proposal.submittedBy}</span>
 								</div>
 								<div class="text-sm text-blue-300 mb-2">• {proposal.proposedText}</div>
 								<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
@@ -572,24 +619,24 @@
 									<div class="flex space-x-2">
 										<button 
 											class="px-2 py-1 bg-green-600/20 text-green-400 rounded text-xs hover:bg-green-600/30 disabled:opacity-50"
-											on:click={() => voteOnProposal(proposal.id, 'yes')}
+											on:click={() => voteOnProposal(proposal.proposalKey, 'yes')}
 											disabled={loading}
 										>
-											Yes ({proposal.votes.yes})
+											Yes ({proposal.yesVotes})
 										</button>
 										<button 
 											class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs hover:bg-red-600/30 disabled:opacity-50"
-											on:click={() => voteOnProposal(proposal.id, 'no')}
+											on:click={() => voteOnProposal(proposal.proposalKey, 'no')}
 											disabled={loading}
 										>
-											No ({proposal.votes.no})
+											No ({proposal.noVotes})
 										</button>
 										<button 
 											class="px-2 py-1 bg-slate-600/20 text-slate-400 rounded text-xs hover:bg-slate-600/30 disabled:opacity-50"
-											on:click={() => voteOnProposal(proposal.id, 'abstain')}
+											on:click={() => voteOnProposal(proposal.proposalKey, 'abstain')}
 											disabled={loading}
 										>
-											Abstain ({proposal.votes.abstain})
+											Abstain ({proposal.abstainVotes})
 										</button>
 									</div>
 									<div class="text-right">

@@ -30,8 +30,7 @@ export const GET: RequestHandler = async () => {
 			.select({
 				totalTransactions: count(factTransaction.transactionKey)
 			})
-			.from(factTransaction)
-			.where(eq(factTransaction.isSuccessful, true));
+			.from(factTransaction);
 
 		// Get matchup counts
 		const matchupStats = await db

@@ -1,0 +1,1465 @@
+{
+  "id": "47673638-a3cd-4959-896a-2638aa82e6f3",
+  "prevId": "39a4e78b-1bde-46e6-9b9c-c336f0d9f617",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "edw.dim_league": {
+      "name": "dim_league",
+      "schema": "edw",
+      "columns": {
+        "league_key": {
+          "name": "league_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "league_id": {
+          "name": "league_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "league_name": {
+          "name": "league_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "num_teams": {
+          "name": "num_teams",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "league_type": {
+          "name": "league_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scoring_type": {
+          "name": "scoring_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "draft_type": {
+          "name": "draft_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.dim_manager": {
+      "name": "dim_manager",
+      "schema": "edw",
+      "columns": {
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "manager_name": {
+          "name": "manager_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_id": {
+          "name": "manager_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_season_year": {
+          "name": "first_season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_season_year": {
+          "name": "last_season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_seasons": {
+          "name": "total_seasons",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "total_leagues": {
+          "name": "total_leagues",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "is_current": {
+          "name": "is_current",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "include_in_analysis": {
+          "name": "include_in_analysis",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.dim_season": {
+      "name": "dim_season",
+      "schema": "edw",
+      "columns": {
+        "season_key": {
+          "name": "season_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season_start_date": {
+          "name": "season_start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_end_date": {
+          "name": "season_end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "playoff_start_week": {
+          "name": "playoff_start_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "championship_week": {
+          "name": "championship_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_weeks": {
+          "name": "total_weeks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_current_season": {
+          "name": "is_current_season",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "season_status": {
+          "name": "season_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'completed'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.dim_team": {
+      "name": "dim_team",
+      "schema": "edw",
+      "columns": {
+        "team_key": {
+          "name": "team_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "team_id": {
+          "name": "team_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "league_key": {
+          "name": "league_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_name": {
+          "name": "team_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_name": {
+          "name": "manager_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manager_id": {
+          "name": "manager_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_logo_url": {
+          "name": "team_logo_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.fact_matchup": {
+      "name": "fact_matchup",
+      "schema": "edw",
+      "columns": {
+        "matchup_key": {
+          "name": "matchup_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "league_key": {
+          "name": "league_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "week_key": {
+          "name": "week_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "week_number": {
+          "name": "week_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team1_key": {
+          "name": "team1_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team2_key": {
+          "name": "team2_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager1_key": {
+          "name": "manager1_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager2_key": {
+          "name": "manager2_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "team1_points": {
+          "name": "team1_points",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team2_points": {
+          "name": "team2_points",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "winner_team_key": {
+          "name": "winner_team_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "winner_manager_key": {
+          "name": "winner_manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchup_type": {
+          "name": "matchup_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'regular'"
+        },
+        "is_playoffs": {
+          "name": "is_playoffs",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_championship": {
+          "name": "is_championship",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_semifinal": {
+          "name": "is_semifinal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_quarterfinal": {
+          "name": "is_quarterfinal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_last_place_game": {
+          "name": "is_last_place_game",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "margin_of_victory": {
+          "name": "margin_of_victory",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.fact_team_performance": {
+      "name": "fact_team_performance",
+      "schema": "edw",
+      "columns": {
+        "performance_key": {
+          "name": "performance_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "team_key": {
+          "name": "team_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "league_key": {
+          "name": "league_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "week_key": {
+          "name": "week_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "week_number": {
+          "name": "week_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "points_for": {
+          "name": "points_for",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "points_against": {
+          "name": "points_against",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wins": {
+          "name": "wins",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "losses": {
+          "name": "losses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "ties": {
+          "name": "ties",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "weekly_rank": {
+          "name": "weekly_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_rank": {
+          "name": "season_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "playoff_seed": {
+          "name": "playoff_seed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_playoff_team": {
+          "name": "is_playoff_team",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.fact_transaction": {
+      "name": "fact_transaction",
+      "schema": "edw",
+      "columns": {
+        "transaction_key": {
+          "name": "transaction_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "league_key": {
+          "name": "league_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "player_key": {
+          "name": "player_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_team_key": {
+          "name": "from_team_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_team_key": {
+          "name": "to_team_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_manager_key": {
+          "name": "from_manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_manager_key": {
+          "name": "to_manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_week": {
+          "name": "transaction_week",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_date": {
+          "name": "transaction_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "faab_bid": {
+          "name": "faab_bid",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trade_group_id": {
+          "name": "trade_group_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_successful": {
+          "name": "is_successful",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.mart_manager_performance": {
+      "name": "mart_manager_performance",
+      "schema": "edw",
+      "columns": {
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "manager_name": {
+          "name": "manager_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_seasons": {
+          "name": "total_seasons",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_wins": {
+          "name": "total_wins",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_losses": {
+          "name": "total_losses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_ties": {
+          "name": "total_ties",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_percentage": {
+          "name": "win_percentage",
+          "type": "numeric(5, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_points_for": {
+          "name": "avg_points_for",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_points_against": {
+          "name": "avg_points_against",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_championships": {
+          "name": "total_championships",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_playoff_appearances": {
+          "name": "total_playoff_appearances",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "best_season": {
+          "name": "best_season",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_season": {
+          "name": "worst_season",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_season": {
+          "name": "first_season",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_season": {
+          "name": "last_season",
+          "type": "varchar(4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longest_win_streak": {
+          "name": "longest_win_streak",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longest_loss_streak": {
+          "name": "longest_loss_streak",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_transactions": {
+          "name": "total_transactions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_transactions_per_season": {
+          "name": "avg_transactions_per_season",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.rule_amendment": {
+      "name": "rule_amendment",
+      "schema": "app",
+      "columns": {
+        "amendment_key": {
+          "name": "amendment_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "proposal_key": {
+          "name": "proposal_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amendment_year": {
+          "name": "amendment_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amendment_title": {
+          "name": "amendment_title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amendment_description": {
+          "name": "amendment_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_season": {
+          "name": "effective_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_results": {
+          "name": "vote_results",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.rule_proposal": {
+      "name": "rule_proposal",
+      "schema": "app",
+      "columns": {
+        "proposal_key": {
+          "name": "proposal_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "proposal_id": {
+          "name": "proposal_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "proposal_type": {
+          "name": "proposal_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "affected_section": {
+          "name": "affected_section",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_language": {
+          "name": "current_language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proposed_language": {
+          "name": "proposed_language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rationale": {
+          "name": "rationale",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_season": {
+          "name": "effective_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "voting_start_date": {
+          "name": "voting_start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "voting_end_date": {
+          "name": "voting_end_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'draft'"
+        },
+        "required_votes": {
+          "name": "required_votes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 7
+        },
+        "yes_votes": {
+          "name": "yes_votes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "no_votes": {
+          "name": "no_votes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "abstain_votes": {
+          "name": "abstain_votes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "rule_proposal_proposal_id_unique": {
+          "name": "rule_proposal_proposal_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "proposal_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.rule_vote": {
+      "name": "rule_vote",
+      "schema": "app",
+      "columns": {
+        "vote_key": {
+          "name": "vote_key",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "proposal_key": {
+          "name": "proposal_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote": {
+          "name": "vote",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "voted_at": {
+          "name": "voted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "unique_vote_per_manager": {
+          "name": "unique_vote_per_manager",
+          "columns": [
+            {
+              "expression": "proposal_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "manager_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.session": {
+      "name": "session",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.user": {
+      "name": "user",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "age": {
+          "name": "age",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notification_preferences": {
+          "name": "notification_preferences",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "profile_settings": {
+          "name": "profile_settings",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "unique_user_manager_key": {
+          "name": "unique_user_manager_key",
+          "columns": [
+            {
+              "expression": "manager_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_manager_key_dim_manager_manager_key_fk": {
+          "name": "user_manager_key_dim_manager_manager_key_fk",
+          "tableFrom": "user",
+          "tableTo": "dim_manager",
+          "schemaTo": "edw",
+          "columnsFrom": [
+            "manager_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_username_unique": {
+          "name": "user_username_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "username"
+          ]
+        },
+        "user_email_unique": {
+          "name": "user_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "edw.vw_current_season_dashboard": {
+      "name": "vw_current_season_dashboard",
+      "schema": "edw",
+      "columns": {
+        "league_name": {
+          "name": "league_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_year": {
+          "name": "season_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_name": {
+          "name": "team_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "manager_name": {
+          "name": "manager_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wins": {
+          "name": "wins",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "losses": {
+          "name": "losses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ties": {
+          "name": "ties",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "points_for": {
+          "name": "points_for",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "points_against": {
+          "name": "points_against",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "point_differential": {
+          "name": "point_differential",
+          "type": "numeric(8, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "win_percentage": {
+          "name": "win_percentage",
+          "type": "numeric(5, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_rank": {
+          "name": "season_rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "playoff_probability": {
+          "name": "playoff_probability",
+          "type": "numeric(5, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_playoff_team": {
+          "name": "is_playoff_team",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "playoff_seed": {
+          "name": "playoff_seed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "app": "app",
+    "edw": "edw"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

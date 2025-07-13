@@ -12,7 +12,8 @@
 		ChevronRight,
 		Calendar,
 		User,
-		MessageSquare
+		MessageSquare,
+		Trash2
 	} from 'lucide-svelte';
 
 	interface RuleProposal {
@@ -75,7 +76,6 @@
 
 	onMount(async () => {
 		await loadProposals();
-		await loadVotes();
 		loading = false;
 	});
 
@@ -89,18 +89,12 @@
 		}
 	}
 
-	async function loadVotes() {
-		try {
-			const response = await fetch('/api/rule-votes');
-			const data = await response.json();
-			votes = data.votes || [];
-		} catch (error) {
-			console.error('Error loading votes:', error);
-		}
-	}
+
 
 	async function createProposal() {
 		try {
+			console.log('Submitting proposal data:', formData);
+			
 			const response = await fetch('/api/rule-proposals', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -111,6 +105,8 @@
 			});
 
 			if (response.ok) {
+				const result = await response.json();
+				console.log('Proposal created successfully:', result);
 				await loadProposals();
 				showCreateForm = false;
 				// Reset form
@@ -124,9 +120,14 @@
 					rationale: '',
 					effectiveSeason: new Date().getFullYear() + 1
 				};
+			} else {
+				const errorData = await response.json();
+				console.error('Failed to create proposal:', response.status, errorData);
+				alert(`Failed to create proposal: ${errorData.error || 'Unknown error'}`);
 			}
 		} catch (error) {
 			console.error('Error creating proposal:', error);
+			alert(`Error creating proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -144,12 +145,34 @@
 			});
 
 			if (response.ok) {
-				await loadVotes();
+				await loadProposals(); // Reload proposals to get updated vote counts
 				selectedProposal = null;
 				voteData = { vote: 'yes', comment: '' };
 			}
 		} catch (error) {
 			console.error('Error submitting vote:', error);
+		}
+	}
+
+	async function deleteProposal(proposalKey: number) {
+		if (!confirm('Are you sure you want to delete this proposal? This action cannot be undone.')) {
+			return;
+		}
+
+		try {
+			const response = await fetch('/api/rule-proposals', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					proposalKey
+				})
+			});
+
+			if (response.ok) {
+				await loadProposals();
+			}
+		} catch (error) {
+			console.error('Error deleting proposal:', error);
 		}
 	}
 
@@ -163,11 +186,30 @@
 	}
 
 	function getVoteCount(proposalKey: number, voteType: 'yes' | 'no' | 'abstain') {
-		return votes.filter(v => v.proposalKey === proposalKey && v.vote === voteType).length;
+		// Defensive check: ensure proposals array exists and is an array
+		if (!proposals || !Array.isArray(proposals)) {
+			console.warn('Proposals not loaded yet or not an array:', proposals);
+			return 0;
+		}
+		
+		const proposal = proposals.find(p => p && p.proposalKey === proposalKey);
+		if (!proposal) {
+			console.warn('Proposal not found for key:', proposalKey);
+			return 0;
+		}
+		
+		switch (voteType) {
+			case 'yes': return proposal.yesVotes || 0;
+			case 'no': return proposal.noVotes || 0;
+			case 'abstain': return proposal.abstainVotes || 0;
+			default: return 0;
+		}
 	}
 
 	function getProposalVotes(proposalKey: number) {
-		return votes.filter(v => v.proposalKey === proposalKey);
+		// Since we don't have individual vote records, return empty array for now
+		// This could be enhanced later to show actual vote history
+		return [];
 	}
 
 	function getStatusColor(status: string) {
@@ -360,13 +402,13 @@
 		<div class="space-y-4">
 			{#each proposals as proposal}
 				<div class="bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-700/50 overflow-hidden">
-					<button 
-						class="w-full p-6 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
-						on:click={() => toggleProposal(proposal.proposalKey)}
-					>
-						<div class="flex items-center space-x-4">
+					<div class="p-6 flex items-center justify-between">
+						<button 
+							class="flex-1 flex items-center space-x-4 hover:bg-slate-700/30 transition-colors rounded-lg p-2 -m-2"
+							on:click={() => toggleProposal(proposal.proposalKey)}
+						>
 							<svelte:component this={getStatusIcon(proposal.status)} class="h-6 w-6 text-amber-400" />
-							<div class="text-left">
+							<div class="text-left flex-1">
 								<h3 class="text-lg font-semibold text-white">{proposal.title}</h3>
 								<div class="flex items-center space-x-4 text-sm text-slate-400">
 									<span class="flex items-center space-x-1">
@@ -383,17 +425,24 @@
 									</span>
 								</div>
 							</div>
-						</div>
-						<div class="flex items-center space-x-4">
+							<svelte:component 
+								this={expandedProposals.has(proposal.proposalKey) ? ChevronDown : ChevronRight} 
+								class="h-5 w-5 text-slate-400 ml-4" 
+							/>
+						</button>
+						<div class="flex items-center space-x-3 ml-4">
+							<button 
+								class="p-2 rounded-lg text-red-300 bg-red-900/30 hover:text-red-200 hover:bg-red-900/50 transition-colors border border-red-800/50"
+								on:click={() => deleteProposal(proposal.proposalKey)}
+								title="Delete proposal"
+							>
+								<Trash2 class="h-5 w-5" />
+							</button>
 							<span class="px-3 py-1 rounded-full text-sm font-medium {getStatusColor(proposal.status)}">
 								{proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
 							</span>
-							<svelte:component 
-								this={expandedProposals.has(proposal.proposalKey) ? ChevronDown : ChevronRight} 
-								class="h-5 w-5 text-slate-400" 
-							/>
 						</div>
-					</button>
+					</div>
 					
 					{#if expandedProposals.has(proposal.proposalKey)}
 						<div class="px-6 pb-6 border-t border-slate-700/50">
@@ -524,33 +573,8 @@
 								{/if}
 								
 								<!-- Vote History -->
-								{#if getProposalVotes(proposal.proposalKey).length > 0}
-									<div class="border-t border-slate-700/50 pt-6">
-										<h4 class="text-lg font-semibold text-white mb-4">Vote History</h4>
-										<div class="space-y-3">
-											{#each getProposalVotes(proposal.proposalKey) as vote}
-												<div class="flex items-center justify-between bg-slate-700/30 rounded-lg p-3">
-													<div class="flex items-center space-x-3">
-														<span class="text-sm text-slate-400">{vote.managerName || 'Unknown'}</span>
-														<span class="px-2 py-1 rounded text-xs font-medium {
-															vote.vote === 'yes' ? 'bg-green-900/50 text-green-400' :
-															vote.vote === 'no' ? 'bg-red-900/50 text-red-400' :
-															'bg-slate-700/50 text-slate-400'
-														}">
-															{vote.vote.toUpperCase()}
-														</span>
-													</div>
-													{#if vote.comment}
-														<div class="flex items-center space-x-2">
-															<MessageSquare class="h-4 w-4 text-slate-400" />
-															<span class="text-sm text-slate-400">{vote.comment}</span>
-														</div>
-													{/if}
-												</div>
-											{/each}
-										</div>
-									</div>
-								{/if}
+								<!-- Note: Individual vote history not implemented yet -->
+								<!-- This would require a separate vote tracking system -->
 							</div>
 						</div>
 					{/if}

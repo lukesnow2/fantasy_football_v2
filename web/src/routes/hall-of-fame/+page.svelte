@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Crown, Trophy, Target, TrendingUp, Award, BarChart3, Users, Medal } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	let hallOfFameData: any = null;
 	let loading = true;
@@ -121,7 +122,11 @@
 				</div>
 				<div class="text-center">
 					<div class="text-3xl font-bold text-green-400">{(parseFloat(analytics.avg_win_percentage || 0) * 100).toFixed(1)}%</div>
-					<div class="text-slate-400">Avg Win Rate</div>
+					<div class="text-slate-400">
+						<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400">
+							Avg Win Rate
+						</MetricHelp>
+					</div>
 				</div>
 				<div class="text-center">
 					<div class="text-3xl font-bold text-purple-400">{parseFloat(analytics.avg_seasons_played || 0).toFixed(1)}</div>
@@ -129,7 +134,11 @@
 				</div>
 				<div class="text-center">
 					<div class="text-3xl font-bold text-cyan-400">{parseFloat(analytics.avg_hall_of_fame_index || 0).toFixed(3)}</div>
-					<div class="text-slate-400">Avg HoF Index</div>
+					<div class="text-slate-400">
+						<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400">
+							Avg HoF Index
+						</MetricHelp>
+					</div>
 				</div>
 			</div>
 			
@@ -157,43 +166,57 @@
 		<!-- Tier Breakdown -->
 		{#if tiers.length > 0}
 			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-				<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
+				<h2 class="text-2xl font-bold text-white mb-4 flex items-center">
 					<Medal class="w-6 h-6 text-yellow-400 mr-3" />
 					Hall of Fame Tiers
 				</h2>
 				
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					{#each tiers as tier}
-						<div class="bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
-							<h3 class="font-bold text-white mb-2">{tier.tier}</h3>
-							<div class="space-y-2 text-sm">
-								<div class="flex justify-between">
-									<span class="text-slate-400">Managers:</span>
-									<span class="text-white font-medium">{tier.manager_count}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Seasons:</span>
-									<span class="text-blue-400 font-medium">{parseFloat(tier.avg_seasons || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Championships:</span>
-									<span class="text-amber-400 font-medium">{parseFloat(tier.avg_championships || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Win %:</span>
-									<span class="text-green-400 font-medium">{(parseFloat(tier.avg_win_pct || 0) * 100).toFixed(1)}%</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg HoF Index:</span>
-									<span class="text-cyan-400 font-medium">{parseFloat(tier.avg_hall_of_fame_index || 0).toFixed(3)}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Career Record:</span>
-									<span class="text-white font-medium">{parseInt(tier.total_wins || 0)}-{parseInt(tier.total_losses || 0)}</span>
-								</div>
-							</div>
-						</div>
-					{/each}
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-slate-600/50">
+								<th class="text-left py-2 text-slate-300 font-medium">Tier</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Managers</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Avg Championships</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Win %</th>
+								<th class="text-center py-2 text-slate-300 font-medium">HoF Index</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Record</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each tiers as tier}
+								<tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
+									<td class="py-3">
+										<div class="flex items-center space-x-2">
+											<span class="text-lg">
+												{#if tier.tier === 'Hall of Fame Elite'}👑
+												{:else if tier.tier === 'Hall of Fame'}🏆
+												{:else if tier.tier === 'Hall of Very Good'}🥇
+												{:else if tier.tier === 'Solid Contributor'}🥈
+												{:else}🥉{/if}
+											</span>
+											<span class="text-white font-medium">{tier.tier}</span>
+										</div>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-white font-bold">{tier.manager_count}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-amber-400 font-bold">{parseFloat(tier.avg_championships || 0).toFixed(1)}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-green-400 font-bold">{(parseFloat(tier.avg_win_pct || 0) * 100).toFixed(1)}%</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-cyan-400 font-bold">{parseFloat(tier.avg_hall_of_fame_index || 0).toFixed(3)}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-slate-300 font-medium text-xs">{parseInt(tier.total_wins || 0)}-{parseInt(tier.total_losses || 0)}</span>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
 			</section>
 		{/if}
@@ -249,13 +272,21 @@
 										<div class="text-lg font-bold text-cyan-400">
 											{parseFloat(manager.hall_of_fame_index || 0).toFixed(3)}
 										</div>
-										<div class="text-xs text-slate-400">HoF Index</div>
+										<div class="text-xs text-slate-400">
+											<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												HoF Index
+											</MetricHelp>
+										</div>
 									</div>
 									<div>
 										<div class="text-lg font-bold {getWinPercentageColor(manager.career_win_percentage)}">
 											{(manager.career_win_percentage * 100).toFixed(1)}%
 										</div>
-										<div class="text-xs text-slate-400">Win Rate</div>
+										<div class="text-xs text-slate-400">
+											<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												Win Rate
+											</MetricHelp>
+										</div>
 									</div>
 									<div>
 										<div class="text-lg font-bold text-emerald-400">
@@ -289,7 +320,11 @@
 										<span class="font-medium text-orange-400">{manager.total_seasons}</span>
 									</div>
 									<div class="flex justify-between">
-										<span class="text-slate-400">Consistency:</span>
+										<span class="text-slate-400">
+											<MetricHelp metricId="season_consistency_score" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												Consistency:
+											</MetricHelp>
+										</span>
 										<span class="font-medium text-rose-400">{parseFloat(manager.season_consistency_score || 0).toFixed(3)}</span>
 									</div>
 								</div>
