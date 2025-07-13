@@ -98,10 +98,7 @@
 			const response = await fetch('/api/rule-proposals', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					...formData,
-					submittedBy: 1 // TODO: Get from auth
-				})
+				body: JSON.stringify(formData)
 			});
 
 			if (response.ok) {
@@ -133,16 +130,15 @@
 
 	async function submitVote(proposalKey: number) {
 		try {
-			const response = await fetch('/api/rule-votes', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					proposalKey,
-					managerKey: 1, // TODO: Get from auth
-					vote: voteData.vote,
-					comment: voteData.comment
-				})
-			});
+					const response = await fetch('/api/rule-votes', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				proposalKey,
+				vote: voteData.vote,
+				comment: voteData.comment
+			})
+		});
 
 			if (response.ok) {
 				await loadProposals(); // Reload proposals to get updated vote counts

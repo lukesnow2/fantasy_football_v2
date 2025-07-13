@@ -91,31 +91,20 @@ export const GET: RequestHandler = async ({ url }) => {
 		};
 	}
 
-	// Special action: migrate sessions
+	// Handle specific actions
 	if (action === 'migrate') {
-		try {
-			tests.migration = await runSessionMigration();
-		} catch (error) {
-			tests.migration = {
-				status: 'error',
-				message: error instanceof Error ? error.message : 'Migration failed'
-			};
-		}
+		tests.migration = await runSessionMigration();
+	} else if (action === 'test-schemas') {
+		tests.schemas = await testDatabaseSchemas();
+	} else if (action === 'migrate-rule-proposals') {
+		tests.ruleProposalMigration = await migrateRuleProposals();
 	}
 
-	// Special action: test database schemas
-	if (action === 'test-schemas') {
-		try {
-			tests.schemaTest = await testDatabaseSchemas();
-		} catch (error) {
-			tests.schemaTest = {
-				status: 'error',
-				message: error instanceof Error ? error.message : 'Schema test failed'
-			};
-		}
-	}
-
-	return json(tests);
+	return json({
+		status: 'debug',
+		timestamp: new Date().toISOString(),
+		tests
+	});
 };
 
 async function runSessionMigration() {
@@ -260,6 +249,165 @@ async function testDatabaseSchemas() {
 		return {
 			status: 'error',
 			message: error instanceof Error ? error.message : 'Database schema test failed'
+		};
+	}
+} 
+
+async function migrateRuleProposals() {
+	const results: string[] = [];
+	
+	try {
+		// Create app schema if it doesn't exist
+		await db.execute(sql`CREATE SCHEMA IF NOT EXISTS app`);
+		results.push('✅ App schema ensured');
+
+		// Check if rule_proposal table exists
+		const tableExistsResult = await db.execute(sql`
+			SELECT EXISTS (
+				SELECT FROM information_schema.tables 
+				WHERE table_schema = 'app' 
+				AND table_name = 'rule_proposal'
+			);
+		`);
+		
+		const tableExists = (tableExistsResult as any)[0]?.exists;
+		
+		if (!tableExists) {
+			// Create the rule_proposal table with SERIAL primary key
+			await db.execute(sql`
+				CREATE TABLE app.rule_proposal (
+					proposal_key SERIAL PRIMARY KEY,
+					proposal_id VARCHAR(50) NOT NULL UNIQUE,
+					title VARCHAR(255) NOT NULL,
+					description TEXT NOT NULL,
+					proposal_type VARCHAR(50) NOT NULL,
+					affected_section VARCHAR(100),
+					rule_index INTEGER,
+					current_language TEXT,
+					proposed_language TEXT NOT NULL,
+					rationale TEXT NOT NULL,
+					effective_season INTEGER NOT NULL,
+					submitted_by INTEGER NOT NULL,
+					submitted_at TIMESTAMP DEFAULT NOW(),
+					voting_start_date TIMESTAMP,
+					voting_end_date TIMESTAMP,
+					status VARCHAR(20) DEFAULT 'draft',
+					required_votes INTEGER DEFAULT 7,
+					yes_votes INTEGER DEFAULT 0,
+					no_votes INTEGER DEFAULT 0,
+					abstain_votes INTEGER DEFAULT 0,
+					created_at TIMESTAMP DEFAULT NOW(),
+					updated_at TIMESTAMP DEFAULT NOW(),
+					FOREIGN KEY (submitted_by) REFERENCES edw.dim_manager(manager_key)
+				);
+			`);
+			results.push('✅ Created rule_proposal table with SERIAL primary key');
+		} else {
+			// Check if proposal_key is already SERIAL
+			const columnInfoResult = await db.execute(sql`
+				SELECT column_default
+				FROM information_schema.columns 
+				WHERE table_schema = 'app' 
+				AND table_name = 'rule_proposal' 
+				AND column_name = 'proposal_key';
+			`);
+			
+			const columnDefault = (columnInfoResult as any)[0]?.column_default;
+			
+			if (!columnDefault || !columnDefault.includes('nextval')) {
+				// Convert existing integer primary key to SERIAL
+				await db.execute(sql`
+					CREATE SEQUENCE IF NOT EXISTS app.rule_proposal_proposal_key_seq;
+				`);
+				await db.execute(sql`
+					ALTER TABLE app.rule_proposal 
+					ALTER COLUMN proposal_key SET DEFAULT nextval('app.rule_proposal_proposal_key_seq');
+				`);
+				await db.execute(sql`
+					ALTER SEQUENCE app.rule_proposal_proposal_key_seq 
+					OWNED BY app.rule_proposal.proposal_key;
+				`);
+				results.push('✅ Converted proposal_key to SERIAL');
+			} else {
+				results.push('✅ proposal_key already uses SERIAL');
+			}
+		}
+
+		// Create rule_vote table if it doesn't exist
+		const voteTableExistsResult = await db.execute(sql`
+			SELECT EXISTS (
+				SELECT FROM information_schema.tables 
+				WHERE table_schema = 'app' 
+				AND table_name = 'rule_vote'
+			);
+		`);
+		
+		const voteTableExists = (voteTableExistsResult as any)[0]?.exists;
+		
+		if (!voteTableExists) {
+			await db.execute(sql`
+				CREATE TABLE app.rule_vote (
+					vote_key SERIAL PRIMARY KEY,
+					proposal_key INTEGER NOT NULL,
+					manager_key INTEGER NOT NULL,
+					vote VARCHAR(10) NOT NULL,
+					comment TEXT,
+					voted_at TIMESTAMP DEFAULT NOW(),
+					created_at TIMESTAMP DEFAULT NOW(),
+					FOREIGN KEY (proposal_key) REFERENCES app.rule_proposal(proposal_key),
+					FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key),
+					UNIQUE(proposal_key, manager_key)
+				);
+			`);
+			results.push('✅ Created rule_vote table');
+		} else {
+			results.push('✅ rule_vote table already exists');
+		}
+
+		// Create rule_amendment table if it doesn't exist
+		const amendmentTableExistsResult = await db.execute(sql`
+			SELECT EXISTS (
+				SELECT FROM information_schema.tables 
+				WHERE table_schema = 'app' 
+				AND table_name = 'rule_amendment'
+			);
+		`);
+		
+		const amendmentTableExists = (amendmentTableExistsResult as any)[0]?.exists;
+		
+		if (!amendmentTableExists) {
+			await db.execute(sql`
+				CREATE TABLE app.rule_amendment (
+					amendment_key SERIAL PRIMARY KEY,
+					proposal_key INTEGER NOT NULL,
+					amendment_year INTEGER NOT NULL,
+					amendment_title VARCHAR(255) NOT NULL,
+					amendment_description TEXT NOT NULL,
+					effective_season INTEGER NOT NULL,
+					vote_results TEXT,
+					approved_by INTEGER,
+					approved_at TIMESTAMP,
+					created_at TIMESTAMP DEFAULT NOW(),
+					FOREIGN KEY (proposal_key) REFERENCES app.rule_proposal(proposal_key),
+					FOREIGN KEY (approved_by) REFERENCES edw.dim_manager(manager_key)
+				);
+			`);
+			results.push('✅ Created rule_amendment table');
+		} else {
+			results.push('✅ rule_amendment table already exists');
+		}
+
+		return {
+			status: 'success',
+			message: 'Rule proposal migration completed successfully',
+			details: results
+		};
+		
+	} catch (error) {
+		return {
+			status: 'error',
+			message: error instanceof Error ? error.message : 'Unknown migration error',
+			details: results
 		};
 	}
 } 

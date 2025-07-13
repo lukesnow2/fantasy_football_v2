@@ -99,7 +99,7 @@
 		const proposalsResponse = await fetch('/api/rule-proposals');
 		const proposalsData = await proposalsResponse.json();
 		const proposals = proposalsData.proposals || proposalsData; // Handle both formats
-		pendingProposals = proposals.filter((p: any) => p.status === 'pending');
+		pendingProposals = proposals.filter((p: any) => p.status === 'active');
 			
 			// Load amendments
 			const amendmentsResponse = await fetch('/api/rule-proposals?type=amendments');
@@ -155,14 +155,13 @@
 	async function voteOnProposal(proposalId: string, vote: 'yes' | 'no' | 'abstain') {
 		loading = true;
 		try {
-			const response = await fetch('/api/rule-proposals', {
+			const response = await fetch('/api/rule-votes', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					action: 'vote',
-					proposalId,
+					proposalKey: parseInt(proposalId),
 					vote,
-					voterId: currentUserId
+					comment: '' // Optional comment field
 				})
 			});
 
@@ -207,19 +206,19 @@
 	// Get proposals for a specific rule (show all edit proposals for this section)
 	function getProposalsForRule(sectionId: string, ruleIndex: number) {
 		return pendingProposals.filter(p => 
-			p.sectionId === sectionId && 
+			p.affectedSection === sectionId && 
 			p.ruleIndex === ruleIndex &&
-			p.type === 'edit' && 
-			p.status === 'pending'
+			p.proposalType === 'edit_language' && 
+			p.status === 'active'
 		);
 	}
 
 	// Get proposals for adding to a section
 	function getAddProposalsForSection(sectionId: string) {
 		return pendingProposals.filter(p => 
-			p.sectionId === sectionId && 
-			p.type === 'add' && 
-			p.status === 'pending'
+			p.affectedSection === sectionId && 
+			p.proposalType === 'add_clause' && 
+			p.status === 'active'
 		);
 	}
 
@@ -464,9 +463,9 @@
 						</button>
 						<div class="text-sm text-slate-400 mb-1 pr-8">{proposal.affectedSection || proposal.sectionId}</div>
 						<div class="text-white font-medium mb-2">
-							{proposal.type === 'add' ? 'Add New Rule' : 'Edit Rule'}
+							{proposal.proposalType === 'add_clause' ? 'Add New Rule' : 'Edit Rule'}
 						</div>
-						<div class="text-sm text-slate-300 mb-3 line-clamp-2">{proposal.proposedText}</div>
+						<div class="text-sm text-slate-300 mb-3 line-clamp-2">{proposal.proposedLanguage}</div>
 						<div class="flex items-center justify-between text-xs">
 							<span class="text-slate-400">Effective {proposal.effectiveSeason}</span>
 							<div class="flex items-center space-x-2">
@@ -552,12 +551,11 @@
 											>
 												<Trash2 class="h-3 w-3" />
 											</button>
-											<div class="flex items-center justify-between mb-2 pr-8">
+											<div class="flex items-center justify-between mb-3 pr-8">
 												<span class="text-xs text-amber-400 font-medium">PROPOSED CHANGE</span>
 												<span class="text-xs text-slate-400">{proposal.submittedByManager || 'Manager ' + proposal.submittedBy}</span>
 											</div>
-											<div class="text-sm text-amber-300 mb-2">{proposal.proposedText}</div>
-											<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
+											<div class="text-base text-amber-200 font-medium mb-2">{proposal.proposedLanguage}</div>
 											<div class="flex items-center justify-between">
 												<div class="flex space-x-2">
 													<button 
@@ -609,12 +607,11 @@
 								>
 									<Trash2 class="h-3 w-3" />
 								</button>
-								<div class="flex items-center justify-between mb-2 pr-8">
+								<div class="flex items-center justify-between mb-3 pr-8">
 									<span class="text-xs text-blue-400 font-medium">PROPOSED NEW RULE</span>
 									<span class="text-xs text-slate-400">{proposal.submittedByManager || 'Manager ' + proposal.submittedBy}</span>
 								</div>
-								<div class="text-sm text-blue-300 mb-2">• {proposal.proposedText}</div>
-								<div class="text-xs text-slate-400 mb-3">{proposal.rationale}</div>
+								<div class="text-base text-blue-200 font-medium mb-2">• {proposal.proposedLanguage}</div>
 								<div class="flex items-center justify-between">
 									<div class="flex space-x-2">
 										<button 

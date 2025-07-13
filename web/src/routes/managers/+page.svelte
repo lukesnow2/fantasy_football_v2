@@ -5,6 +5,8 @@
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import { getTierColor, getWinPercentageColor, getChampionshipBadge, getInitials } from '$lib/utils/managerUtils';
 
+	export let data;
+
 	let managerData: any = null;
 	let loading = true;
 	let selectedManagerName = '';
@@ -17,9 +19,14 @@
 			if (response.ok) {
 				managerData = await response.json();
 				console.log('Manager data loaded:', managerData);
-				// Set first manager as default
+				// Set authenticated user's manager as default, or first manager if not authenticated
 				if (managerData?.data?.rankings?.length > 0) {
-					selectedManagerName = managerData.data.rankings[0].manager_name;
+					const userManager = data.userManagerName;
+					if (userManager && managerData.data.rankings.find((m: any) => m.manager_name === userManager)) {
+						selectedManagerName = userManager;
+					} else {
+						selectedManagerName = managerData.data.rankings[0].manager_name;
+					}
 				}
 			} else {
 				console.error('Failed to fetch manager data:', response.status, response.statusText);
