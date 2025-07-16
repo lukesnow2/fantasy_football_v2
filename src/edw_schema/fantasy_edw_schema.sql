@@ -7,7 +7,7 @@
 -- NOTE: ROSTER FUNCTIONALITY ENABLED
 -- fact_roster table included for weekly player performance analytics
 -- 
--- Author: AI Assistant
+-- Author: Luke Snow
 -- Date: 2025-06-06
 -- ============================================================================
 

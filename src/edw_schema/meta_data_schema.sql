@@ -4,7 +4,7 @@
 -- Stores comprehensive definitions, formulas, and metadata for all metrics
 -- Used to provide contextual help and documentation to users
 -- 
--- Author: AI Assistant
+-- Author: Luke Snow
 -- Date: 2025-01-27
 -- ============================================================================
 
