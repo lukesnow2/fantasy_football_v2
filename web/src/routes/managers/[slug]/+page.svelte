@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { Crown, Trophy, TrendingUp, Users, Target, Calendar, BarChart3, Award, ArrowLeft } from 'lucide-svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 
 	let managerData: any = null;
 	let loading = true;
@@ -135,11 +136,19 @@
 							<div class="text-2xl font-bold {getWinPercentageColor(manager.win_percentage)}">
 								{(manager.win_percentage * 100).toFixed(1)}%
 							</div>
-							<div class="text-sm text-slate-400">Win Rate</div>
+							<div class="text-sm text-slate-400">
+								<MetricHelp metricId="career_win_percentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+									Win Rate
+								</MetricHelp>
+							</div>
 						</div>
 						<div class="text-center">
 							<div class="text-2xl font-bold text-green-400">{manager.avg_points_for?.toFixed(1)}</div>
-							<div class="text-sm text-slate-400">Avg Points</div>
+							<div class="text-sm text-slate-400">
+								<MetricHelp metricId="avg_points_per_game" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+									Avg Points
+								</MetricHelp>
+							</div>
 						</div>
 						<div class="text-center">
 							<div class="text-2xl font-bold text-purple-400">{manager.total_seasons}</div>

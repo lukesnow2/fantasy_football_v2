@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Crown, Trophy, Target, TrendingUp, Award, BarChart3, Users, Medal } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	let hallOfFameData: any = null;
 	let loading = true;
@@ -62,12 +63,12 @@
 		return 'text-red-400';
 	}
 
-	function getIndexColor(index: number, maxIndex: number): string {
-		const percentage = index / maxIndex;
-		if (percentage >= 0.8) return 'text-amber-400';
-		if (percentage >= 0.6) return 'text-purple-400';
-		if (percentage >= 0.4) return 'text-blue-400';
-		if (percentage >= 0.2) return 'text-green-400';
+	function getIndexColor(rank: number, totalManagers: number): string {
+		const percentage = rank / totalManagers;
+		if (percentage <= 0.2) return 'text-amber-400';
+		if (percentage <= 0.4) return 'text-purple-400';
+		if (percentage <= 0.6) return 'text-blue-400';
+		if (percentage <= 0.8) return 'text-green-400';
 		return 'text-slate-400';
 	}
 
@@ -110,7 +111,7 @@
 				Hall of Fame Overview
 			</h2>
 			
-			<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+			<div class="grid grid-cols-2 md:grid-cols-5 gap-6">
 				<div class="text-center">
 					<div class="text-3xl font-bold text-blue-400">{analytics.total_managers || 0}</div>
 					<div class="text-slate-400">Total Managers</div>
@@ -121,11 +122,43 @@
 				</div>
 				<div class="text-center">
 					<div class="text-3xl font-bold text-green-400">{(parseFloat(analytics.avg_win_percentage || 0) * 100).toFixed(1)}%</div>
-					<div class="text-slate-400">Avg Win Rate</div>
+					<div class="text-slate-400">
+						<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400">
+							Avg Win Rate
+						</MetricHelp>
+					</div>
 				</div>
 				<div class="text-center">
 					<div class="text-3xl font-bold text-purple-400">{parseFloat(analytics.avg_seasons_played || 0).toFixed(1)}</div>
 					<div class="text-slate-400">Avg Seasons</div>
+				</div>
+				<div class="text-center">
+					<div class="text-3xl font-bold text-cyan-400">{parseFloat(analytics.avg_hall_of_fame_index || 0).toFixed(3)}</div>
+					<div class="text-slate-400">
+						<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400">
+							Avg HoF Index
+						</MetricHelp>
+					</div>
+				</div>
+			</div>
+			
+			<!-- Additional Analytics Row -->
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-700/50">
+				<div class="text-center">
+					<div class="text-2xl font-bold text-orange-400">{parseFloat(analytics.avg_points_per_game || 0).toFixed(1)}</div>
+					<div class="text-slate-400">Avg Pts/Game</div>
+				</div>
+				<div class="text-center">
+					<div class="text-2xl font-bold text-emerald-400">{parseInt(analytics.total_career_wins || 0).toLocaleString()}</div>
+					<div class="text-slate-400">Total Wins</div>
+				</div>
+				<div class="text-center">
+					<div class="text-2xl font-bold text-red-400">{parseInt(analytics.total_career_losses || 0).toLocaleString()}</div>
+					<div class="text-slate-400">Total Losses</div>
+				</div>
+				<div class="text-center">
+					<div class="text-2xl font-bold text-yellow-400">{parseInt(analytics.total_career_ties || 0)}</div>
+					<div class="text-slate-400">Total Ties</div>
 				</div>
 			</div>
 		</section>
@@ -133,35 +166,57 @@
 		<!-- Tier Breakdown -->
 		{#if tiers.length > 0}
 			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-				<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
+				<h2 class="text-2xl font-bold text-white mb-4 flex items-center">
 					<Medal class="w-6 h-6 text-yellow-400 mr-3" />
 					Hall of Fame Tiers
 				</h2>
 				
-				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-					{#each tiers as tier}
-						<div class="bg-slate-700/30 rounded-lg p-4 border border-slate-600/50">
-							<h3 class="font-bold text-white mb-2">{tier.tier}</h3>
-							<div class="space-y-2 text-sm">
-								<div class="flex justify-between">
-									<span class="text-slate-400">Managers:</span>
-									<span class="text-white font-medium">{tier.manager_count}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Index:</span>
-									<span class="text-blue-400 font-medium">{parseFloat(tier.avg_index || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Championships:</span>
-									<span class="text-amber-400 font-medium">{parseFloat(tier.avg_championships || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between">
-									<span class="text-slate-400">Avg Win %:</span>
-									<span class="text-green-400 font-medium">{(parseFloat(tier.avg_win_pct || 0) * 100).toFixed(1)}%</span>
-								</div>
-							</div>
-						</div>
-					{/each}
+				<div class="overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-slate-600/50">
+								<th class="text-left py-2 text-slate-300 font-medium">Tier</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Managers</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Avg Championships</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Win %</th>
+								<th class="text-center py-2 text-slate-300 font-medium">HoF Index</th>
+								<th class="text-center py-2 text-slate-300 font-medium">Record</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each tiers as tier}
+								<tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
+									<td class="py-3">
+										<div class="flex items-center space-x-2">
+											<span class="text-lg">
+												{#if tier.tier === 'Hall of Fame Elite'}👑
+												{:else if tier.tier === 'Hall of Fame'}🏆
+												{:else if tier.tier === 'Hall of Very Good'}🥇
+												{:else if tier.tier === 'Solid Contributor'}🥈
+												{:else}🥉{/if}
+											</span>
+											<span class="text-white font-medium">{tier.tier}</span>
+										</div>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-white font-bold">{tier.manager_count}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-amber-400 font-bold">{parseFloat(tier.avg_championships || 0).toFixed(1)}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-green-400 font-bold">{(parseFloat(tier.avg_win_pct || 0) * 100).toFixed(1)}%</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-cyan-400 font-bold">{parseFloat(tier.avg_hall_of_fame_index || 0).toFixed(3)}</span>
+									</td>
+									<td class="py-3 text-center">
+										<span class="text-slate-300 font-medium text-xs">{parseInt(tier.total_wins || 0)}-{parseInt(tier.total_losses || 0)}</span>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
 			</section>
 		{/if}
@@ -206,28 +261,45 @@
 								</div>
 
 								<!-- Right Side: Stats Grid -->
-								<div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+								<div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
 									<div>
-										<div class="text-lg font-bold {getIndexColor(manager.hall_of_fame_index, analytics.highest_hall_of_fame_index)}">
-											{parseFloat(manager.hall_of_fame_index).toFixed(1)}
+										<div class="text-lg font-bold {getIndexColor(manager.hall_of_fame_rank, analytics.total_managers)}">
+											#{manager.hall_of_fame_rank}
 										</div>
-										<div class="text-xs text-slate-400">HoF Index</div>
+										<div class="text-xs text-slate-400">HoF Rank</div>
+									</div>
+									<div>
+										<div class="text-lg font-bold text-cyan-400">
+											{parseFloat(manager.hall_of_fame_index || 0).toFixed(3)}
+										</div>
+										<div class="text-xs text-slate-400">
+											<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												HoF Index
+											</MetricHelp>
+										</div>
 									</div>
 									<div>
 										<div class="text-lg font-bold {getWinPercentageColor(manager.career_win_percentage)}">
 											{(manager.career_win_percentage * 100).toFixed(1)}%
 										</div>
-										<div class="text-xs text-slate-400">Win Rate</div>
+										<div class="text-xs text-slate-400">
+											<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												Win Rate
+											</MetricHelp>
+										</div>
 									</div>
 									<div>
-										<div class="text-lg font-bold text-blue-400">
-											{manager.career_wins}-{manager.career_losses}{manager.career_ties > 0 ? `-${manager.career_ties}` : ''}
+										<div class="text-lg font-bold text-emerald-400">
+											{manager.career_wins}-{manager.career_losses}
+											{#if manager.career_ties > 0}-{manager.career_ties}{/if}
 										</div>
 										<div class="text-xs text-slate-400">Career Record</div>
 									</div>
 									<div>
-										<div class="text-lg font-bold text-purple-400">{manager.total_seasons}</div>
-										<div class="text-xs text-slate-400">Seasons</div>
+										<div class="text-lg font-bold text-blue-400">
+											{parseFloat(manager.total_points_scored).toLocaleString()}
+										</div>
+										<div class="text-xs text-slate-400">Career Points</div>
 									</div>
 								</div>
 							</div>
@@ -236,20 +308,24 @@
 							<div class="mt-4 pt-4 border-t border-slate-700/50">
 								<div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
 									<div class="flex justify-between">
-										<span class="text-slate-400">Career Points:</span>
-										<span class="font-medium text-green-400">{parseFloat(manager.total_points_scored).toLocaleString()}</span>
-									</div>
-									<div class="flex justify-between">
 										<span class="text-slate-400">Avg Points/Game:</span>
-										<span class="font-medium text-cyan-400">{parseFloat(manager.avg_points_per_game).toFixed(1)}</span>
+										<span class="font-medium text-green-400">{parseFloat(manager.avg_points_per_game).toFixed(1)}</span>
 									</div>
 									<div class="flex justify-between">
 										<span class="text-slate-400">Playoff Apps:</span>
-										<span class="font-medium text-orange-400">{manager.playoff_appearances}</span>
+										<span class="font-medium text-cyan-400">{manager.playoff_appearances}</span>
 									</div>
 									<div class="flex justify-between">
-										<span class="text-slate-400">Consistency:</span>
-										<span class="font-medium text-rose-400">{parseFloat(manager.season_consistency_score).toFixed(2)}</span>
+										<span class="text-slate-400">Seasons Played:</span>
+										<span class="font-medium text-orange-400">{manager.total_seasons}</span>
+									</div>
+									<div class="flex justify-between">
+										<span class="text-slate-400">
+											<MetricHelp metricId="season_consistency_score" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+												Consistency:
+											</MetricHelp>
+										</span>
+										<span class="font-medium text-rose-400">{parseFloat(manager.season_consistency_score || 0).toFixed(3)}</span>
 									</div>
 								</div>
 							</div>
@@ -270,13 +346,19 @@
 				<div>
 					<h3 class="text-lg font-bold text-white mb-4">How the Index is Calculated</h3>
 					<div class="space-y-3 text-sm text-slate-300">
+						<div class="bg-slate-700/30 rounded-lg p-3 border border-slate-600/50 mb-4">
+							<div class="font-bold text-cyan-400 mb-2">Hall of Fame Index Formula:</div>
+							<div class="text-xs text-slate-300">
+								HoF Index = (60% × Championship Score) + (40% × Win Percentage)
+							</div>
+						</div>
 						<div class="flex items-start">
 							<Trophy class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Championships:</strong> Major factor - multiple titles significantly boost ranking</span>
+							<span><strong>Championships (60%):</strong> Multiple titles significantly boost ranking with diminishing returns</span>
 						</div>
 						<div class="flex items-start">
 							<Target class="w-4 h-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Win Percentage:</strong> Consistent success over career</span>
+							<span><strong>Win Percentage (40%):</strong> Consistent success over entire career</span>
 						</div>
 						<div class="flex items-start">
 							<TrendingUp class="w-4 h-4 text-green-400 mr-2 mt-0.5 flex-shrink-0" />

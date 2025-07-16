@@ -2,7 +2,10 @@
 	import { onMount } from 'svelte';
 	import { Trophy, Target, TrendingUp, Award, User, Crown, BarChart3, Calendar, Users } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import { getTierColor, getWinPercentageColor, getChampionshipBadge, getInitials } from '$lib/utils/managerUtils';
+
+	export let data;
 
 	let managerData: any = null;
 	let loading = true;
@@ -16,9 +19,14 @@
 			if (response.ok) {
 				managerData = await response.json();
 				console.log('Manager data loaded:', managerData);
-				// Set first manager as default
+				// Set authenticated user's manager as default, or first manager if not authenticated
 				if (managerData?.data?.rankings?.length > 0) {
-					selectedManagerName = managerData.data.rankings[0].manager_name;
+					const userManager = data.userManagerName;
+					if (userManager && managerData.data.rankings.find((m: any) => m.manager_name === userManager)) {
+						selectedManagerName = userManager;
+					} else {
+						selectedManagerName = managerData.data.rankings[0].manager_name;
+					}
 				}
 			} else {
 				console.error('Failed to fetch manager data:', response.status, response.statusText);
@@ -118,7 +126,11 @@
 								{parseFloat(currentManager.win_percentage || 0).toFixed(3)}
 							</div>
 						</div>
-						<div class="text-slate-400 text-sm">Win Rate</div>
+						<div class="text-slate-400 text-sm">
+							<MetricHelp metricId="career_win_percentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+								Win Rate
+							</MetricHelp>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -169,7 +181,11 @@
 								</div>
 								<div class="text-center">
 									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avg_points_per_game || 0).toFixed(1)}</div>
-									<div class="text-slate-400 text-sm">Avg Points/Game</div>
+									<div class="text-slate-400 text-sm">
+										<MetricHelp metricId="avg_points_per_game" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+											Avg Points/Game
+										</MetricHelp>
+									</div>
 								</div>
 								<div class="text-center">
 									<div class="text-2xl font-bold text-purple-400">{parseFloat(currentManager.total_points_scored || 0).toLocaleString()}</div>
@@ -242,15 +258,27 @@
 							</h3>
 							<div class="space-y-4">
 								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Draft Grade</span>
+									<span class="text-slate-400">
+										<MetricHelp metricId="draft_value_index" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+											Draft Grade
+										</MetricHelp>
+									</span>
 									<span class="text-lg font-bold text-green-400">{parseFloat(currentManager.avg_draft_grade || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-slate-400">FAAB Efficiency</span>
+									<span class="text-slate-400">
+										<MetricHelp metricId="faab_efficiency" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+											FAAB Efficiency
+										</MetricHelp>
+									</span>
 									<span class="text-lg font-bold text-blue-400">{parseFloat(currentManager.faab_efficiency_rating || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Consistency Score</span>
+									<span class="text-slate-400">
+										<MetricHelp metricId="season_consistency_score" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+											Consistency Score
+										</MetricHelp>
+									</span>
 									<span class="text-lg font-bold text-purple-400">{parseFloat(currentManager.season_consistency_score || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { TrendingUp, Trophy, Calendar, BarChart3, Target } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
 	let tradeData: any = null;
 	let loading = true;
@@ -142,7 +143,11 @@
 						</div>
 						<div class="text-center">
 							<div class="text-3xl font-bold text-purple-400">{parseFloat(tradeData.analytics.overview.avg_production_impact || 0).toFixed(1)}</div>
-							<div class="text-slate-400">Avg Impact</div>
+							<div class="text-slate-400">
+								<MetricHelp metricId="trade_production_differential" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+									Avg Impact
+								</MetricHelp>
+							</div>
 						</div>
 					</div>
 				</section>
@@ -250,8 +255,8 @@
 										<span class="text-slate-400 text-sm">Week {trade.transaction_week}, {trade.season_year}</span>
 									</div>
 									<span class="text-xs px-2 py-1 rounded
-										{trade.trade_winner === 'Even Trade' ? 'bg-amber-500/20 text-amber-300' :
-										 'bg-green-500/20 text-green-300'}">
+										{trade.trade_winner === 'Even Trade' ? 'bg-amber-500 bg-opacity-20 text-amber-300' :
+										 'bg-green-500 bg-opacity-20 text-green-300'}">
 										{trade.trade_winner}
 									</span>
 								</div>
