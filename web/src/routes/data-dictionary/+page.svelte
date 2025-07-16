@@ -7,7 +7,7 @@
 	 */
 	
 	import { onMount } from 'svelte';
-	import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
+	import metricDefinitionsStore from '$lib/stores/metricDefinitions';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
 	
