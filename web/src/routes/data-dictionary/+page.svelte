@@ -11,22 +11,22 @@
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
 	
-	let categories = [];
-	let groupedMetrics = {};
+	let categories: any[] = [];
+	let groupedMetrics: Record<string, any> = {};
 	let searchTerm = '';
 	let selectedCategory = 'all';
 	let loading = true;
-	let error = null;
+	let error: string | null = null;
 	
 	// Reactive filtering
-	$: filteredCategories = categories.filter(category => {
+	$: filteredCategories = categories.filter((category: any) => {
 		if (selectedCategory !== 'all' && category.category_id !== selectedCategory) {
 			return false;
 		}
 		
 		if (searchTerm) {
 			const searchLower = searchTerm.toLowerCase();
-			return category.metrics.some(metric => 
+			return category.metrics.some((metric: any) => 
 				metric.metric_name.toLowerCase().includes(searchLower) ||
 				metric.short_description.toLowerCase().includes(searchLower) ||
 				metric.metric_category.toLowerCase().includes(searchLower)
@@ -54,14 +54,14 @@
 			categories = data.categories || [];
 			
 			// Also cache in store for tooltip usage
-			categories.forEach(category => {
+			categories.forEach((category: any) => {
 				metricDefinitionsStore.setCategories(categories);
-				category.metrics?.forEach(metric => {
+				category.metrics?.forEach((metric: any) => {
 					metricDefinitionsStore.setMetric(metric.metric_id, { metric });
 				});
 			});
 			
-		} catch (err) {
+		} catch (err: any) {
 			console.error('Error loading data dictionary:', err);
 			error = err.message;
 		} finally {
@@ -69,18 +69,18 @@
 		}
 	});
 	
-	function getFilteredMetrics(categoryMetrics) {
+	function getFilteredMetrics(categoryMetrics: any[]) {
 		if (!searchTerm) return categoryMetrics;
 		
 		const searchLower = searchTerm.toLowerCase();
-		return categoryMetrics.filter(metric => 
+		return categoryMetrics.filter((metric: any) => 
 			metric.metric_name.toLowerCase().includes(searchLower) ||
 			metric.short_description.toLowerCase().includes(searchLower)
 		);
 	}
 	
-	function getCategoryIcon(iconName) {
-		const icons = {
+	function getCategoryIcon(iconName: string) {
+		const icons: Record<string, string> = {
 			'user': '👤',
 			'users': '👥',
 			'target': '🎯',
@@ -97,7 +97,7 @@
 		return icons[iconName] || '📊';
 	}
 	
-	function formatValue(value, format) {
+	function formatValue(value: any, format: string) {
 		if (value === null || value === undefined) return 'N/A';
 		
 		switch (format) {
