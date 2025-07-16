@@ -495,7 +495,7 @@
 					<div class="flex items-center space-x-2">
 						{#if editMode}
 							<button 
-								class="p-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+								class="p-2 bg-amber-500 bg-opacity-20 hover:bg-amber-500 hover:bg-opacity-30 text-amber-400 rounded-lg transition-colors"
 								on:click|stopPropagation={() => startAdd(section.id)}
 							>
 								<Plus class="h-4 w-4" />
@@ -668,7 +668,7 @@
 			<div class="flex items-center space-x-2">
 				{#if editMode}
 					<button 
-						class="p-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+						class="p-2 bg-amber-500 bg-opacity-20 hover:bg-amber-500 hover:bg-opacity-30 text-amber-400 rounded-lg transition-colors"
 						on:click|stopPropagation={() => startAdd('appendix1')}
 					>
 						<Plus class="h-4 w-4" />

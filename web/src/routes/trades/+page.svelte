@@ -255,8 +255,8 @@
 										<span class="text-slate-400 text-sm">Week {trade.transaction_week}, {trade.season_year}</span>
 									</div>
 									<span class="text-xs px-2 py-1 rounded
-										{trade.trade_winner === 'Even Trade' ? 'bg-amber-500/20 text-amber-300' :
-										 'bg-green-500/20 text-green-300'}">
+										{trade.trade_winner === 'Even Trade' ? 'bg-amber-500 bg-opacity-20 text-amber-300' :
+										 'bg-green-500 bg-opacity-20 text-green-300'}">
 										{trade.trade_winner}
 									</span>
 								</div>
