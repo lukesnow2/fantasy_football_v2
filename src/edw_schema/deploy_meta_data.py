@@ -8,7 +8,7 @@ It can be run standalone or integrated into existing deployment processes.
 Usage:
     python deploy_meta_data.py [--recreate] [--data-only] [--schema-only]
 
-Author: AI Assistant
+Author: Luke Snow
 Date: 2025-01-27
 """
 

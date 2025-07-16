@@ -124,6 +124,27 @@
   --color-pink-900: #831843;
   --color-pink-950: #500724;
 
+  /* Custom colors for fantasy football positions */
+  --color-position-qb: #dc2626;        /* Red for QB */
+  --color-position-rb: #2563eb;        /* Blue for RB */
+  --color-position-wr: #16a34a;        /* Green for WR */
+  --color-position-te: #eab308;        /* Yellow for TE */
+  --color-position-k: #ea580c;         /* Brown/Orange for K */
+  --color-position-def: #1f2937;       /* Dark gray/black for DEF */
+
+  /* Orange color palette (missing from default) */
+  --color-orange-50: #fff7ed;
+  --color-orange-100: #ffedd5;
+  --color-orange-200: #fed7aa;
+  --color-orange-300: #fdba74;
+  --color-orange-400: #fb923c;
+  --color-orange-500: #f97316;
+  --color-orange-600: #ea580c;
+  --color-orange-700: #c2410c;
+  --color-orange-800: #9a3412;
+  --color-orange-900: #7c2d12;
+  --color-orange-950: #431407;
+
   /* Essential design tokens */
   --color-white: #ffffff;
   --color-black: #000000;

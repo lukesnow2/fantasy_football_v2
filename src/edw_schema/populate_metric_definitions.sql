@@ -4,7 +4,7 @@
 -- Populates the meta_data schema with definitions for all complex metrics
 -- Based on analysis of the existing EDW schema and API endpoints
 -- 
--- Author: AI Assistant
+-- Author: Luke Snow
 -- Date: 2025-01-27
 -- ============================================================================
 
