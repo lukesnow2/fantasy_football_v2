@@ -7,6 +7,7 @@ import type { RequestHandler } from './$types';
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const requestedSeason = url.searchParams.get('season') || '2024';
+		console.log('Standings API called with season:', requestedSeason);
 		
 		// Get current season standings from the dashboard view
 		// Note: This view is hardcoded to current year and current week
@@ -89,8 +90,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			LIMIT 1
 		`;
 		
+		console.log('Executing championship query...');
 		const championshipResult = await db.execute(sql.raw(championshipQuery));
 		const championshipData = championshipResult.length > 0 ? championshipResult[0] : null;
+		console.log('Championship result:', championshipData);
 
 		// Get last place game loser information
 		let lastPlaceGameLoser = null;
@@ -253,6 +256,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			});
 		} else {
 			// Regular season still ongoing - standings are already sorted above
+			console.log('No championship data found - using regular season standings');
 			finalStandings = standings;
 		}
 
