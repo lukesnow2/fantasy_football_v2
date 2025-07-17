@@ -15,6 +15,11 @@ export default defineConfig({
 			interval: 100
 		}
 	},
+	resolve: {
+		alias: {
+			$lib: './src/lib'
+		}
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),

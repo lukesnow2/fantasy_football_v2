@@ -86,8 +86,9 @@
 			<!-- Season Filter -->
 			<div class="flex items-center justify-between bg-slate-800/30 rounded-lg p-4">
 				<div>
-					<label class="text-slate-300 font-medium">Filter by Season:</label>
+					<label for="season-filter" class="text-slate-300 font-medium">Filter by Season:</label>
 					<select 
+						id="season-filter"
 						bind:value={selectedSeason} 
 						on:change={handleSeasonChange}
 						class="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
