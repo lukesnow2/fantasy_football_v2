@@ -9,17 +9,35 @@ export const GET: RequestHandler = async ({ url }) => {
 		const requestedSeason = url.searchParams.get('season') || '2024';
 		console.log('Standings API called with season:', requestedSeason);
 		
+		// Test database connection
+		try {
+			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_current_season_dashboard`;
+			const testResult = await db.execute(sql.raw(testQuery));
+			console.log('Database connection test result:', testResult[0]);
+		} catch (dbError) {
+			console.error('Database connection error:', dbError);
+			return json({ error: 'Database connection failed' }, { status: 500 });
+		}
+		
 		// Get current season standings from the dashboard view
 		// Note: This view is hardcoded to current year and current week
-		const rawStandings = await db
-			.select()
-			.from(vwCurrentSeasonDashboard)
-			.orderBy(vwCurrentSeasonDashboard.seasonRank);
+		console.log('Fetching standings from dashboard view...');
+		let rawStandings;
+		try {
+			rawStandings = await db
+				.select()
+				.from(vwCurrentSeasonDashboard)
+				.orderBy(vwCurrentSeasonDashboard.seasonRank);
+			console.log('Raw standings count:', rawStandings.length);
+		} catch (standingsError) {
+			console.error('Error fetching standings:', standingsError);
+			return json({ error: 'Failed to fetch standings data' }, { status: 500 });
+		}
 
 		// Aggregate data by team since view may return multiple rows per team (one per week)
 		const teamStandings = new Map();
 		
-		rawStandings.forEach(row => {
+		rawStandings.forEach((row: any) => {
 			const teamId = `${row.teamName}_${row.managerName}`; // Use combination as unique key
 			
 			if (teamStandings.has(teamId)) {
