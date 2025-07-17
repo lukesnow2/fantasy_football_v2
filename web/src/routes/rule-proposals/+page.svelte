@@ -57,10 +57,19 @@
 	let expandedProposals = new Set<number>();
 
 	// Form data
-	let formData = {
+	let formData: {
+		title: string;
+		description: string;
+		proposalType: 'add_clause' | 'edit_language' | 'tweak_rule';
+		affectedSection: string;
+		currentLanguage: string;
+		proposedLanguage: string;
+		rationale: string;
+		effectiveSeason: number;
+	} = {
 		title: '',
 		description: '',
-		proposalType: 'add_clause' as const,
+		proposalType: 'add_clause',
 		affectedSection: '',
 		currentLanguage: '',
 		proposedLanguage: '',
@@ -181,14 +190,14 @@
 		expandedProposals = expandedProposals; // Trigger reactivity
 	}
 
-	function getVoteCount(proposalKey: number, voteType: 'yes' | 'no' | 'abstain') {
+	function getVoteCount(proposalKey: number, voteType: 'yes' | 'no' | 'abstain'): number {
 		// Defensive check: ensure proposals array exists and is an array
 		if (!proposals || !Array.isArray(proposals)) {
 			console.warn('Proposals not loaded yet or not an array:', proposals);
 			return 0;
 		}
 		
-		const proposal = proposals.find(p => p && p.proposalKey === proposalKey);
+		const proposal = proposals.find((p: RuleProposal) => p && p.proposalKey === proposalKey);
 		if (!proposal) {
 			console.warn('Proposal not found for key:', proposalKey);
 			return 0;
@@ -202,13 +211,13 @@
 		}
 	}
 
-	function getProposalVotes(proposalKey: number) {
+	function getProposalVotes(proposalKey: number): RuleVote[] {
 		// Since we don't have individual vote records, return empty array for now
 		// This could be enhanced later to show actual vote history
 		return [];
 	}
 
-	function getStatusColor(status: string) {
+	function getStatusColor(status: string): string {
 		switch (status) {
 			case 'draft': return 'text-slate-400';
 			case 'active': return 'text-blue-400';
@@ -219,7 +228,7 @@
 		}
 	}
 
-	function getStatusIcon(status: string) {
+	function getStatusIcon(status: string): any {
 		switch (status) {
 			case 'draft': return Clock;
 			case 'active': return Vote;
@@ -230,14 +239,14 @@
 		}
 	}
 
-	const proposalTypes = [
+	const proposalTypes: Array<{value: 'add_clause' | 'edit_language' | 'tweak_rule', label: string}> = [
 		{ value: 'add_clause', label: 'Add New Clause' },
 		{ value: 'edit_language', label: 'Edit Current Language' },
 		{ value: 'tweak_rule', label: 'Tweak Existing Rule' }
 	];
 
-	const currentYear = new Date().getFullYear();
-	const seasonOptions = Array.from({ length: 5 }, (_, i) => currentYear + i + 1);
+	const currentYear: number = new Date().getFullYear();
+	const seasonOptions: number[] = Array.from({ length: 5 }, (_: any, i: number) => currentYear + i + 1);
 </script>
 
 <div class="max-w-7xl mx-auto px-4 py-8 space-y-8">
@@ -270,8 +279,9 @@
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 				<div class="space-y-4">
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Proposal Title</label>
+						<label for="proposal-title" class="block text-sm font-medium text-slate-300 mb-2">Proposal Title</label>
 						<input 
+							id="proposal-title"
 							type="text" 
 							bind:value={formData.title}
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -280,8 +290,9 @@
 					</div>
 					
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Proposal Type</label>
+						<label for="proposal-type" class="block text-sm font-medium text-slate-300 mb-2">Proposal Type</label>
 						<select 
+							id="proposal-type"
 							bind:value={formData.proposalType}
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
 						>
@@ -292,8 +303,9 @@
 					</div>
 					
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Affected Section (Optional)</label>
+						<label for="affected-section" class="block text-sm font-medium text-slate-300 mb-2">Affected Section (Optional)</label>
 						<input 
+							id="affected-section"
 							type="text" 
 							bind:value={formData.affectedSection}
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -302,8 +314,9 @@
 					</div>
 					
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Effective Season</label>
+						<label for="effective-season" class="block text-sm font-medium text-slate-300 mb-2">Effective Season</label>
 						<select 
+							id="effective-season"
 							bind:value={formData.effectiveSeason}
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
 						>
@@ -316,8 +329,9 @@
 				
 				<div class="space-y-4">
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Description</label>
+						<label for="proposal-description" class="block text-sm font-medium text-slate-300 mb-2">Description</label>
 						<textarea 
+							id="proposal-description"
 							bind:value={formData.description}
 							rows="3"
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -326,8 +340,9 @@
 					</div>
 					
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Rationale</label>
+						<label for="proposal-rationale" class="block text-sm font-medium text-slate-300 mb-2">Rationale</label>
 						<textarea 
+							id="proposal-rationale"
 							bind:value={formData.rationale}
 							rows="3"
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -340,8 +355,9 @@
 			{#if formData.proposalType === 'edit_language'}
 				<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Current Language</label>
+						<label for="current-language" class="block text-sm font-medium text-slate-300 mb-2">Current Language</label>
 						<textarea 
+							id="current-language"
 							bind:value={formData.currentLanguage}
 							rows="4"
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -350,8 +366,9 @@
 					</div>
 					
 					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-2">Proposed Language</label>
+						<label for="proposed-language-edit" class="block text-sm font-medium text-slate-300 mb-2">Proposed Language</label>
 						<textarea 
+							id="proposed-language-edit"
 							bind:value={formData.proposedLanguage}
 							rows="4"
 							class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -361,8 +378,9 @@
 				</div>
 			{:else}
 				<div>
-					<label class="block text-sm font-medium text-slate-300 mb-2">Proposed Language</label>
+					<label for="proposed-language" class="block text-sm font-medium text-slate-300 mb-2">Proposed Language</label>
 					<textarea 
+						id="proposed-language"
 						bind:value={formData.proposedLanguage}
 						rows="4"
 						class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -491,7 +509,7 @@
 										<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 											<div class="space-y-4">
 												<div>
-													<label class="block text-sm font-medium text-slate-300 mb-2">Your Vote</label>
+													<span class="block text-sm font-medium text-slate-300 mb-2">Your Vote</span>
 													<div class="flex space-x-4">
 														<label class="flex items-center space-x-2">
 															<input 
@@ -524,8 +542,9 @@
 												</div>
 												
 												<div>
-													<label class="block text-sm font-medium text-slate-300 mb-2">Comment (Optional)</label>
+													<label for="vote-comment" class="block text-sm font-medium text-slate-300 mb-2">Comment (Optional)</label>
 													<textarea 
+														id="vote-comment"
 														bind:value={voteData.comment}
 														rows="3"
 														class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
