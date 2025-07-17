@@ -272,8 +272,9 @@
 				
 				<!-- Season Selector -->
 				<div class="mb-6">
-					<label class="block text-sm font-medium text-gray-300 mb-2">Select Season</label>
+					<label for="season-select" class="block text-sm font-medium text-gray-300 mb-2">Select Season</label>
 					<select 
+						id="season-select"
 						bind:value={selectedSeason} 
 						class="bg-gray-700 border border-gray-600 text-white rounded-lg px-4 py-2 w-48"
 						on:change={() => loadSpecificSeasonDraft(selectedSeason)}
