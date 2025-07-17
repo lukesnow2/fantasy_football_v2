@@ -51,35 +51,35 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
-			// Convert snake_case to camelCase
-			managerName: mgr.manager_name,
-			firstSeason: mgr.first_season,
-			lastSeason: mgr.last_season,
-			totalSeasons: mgr.total_seasons,
-			totalWins: mgr.total_wins,
-			totalLosses: mgr.total_losses,
-			totalTies: mgr.total_ties,
-			winPercentage: mgr.win_percentage,
-			totalPointsScored: mgr.total_points_scored,
-			avgPointsPerGame: mgr.avg_points_per_game,
-			avgPointsFor: mgr.avg_points_for,
-			totalChampionships: mgr.total_championships,
-			championshipAppearances: mgr.championship_appearances,
-			playoffAppearances: mgr.playoff_appearances,
-			playoffWinPercentage: mgr.playoff_win_percentage,
-			avgDraftGrade: mgr.avg_draft_grade,
-			bestDraftYear: mgr.best_draft_year,
-			worstDraftYear: mgr.worst_draft_year,
-			totalTransactions: mgr.total_transactions,
-			avgTransactionsPerSeason: mgr.avg_transactions_per_season,
-			faabEfficiencyRating: mgr.faab_efficiency_rating,
-			seasonConsistencyScore: mgr.season_consistency_score,
-			bestSeasonRecord: mgr.best_season_record,
-			worstSeasonRecord: mgr.worst_season_record,
+			// Handle both snake_case and camelCase field names from database
+			managerName: mgr.manager_name || mgr.managerName,
+			firstSeason: mgr.first_season || mgr.firstSeason,
+			lastSeason: mgr.last_season || mgr.lastSeason,
+			totalSeasons: mgr.total_seasons || mgr.totalSeasons,
+			totalWins: mgr.total_wins || mgr.totalWins,
+			totalLosses: mgr.total_losses || mgr.totalLosses,
+			totalTies: mgr.total_ties || mgr.totalTies,
+			winPercentage: mgr.win_percentage || mgr.winPercentage,
+			totalPointsScored: mgr.total_points_scored || mgr.totalPointsScored,
+			avgPointsPerGame: mgr.avg_points_per_game || mgr.avgPointsPerGame,
+			avgPointsFor: mgr.avg_points_for || mgr.avgPointsFor,
+			totalChampionships: mgr.total_championships || mgr.totalChampionships,
+			championshipAppearances: mgr.championship_appearances || mgr.championshipAppearances,
+			playoffAppearances: mgr.playoff_appearances || mgr.playoffAppearances,
+			playoffWinPercentage: mgr.playoff_win_percentage || mgr.playoffWinPercentage,
+			avgDraftGrade: mgr.avg_draft_grade || mgr.avgDraftGrade,
+			bestDraftYear: mgr.best_draft_year || mgr.bestDraftYear,
+			worstDraftYear: mgr.worst_draft_year || mgr.worstDraftYear,
+			totalTransactions: mgr.total_transactions || mgr.totalTransactions,
+			avgTransactionsPerSeason: mgr.avg_transactions_per_season || mgr.avgTransactionsPerSeason,
+			faabEfficiencyRating: mgr.faab_efficiency_rating || mgr.faabEfficiencyRating,
+			seasonConsistencyScore: mgr.season_consistency_score || mgr.seasonConsistencyScore,
+			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
+			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,
 			// Tier classification based on performance
-			tierClassification: mgr.manager_name === 'Bobby' ? 'League Alum' : (() => {
-				const championships = parseInt(mgr.total_championships) || 0;
-				const winPct = parseFloat(mgr.win_percentage) || 0;
+			tierClassification: (mgr.manager_name || mgr.managerName) === 'Bobby' ? 'League Alum' : (() => {
+				const championships = parseInt(mgr.total_championships || mgr.totalChampionships) || 0;
+				const winPct = parseFloat(mgr.win_percentage || mgr.winPercentage) || 0;
 				
 				if (championships >= 3) return 'League Legend';
 				if (championships >= 2) return 'Dynasty Builder';
@@ -211,13 +211,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 		}
 
-		// Available managers list
+		// Available managers list - check both snake_case and camelCase field names
 		data.availableManagers = managerStats
-			.filter((mgr: any) => mgr.manager_name != null)
-			.map((mgr: any) => mgr.manager_name);
+			.filter((mgr: any) => mgr.manager_name != null || mgr.managerName != null)
+			.map((mgr: any) => mgr.manager_name || mgr.managerName);
 		
-		// Debug: Log available managers
+		// Debug: Log available managers and first few records to see field names
 		console.log('Available managers:', data.availableManagers);
+		console.log('First manager record fields:', Object.keys(managerStats[0] || {}));
+		console.log('First manager record:', managerStats[0]);
 
 		// Meta information
 		data.meta = {
