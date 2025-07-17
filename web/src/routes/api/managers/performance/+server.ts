@@ -46,21 +46,45 @@ export const GET: RequestHandler = async ({ url }) => {
 		const statsResult = await db.execute(sql.raw(managerStatsQuery));
 		const managerStats = Array.from(statsResult);
 
-		// Add computed rankings and tier classification
+		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats = managerStats.map((mgr: any, index: number) => ({
-			...mgr,
+			// Convert snake_case to camelCase
+			managerName: mgr.manager_name,
+			firstSeason: mgr.first_season,
+			lastSeason: mgr.last_season,
+			totalSeasons: mgr.total_seasons,
+			totalWins: mgr.total_wins,
+			totalLosses: mgr.total_losses,
+			totalTies: mgr.total_ties,
+			winPercentage: mgr.win_percentage,
+			totalPointsScored: mgr.total_points_scored,
+			avgPointsPerGame: mgr.avg_points_per_game,
+			avgPointsFor: mgr.avg_points_for,
+			totalChampionships: mgr.total_championships,
+			championshipAppearances: mgr.championship_appearances,
+			playoffAppearances: mgr.playoff_appearances,
+			playoffWinPercentage: mgr.playoff_win_percentage,
+			avgDraftGrade: mgr.avg_draft_grade,
+			bestDraftYear: mgr.best_draft_year,
+			worstDraftYear: mgr.worst_draft_year,
+			totalTransactions: mgr.total_transactions,
+			avgTransactionsPerSeason: mgr.avg_transactions_per_season,
+			faabEfficiencyRating: mgr.faab_efficiency_rating,
+			seasonConsistencyScore: mgr.season_consistency_score,
+			bestSeasonRecord: mgr.best_season_record,
+			worstSeasonRecord: mgr.worst_season_record,
 			// Overall ranking based on combined factors
-			overall_rank: index + 1,
+			overallRank: index + 1,
 			// Championship ranking - using correct field name from SQL alias
-			championship_rank: [...managerStats].sort((a: any, b: any) => (Number(b.total_championships) || 0) - (Number(a.total_championships) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			championshipRank: [...managerStats].sort((a: any, b: any) => (Number(b.total_championships) || 0) - (Number(a.total_championships) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Win percentage ranking - using correct field name from SQL alias
-			win_pct_rank: [...managerStats].sort((a: any, b: any) => (Number(b.win_percentage) || 0) - (Number(a.win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			winPctRank: [...managerStats].sort((a: any, b: any) => (Number(b.win_percentage) || 0) - (Number(a.win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Scoring ranking - using correct field name from SQL alias
-			scoring_rank: [...managerStats].sort((a: any, b: any) => (Number(b.avg_points_for) || 0) - (Number(a.avg_points_for) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			scoringRank: [...managerStats].sort((a: any, b: any) => (Number(b.avg_points_for) || 0) - (Number(a.avg_points_for) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Playoff ranking - this one was already correct
-			playoff_rank: [...managerStats].sort((a: any, b: any) => (Number(b.playoff_win_percentage) || 0) - (Number(a.playoff_win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
+			playoffRank: [...managerStats].sort((a: any, b: any) => (Number(b.playoff_win_percentage) || 0) - (Number(a.playoff_win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Tier classification based on performance
-			tier_classification: mgr.manager_name === 'Bobby' ? 'League Alum' : (() => {
+			tierClassification: mgr.manager_name === 'Bobby' ? 'League Alum' : (() => {
 				const championships = parseInt(mgr.total_championships) || 0;
 				const winPct = parseFloat(mgr.win_percentage) || 0;
 				
@@ -87,26 +111,26 @@ export const GET: RequestHandler = async ({ url }) => {
 		data.performance = enrichedStats;
 		data.rankings = enrichedStats;
 
-		// Get achievements based on computed stats
+		// Get achievements based on computed stats with camelCase field names
 		const achievements = enrichedStats.map((mgr: any) => ({
-			manager_name: mgr.manager_name,
-			championship_achievement: (mgr.total_championships || 0) >= 3 ? 'Dynasty Builder' : 
-										(mgr.total_championships || 0) >= 2 ? 'Repeat Champion' : 
-										(mgr.total_championships || 0) >= 1 ? 'Champion' : null,
-			consistency_achievement: (mgr.win_percentage || 0) >= 0.70 ? 'Dominance' : 
-									(mgr.win_percentage || 0) >= 0.60 ? 'Consistent Winner' : 
-									(mgr.win_percentage || 0) >= 0.50 ? 'Above Average' : null,
-			scoring_achievement: (mgr.avg_points_for || 0) >= 130 ? 'Offensive Powerhouse' : 
-								(mgr.avg_points_for || 0) >= 120 ? 'High Scorer' : null,
-			longevity_achievement: (mgr.total_seasons || 0) >= 15 ? 'League Veteran' : 
-								  (mgr.total_seasons || 0) >= 10 ? 'Long Timer' : 
-								  (mgr.total_seasons || 0) >= 5 ? 'Established' : 'Newcomer',
-			all_achievements: [
-				(mgr.total_championships || 0) >= 1 ? 'Champion' : null,
-				(mgr.win_percentage || 0) >= 0.60 ? 'Consistent Winner' : null,
-				(mgr.avg_points_for || 0) >= 120 ? 'High Scorer' : null,
-				(mgr.total_seasons || 0) >= 10 ? 'Long Timer' : 
-				(mgr.total_seasons || 0) >= 5 ? 'Established' : 'Newcomer'
+			managerName: mgr.managerName,
+			championshipAchievement: (mgr.totalChampionships || 0) >= 3 ? 'Dynasty Builder' : 
+										(mgr.totalChampionships || 0) >= 2 ? 'Repeat Champion' : 
+										(mgr.totalChampionships || 0) >= 1 ? 'Champion' : null,
+			consistencyAchievement: (mgr.winPercentage || 0) >= 0.70 ? 'Dominance' : 
+									(mgr.winPercentage || 0) >= 0.60 ? 'Consistent Winner' : 
+									(mgr.winPercentage || 0) >= 0.50 ? 'Above Average' : null,
+			scoringAchievement: (mgr.avgPointsFor || 0) >= 130 ? 'Offensive Powerhouse' : 
+								(mgr.avgPointsFor || 0) >= 120 ? 'High Scorer' : null,
+			longevityAchievement: (mgr.totalSeasons || 0) >= 15 ? 'League Veteran' : 
+								  (mgr.totalSeasons || 0) >= 10 ? 'Long Timer' : 
+								  (mgr.totalSeasons || 0) >= 5 ? 'Established' : 'Newcomer',
+			allAchievements: [
+				(mgr.totalChampionships || 0) >= 1 ? 'Champion' : null,
+				(mgr.winPercentage || 0) >= 0.60 ? 'Consistent Winner' : null,
+				(mgr.avgPointsFor || 0) >= 120 ? 'High Scorer' : null,
+				(mgr.totalSeasons || 0) >= 10 ? 'Long Timer' : 
+				(mgr.totalSeasons || 0) >= 5 ? 'Established' : 'Newcomer'
 			].filter(a => a !== null)
 		}));
 
@@ -186,13 +210,13 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Available managers list
-		data.available_managers = managerStats.map((mgr: any) => mgr.manager_name);
+		data.availableManagers = managerStats.map((mgr: any) => mgr.manager_name);
 
 		// Meta information
 		data.meta = {
-			total_managers: data.available_managers?.length || 0,
-			requested_manager: manager,
-			analysis_level: analysis
+			totalManagers: data.availableManagers?.length || 0,
+			requestedManager: manager,
+			analysisLevel: analysis
 		};
 
 		return json({

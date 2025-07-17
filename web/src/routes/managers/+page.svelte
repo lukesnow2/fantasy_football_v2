@@ -53,7 +53,7 @@
 		const achievements = managerData?.data?.achievements?.find(
 			(a: any) => a.managerName === managerName
 		);
-		return achievements?.all_achievements || [];
+		return achievements?.allAchievements || [];
 	}
 </script>
 
@@ -103,16 +103,16 @@
 						<div>
 							<h1 class="text-4xl font-bold text-white mb-2">
 								{currentManager.managerName}
-								{#if currentManager.total_championships > 0}
-									<span class="ml-3">{getChampionshipBadge(currentManager.total_championships)}</span>
+								{#if currentManager.totalChampionships > 0}
+									<span class="ml-3">{getChampionshipBadge(currentManager.totalChampionships)}</span>
 								{/if}
 							</h1>
 																			<div class="flex items-center gap-4">
-								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getTierColor(currentManager.tier_classification)}">
-									{currentManager.tier_classification}
+								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getTierColor(currentManager.tierClassification)}">
+									{currentManager.tierClassification}
 								</span>
 								<span class="text-slate-400">
-									{currentManager.first_season} - {currentManager.last_season}
+									{currentManager.firstSeason} - {currentManager.lastSeason}
 								</span>
 							</div>
 						</div>
@@ -122,10 +122,10 @@
 					<div class="text-right">
 						<div class="flex items-baseline justify-end gap-6 mb-1">
 							<div class="text-3xl font-bold text-slate-300">
-								<span class="text-green-400">{currentManager.total_wins || 0}</span>-<span class="text-red-400">{currentManager.total_losses || 0}</span>-<span class="text-amber-400">{currentManager.total_ties || 0}</span>
+								<span class="text-green-400">{currentManager.totalWins || 0}</span>-<span class="text-red-400">{currentManager.totalLosses || 0}</span>-<span class="text-amber-400">{currentManager.totalTies || 0}</span>
 							</div>
-							<div class="text-3xl font-bold {getWinPercentageColor(parseFloat(currentManager.win_percentage || 0))}">
-								{parseFloat(currentManager.win_percentage || 0).toFixed(3)}
+							<div class="text-3xl font-bold {getWinPercentageColor(parseFloat(currentManager.winPercentage || 0))}">
+								{parseFloat(currentManager.winPercentage || 0).toFixed(3)}
 							</div>
 						</div>
 						<div class="text-slate-400 text-sm">
@@ -152,19 +152,19 @@
 							</h3>
 							<div class="grid grid-cols-4 gap-6">
 								<div class="text-center">
-									<div class="text-3xl font-bold text-purple-400">{currentManager.total_seasons}</div>
+									<div class="text-3xl font-bold text-purple-400">{currentManager.totalSeasons}</div>
 									<div class="text-slate-400 font-medium">Seasons</div>
 								</div>
 								<div class="text-center">
-									<div class="text-3xl font-bold text-blue-400">{currentManager.playoff_appearances || 0}</div>
+									<div class="text-3xl font-bold text-blue-400">{currentManager.playoffAppearances || 0}</div>
 									<div class="text-slate-400 font-medium">Playoffs</div>
 								</div>
 								<div class="text-center">
-									<div class="text-3xl font-bold text-amber-400">{currentManager.total_championships || 0}</div>
+									<div class="text-3xl font-bold text-amber-400">{currentManager.totalChampionships || 0}</div>
 									<div class="text-slate-400 font-medium">Championships</div>
 								</div>
 								<div class="text-center">
-									<div class="text-3xl font-bold text-green-400">{currentManager.total_transactions || 0}</div>
+									<div class="text-3xl font-bold text-green-400">{currentManager.totalTransactions || 0}</div>
 									<div class="text-slate-400 font-medium">Transactions</div>
 								</div>
 							</div>
@@ -178,11 +178,11 @@
 							</h3>
 							<div class="grid grid-cols-3 gap-6">
 								<div class="text-center">
-									<div class="text-2xl font-bold text-blue-400">{parseFloat(currentManager.avg_points_for || 0).toFixed(1)}</div>
+									<div class="text-2xl font-bold text-blue-400">{parseFloat(currentManager.avgPointsFor || 0).toFixed(1)}</div>
 									<div class="text-slate-400 text-sm">Avg Points/Season</div>
 								</div>
 								<div class="text-center">
-									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avg_points_per_game || 0).toFixed(1)}</div>
+									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avgPointsPerGame || 0).toFixed(1)}</div>
 									<div class="text-slate-400 text-sm">
 										<MetricHelp metricId="avg_points_per_game" position="top" theme="dark" className="text-slate-400" showIcon={false}>
 											Avg Points/Game
@@ -190,7 +190,7 @@
 									</div>
 								</div>
 								<div class="text-center">
-									<div class="text-2xl font-bold text-purple-400">{parseFloat(currentManager.total_points_scored || 0).toLocaleString()}</div>
+									<div class="text-2xl font-bold text-purple-400">{parseFloat(currentManager.totalPointsScored || 0).toLocaleString()}</div>
 									<div class="text-slate-400 text-sm">Career Points</div>
 								</div>
 							</div>
@@ -204,19 +204,19 @@
 							</h3>
 							<div class="grid grid-cols-4 gap-4">
 								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-amber-400">#{currentManager.championship_rank}</div>
+									<div class="text-xl font-bold text-amber-400">#{currentManager.championshipRank}</div>
 									<div class="text-slate-400 text-sm">Championships</div>
 								</div>
 								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-blue-400">#{currentManager.win_pct_rank}</div>
+									<div class="text-xl font-bold text-blue-400">#{currentManager.winPctRank}</div>
 									<div class="text-slate-400 text-sm">Win Rate</div>
 								</div>
 								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-green-400">#{currentManager.scoring_rank}</div>
+									<div class="text-xl font-bold text-green-400">#{currentManager.scoringRank}</div>
 									<div class="text-slate-400 text-sm">Scoring</div>
 								</div>
 								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-purple-400">#{currentManager.playoff_rank}</div>
+									<div class="text-xl font-bold text-purple-400">#{currentManager.playoffRank}</div>
 									<div class="text-slate-400 text-sm">Playoffs</div>
 								</div>
 							</div>
@@ -235,19 +235,19 @@
 							<div class="space-y-4">
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Best Season</span>
-									<span class="text-lg font-bold text-green-400">{currentManager.best_season_record || 'N/A'}</span>
+									<span class="text-lg font-bold text-green-400">{currentManager.bestSeasonRecord || 'N/A'}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Worst Season</span>
-									<span class="text-lg font-bold text-red-400">{currentManager.worst_season_record || 'N/A'}</span>
+									<span class="text-lg font-bold text-red-400">{currentManager.worstSeasonRecord || 'N/A'}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Best Draft Year</span>
-									<span class="text-lg font-bold text-blue-400">{currentManager.best_draft_year || 'N/A'}</span>
+									<span class="text-lg font-bold text-blue-400">{currentManager.bestDraftYear || 'N/A'}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Worst Draft Year</span>
-									<span class="text-lg font-bold text-amber-400">{currentManager.worst_draft_year || 'N/A'}</span>
+									<span class="text-lg font-bold text-amber-400">{currentManager.worstDraftYear || 'N/A'}</span>
 								</div>
 							</div>
 						</div>
@@ -265,7 +265,7 @@
 											Draft Grade
 										</MetricHelp>
 									</span>
-									<span class="text-lg font-bold text-green-400">{parseFloat(currentManager.avg_draft_grade || 0).toFixed(1)}</span>
+									<span class="text-lg font-bold text-green-400">{parseFloat(currentManager.avgDraftGrade || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">
@@ -273,7 +273,7 @@
 											FAAB Efficiency
 										</MetricHelp>
 									</span>
-									<span class="text-lg font-bold text-blue-400">{parseFloat(currentManager.faab_efficiency_rating || 0).toFixed(1)}</span>
+									<span class="text-lg font-bold text-blue-400">{parseFloat(currentManager.faabEfficiencyRating || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">
@@ -281,11 +281,11 @@
 											Consistency Score
 										</MetricHelp>
 									</span>
-									<span class="text-lg font-bold text-purple-400">{parseFloat(currentManager.season_consistency_score || 0).toFixed(1)}</span>
+									<span class="text-lg font-bold text-purple-400">{parseFloat(currentManager.seasonConsistencyScore || 0).toFixed(1)}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Avg Transactions</span>
-									<span class="text-lg font-bold text-amber-400">{parseFloat(currentManager.avg_transactions_per_season || 0).toFixed(1)}</span>
+									<span class="text-lg font-bold text-amber-400">{parseFloat(currentManager.avgTransactionsPerSeason || 0).toFixed(1)}</span>
 								</div>
 							</div>
 						</div>
@@ -299,15 +299,15 @@
 							<div class="space-y-3">
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Best Season</span>
-									<span class="text-sm font-bold text-green-400">{currentManager.best_season_record || 'N/A'}</span>
+									<span class="text-sm font-bold text-green-400">{currentManager.bestSeasonRecord || 'N/A'}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Best Draft Year</span>
-									<span class="text-sm font-bold text-blue-400">{currentManager.best_draft_year || 'N/A'}</span>
+									<span class="text-sm font-bold text-blue-400">{currentManager.bestDraftYear || 'N/A'}</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">Total Transactions</span>
-									<span class="text-sm font-bold text-purple-400">{currentManager.total_transactions || 0}</span>
+									<span class="text-sm font-bold text-purple-400">{currentManager.totalTransactions || 0}</span>
 								</div>
 							</div>
 						</div>
