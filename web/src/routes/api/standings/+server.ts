@@ -60,6 +60,18 @@ export const GET: RequestHandler = async ({ url }) => {
 				pointDifferential
 			};
 		});
+		
+		// Sort standings by wins first, then by point differential for regular season
+		standings.sort((a, b) => {
+			if (a.wins !== b.wins) return b.wins - a.wins;
+			if (a.losses !== b.losses) return a.losses - b.losses; // Fewer losses is better
+			return b.pointDifferential - a.pointDifferential;
+		});
+		
+		// Add season rank based on sorted order
+		standings.forEach((team, index) => {
+			team.seasonRank = index + 1;
+		});
 
 		// Check if season is complete (championship played) and get final playoff standings
 		const championshipQuery = `
@@ -225,11 +237,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				return b.pointDifferential - a.pointDifferential;
 			});
 		} else {
-			// Regular season still ongoing - sort by wins and point differential
-			finalStandings.sort((a, b) => {
-				if (a.wins !== b.wins) return b.wins - a.wins;
-				return b.pointDifferential - a.pointDifferential;
-			});
+			// Regular season still ongoing - standings are already sorted above
+			finalStandings = standings;
 		}
 
 		// Format data for frontend
@@ -244,8 +253,11 @@ export const GET: RequestHandler = async ({ url }) => {
 				team.teamName === lastPlaceGameLoser.teamName && 
 				team.managerName === lastPlaceGameLoser.managerName;
 			
+			// Determine the correct rank
+			const rank = team.finalRank || team.seasonRank || (index + 1);
+			
 			return {
-				teamId: team.seasonRank || (index + 1), // Use actual season rank
+				teamId: rank, // Use the correct rank
 				teamName: team.teamName,
 				managerName: team.managerName,
 				wins: team.wins || 0,
@@ -254,7 +266,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				pointsFor: team.pointsFor ? parseFloat(team.pointsFor.toString()) : 0,
 				pointsAgainst: team.pointsAgainst ? parseFloat(team.pointsAgainst.toString()) : 0,
 				playoffSeed: team.playoffSeed,
-				rank: team.finalRank || team.seasonRank || (index + 1), // Use final playoff rank when available
+				rank: rank, // Use the correct rank
 				winPercentage,
 				pointDifferential,
 				leagueName: team.leagueName,
