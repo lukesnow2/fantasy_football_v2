@@ -187,8 +187,11 @@ export const GET: RequestHandler = async ({ url }) => {
 				ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
 			`;
 			
+			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
 			const playoffGames = Array.from(playoffResult);
+			console.log('Playoff games found:', playoffGames.length);
+			console.log('Playoff games:', playoffGames);
 			
 			// Build final standings based on playoff results
 			const playoffStandings = new Map();
@@ -233,6 +236,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Playoff games found:', playoffGames.length);
 			console.log('Playoff standings map:', Array.from(playoffStandings.entries()));
 			console.log('Available teams in standings:', standings.map(s => `${s.teamName} (${s.managerName})`));
+			console.log('Teams in playoff games:', playoffGames.map(g => `${g.team1_name} (${g.team1_manager}) vs ${g.team2_name} (${g.team2_manager})`));
 			
 			finalStandings = standings.map(team => {
 				// Find team key by matching name and manager
