@@ -29,22 +29,6 @@ yarn-error.log*
 .next/
 out/
 
-# Web directories (if they contain build artifacts)
-fantasy-league-web/
-
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Next.js
-.next/
-out/
-
-# Web directories (if they contain build artifacts)
-fantasy-league-web/
-
 # Python
 __pycache__/
 *.py[cod]
@@ -57,7 +41,10 @@ dist/
 downloads/
 eggs/
 .eggs/
+# Python libraries
 lib/
+# But not web app lib directories
+!web/src/lib/
 lib64/
 parts/
 sdist/
@@ -89,6 +76,6 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# Note: web/ directory is now tracked in git
-# It has its own .gitignore that excludes build artifacts (node_modules, .svelte-kit, .env, etc.) 
+# Note: web/ directory is tracked in git and has its own .gitignore
+# that properly excludes build artifacts (node_modules, .svelte-kit, .env, etc.)
 .vercel
