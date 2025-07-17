@@ -210,7 +210,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Available managers list
-		data.availableManagers = managerStats.map((mgr: any) => mgr.manager_name);
+		data.availableManagers = managerStats
+			.filter((mgr: any) => mgr.manager_name != null)
+			.map((mgr: any) => mgr.manager_name);
 
 		// Meta information
 		data.meta = {
