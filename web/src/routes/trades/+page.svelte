@@ -131,19 +131,19 @@
 					
 					<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
 						<div class="text-center">
-							<div class="text-3xl font-bold text-blue-400">{tradeData.analytics.overview.total_trades || 0}</div>
+							<div class="text-3xl font-bold text-blue-400">{tradeData.analytics.overview.totalTrades || 0}</div>
 							<div class="text-slate-400">Total Trades</div>
 						</div>
 						<div class="text-center">
-							<div class="text-3xl font-bold text-green-400">{parseFloat(tradeData.analytics.overview.avg_trades_per_season || 0).toFixed(1)}</div>
+							<div class="text-3xl font-bold text-green-400">{tradeData.analytics.overview.avgTradesPerSeason ? parseFloat(tradeData.analytics.overview.avgTradesPerSeason).toFixed(1) : (parseInt(tradeData.analytics.overview.totalTrades) / 20).toFixed(1)}</div>
 							<div class="text-slate-400">Per Season</div>
 						</div>
 						<div class="text-center">
-							<div class="text-3xl font-bold text-amber-400">{tradeData.analytics.overview.championship_trades || 0}</div>
+							<div class="text-3xl font-bold text-amber-400">{tradeData.analytics.overview.championshipImpactTrades || 0}</div>
 							<div class="text-slate-400">Championship Impact</div>
 						</div>
 						<div class="text-center">
-							<div class="text-3xl font-bold text-purple-400">{parseFloat(tradeData.analytics.overview.avg_production_impact || 0).toFixed(1)}</div>
+							<div class="text-3xl font-bold text-purple-400">{parseFloat(tradeData.analytics.overview.avgProductionImpact || 0).toFixed(1)}</div>
 							<div class="text-slate-400">
 								<MetricHelp metricId="trade_production_differential" position="top" theme="dark" className="text-slate-400" showIcon={false}>
 									Avg Impact

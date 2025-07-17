@@ -10,6 +10,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		const limit = parseInt(url.searchParams.get('limit') || '1000');
 		const analysis = url.searchParams.get('analysis') || 'overview';
 
+		// Test if the view exists and has data
+		try {
+			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_trade_analysis`;
+			const testResult = await db.execute(sql.raw(testQuery));
+			console.log('Trade analysis view count:', testResult[0]);
+		} catch (error) {
+			console.error('Trade analysis view error:', error);
+		}
+
 		// Base trade analysis query with proper SQL syntax
 		let query = `
 			SELECT 
@@ -62,6 +71,10 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		console.log('Executing trade query:', query);
 		const trades = await db.execute(sql.raw(query));
+		console.log('Trade query result count:', trades.length);
+		if (trades.length > 0) {
+			console.log('First trade record:', trades[0]);
+		}
 
 		// Generate analytics based on request type
 		let analytics: any = {};
@@ -84,6 +97,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			console.log('Executing analytics query:', analyticsQuery);
 			const analyticsResult = await db.execute(sql.raw(analyticsQuery));
+			console.log('Analytics result:', Array.from(analyticsResult));
 			analytics = {
 				...analytics,
 				overview: Array.from(analyticsResult)[0]
