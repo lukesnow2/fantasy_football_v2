@@ -41,16 +41,38 @@ export const GET: RequestHandler = async ({ url }) => {
 
 	// Test 2: Database Connection
 	try {
+		// Test basic connection
 		const userCount = await db.$count(user);
+		
+		// Test schema access
+		const schemaTest = await db.execute(sql`
+			SELECT 
+				COUNT(*) as table_count,
+				schemaname 
+			FROM pg_tables 
+			WHERE schemaname IN ('app', 'edw', 'public')
+			GROUP BY schemaname
+		`);
+		
+		// Test actual data access
+		const dataTest = await db.execute(sql`
+			SELECT COUNT(*) as manager_count FROM edw.dim_manager LIMIT 1
+		`);
+		
 		tests.database = {
 			status: 'connected',
 			userCount,
-			message: 'Database connection successful'
+			schemaAccess: Array.from(schemaTest),
+			edwDataAccess: Array.from(dataTest),
+			connectionPool: 'healthy',
+			message: 'Database connection and schema access successful'
 		};
 	} catch (error) {
 		tests.database = {
 			status: 'error',
-			message: error instanceof Error ? error.message : 'Unknown database error'
+			message: error instanceof Error ? error.message : 'Unknown database error',
+			errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+			stack: error instanceof Error ? error.stack?.split('\n').slice(0, 3) : undefined
 		};
 	}
 

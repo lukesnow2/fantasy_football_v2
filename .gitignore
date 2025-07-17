@@ -91,3 +91,4 @@ Desktop.ini
 
 # Note: web/ directory is now tracked in git
 # It has its own .gitignore that excludes build artifacts (node_modules, .svelte-kit, .env, etc.) 
+.vercel
