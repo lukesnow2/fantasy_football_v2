@@ -113,15 +113,15 @@
 			
 			<div class="grid grid-cols-2 md:grid-cols-5 gap-6">
 				<div class="text-center">
-					<div class="text-3xl font-bold text-blue-400">{analytics.total_managers || 0}</div>
+					<div class="text-3xl font-bold text-blue-400">{analytics.totalManagers || 0}</div>
 					<div class="text-slate-400">Total Managers</div>
 				</div>
 				<div class="text-center">
-					<div class="text-3xl font-bold text-amber-400">{parseFloat(analytics.avg_championships || 0).toFixed(1)}</div>
+					<div class="text-3xl font-bold text-amber-400">{parseFloat(analytics.avgChampionships || 0).toFixed(1)}</div>
 					<div class="text-slate-400">Avg Championships</div>
 				</div>
 				<div class="text-center">
-					<div class="text-3xl font-bold text-green-400">{(parseFloat(analytics.avg_win_percentage || 0) * 100).toFixed(1)}%</div>
+					<div class="text-3xl font-bold text-green-400">{(parseFloat(analytics.avgWinPercentage || 0) * 100).toFixed(1)}%</div>
 					<div class="text-slate-400">
 						<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400">
 							Avg Win Rate
@@ -129,11 +129,11 @@
 					</div>
 				</div>
 				<div class="text-center">
-					<div class="text-3xl font-bold text-purple-400">{parseFloat(analytics.avg_seasons_played || 0).toFixed(1)}</div>
+					<div class="text-3xl font-bold text-purple-400">{parseFloat(analytics.avgSeasonsPlayed || 0).toFixed(1)}</div>
 					<div class="text-slate-400">Avg Seasons</div>
 				</div>
 				<div class="text-center">
-					<div class="text-3xl font-bold text-cyan-400">{parseFloat(analytics.avg_hall_of_fame_index || 0).toFixed(3)}</div>
+					<div class="text-3xl font-bold text-cyan-400">{parseFloat(analytics.avgHallOfFameIndex || 0).toFixed(3)}</div>
 					<div class="text-slate-400">
 						<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400">
 							Avg HoF Index
@@ -145,19 +145,19 @@
 			<!-- Additional Analytics Row -->
 			<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-700/50">
 				<div class="text-center">
-					<div class="text-2xl font-bold text-orange-400">{parseFloat(analytics.avg_points_per_game || 0).toFixed(1)}</div>
+					<div class="text-2xl font-bold text-orange-400">{parseFloat(analytics.avgPointsPerGame || 0).toFixed(1)}</div>
 					<div class="text-slate-400">Avg Pts/Game</div>
 				</div>
 				<div class="text-center">
-					<div class="text-2xl font-bold text-emerald-400">{parseInt(analytics.total_career_wins || 0).toLocaleString()}</div>
+					<div class="text-2xl font-bold text-emerald-400">{parseInt(analytics.totalCareerWins || 0).toLocaleString()}</div>
 					<div class="text-slate-400">Total Wins</div>
 				</div>
 				<div class="text-center">
-					<div class="text-2xl font-bold text-red-400">{parseInt(analytics.total_career_losses || 0).toLocaleString()}</div>
+					<div class="text-2xl font-bold text-red-400">{parseInt(analytics.totalCareerLosses || 0).toLocaleString()}</div>
 					<div class="text-slate-400">Total Losses</div>
 				</div>
 				<div class="text-center">
-					<div class="text-2xl font-bold text-yellow-400">{parseInt(analytics.total_career_ties || 0)}</div>
+					<div class="text-2xl font-bold text-yellow-400">{parseInt(analytics.totalCareerTies || 0)}</div>
 					<div class="text-slate-400">Total Ties</div>
 				</div>
 			</div>
@@ -202,16 +202,16 @@
 										<span class="text-white font-bold">{tier.manager_count}</span>
 									</td>
 									<td class="py-3 text-center">
-										<span class="text-amber-400 font-bold">{parseFloat(tier.avg_championships || 0).toFixed(1)}</span>
+										<span class="text-amber-400 font-bold">{parseFloat(tier.avgChampionships || 0).toFixed(1)}</span>
 									</td>
 									<td class="py-3 text-center">
-										<span class="text-green-400 font-bold">{(parseFloat(tier.avg_win_pct || 0) * 100).toFixed(1)}%</span>
+										<span class="text-green-400 font-bold">{(parseFloat(tier.avgWinPct || 0) * 100).toFixed(1)}%</span>
 									</td>
 									<td class="py-3 text-center">
-										<span class="text-cyan-400 font-bold">{parseFloat(tier.avg_hall_of_fame_index || 0).toFixed(3)}</span>
+										<span class="text-cyan-400 font-bold">{parseFloat(tier.avgHallOfFameIndex || 0).toFixed(3)}</span>
 									</td>
 									<td class="py-3 text-center">
-										<span class="text-slate-300 font-medium text-xs">{parseInt(tier.total_wins || 0)}-{parseInt(tier.total_losses || 0)}</span>
+										<span class="text-slate-300 font-medium text-xs">{parseInt(tier.totalWins || 0)}-{parseInt(tier.totalLosses || 0)}</span>
 									</td>
 								</tr>
 							{/each}
@@ -269,7 +269,7 @@
 								<!-- Right Side: Stats Grid -->
 								<div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
 									<div>
-										<div class="text-lg font-bold {getIndexColor(manager.hall_of_fame_rank, analytics.total_managers)}">
+										<div class="text-lg font-bold {getIndexColor(manager.hall_of_fame_rank, analytics.totalManagers)}">
 											#{manager.hall_of_fame_rank}
 										</div>
 										<div class="text-xs text-slate-400">HoF Rank</div>
