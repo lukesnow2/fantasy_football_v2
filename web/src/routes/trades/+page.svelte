@@ -29,6 +29,7 @@
 					console.log('Championship trades count:', tradeData.analytics.championship_trades?.length);
 					if (tradeData.analytics.best_trades?.length > 0) {
 						console.log('First best trade:', tradeData.analytics.best_trades[0]);
+						console.log('Best trade fields:', Object.keys(tradeData.analytics.best_trades[0]));
 					}
 				}
 				
@@ -37,6 +38,7 @@
 					console.log('Trades count:', tradeData.trades.length);
 					if (tradeData.trades.length > 0) {
 						console.log('First trade:', tradeData.trades[0]);
+						console.log('Trade fields:', Object.keys(tradeData.trades[0]));
 					}
 				}
 			} else {
@@ -183,9 +185,9 @@
 						
 						<div class="space-y-4">
 							{#each tradeData.analytics.best_trades as trade, index}
-								<!-- Debug: {JSON.stringify(trade)} -->
 								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
+								<!-- Debug trade {index}: {trade.tradeWinner} vs {trade.teamAManager} -->
 								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{trade.tradeWinner}</span>
@@ -266,7 +268,7 @@
 					
 					<div class="space-y-3">
 						{#each tradeData.trades.slice(0, 10) as trade, index}
-							<!-- Debug trade {index}: {JSON.stringify(trade)} -->
+							<!-- Debug trade {index}: {trade.tradeWinner} vs {trade.teamAManager} -->
 							<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 
 								{trade.tradeWinner === 'Even Trade' ? 'border-amber-400' :
 								 trade.teamAFinalScore > trade.teamBFinalScore ? 'border-green-400' : 'border-blue-400'}">
