@@ -200,6 +200,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 			
 			// Apply playoff rankings to standings
+			console.log('Playoff games found:', playoffGames.length);
+			console.log('Playoff standings map:', Array.from(playoffStandings.entries()));
+			console.log('Available teams in standings:', standings.map(s => `${s.teamName} (${s.managerName})`));
+			
 			finalStandings = standings.map(team => {
 				// Find team key by matching name and manager
 				let teamKey = null;
@@ -207,8 +211,13 @@ export const GET: RequestHandler = async ({ url }) => {
 					if ((game.team1_name === team.teamName && game.team1_manager === team.managerName) ||
 						(game.team2_name === team.teamName && game.team2_manager === team.managerName)) {
 						teamKey = game.team1_name === team.teamName ? game.team1_key : game.team2_key;
+						console.log(`Found team key ${teamKey} for ${team.teamName} (${team.managerName})`);
 						break;
 					}
+				}
+				
+				if (!teamKey) {
+					console.log(`No team key found for ${team.teamName} (${team.managerName})`);
 				}
 				
 				const playoffRank = playoffStandings.get(teamKey);
