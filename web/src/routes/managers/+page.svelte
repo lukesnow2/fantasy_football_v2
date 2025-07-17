@@ -44,6 +44,13 @@
 
 	$: managers = (managerData?.data?.rankings || []).filter((m: any) => m.managerName != null);
 	$: currentManager = managers.find((m: any) => m.managerName === selectedManagerName) || managers[0];
+	
+	// Debug: Log what we're getting
+	$: if (managerData?.data?.rankings) {
+		console.log('Raw rankings data:', managerData.data.rankings);
+		console.log('Filtered managers:', managers);
+		console.log('Current manager:', currentManager);
+	}
 
 	function selectManager(managerName: string) {
 		selectedManagerName = managerName;
