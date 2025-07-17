@@ -13,7 +13,7 @@
 		loadTradeData();
 	});
 
-	// Load trade data
+			// Load trade data
 	async function loadTradeData(season = 'all') {
 		loadingTrades = true;
 		try {
@@ -21,6 +21,24 @@
 			if (response.ok) {
 				tradeData = await response.json();
 				console.log('Trade data loaded:', tradeData);
+				
+				// Debug analytics data
+				if (tradeData.analytics) {
+					console.log('Analytics overview:', tradeData.analytics.overview);
+					console.log('Best trades count:', tradeData.analytics.best_trades?.length);
+					console.log('Championship trades count:', tradeData.analytics.championship_trades?.length);
+					if (tradeData.analytics.best_trades?.length > 0) {
+						console.log('First best trade:', tradeData.analytics.best_trades[0]);
+					}
+				}
+				
+				// Debug trades data
+				if (tradeData.trades) {
+					console.log('Trades count:', tradeData.trades.length);
+					if (tradeData.trades.length > 0) {
+						console.log('First trade:', tradeData.trades[0]);
+					}
+				}
 			} else {
 				console.error('Failed to fetch trade data:', response.status, response.statusText);
 			}
@@ -160,11 +178,12 @@
 					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 							<TrendingUp class="w-6 h-6 text-green-400 mr-3" />
-							Most Decisive Trades
+							Most Decisive Trades ({tradeData.analytics.best_trades.length})
 						</h2>
 						
 						<div class="space-y-4">
-							{#each tradeData.analytics.best_trades as trade}
+							{#each tradeData.analytics.best_trades as trade, index}
+								<!-- Debug: {JSON.stringify(trade)} -->
 								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
@@ -206,7 +225,7 @@
 						
 						<div class="space-y-4">
 							{#each tradeData.analytics.championship_trades as trade}
-								{@const champion = trade.team_a_champion ? trade.team_a_manager : trade.team_b_manager}
+								{@const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager}
 								<div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{champion} 🏆</span>
@@ -214,22 +233,22 @@
 											<span class="bg-amber-500 text-black px-2 py-1 rounded text-sm font-bold">
 												CHAMP
 											</span>
-											<span class="text-xs text-slate-400">{trade.season_year}</span>
+											<span class="text-xs text-slate-400">{trade.seasonYear}</span>
 										</div>
 									</div>
 									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-blue-400">{trade.team_a_manager}:</span> {trade.team_a_gives}
+										<span class="text-blue-400">{trade.teamAManager}:</span> {trade.teamAGives}
 									</div>
 									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-purple-400">{trade.team_b_manager}:</span> {trade.team_b_gives}
+										<span class="text-purple-400">{trade.teamBManager}:</span> {trade.teamBGives}
 									</div>
 									<div class="flex justify-between text-xs">
-										<span class="text-slate-500">Week {trade.transaction_week}</span>
+										<span class="text-slate-500">Week {trade.transactionWeek}</span>
 										<span class="text-amber-400 font-bold">
-											Production: {parseFloat(trade.production_differential || 0) > 0 ? '+' : ''}{parseFloat(trade.production_differential || 0).toFixed(1)}
+											Production: {parseFloat(trade.productionDifferential || 0) > 0 ? '+' : ''}{parseFloat(trade.productionDifferential || 0).toFixed(1)}
 										</span>
 									</div>
-									<div class="text-xs text-slate-400 mt-2">{trade.trade_analysis}</div>
+									<div class="text-xs text-slate-400 mt-2">{trade.tradeAnalysis}</div>
 								</div>
 							{/each}
 						</div>
@@ -242,50 +261,51 @@
 				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 						<Calendar class="w-6 h-6 text-blue-400 mr-3" />
-						Recent Trade History
+						Recent Trade History ({tradeData.trades.length} total)
 					</h2>
 					
 					<div class="space-y-3">
-						{#each tradeData.trades.slice(0, 10) as trade}
+						{#each tradeData.trades.slice(0, 10) as trade, index}
+							<!-- Debug trade {index}: {JSON.stringify(trade)} -->
 							<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 
-								{trade.trade_winner === 'Even Trade' ? 'border-amber-400' :
-								 trade.team_a_final_score > trade.team_b_final_score ? 'border-green-400' : 'border-blue-400'}">
+								{trade.tradeWinner === 'Even Trade' ? 'border-amber-400' :
+								 trade.teamAFinalScore > trade.teamBFinalScore ? 'border-green-400' : 'border-blue-400'}">
 								<div class="flex items-center justify-between mb-2">
 									<div class="flex items-center space-x-3">
-										<span class="text-white font-bold">{trade.trade_type}</span>
-										<span class="text-slate-400 text-sm">Week {trade.transaction_week}, {trade.season_year}</span>
+										<span class="text-white font-bold">{trade.tradeType}</span>
+										<span class="text-slate-400 text-sm">Week {trade.transactionWeek}, {trade.seasonYear}</span>
 									</div>
 									<span class="text-xs px-2 py-1 rounded
-										{trade.trade_winner === 'Even Trade' ? 'bg-amber-500 bg-opacity-20 text-amber-300' :
+										{trade.tradeWinner === 'Even Trade' ? 'bg-amber-500 bg-opacity-20 text-amber-300' :
 										 'bg-green-500 bg-opacity-20 text-green-300'}">
-										{trade.trade_winner}
+										{trade.tradeWinner}
 									</span>
 								</div>
 								
 								<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
 									<div>
-										<span class="text-blue-400 font-medium">{trade.team_a_manager}:</span>
-										<span class="text-slate-300">{trade.team_a_gives}</span>
+										<span class="text-blue-400 font-medium">{trade.teamAManager}:</span>
+										<span class="text-slate-300">{trade.teamAGives}</span>
 										<div class="text-xs text-slate-500 mt-1">
-											Score: {parseFloat(trade.team_a_final_score || 0).toFixed(1)} 
-											{#if trade.team_a_made_playoffs} | Made Playoffs{/if}
-											{#if trade.team_a_champion} | 🏆 Champion{/if}
+											Score: {parseFloat(trade.teamAFinalScore || 0).toFixed(1)} 
+											{#if trade.teamAMadePlayoffs} | Made Playoffs{/if}
+											{#if trade.teamAChampion} | 🏆 Champion{/if}
 										</div>
 									</div>
 									<div>
-										<span class="text-purple-400 font-medium">{trade.team_b_manager}:</span>
-										<span class="text-slate-300">{trade.team_b_gives}</span>
+										<span class="text-purple-400 font-medium">{trade.teamBManager}:</span>
+										<span class="text-slate-300">{trade.teamBGives}</span>
 										<div class="text-xs text-slate-500 mt-1">
-											Score: {parseFloat(trade.team_b_final_score || 0).toFixed(1)}
-											{#if trade.team_b_made_playoffs} | Made Playoffs{/if}
-											{#if trade.team_b_champion} | 🏆 Champion{/if}
+											Score: {parseFloat(trade.teamBFinalScore || 0).toFixed(1)}
+											{#if trade.teamBMadePlayoffs} | Made Playoffs{/if}
+											{#if trade.teamBChampion} | 🏆 Champion{/if}
 										</div>
 									</div>
 								</div>
 								
-								{#if parseFloat(trade.production_differential || 0) !== 0}
+								{#if parseFloat(trade.productionDifferential || 0) !== 0}
 									<div class="mt-2 text-xs text-slate-400">
-										Production Impact: {parseFloat(trade.production_differential || 0) > 0 ? '+' : ''}{parseFloat(trade.production_differential || 0).toFixed(1)} points
+										Production Impact: {parseFloat(trade.productionDifferential || 0) > 0 ? '+' : ''}{parseFloat(trade.productionDifferential || 0).toFixed(1)} points
 									</div>
 								{/if}
 							</div>
