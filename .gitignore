@@ -41,7 +41,10 @@ dist/
 downloads/
 eggs/
 .eggs/
+# Python libraries
 lib/
+# But not web app lib directories
+!web/src/lib/
 lib64/
 parts/
 sdist/
