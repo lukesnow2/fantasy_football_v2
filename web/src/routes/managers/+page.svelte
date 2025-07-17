@@ -42,7 +42,7 @@
 
 	onMount(loadManagerData);
 
-	$: managers = managerData?.data?.rankings || [];
+	$: managers = (managerData?.data?.rankings || []).filter((m: any) => m.managerName != null);
 	$: currentManager = managers.find((m: any) => m.managerName === selectedManagerName) || managers[0];
 
 	function selectManager(managerName: string) {
@@ -72,14 +72,16 @@
 					title={manager.managerName}
 				>
 					<!-- Profile Picture -->
-					<ManagerProfilePicture 
-						managerName={manager.managerName}
-						size="small"
-						className="transition-all duration-200 
-							{manager.managerName === selectedManagerName 
-								? 'ring-2 ring-blue-400 scale-110' 
-								: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
-					/>
+					{#if manager.managerName}
+						<ManagerProfilePicture 
+							managerName={manager.managerName}
+							size="small"
+							className="transition-all duration-200 
+								{manager.managerName === selectedManagerName 
+									? 'ring-2 ring-blue-400 scale-110' 
+									: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
+						/>
+					{/if}
 					
 
 				</button>
@@ -93,11 +95,13 @@
 				<div class="flex items-center justify-between">
 					<div class="flex items-center gap-6">
 						<!-- Large Profile Picture -->
-						<ManagerProfilePicture 
-							managerName={currentManager.managerName}
-							size="medium"
-							className="ring-2 ring-slate-600"
-						/>
+						{#if currentManager.managerName}
+							<ManagerProfilePicture 
+								managerName={currentManager.managerName}
+								size="medium"
+								className="ring-2 ring-slate-600"
+							/>
+						{/if}
 						
 						<!-- Manager Info -->
 						<div>
