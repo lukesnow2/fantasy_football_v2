@@ -88,15 +88,20 @@
 
 	onMount(async () => {
 		try {
+			console.log('This Season page loading - calling standings API...');
 			// Fetch current season standings
 			const standingsResponse = await fetch('/api/standings?season=2024');
+			console.log('Standings API response status:', standingsResponse.status);
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();
+				console.log('Standings data received:', standingsData);
 				standings = standingsData.standings;
 				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
 				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
+			} else {
+				console.error('Standings API failed:', standingsResponse.status, standingsResponse.statusText);
 			}
 
 			// Fetch recent transactions

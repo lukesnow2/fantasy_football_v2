@@ -9,6 +9,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		const requestedSeason = url.searchParams.get('season') || '2024';
 		console.log('Standings API called with season:', requestedSeason);
 		
+		// Simple test response first
+		if (requestedSeason === 'test') {
+			return json({ 
+				test: true, 
+				message: 'Standings API is working',
+				timestamp: new Date().toISOString()
+			});
+		}
+		
 		// Test database connection
 		try {
 			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_current_season_dashboard`;
