@@ -47,7 +47,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		const managerStats = Array.from(statsResult);
 
 		// Add computed rankings and tier classification with camelCase field names
-		const enrichedStats = managerStats.map((mgr: any, index: number) => ({
+		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
 			// Convert snake_case to camelCase
 			managerName: mgr.manager_name,
 			firstSeason: mgr.first_season,
@@ -73,29 +73,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			seasonConsistencyScore: mgr.season_consistency_score,
 			bestSeasonRecord: mgr.best_season_record,
 			worstSeasonRecord: mgr.worst_season_record,
-			// Overall ranking based on combined factors
-			overallRank: index + 1,
-			// Championship ranking - using correct field name from SQL alias
-			championshipRank: [...managerStats].sort((a: any, b: any) => (Number(b.total_championships) || 0) - (Number(a.total_championships) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Win percentage ranking - using correct field name from SQL alias
-			winPctRank: [...managerStats].sort((a: any, b: any) => (Number(b.win_percentage) || 0) - (Number(a.win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Scoring ranking - using correct field name from SQL alias
-			scoringRank: [...managerStats].sort((a: any, b: any) => (Number(b.avg_points_for) || 0) - (Number(a.avg_points_for) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
-			// Playoff ranking - this one was already correct
-			playoffRank: [...managerStats].sort((a: any, b: any) => (Number(b.playoff_win_percentage) || 0) - (Number(a.playoff_win_percentage) || 0)).findIndex((m: any) => m.manager_name === mgr.manager_name) + 1,
 			// Tier classification based on performance
 			tierClassification: mgr.manager_name === 'Bobby' ? 'League Alum' : (() => {
 				const championships = parseInt(mgr.total_championships) || 0;
 				const winPct = parseFloat(mgr.win_percentage) || 0;
-				
-				// Debug logging
-				console.log('Tier Debug:', {
-					manager: mgr.manager_name,
-					raw_championships: mgr.total_championships,
-					parsed_championships: championships,
-					raw_winpct: mgr.win_percentage,
-					parsed_winpct: winPct
-				});
 				
 				if (championships >= 3) return 'League Legend';
 				if (championships >= 2) return 'Dynasty Builder';
@@ -107,6 +88,21 @@ export const GET: RequestHandler = async ({ url }) => {
 				return 'Rebuilding';
 			})()
 		}));
+
+		// Calculate rankings after creating enriched stats
+		const sortedByChampionships = [...enrichedStats].sort((a, b) => (Number(b.totalChampionships) || 0) - (Number(a.totalChampionships) || 0));
+		const sortedByWinPct = [...enrichedStats].sort((a, b) => (Number(b.winPercentage) || 0) - (Number(a.winPercentage) || 0));
+		const sortedByScoring = [...enrichedStats].sort((a, b) => (Number(b.avgPointsFor) || 0) - (Number(a.avgPointsFor) || 0));
+		const sortedByPlayoffs = [...enrichedStats].sort((a, b) => (Number(b.playoffWinPercentage) || 0) - (Number(a.playoffWinPercentage) || 0));
+
+		// Add rankings to enriched stats
+		enrichedStats.forEach((mgr, index) => {
+			mgr.overallRank = index + 1;
+			mgr.championshipRank = sortedByChampionships.findIndex(m => m.managerName === mgr.managerName) + 1;
+			mgr.winPctRank = sortedByWinPct.findIndex(m => m.managerName === mgr.managerName) + 1;
+			mgr.scoringRank = sortedByScoring.findIndex(m => m.managerName === mgr.managerName) + 1;
+			mgr.playoffRank = sortedByPlayoffs.findIndex(m => m.managerName === mgr.managerName) + 1;
+		});
 
 		data.performance = enrichedStats;
 		data.rankings = enrichedStats;
