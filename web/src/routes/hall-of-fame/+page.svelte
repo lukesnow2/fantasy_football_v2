@@ -241,12 +241,18 @@
 									</div>
 									
 									<div class="flex items-center space-x-4">
-										<ManagerProfilePicture 
-											managerName={manager.manager_name} 
-											className="w-16 h-16" 
-										/>
+										{#if manager.manager_name}
+											<ManagerProfilePicture 
+												managerName={manager.manager_name} 
+												className="w-16 h-16" 
+											/>
+										{:else}
+											<div class="w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center">
+												<span class="text-white font-bold text-lg">?</span>
+											</div>
+										{/if}
 										<div>
-											<h3 class="text-xl font-bold text-white">{manager.manager_name}</h3>
+											<h3 class="text-xl font-bold text-white">{manager.manager_name || 'Unknown Manager'}</h3>
 											<div class="text-sm text-slate-400">{getTierName(manager.hall_of_fame_rank)}</div>
 											<div class="flex items-center gap-2 mt-1">
 												{#if manager.championships_won > 0}

@@ -1,10 +1,17 @@
 // Manager utility functions
 
 export function getInitials(name: string): string {
+	if (!name) return '';
 	return name.split(' ').map(n => n.charAt(0)).join('').toUpperCase();
 }
 
 export function getManagerProfilePicture(managerName: string): string | null {
+	// Check if managerName is valid
+	if (!managerName || typeof managerName !== 'string') {
+		console.warn('getManagerProfilePicture: Invalid managerName:', managerName);
+		return null;
+	}
+
 	// Normalize manager name for file matching
 	const normalizedName = managerName.toLowerCase().replace(/\s+/g, '-');
 	
