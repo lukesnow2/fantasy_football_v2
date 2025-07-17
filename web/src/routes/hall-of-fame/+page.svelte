@@ -230,20 +230,20 @@
 			
 			<div class="space-y-3">
 				{#each managers as manager, index}
-					<div class="bg-gradient-to-r {getTierColor(manager.hall_of_fame_rank)} p-[1px] rounded-xl">
+					<div class="bg-gradient-to-r {getTierColor(manager.hallOfFameRank)} p-[1px] rounded-xl">
 						<div class="bg-slate-800 rounded-xl p-6">
 							<div class="flex items-center justify-between">
 								<!-- Left Side: Rank and Manager Info -->
 								<div class="flex items-center space-x-4">
 									<div class="flex-shrink-0 text-center">
-										<div class="text-3xl font-bold text-white">#{manager.hall_of_fame_rank}</div>
-										<div class="text-lg">{getTierBadge(manager.hall_of_fame_rank)}</div>
+										<div class="text-3xl font-bold text-white">#{manager.hallOfFameRank}</div>
+										<div class="text-lg">{getTierBadge(manager.hallOfFameRank)}</div>
 									</div>
 									
 									<div class="flex items-center space-x-4">
-										{#if manager.manager_name}
+										{#if manager.managerName}
 											<ManagerProfilePicture 
-												managerName={manager.manager_name} 
+												managerName={manager.managerName} 
 												className="w-16 h-16" 
 											/>
 										{:else}
@@ -252,13 +252,13 @@
 											</div>
 										{/if}
 										<div>
-											<h3 class="text-xl font-bold text-white">{manager.manager_name || 'Unknown Manager'}</h3>
-											<div class="text-sm text-slate-400">{getTierName(manager.hall_of_fame_rank)}</div>
+											<h3 class="text-xl font-bold text-white">{manager.managerName || 'Unknown Manager'}</h3>
+											<div class="text-sm text-slate-400">{getTierName(manager.hallOfFameRank)}</div>
 											<div class="flex items-center gap-2 mt-1">
-												{#if manager.championships_won > 0}
+												{#if manager.championshipsWon > 0}
 													<span class="flex items-center text-amber-400 text-sm">
 														<Trophy class="w-4 h-4 mr-1" />
-														{manager.championships_won} Championship{manager.championships_won > 1 ? 's' : ''}
+														{manager.championshipsWon} Championship{manager.championshipsWon > 1 ? 's' : ''}
 													</span>
 												{/if}
 											</div>
@@ -269,14 +269,14 @@
 								<!-- Right Side: Stats Grid -->
 								<div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
 									<div>
-										<div class="text-lg font-bold {getIndexColor(manager.hall_of_fame_rank, analytics.totalManagers)}">
-											#{manager.hall_of_fame_rank}
+										<div class="text-lg font-bold {getIndexColor(manager.hallOfFameRank, analytics.totalManagers)}">
+											#{manager.hallOfFameRank}
 										</div>
 										<div class="text-xs text-slate-400">HoF Rank</div>
 									</div>
 									<div>
 										<div class="text-lg font-bold text-cyan-400">
-											{parseFloat(manager.hall_of_fame_index || 0).toFixed(3)}
+											{parseFloat(manager.hallOfFameIndex || 0).toFixed(3)}
 										</div>
 										<div class="text-xs text-slate-400">
 											<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400" showIcon={false}>
@@ -285,8 +285,8 @@
 										</div>
 									</div>
 									<div>
-										<div class="text-lg font-bold {getWinPercentageColor(manager.career_win_percentage)}">
-											{(manager.career_win_percentage * 100).toFixed(1)}%
+										<div class="text-lg font-bold {getWinPercentageColor(manager.careerWinPercentage)}">
+											{(manager.careerWinPercentage * 100).toFixed(1)}%
 										</div>
 										<div class="text-xs text-slate-400">
 											<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400" showIcon={false}>
@@ -296,14 +296,14 @@
 									</div>
 									<div>
 										<div class="text-lg font-bold text-emerald-400">
-											{manager.career_wins}-{manager.career_losses}
-											{#if manager.career_ties > 0}-{manager.career_ties}{/if}
+											{manager.careerWins}-{manager.careerLosses}
+											{#if manager.careerTies > 0}-{manager.careerTies}{/if}
 										</div>
 										<div class="text-xs text-slate-400">Career Record</div>
 									</div>
 									<div>
 										<div class="text-lg font-bold text-blue-400">
-											{parseFloat(manager.total_points_scored).toLocaleString()}
+											{parseFloat(manager.totalPointsScored).toLocaleString()}
 										</div>
 										<div class="text-xs text-slate-400">Career Points</div>
 									</div>
@@ -315,15 +315,15 @@
 								<div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
 									<div class="flex justify-between">
 										<span class="text-slate-400">Avg Points/Game:</span>
-										<span class="font-medium text-green-400">{parseFloat(manager.avg_points_per_game).toFixed(1)}</span>
+										<span class="font-medium text-green-400">{parseFloat(manager.avgPointsPerGame).toFixed(1)}</span>
 									</div>
 									<div class="flex justify-between">
 										<span class="text-slate-400">Playoff Apps:</span>
-										<span class="font-medium text-cyan-400">{manager.playoff_appearances}</span>
+										<span class="font-medium text-cyan-400">{manager.playoffAppearances}</span>
 									</div>
 									<div class="flex justify-between">
 										<span class="text-slate-400">Seasons Played:</span>
-										<span class="font-medium text-orange-400">{manager.total_seasons}</span>
+										<span class="font-medium text-orange-400">{manager.totalSeasons}</span>
 									</div>
 									<div class="flex justify-between">
 										<span class="text-slate-400">
@@ -331,7 +331,7 @@
 												Consistency:
 											</MetricHelp>
 										</span>
-										<span class="font-medium text-rose-400">{parseFloat(manager.season_consistency_score || 0).toFixed(3)}</span>
+										<span class="font-medium text-rose-400">{parseFloat(manager.seasonConsistencyScore || 0).toFixed(3)}</span>
 									</div>
 								</div>
 							</div>

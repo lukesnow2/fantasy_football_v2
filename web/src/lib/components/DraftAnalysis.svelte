@@ -29,7 +29,7 @@
 										<span class="font-bold text-white">{pick.player_name}</span>
 										<span class="text-xs bg-green-500 text-black px-2 py-1 rounded">#{pick.overall_pick}</span>
 									</div>
-									<div class="text-sm text-slate-300">{pick.primary_position} • {pick.manager_name}</div>
+									<div class="text-sm text-slate-300">{pick.primaryPosition} • {pick.managerName}</div>
 									<div class="text-lg font-bold text-green-400">{parseFloat(pick.season_points || 0).toFixed(1)} pts</div>
 								</div>
 							{/each}
@@ -46,7 +46,7 @@
 										<span class="font-bold text-white">{pick.player_name}</span>
 										<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">#{pick.overall_pick}</span>
 									</div>
-									<div class="text-sm text-slate-300">{pick.primary_position} • {pick.manager_name}</div>
+									<div class="text-sm text-slate-300">{pick.primaryPosition} • {pick.managerName}</div>
 									<div class="text-lg font-bold text-red-400">{parseFloat(pick.season_points || 0).toFixed(1)} pts</div>
 								</div>
 							{/each}
