@@ -165,31 +165,31 @@
 						
 						<div class="space-y-4">
 							{#each tradeData.analytics.best_trades as trade}
-								{@const winnerScore = parseFloat(trade.team_a_final_score || 0) > parseFloat(trade.team_b_final_score || 0) ? parseFloat(trade.team_a_final_score || 0) : parseFloat(trade.team_b_final_score || 0)}
-								{@const loserScore = parseFloat(trade.team_a_final_score || 0) < parseFloat(trade.team_b_final_score || 0) ? parseFloat(trade.team_a_final_score || 0) : parseFloat(trade.team_b_final_score || 0)}
+								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
+								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
-										<span class="font-bold text-white">{trade.trade_winner}</span>
+										<span class="font-bold text-white">{trade.tradeWinner}</span>
 										<div class="flex items-center space-x-2">
 											<span class="bg-green-500 text-white px-2 py-1 rounded text-sm font-bold">
-												+{parseFloat(trade.production_differential || 0).toFixed(1)}
+												+{parseFloat(trade.productionDifferential || 0).toFixed(1)}
 											</span>
-											<span class="text-xs text-slate-400">{trade.season_year}</span>
+											<span class="text-xs text-slate-400">{trade.seasonYear}</span>
 										</div>
 									</div>
 									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-blue-400">{trade.team_a_manager}:</span> {trade.team_a_gives}
+										<span class="text-blue-400">{trade.teamAManager}:</span> {trade.teamAGives}
 									</div>
 									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-purple-400">{trade.team_b_manager}:</span> {trade.team_b_gives}
+										<span class="text-purple-400">{trade.teamBManager}:</span> {trade.teamBGives}
 									</div>
 									<div class="flex justify-between text-xs">
-										<span class="text-slate-500">Week {trade.transaction_week}</span>
+										<span class="text-slate-500">Week {trade.transactionWeek}</span>
 										<span class="text-green-400 font-bold">
 											Final: {winnerScore.toFixed(1)} - {loserScore.toFixed(1)}
 										</span>
 									</div>
-									<div class="text-xs text-slate-400 mt-2">{trade.trade_analysis}</div>
+									<div class="text-xs text-slate-400 mt-2">{trade.tradeAnalysis}</div>
 								</div>
 							{/each}
 						</div>

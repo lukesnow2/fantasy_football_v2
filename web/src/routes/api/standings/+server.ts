@@ -132,6 +132,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		if (championshipData) {
 			// Season is complete - build final standings based on playoff results
 			console.log('Championship completed, building final playoff standings...');
+			console.log('Original standings count:', standings.length);
 			
 			// Get playoff bracket results
 			const playoffQuery = `
@@ -212,6 +213,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				
 				const playoffRank = playoffStandings.get(teamKey);
 				if (playoffRank) {
+					console.log(`Team ${team.teamName} (${team.managerName}) gets playoff rank ${playoffRank.rank}`);
 					return {
 						...team,
 						finalRank: playoffRank.rank,
@@ -219,6 +221,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					};
 				} else {
 					// Non-playoff team - rank by regular season record
+					console.log(`Team ${team.teamName} (${team.managerName}) gets regular season rank ${rank}`);
 					return {
 						...team,
 						finalRank: rank++,
@@ -226,6 +229,9 @@ export const GET: RequestHandler = async ({ url }) => {
 					};
 				}
 			});
+			
+			console.log('Final standings count:', finalStandings.length);
+			console.log('Final standings:', finalStandings.map(s => `${s.finalRank}: ${s.teamName} (${s.managerName})`));
 			
 			// Sort by final playoff rank, then by regular season record for non-playoff teams
 			finalStandings.sort((a, b) => {
