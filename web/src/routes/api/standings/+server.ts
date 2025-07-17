@@ -344,7 +344,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.warn('Could not determine current week, using default:', error);
 		}
 
-		return json({
+		const responseData = {
 			standings: standingsWithStats,
 			season: finalStandings.length > 0 ? finalStandings[0].seasonYear : requestedSeason,
 			currentWeek,
@@ -352,7 +352,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			isFinalStandings: !!championshipData,
 			lastPlaceGameLoser, // Include the last place game loser info
 			lastUpdated: new Date().toISOString()
+		};
+		
+		console.log('Returning standings response:', {
+			standingsCount: standingsWithStats.length,
+			isSeasonComplete: !!championshipData,
+			isFinalStandings: !!championshipData,
+			firstFewStandings: standingsWithStats.slice(0, 3).map(s => `${s.rank}: ${s.teamName} (${s.managerName})`)
 		});
+		
+		return json(responseData);
 
 	} catch (error) {
 		console.error('Error fetching standings:', error);
