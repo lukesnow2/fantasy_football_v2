@@ -45,6 +45,9 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		const statsResult = await db.execute(sql.raw(managerStatsQuery));
 		const managerStats = Array.from(statsResult);
+		
+		// Debug: Log the raw data to see what we're getting
+		console.log('Raw manager stats from database:', managerStats);
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
@@ -103,6 +106,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			mgr.scoringRank = sortedByScoring.findIndex(m => m.managerName === mgr.managerName) + 1;
 			mgr.playoffRank = sortedByPlayoffs.findIndex(m => m.managerName === mgr.managerName) + 1;
 		});
+		
+		// Debug: Log the enriched stats to see what we're sending
+		console.log('Enriched stats with rankings:', enrichedStats);
 
 		data.performance = enrichedStats;
 		data.rankings = enrichedStats;
@@ -209,6 +215,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		data.availableManagers = managerStats
 			.filter((mgr: any) => mgr.manager_name != null)
 			.map((mgr: any) => mgr.manager_name);
+		
+		// Debug: Log available managers
+		console.log('Available managers:', data.availableManagers);
 
 		// Meta information
 		data.meta = {
