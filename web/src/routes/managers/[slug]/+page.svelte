@@ -58,21 +58,21 @@
 	}
 
 	function getSeasonOutcome(season: any): string {
-		if (season.championship_winner) return '🏆 Champion';
-		if (season.made_playoffs) return '🔥 Playoffs';
+		if (season.championshipWinner) return '🏆 Champion';
+		if (season.madePlayoffs) return '🔥 Playoffs';
 		return '📉 Missed Playoffs';
 	}
 
 	function getSeasonOutcomeColor(season: any): string {
-		if (season.championship_winner) return 'text-amber-400';
-		if (season.made_playoffs) return 'text-blue-400';
+		if (season.championshipWinner) return 'text-amber-400';
+		if (season.madePlayoffs) return 'text-blue-400';
 		return 'text-red-400';
 	}
 
 	// Get manager's main data
 	$: manager = managerData?.data?.performance?.[0];
 	$: ranking = managerData?.data?.rankings?.[0];
-	$: achievements = managerData?.data?.achievements?.[0]?.all_achievements || [];
+	$: achievements = managerData?.data?.achievements?.[0]?.allAchievements || [];
 
 	const tabs = [
 		{ id: 'overview', name: 'Overview', icon: BarChart3 },
@@ -103,55 +103,57 @@
 		<div class="bg-slate-800/50 rounded-xl p-8 border border-slate-700/50">
 			<div class="flex flex-col md:flex-row items-start md:items-center gap-6">
 				<div class="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-white text-3xl">
-					{manager.manager_name.charAt(0)}
+					<span class="text-4xl font-bold text-white">
+						{manager.managerName.charAt(0)}
+					</span>
 				</div>
 				
 				<div class="flex-1">
 					<div class="flex items-center gap-4 mb-2">
-						<h1 class="text-4xl font-bold text-white">{manager.manager_name}</h1>
-						{#if manager.total_championships > 0}
+						<h1 class="text-4xl font-bold text-white">{manager.managerName}</h1>
+						{#if manager.totalChampionships > 0}
 							<span class="text-3xl">
-								{getChampionshipBadge(manager.total_championships)}
+								{getChampionshipBadge(manager.totalChampionships)}
 							</span>
 						{/if}
 					</div>
 					
 					{#if ranking}
 						<div class="flex items-center gap-4 mb-4">
-							<span class="text-lg px-3 py-1 rounded-full border {getTierColor(ranking.tier_classification)}">
-								{ranking.tier_classification}
+							<span class="text-lg px-3 py-1 rounded-full border {getTierColor(ranking.tierClassification)}">
+								{ranking.tierClassification}
 							</span>
 							<span class="text-slate-300">
-								Ranked #{ranking.overall_rank} Overall
+								Ranked #{ranking.overallRank} Overall
 							</span>
 						</div>
 					{/if}
 
 					<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
 						<div class="text-center">
-							<div class="text-2xl font-bold text-blue-400">{manager.total_championships}</div>
+							<div class="text-2xl font-bold text-blue-400">{manager.totalChampionships}</div>
 							<div class="text-sm text-slate-400">Championships</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold {getWinPercentageColor(manager.win_percentage)}">
-								{(manager.win_percentage * 100).toFixed(1)}%
+							<div class="text-2xl font-bold {getWinPercentageColor(manager.winPercentage)}">
+								{(manager.winPercentage * 100).toFixed(1)}%
 							</div>
 							<div class="text-sm text-slate-400">
-								<MetricHelp metricId="career_win_percentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+								<MetricHelp metricId="careerWinPercentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
 									Win Rate
 								</MetricHelp>
 							</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-green-400">{manager.avg_points_for?.toFixed(1)}</div>
+							<div class="text-2xl font-bold text-green-400">{manager.avgPointsFor?.toFixed(1)}</div>
 							<div class="text-sm text-slate-400">
-								<MetricHelp metricId="avg_points_per_game" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+								<MetricHelp metricId="avgPointsPerGame" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
 									Avg Points
 								</MetricHelp>
 							</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-purple-400">{manager.total_seasons}</div>
+							<div class="text-2xl font-bold text-purple-400">{manager.totalSeasons}</div>
 							<div class="text-sm text-slate-400">Seasons</div>
 						</div>
 					</div>
@@ -198,30 +200,30 @@
 					<div class="space-y-4">
 						<div class="flex justify-between">
 							<span class="text-slate-400">Total Record</span>
-							<span class="font-bold text-white">{manager.total_wins}-{manager.total_losses}-{manager.total_ties}</span>
+							<span class="font-bold text-white">{manager.totalWins}-{manager.totalLosses}-{manager.totalTies}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Playoff Appearances</span>
-							<span class="font-bold text-blue-400">{manager.total_playoff_appearances}</span>
+							<span class="font-bold text-blue-400">{manager.totalPlayoffAppearances}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Playoff Win %</span>
-							<span class="font-bold {getWinPercentageColor(manager.playoff_win_percentage)}">
-								{(manager.playoff_win_percentage * 100).toFixed(1)}%
+							<span class="font-bold {getWinPercentageColor(manager.playoffWinPercentage)}">
+								{(manager.playoffWinPercentage * 100).toFixed(1)}%
 							</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Career Points For</span>
-							<span class="font-bold text-green-400">{manager.career_points_for?.toLocaleString()}</span>
+							<span class="font-bold text-green-400">{manager.careerPointsFor?.toLocaleString()}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Career Points Against</span>
-							<span class="font-bold text-red-400">{manager.career_points_against?.toLocaleString()}</span>
+							<span class="font-bold text-red-400">{manager.careerPointsAgainst?.toLocaleString()}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Point Differential</span>
-							<span class="font-bold {manager.point_differential >= 0 ? 'text-green-400' : 'text-red-400'}">
-								{manager.point_differential >= 0 ? '+' : ''}{manager.point_differential?.toFixed(1)}
+							<span class="font-bold {manager.pointDifferential >= 0 ? 'text-green-400' : 'text-red-400'}">
+								{manager.pointDifferential >= 0 ? '+' : ''}{manager.pointDifferential?.toFixed(1)}
 							</span>
 						</div>
 					</div>
@@ -233,27 +235,27 @@
 					<div class="space-y-4">
 						<div class="flex justify-between">
 							<span class="text-slate-400">Longest Win Streak</span>
-							<span class="font-bold text-green-400">{manager.longest_win_streak} games</span>
+							<span class="font-bold text-green-400">{manager.longestWinStreak} games</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Longest Loss Streak</span>
-							<span class="font-bold text-red-400">{manager.longest_loss_streak} games</span>
+							<span class="font-bold text-red-400">{manager.longestLossStreak} games</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Best Season Record</span>
-							<span class="font-bold text-white">{manager.best_season_record}</span>
+							<span class="font-bold text-white">{manager.bestSeasonRecord}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Worst Season Record</span>
-							<span class="font-bold text-slate-400">{manager.worst_season_record}</span>
+							<span class="font-bold text-slate-400">{manager.worstSeasonRecord}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Best Season Points</span>
-							<span class="font-bold text-green-400">{manager.best_season_points?.toFixed(1)}</span>
+							<span class="font-bold text-green-400">{manager.bestSeasonPoints?.toFixed(1)}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Worst Season Points</span>
-							<span class="font-bold text-red-400">{manager.worst_season_points?.toFixed(1)}</span>
+							<span class="font-bold text-red-400">{manager.worstSeasonPoints?.toFixed(1)}</span>
 						</div>
 					</div>
 				</div>
@@ -276,14 +278,14 @@
 							<tbody>
 								{#each managerData.data.seasons as season}
 									<tr class="border-b border-slate-700/50">
-										<td class="py-3 px-4 font-bold text-white">{season.season_year}</td>
+										<td class="py-3 px-4 font-bold text-white">{season.seasonYear}</td>
 										<td class="text-center py-3 px-4">
-											<span class="font-mono {getWinPercentageColor(season.win_percentage)}">
+											<span class="font-mono {getWinPercentageColor(season.winPercentage)}">
 												{season.wins}-{season.losses}-{season.ties}
 											</span>
 										</td>
-										<td class="text-center py-3 px-4 text-green-400">{season.points_for?.toFixed(1)}</td>
-										<td class="text-center py-3 px-4 text-slate-300">#{season.final_rank}</td>
+										<td class="text-center py-3 px-4 text-green-400">{season.pointsFor?.toFixed(1)}</td>
+										<td class="text-center py-3 px-4 text-slate-300">#{season.finalRank}</td>
 										<td class="text-center py-3 px-4 {getSeasonOutcomeColor(season)}">
 											{getSeasonOutcome(season)}
 										</td>
@@ -297,20 +299,20 @@
 		{:else if selectedTab === 'head-to-head'}
 			<div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 				<h3 class="text-xl font-bold text-white mb-6">Head-to-Head Records</h3>
-				{#if managerData?.data?.head_to_head}
+				{#if managerData?.data?.headToHead}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						{#each managerData.data.head_to_head as h2h}
+						{#each managerData.data.headToHead as h2h}
 							<div class="bg-slate-700/30 rounded-lg p-4">
 								<div class="flex justify-between items-center mb-2">
 									<span class="font-bold text-white">vs {h2h.opponent}</span>
-									<span class="text-sm text-slate-400">{h2h.total_matchups} games</span>
+									<span class="text-sm text-slate-400">{h2h.totalMatchups} games</span>
 								</div>
 								<div class="flex justify-between items-center">
-									<span class="font-mono {getWinPercentageColor(h2h.win_percentage)}">
+									<span class="font-mono {getWinPercentageColor(h2h.winPercentage)}">
 										{h2h.wins}-{h2h.losses}
 									</span>
-									<span class="text-sm {getWinPercentageColor(h2h.win_percentage)}">
-										{(h2h.win_percentage * 100).toFixed(1)}%
+									<span class="text-sm {getWinPercentageColor(h2h.winPercentage)}">
+										{(h2h.winPercentage * 100).toFixed(1)}%
 									</span>
 								</div>
 							</div>
@@ -324,9 +326,9 @@
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					<div>
 						<h4 class="text-lg font-semibold text-amber-400 mb-3">🏆 Championship History</h4>
-						{#if manager.championship_years}
+						{#if manager.championshipYears}
 							<div class="space-y-2">
-								{#each manager.championship_years.split(',') as year}
+								{#each manager.championshipYears.split(',') as year}
 									<div class="flex items-center gap-2">
 										<Trophy class="w-4 h-4 text-amber-400" />
 										<span class="text-white">{year.trim()} Champion</span>
@@ -344,23 +346,23 @@
 							<div class="space-y-2">
 								<div class="flex justify-between">
 									<span class="text-slate-400">Overall Rank</span>
-									<span class="font-bold text-white">#{ranking.overall_rank}</span>
+									<span class="font-bold text-white">#{ranking.overallRank}</span>
 								</div>
 								<div class="flex justify-between">
 									<span class="text-slate-400">Championships</span>
-									<span class="font-bold text-amber-400">#{ranking.championship_rank}</span>
+									<span class="font-bold text-amber-400">#{ranking.championshipRank}</span>
 								</div>
 								<div class="flex justify-between">
 									<span class="text-slate-400">Win Percentage</span>
-									<span class="font-bold text-blue-400">#{ranking.win_pct_rank}</span>
+									<span class="font-bold text-blue-400">#{ranking.winPctRank}</span>
 								</div>
 								<div class="flex justify-between">
 									<span class="text-slate-400">Scoring</span>
-									<span class="font-bold text-green-400">#{ranking.scoring_rank}</span>
+									<span class="font-bold text-green-400">#{ranking.scoringRank}</span>
 								</div>
 								<div class="flex justify-between">
 									<span class="text-slate-400">Playoffs</span>
-									<span class="font-bold text-purple-400">#{ranking.playoff_rank}</span>
+									<span class="font-bold text-purple-400">#{ranking.playoffRank}</span>
 								</div>
 							</div>
 						{/if}

@@ -22,11 +22,13 @@
 				// Set authenticated user's manager as default, or first manager if not authenticated
 				if (managerData?.data?.rankings?.length > 0) {
 					const userManager = data.userManagerName;
-					if (userManager && managerData.data.rankings.find((m: any) => m.manager_name === userManager)) {
+					if (userManager && managerData.data.rankings.find((m: any) => m.managerName === userManager)) {
 						selectedManagerName = userManager;
 					} else {
-						selectedManagerName = managerData.data.rankings[0].manager_name;
+						selectedManagerName = managerData.data.rankings[0].managerName;
 					}
+				} else {
+					selectedManagerName = 'All Managers';
 				}
 			} else {
 				console.error('Failed to fetch manager data:', response.status, response.statusText);
@@ -41,7 +43,7 @@
 	onMount(loadManagerData);
 
 	$: managers = managerData?.data?.rankings || [];
-	$: currentManager = managers.find((m: any) => m.manager_name === selectedManagerName) || managers[0];
+	$: currentManager = managers.find((m: any) => m.managerName === selectedManagerName) || managers[0];
 
 	function selectManager(managerName: string) {
 		selectedManagerName = managerName;
@@ -49,7 +51,7 @@
 
 	function getManagerAchievements(managerName: string): string[] {
 		const achievements = managerData?.data?.achievements?.find(
-			(a: any) => a.manager_name === managerName
+			(a: any) => a.managerName === managerName
 		);
 		return achievements?.all_achievements || [];
 	}
@@ -65,16 +67,16 @@
 		<div class="w-20 bg-slate-800/50 border-r border-slate-700/50 flex flex-col items-center py-6 space-y-3 overflow-y-auto">
 			{#each managers as manager}
 				<button
-					on:click={() => selectManager(manager.manager_name)}
+					on:click={() => selectManager(manager.managerName)}
 					class="relative group"
-					title={manager.manager_name}
+					title={manager.managerName}
 				>
 					<!-- Profile Picture -->
 					<ManagerProfilePicture 
-						managerName={manager.manager_name}
+						managerName={manager.managerName}
 						size="small"
 						className="transition-all duration-200 
-							{manager.manager_name === selectedManagerName 
+							{manager.managerName === selectedManagerName 
 								? 'ring-2 ring-blue-400 scale-110' 
 								: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
 					/>
@@ -92,7 +94,7 @@
 					<div class="flex items-center gap-6">
 						<!-- Large Profile Picture -->
 						<ManagerProfilePicture 
-							managerName={currentManager.manager_name}
+							managerName={currentManager.managerName}
 							size="medium"
 							className="ring-2 ring-slate-600"
 						/>
@@ -100,7 +102,7 @@
 						<!-- Manager Info -->
 						<div>
 							<h1 class="text-4xl font-bold text-white mb-2">
-								{currentManager.manager_name}
+								{currentManager.managerName}
 								{#if currentManager.total_championships > 0}
 									<span class="ml-3">{getChampionshipBadge(currentManager.total_championships)}</span>
 								{/if}
@@ -312,7 +314,7 @@
 
 						<!-- Achievements -->
 						{#if currentManager}
-							{@const achievements = getManagerAchievements(currentManager.manager_name)}
+							{@const achievements = getManagerAchievements(currentManager.managerName)}
 							{#if achievements.length > 0}
 								<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
 									<h3 class="text-lg font-bold text-white mb-4">Achievements</h3>
@@ -333,7 +335,7 @@
 				<div class="text-center mt-8">
 					<button 
 						class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg"
-						on:click={() => window.location.href = `/managers/${encodeURIComponent(currentManager.manager_name)}`}
+						on:click={() => window.location.href = `/managers/${encodeURIComponent(currentManager.managerName)}`}
 					>
 						View Detailed Profile & History
 					</button>

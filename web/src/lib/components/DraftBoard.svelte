@@ -12,14 +12,14 @@
 	function createDraftBoard(picks: any[]) {
 		if (!picks.length) return [];
 		
-		const rounds = Math.max(...picks.map(p => p.round_number));
+		const rounds = Math.max(...picks.map(p => p.roundNumber));
 		const board: any[][] = [];
 		
-		// Sort all picks by overall_pick to ensure correct order
-		const sortedPicks = [...picks].sort((a, b) => a.overall_pick - b.overall_pick);
+		// Sort all picks by overallPick to ensure correct order
+		const sortedPicks = [...picks].sort((a, b) => a.overallPick - b.overallPick);
 		
 		for (let round = 1; round <= rounds; round++) {
-			const roundPicks = sortedPicks.filter(p => p.round_number === round);
+			const roundPicks = sortedPicks.filter(p => p.roundNumber === round);
 			
 			// Snake draft - odd rounds go left to right, even rounds go right to left
 			if (round % 2 === 0) {
@@ -68,8 +68,8 @@
 	}
 
 	function getValueIndicator(pick: any): string {
-		const expectedPoints = Math.max(180 - (pick.overall_pick * 2), 40);
-		const actualPoints = parseFloat(pick.season_points || 0);
+		const expectedPoints = Math.max(180 - (pick.overallPick * 2), 40);
+		const actualPoints = parseFloat(pick.seasonPoints || 0);
 		const value = actualPoints - expectedPoints;
 		
 		if (value > 50) return '🔥'; // Steal
@@ -120,26 +120,26 @@
 						{#each round as pick}
 							<button
 								class="p-3 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer"
-								style={getPositionStyle(pick.primary_position)}
-								on:click={() => selectedPick = selectedPick?.overall_pick === pick.overall_pick ? null : pick}
+								style={getPositionStyle(pick.primaryPosition)}
+								on:click={() => selectedPick = selectedPick?.overallPick === pick.overallPick ? null : pick}
 							>
-								<div class="text-xs font-bold mb-1">#{pick.overall_pick}</div>
-								<div class="font-bold text-white text-sm mb-1 truncate" title={pick.player_name}>
-									{pick.player_name}
+								<div class="text-xs font-bold mb-1">#{pick.overallPick}</div>
+								<div class="font-bold text-white text-sm mb-1 truncate" title={pick.playerName}>
+									{pick.playerName}
 								</div>
-								<div class="text-xs opacity-75 mb-1">{pick.primary_position} • {pick.nfl_team}</div>
-								<div class="text-xs text-slate-300 truncate" title={pick.manager_name}>
-									{pick.manager_name}
+								<div class="text-xs opacity-75 mb-1">{pick.primaryPosition} • {pick.nflTeam}</div>
+								<div class="text-xs text-slate-300 truncate" title={pick.managerName}>
+									{pick.managerName}
 								</div>
 								<div class="flex items-center justify-between mt-2">
-									<span class="text-xs font-bold {getPerformanceGrade(parseFloat(pick.season_points || 0)).color}">
-										{getPerformanceGrade(parseFloat(pick.season_points || 0)).grade}
+									<span class="text-xs font-bold {getPerformanceGrade(parseFloat(pick.seasonPoints || 0)).color}">
+										{getPerformanceGrade(parseFloat(pick.seasonPoints || 0)).grade}
 									</span>
 									<span class="text-sm">
 										{getValueIndicator(pick)}
 									</span>
 								</div>
-								{#if pick.is_keeper_pick}
+								{#if pick.isKeeperPick}
 									<div class="text-xs text-amber-400 mt-1">🔒 Keeper</div>
 								{/if}
 							</button>
@@ -155,32 +155,32 @@
 		<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => selectedPick = null}>
 			<div class="bg-slate-800 rounded-xl p-6 border border-slate-700 max-w-md mx-4" on:click|stopPropagation>
 				<div class="flex items-center justify-between mb-4">
-					<h4 class="text-xl font-bold text-white">Pick #{selectedPick.overall_pick}</h4>
+					<h4 class="text-xl font-bold text-white">Pick #{selectedPick.overallPick}</h4>
 					<button class="text-slate-400 hover:text-white" on:click={() => selectedPick = null}>✕</button>
 				</div>
 				
 				<div class="space-y-4">
 					<div class="text-center">
-						<div class="text-lg font-bold text-white mb-1">{selectedPick.player_name}</div>
-						<div class="text-sm text-slate-400">{selectedPick.primary_position} • {selectedPick.nfl_team}</div>
-						<div class="text-sm text-blue-400">{selectedPick.manager_name} ({selectedPick.team_name})</div>
+						<div class="text-lg font-bold text-white mb-1">{selectedPick.playerName}</div>
+						<div class="text-sm text-slate-400">{selectedPick.primaryPosition} • {selectedPick.nflTeam}</div>
+						<div class="text-sm text-blue-400">{selectedPick.managerName} ({selectedPick.teamName})</div>
 					</div>
 					
 					<div class="grid grid-cols-2 gap-4 text-sm">
 						<div class="bg-slate-700/50 p-3 rounded">
 							<div class="text-slate-400">Round</div>
-							<div class="font-bold text-white">{selectedPick.round_number}.{selectedPick.pick_in_round}</div>
+							<div class="font-bold text-white">{selectedPick.roundNumber}.{selectedPick.pickInRound}</div>
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
 							<div class="text-slate-400">Season Points</div>
-							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.season_points || 0)).color}">
-								{parseFloat(selectedPick.season_points || 0).toFixed(1)}
+							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).color}">
+								{parseFloat(selectedPick.seasonPoints || 0).toFixed(1)}
 							</div>
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
 							<div class="text-slate-400">Grade</div>
-							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.season_points || 0)).color}">
-								{getPerformanceGrade(parseFloat(selectedPick.season_points || 0)).grade}
+							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).color}">
+								{getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).grade}
 							</div>
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
@@ -189,7 +189,7 @@
 						</div>
 					</div>
 					
-					{#if selectedPick.is_keeper_pick}
+					{#if selectedPick.isKeeperPick}
 						<div class="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-center">
 							<span class="text-amber-400">🔒 Keeper Pick</span>
 						</div>

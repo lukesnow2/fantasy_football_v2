@@ -32,9 +32,9 @@
 		const managerStats: any = {};
 		
 		drafts.forEach(pick => {
-			const manager = pick.manager_name;
-			const points = parseFloat(pick.season_points || 0);
-			const pickNum = pick.overall_pick;
+			const manager = pick.managerName;
+			const points = parseFloat(pick.seasonPoints || 0);
+			const pickNum = pick.overallPick;
 			
 			if (!managerStats[manager]) {
 				managerStats[manager] = {
@@ -101,12 +101,12 @@
 	function getBestEarlyRoundDrafter(drafts: any[]) {
 		if (!drafts?.length) return null;
 		
-		const earlyPicks = drafts.filter(pick => pick.round_number <= 3);
+		const earlyPicks = drafts.filter(pick => pick.roundNumber <= 3);
 		const managerStats: any = {};
 		
 		earlyPicks.forEach(pick => {
-			const manager = pick.manager_name;
-			const points = parseFloat(pick.season_points || 0);
+			const manager = pick.managerName;
+			const points = parseFloat(pick.seasonPoints || 0);
 			
 			if (!managerStats[manager]) {
 				managerStats[manager] = { name: manager, totalPoints: 0, picks: 0 };
@@ -134,9 +134,9 @@
 		const managerStats: any = {};
 		
 		drafts.forEach(pick => {
-			const manager = pick.manager_name;
-			const points = parseFloat(pick.season_points || 0);
-			const pickNum = pick.overall_pick;
+			const manager = pick.managerName;
+			const points = parseFloat(pick.seasonPoints || 0);
+			const pickNum = pick.overallPick;
 			const expected = Math.max(180 - (pickNum * 2), 40);
 			const value = points - expected;
 			
@@ -165,9 +165,9 @@
 		const managerStats: any = {};
 		
 		drafts.forEach(pick => {
-			const manager = pick.manager_name;
-			const points = parseFloat(pick.season_points || 0);
-			const pickNum = pick.overall_pick;
+			const manager = pick.managerName;
+			const points = parseFloat(pick.seasonPoints || 0);
+			const pickNum = pick.overallPick;
 			const expected = Math.max(180 - (pickNum * 2), 40);
 			
 			if (!managerStats[manager]) {
@@ -264,10 +264,10 @@
 			<div class="flex items-center justify-center py-8">
 				<div class="text-blue-400">Loading draft data...</div>
 			</div>
-		{:else if draftData?.data?.available_seasons}
+		{:else if draftData?.data?.availableSeasons}
 			<div class="space-y-6">
 				<div class="text-sm text-gray-400 mb-4">
-					{draftData.data.available_seasons.length} seasons available ({draftData.data.available_seasons[draftData.data.available_seasons.length - 1]} - {draftData.data.available_seasons[0]})
+					{draftData.data.availableSeasons.length} seasons available ({draftData.data.availableSeasons[draftData.data.availableSeasons.length - 1]} - {draftData.data.availableSeasons[0]})
 				</div>
 				
 				<!-- Season Selector -->
@@ -280,7 +280,7 @@
 						on:change={() => loadSpecificSeasonDraft(selectedSeason)}
 					>
 						<option value="all">All Seasons Overview</option>
-						{#each draftData.data.available_seasons as season}
+						{#each draftData.data.availableSeasons as season}
 							<option value={season}>{season} Season</option>
 						{/each}
 					</select>
@@ -290,11 +290,11 @@
 				{#if selectedSeason === 'all'}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
 						<div class="bg-gray-700 p-4 rounded-lg">
-							<div class="text-2xl font-bold text-blue-400">{draftData.data.meta.total_drafts}</div>
+							<div class="text-2xl font-bold text-blue-400">{draftData.data.meta.totalDrafts}</div>
 							<div class="text-sm text-gray-400">Total Picks</div>
 						</div>
 						<div class="bg-gray-700 p-4 rounded-lg">
-							<div class="text-2xl font-bold text-green-400">{draftData.data.available_seasons.length}</div>
+							<div class="text-2xl font-bold text-green-400">{draftData.data.availableSeasons.length}</div>
 							<div class="text-sm text-gray-400">Seasons</div>
 						</div>
 					</div>
@@ -392,12 +392,12 @@
 							</div>
 						</div>
 					</div>
-				{:else if specificSeasonDraft?.data?.draft_board}
+				{:else if specificSeasonDraft?.data?.draftBoard}
 					<!-- Draft Board Recreation -->
 					<DraftBoard 
-						draftData={specificSeasonDraft.data.draft_board}
+						draftData={specificSeasonDraft.data.draftBoard}
 						season={selectedSeason}
-						numTeams={specificSeasonDraft.data.draft_board[0]?.num_teams || 10}
+						numTeams={specificSeasonDraft.data.draftBoard[0]?.numTeams || 10}
 					/>
 					
 					<!-- Draft Analysis -->
