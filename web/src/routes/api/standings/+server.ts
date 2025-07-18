@@ -177,28 +177,57 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Original standings count:', standings.length);
 			console.log('Championship data found, entering playoff logic');
 			
-			// Get playoff bracket results
-			const playoffQuery = `
-				SELECT 
-					fm.team1_key,
-					fm.team2_key,
-					fm.winner_team_key,
-					fm.is_championship,
-					fm.is_semifinal,
-					fm.is_quarterfinal,
-					dt1.team_name as team1_name,
-					dt1.manager_name as team1_manager,
-					dt2.team_name as team2_name,
-					dt2.manager_name as team2_manager
-				FROM edw.fact_matchup fm
-				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
-				JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
-				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-				WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
-				  AND fm.is_playoffs = true
-				  AND fm.is_consolation = false
-				ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
-			`;
+					// Get playoff bracket results
+		const playoffQuery = `
+			SELECT 
+				fm.team1_key,
+				fm.team2_key,
+				fm.winner_team_key,
+				fm.is_championship,
+				fm.is_semifinal,
+				fm.is_quarterfinal,
+				dt1.team_name as team1_name,
+				dt1.manager_name as team1_manager,
+				dt2.team_name as team2_name,
+				dt2.manager_name as team2_manager
+			FROM edw.fact_matchup fm
+			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+			JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+			JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+			WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+			  AND fm.is_playoffs = true
+			  AND fm.is_consolation = false
+			ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
+		`;
+		
+		// Debug: Check what playoff games exist without the consolation filter
+		const debugPlayoffQuery = `
+			SELECT 
+				fm.team1_key,
+				fm.team2_key,
+				fm.winner_team_key,
+				fm.is_championship,
+				fm.is_semifinal,
+				fm.is_quarterfinal,
+				fm.is_consolation,
+				fm.is_playoffs,
+				dt1.team_name as team1_name,
+				dt1.manager_name as team1_manager,
+				dt2.team_name as team2_name,
+				dt2.manager_name as team2_manager
+			FROM edw.fact_matchup fm
+			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+			JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+			JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+			WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+			  AND (fm.is_playoffs = true OR fm.is_championship = true OR fm.is_semifinal = true OR fm.is_quarterfinal = true)
+			ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
+		`;
+		
+		console.log('Executing debug playoff query...');
+		const debugPlayoffResult = await db.execute(sql.raw(debugPlayoffQuery));
+		console.log('Debug playoff games found:', debugPlayoffResult.length);
+		console.log('Debug playoff games:', debugPlayoffResult);
 			
 			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
