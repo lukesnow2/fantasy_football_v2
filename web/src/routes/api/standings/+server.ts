@@ -237,9 +237,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Check if there are any championship games at all
 		const allChampionshipQuery = `
 			SELECT COUNT(*) as count, 
-			       MAX(season_year) as max_season,
-			       MAX(is_championship) as has_championship,
-			       MAX(is_playoffs) as has_playoffs
+			       MAX(dl.season_year) as max_season,
+			       MAX(fm.is_championship) as has_championship,
+			       MAX(fm.is_playoffs) as has_playoffs
 			FROM edw.fact_matchup fm
 			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
 		`;
