@@ -472,7 +472,12 @@ export const GET: RequestHandler = async ({ url }) => {
 						winner_team_key: g.winnerTeamKey,
 						team1_key: g.team1Key,
 						team2_key: g.team2Key,
-						raw_game: g // Include raw game data for debugging
+						raw_game: g, // Include raw game data for debugging
+						game_keys: Object.keys(g), // Include keys for debugging
+						team1_name_prop: g.team1Name,
+						team1_manager_prop: g.team1Manager,
+						team2_name_prop: g.team2Name,
+						team2_manager_prop: g.team2Manager
 					};
 				}) || [],
 				championshipGameFound: !!playoffGames?.find(g => g.isChampionship),
