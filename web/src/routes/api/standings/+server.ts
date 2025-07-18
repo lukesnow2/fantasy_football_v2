@@ -240,27 +240,27 @@ export const GET: RequestHandler = async ({ url }) => {
 			playoffStandings.clear();
 			
 			// 1st and 2nd place from championship
-			const championshipGame = playoffGames.find(game => game.is_championship);
+			const championshipGame = playoffGames.find(game => game.isChampionship);
 			console.log('=== CHAMPIONSHIP GAME DEBUG ===');
 			console.log('All playoff games:', playoffGames.map(g => ({ 
-				team1: g.team1_name, 
-				team2: g.team2_name, 
-				is_championship: g.is_championship,
-				winner_team_key: g.winner_team_key,
-				team1_key: g.team1_key,
-				team2_key: g.team2_key
+				team1: g.team1Name, 
+				team2: g.team2Name, 
+				is_championship: g.isChampionship,
+				winner_team_key: g.winnerTeamKey,
+				team1_key: g.team1Key,
+				team2_key: g.team2Key
 			})));
 			console.log('Championship game found:', championshipGame);
 			if (championshipGame) {
 				console.log('Found championship game:', championshipGame);
-				console.log('Winner team key:', championshipGame.winner_team_key);
-				console.log('Team1 key:', championshipGame.team1_key);
-				console.log('Team2 key:', championshipGame.team2_key);
-				playoffStandings.set(championshipGame.winner_team_key, { rank: 1, tier: 'Champion' });
-				const runnerUpKey = championshipGame.team1_key === championshipGame.winner_team_key 
-					? championshipGame.team2_key : championshipGame.team1_key;
+				console.log('Winner team key:', championshipGame.winnerTeamKey);
+				console.log('Team1 key:', championshipGame.team1Key);
+				console.log('Team2 key:', championshipGame.team2Key);
+				playoffStandings.set(championshipGame.winnerTeamKey, { rank: 1, tier: 'Champion' });
+				const runnerUpKey = championshipGame.team1Key === championshipGame.winnerTeamKey 
+					? championshipGame.team2Key : championshipGame.team1Key;
 				playoffStandings.set(runnerUpKey, { rank: 2, tier: 'Runner-up' });
-				console.log('Set champion and runner-up:', { champion: championshipGame.winner_team_key, runnerUp: runnerUpKey });
+				console.log('Set champion and runner-up:', { champion: championshipGame.winnerTeamKey, runnerUp: runnerUpKey });
 				console.log('Playoff standings map after championship:', Array.from(playoffStandings.entries()));
 			} else {
 				console.log('No championship game found in playoff games');
@@ -268,12 +268,12 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('=== END CHAMPIONSHIP GAME DEBUG ===');
 			
 			// 3rd and 4th place from semifinals losers
-			const semifinalGames = playoffGames.filter(game => game.is_semifinal);
+			const semifinalGames = playoffGames.filter(game => game.isSemifinal);
 			let rank = 3;
 			for (const game of semifinalGames) {
-				if (game.winner_team_key) {
-					const loserKey = game.team1_key === game.winner_team_key 
-						? game.team2_key : game.team1_key;
+				if (game.winnerTeamKey) {
+					const loserKey = game.team1Key === game.winnerTeamKey 
+						? game.team2Key : game.team1Key;
 					if (!playoffStandings.has(loserKey)) {
 						playoffStandings.set(loserKey, { rank, tier: 'Semifinalist' });
 						rank++;
@@ -282,11 +282,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 			
 			// 5th and 6th place from quarterfinals losers
-			const quarterfinalGames = playoffGames.filter(game => game.is_quarterfinal);
+			const quarterfinalGames = playoffGames.filter(game => game.isQuarterfinal);
 			for (const game of quarterfinalGames) {
-				if (game.winner_team_key) {
-					const loserKey = game.team1_key === game.winner_team_key 
-						? game.team2_key : game.team1_key;
+				if (game.winnerTeamKey) {
+					const loserKey = game.team1Key === game.winnerTeamKey 
+						? game.team2Key : game.team1Key;
 					if (!playoffStandings.has(loserKey)) {
 						playoffStandings.set(loserKey, { rank, tier: 'Quarterfinalist' });
 						rank++;
@@ -314,15 +314,15 @@ export const GET: RequestHandler = async ({ url }) => {
 				console.log(`\n--- Matching team: "${team.teamName}" (${team.managerName}) ---`);
 				
 				for (const game of playoffGames) {
-					console.log(`Checking playoff game: "${game.team1_name}" (${game.team1_manager}) vs "${game.team2_name}" (${game.team2_manager})`);
+					console.log(`Checking playoff game: "${game.team1Name}" (${game.team1Manager}) vs "${game.team2Name}" (${game.team2Manager})`);
 					
 					// Normalize strings for comparison (trim whitespace, lowercase)
 					const normalizeStr = (str: any) => String(str || '').trim().toLowerCase();
 					
-					const team1NameMatch = normalizeStr(game.team1_name) === normalizeStr(team.teamName);
-					const team1ManagerMatch = normalizeStr(game.team1_manager) === normalizeStr(team.managerName);
-					const team2NameMatch = normalizeStr(game.team2_name) === normalizeStr(team.teamName);
-					const team2ManagerMatch = normalizeStr(game.team2_manager) === normalizeStr(team.managerName);
+					const team1NameMatch = normalizeStr(game.team1Name) === normalizeStr(team.teamName);
+					const team1ManagerMatch = normalizeStr(game.team1Manager) === normalizeStr(team.managerName);
+					const team2NameMatch = normalizeStr(game.team2Name) === normalizeStr(team.teamName);
+					const team2ManagerMatch = normalizeStr(game.team2Manager) === normalizeStr(team.managerName);
 					
 					const team1Match = team1NameMatch && team1ManagerMatch;
 					const team2Match = team2NameMatch && team2ManagerMatch;
@@ -331,7 +331,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					console.log(`Team2 match: ${team2Match} (name: ${team2NameMatch}, manager: ${team2ManagerMatch})`);
 					
 					if (team1Match || team2Match) {
-						teamKey = team1Match ? game.team1_key : game.team2_key;
+						teamKey = team1Match ? game.team1Key : game.team2Key;
 						console.log(`✅ Found team key ${teamKey} for ${team.teamName} (${team.managerName})`);
 						break;
 					}
@@ -341,8 +341,8 @@ export const GET: RequestHandler = async ({ url }) => {
 					console.log(`❌ No team key found for ${team.teamName} (${team.managerName})`);
 					console.log(`Available playoff teams:`);
 					playoffGames.forEach(game => {
-						console.log(`  - "${game.team1_name}" (${game.team1_manager})`);
-						console.log(`  - "${game.team2_name}" (${game.team2_manager})`);
+						console.log(`  - "${game.team1Name}" (${game.team1Manager})`);
+						console.log(`  - "${game.team2Name}" (${game.team2Manager})`);
 					});
 				}
 				
@@ -464,16 +464,16 @@ export const GET: RequestHandler = async ({ url }) => {
 					console.log('Mapping playoff game:', g);
 					console.log('Game keys:', Object.keys(g));
 					return {
-						team1: g.team1_name,
-						team2: g.team2_name,
-						is_championship: g.is_championship,
-						winner_team_key: g.winner_team_key,
-						team1_key: g.team1_key,
-						team2_key: g.team2_key,
+						team1: g.team1Name,
+						team2: g.team2Name,
+						is_championship: g.isChampionship,
+						winner_team_key: g.winnerTeamKey,
+						team1_key: g.team1Key,
+						team2_key: g.team2Key,
 						raw_game: g // Include raw game data for debugging
 					};
 				}) || [],
-				championshipGameFound: !!playoffGames?.find(g => g.is_championship),
+				championshipGameFound: !!playoffGames?.find(g => g.isChampionship),
 				playoffStandingsEntries: Array.from(playoffStandings?.entries() || [])
 			}
 		};
