@@ -202,6 +202,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		
 		// Debug: Check what playoff games exist
 		console.log('Checking playoff games for season 2024...');
+		
+		// Simple test query to see if we can find any playoff games
+		const testQuery = `SELECT COUNT(*) as count FROM edw.fact_matchup fm JOIN edw.dim_league dl ON fm.league_key = dl.league_key WHERE dl.season_year = 2024 AND fm.is_playoffs = true`;
+		const testResult = await db.execute(sql.raw(testQuery));
+		console.log('Test playoff count:', testResult[0]);
 			
 			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
@@ -254,7 +259,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Available teams in standings:', standings.map(s => `${s.teamName} (${s.managerName})`));
 			console.log('Teams in playoff games:', playoffGames.map(g => `${g.team1_name} (${g.team1_manager}) vs ${g.team2_name} (${g.team2_manager})`));
 			
-			finalStandings = standings.map(team => {
+			finalStandings = standings.map((team, index) => {
 				// Find team key by matching name and manager
 				let teamKey = null;
 				console.log(`\n--- Matching team: "${team.teamName}" (${team.managerName}) ---`);
@@ -299,10 +304,10 @@ export const GET: RequestHandler = async ({ url }) => {
 					};
 				} else {
 					// Non-playoff team - rank by regular season record
-					console.log(`❌ Team ${team.teamName} (${team.managerName}) gets regular season rank ${rank} (no playoff rank found)`);
+					console.log(`❌ Team ${team.teamName} (${team.managerName}) gets regular season rank (no playoff rank found)`);
 					return {
 						...team,
-						finalRank: rank++,
+						finalRank: team.seasonRank || (index + 1),
 						playoffTier: 'Regular Season'
 					};
 				}
