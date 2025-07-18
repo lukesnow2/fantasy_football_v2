@@ -95,6 +95,7 @@
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();
 				console.log('Standings data received:', standingsData);
+				console.log('Debug info:', standingsData.debug);
 				console.log('Standings array:', standingsData.standings);
 				console.log('Standings count:', standingsData.standings.length);
 				console.log('First few standings:', standingsData.standings.slice(0, 3));
