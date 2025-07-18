@@ -198,7 +198,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Original standings count:', standings.length);
 			console.log('Championship data found, entering playoff logic');
 			
-			// Get playoff bracket results
+			// Get playoff bracket results - simplified query
 			const playoffQuery = `
 				SELECT 
 					fm.team1_key,
@@ -215,9 +215,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
 				JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
 				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-				WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+				WHERE dl.season_year = 2024
 				  AND fm.is_playoffs = true
-				  AND fm.is_consolation = false
 				ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
 			`;
 			
