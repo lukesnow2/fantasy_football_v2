@@ -191,7 +191,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		console.log('=== END DEBUGGING ===');
 
 		let finalStandings = standings;
-		let playoffGames = [];
+		let playoffGames: any[] = [];
 		let playoffStandings = new Map();
 
 		if (championshipData) {
@@ -223,10 +223,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			`;
 			
 			console.log('Executing playoff query...');
-			const playoffResult = await db.execute(sql.raw(playoffQuery));
-			const playoffGames = Array.from(playoffResult);
-			console.log('Playoff games found:', playoffGames.length);
-			console.log('Playoff games:', playoffGames);
+			console.log('Playoff query SQL:', playoffQuery);
+			try {
+				const playoffResult = await db.execute(sql.raw(playoffQuery));
+				playoffGames = Array.from(playoffResult);
+				console.log('Playoff games found:', playoffGames.length);
+				console.log('Playoff games:', playoffGames);
+			} catch (error) {
+				console.error('Error executing playoff query:', error);
+				playoffGames = [];
+			}
 			
 			// Build final standings based on playoff results
 			playoffStandings.clear();
