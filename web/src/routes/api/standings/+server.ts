@@ -228,6 +228,23 @@ export const GET: RequestHandler = async ({ url }) => {
 		const debugPlayoffResult = await db.execute(sql.raw(debugPlayoffQuery));
 		console.log('Debug playoff games found:', debugPlayoffResult.length);
 		console.log('Debug playoff games:', debugPlayoffResult);
+		
+		// Also check what season we're looking for
+		const seasonQuery = `SELECT MAX(season_year) as max_season FROM edw.fact_draft`;
+		const seasonResult = await db.execute(sql.raw(seasonQuery));
+		console.log('Max season from draft table:', seasonResult[0]);
+		
+		// Check if there are any championship games at all
+		const allChampionshipQuery = `
+			SELECT COUNT(*) as count, 
+			       MAX(season_year) as max_season,
+			       MAX(is_championship) as has_championship,
+			       MAX(is_playoffs) as has_playoffs
+			FROM edw.fact_matchup fm
+			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+		`;
+		const allChampionshipResult = await db.execute(sql.raw(allChampionshipQuery));
+		console.log('All matchup summary:', allChampionshipResult[0]);
 			
 			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
