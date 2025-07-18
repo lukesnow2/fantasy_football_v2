@@ -121,6 +121,18 @@ export const GET: RequestHandler = async ({ url }) => {
 		const championshipResult = await db.execute(sql.raw(championshipQuery));
 		const championshipData = championshipResult.length > 0 ? championshipResult[0] : null;
 		console.log('Championship result:', championshipData);
+		console.log('Championship query found games:', championshipResult.length);
+		
+		// Also check if there are any championship games at all
+		const allChampionshipQuery = `
+			SELECT COUNT(*) as count 
+			FROM edw.fact_matchup fm
+			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+			WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+			  AND fm.is_championship = true
+		`;
+		const allChampionshipResult = await db.execute(sql.raw(allChampionshipQuery));
+		console.log('Total championship games in database:', allChampionshipResult[0]);
 
 		// Get last place game loser information
 		let lastPlaceGameLoser = null;
@@ -163,6 +175,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			// Season is complete - build final standings based on playoff results
 			console.log('Championship completed, building final playoff standings...');
 			console.log('Original standings count:', standings.length);
+			console.log('Championship data found, entering playoff logic');
 			
 			// Get playoff bracket results
 			const playoffQuery = `
