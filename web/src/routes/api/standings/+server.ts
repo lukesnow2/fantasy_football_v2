@@ -207,6 +207,16 @@ export const GET: RequestHandler = async ({ url }) => {
 		const testQuery = `SELECT COUNT(*) as count FROM edw.fact_matchup fm JOIN edw.dim_league dl ON fm.league_key = dl.league_key WHERE dl.season_year = 2024 AND fm.is_playoffs = true`;
 		const testResult = await db.execute(sql.raw(testQuery));
 		console.log('Test playoff count:', testResult[0]);
+		
+		// Test the exact playoff query that's failing
+		const exactTestQuery = `SELECT COUNT(*) as count FROM edw.fact_matchup fm JOIN edw.dim_league dl ON fm.league_key = dl.league_key JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft) AND fm.is_playoffs = true AND fm.is_consolation = false`;
+		const exactTestResult = await db.execute(sql.raw(exactTestQuery));
+		console.log('Exact playoff query count:', exactTestResult[0]);
+		
+		// Also test the championship query to see what season it finds
+		const championshipTestQuery = `SELECT MAX(season_year) as max_season FROM edw.fact_draft`;
+		const championshipTestResult = await db.execute(sql.raw(championshipTestQuery));
+		console.log('Championship test - max season:', championshipTestResult[0]);
 			
 			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
