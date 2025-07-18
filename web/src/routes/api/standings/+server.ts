@@ -254,22 +254,41 @@ export const GET: RequestHandler = async ({ url }) => {
 			finalStandings = standings.map(team => {
 				// Find team key by matching name and manager
 				let teamKey = null;
+				console.log(`\n--- Matching team: "${team.teamName}" (${team.managerName}) ---`);
+				
 				for (const game of playoffGames) {
-					if ((game.team1_name === team.teamName && game.team1_manager === team.managerName) ||
-						(game.team2_name === team.teamName && game.team2_manager === team.managerName)) {
-						teamKey = game.team1_name === team.teamName ? game.team1_key : game.team2_key;
-						console.log(`Found team key ${teamKey} for ${team.teamName} (${team.managerName})`);
+					console.log(`Checking playoff game: "${game.team1_name}" (${game.team1_manager}) vs "${game.team2_name}" (${game.team2_manager})`);
+					
+					const team1Match = game.team1_name === team.teamName && game.team1_manager === team.managerName;
+					const team2Match = game.team2_name === team.teamName && game.team2_manager === team.managerName;
+					
+					console.log(`Team1 match: ${team1Match} (name: ${game.team1_name === team.teamName}, manager: ${game.team1_manager === team.managerName})`);
+					console.log(`Team2 match: ${team2Match} (name: ${game.team2_name === team.teamName}, manager: ${game.team2_manager === team.managerName})`);
+					
+					if (team1Match || team2Match) {
+						teamKey = team1Match ? game.team1_key : game.team2_key;
+						console.log(`✅ Found team key ${teamKey} for ${team.teamName} (${team.managerName})`);
 						break;
 					}
 				}
 				
 				if (!teamKey) {
-					console.log(`No team key found for ${team.teamName} (${team.managerName})`);
+					console.log(`❌ No team key found for ${team.teamName} (${team.managerName})`);
+					console.log(`Available playoff teams:`);
+					playoffGames.forEach(game => {
+						console.log(`  - "${game.team1_name}" (${game.team1_manager})`);
+						console.log(`  - "${game.team2_name}" (${game.team2_manager})`);
+					});
 				}
 				
 				const playoffRank = playoffStandings.get(teamKey);
+				console.log(`Playoff standings map has ${playoffStandings.size} entries:`);
+				playoffStandings.forEach((rank, key) => {
+					console.log(`  Key: ${key}, Rank: ${rank.rank}, Tier: ${rank.tier}`);
+				});
+				
 				if (playoffRank) {
-					console.log(`Team ${team.teamName} (${team.managerName}) gets playoff rank ${playoffRank.rank}`);
+					console.log(`✅ Team ${team.teamName} (${team.managerName}) gets playoff rank ${playoffRank.rank} (${playoffRank.tier})`);
 					return {
 						...team,
 						finalRank: playoffRank.rank,
@@ -277,7 +296,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					};
 				} else {
 					// Non-playoff team - rank by regular season record
-					console.log(`Team ${team.teamName} (${team.managerName}) gets regular season rank ${rank}`);
+					console.log(`❌ Team ${team.teamName} (${team.managerName}) gets regular season rank ${rank} (no playoff rank found)`);
 					return {
 						...team,
 						finalRank: rank++,
