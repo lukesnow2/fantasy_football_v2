@@ -191,6 +191,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		console.log('=== END DEBUGGING ===');
 
 		let finalStandings = standings;
+		let playoffGames = [];
+		let playoffStandings = new Map();
 
 		if (championshipData) {
 			// Season is complete - build final standings based on playoff results
@@ -227,7 +229,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Playoff games:', playoffGames);
 			
 			// Build final standings based on playoff results
-			const playoffStandings = new Map();
+			playoffStandings.clear();
 			
 			// 1st and 2nd place from championship
 			const championshipGame = playoffGames.find(game => game.is_championship);
@@ -427,7 +429,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			isSeasonComplete: !!championshipData,
 			isFinalStandings: !!championshipData,
 			lastPlaceGameLoser, // Include the last place game loser info
-			lastUpdated: new Date().toISOString()
+			lastUpdated: new Date().toISOString(),
+			// Debug info for frontend
+			debug: {
+				championshipDataFound: !!championshipData,
+				playoffGamesCount: playoffGames?.length || 0,
+				playoffStandingsMapSize: playoffStandings?.size || 0,
+				teamsWithPlayoffTiers: standingsWithStats.filter(s => s.playoffTier && s.playoffTier !== 'Regular Season').length
+			}
 		};
 		
 		console.log('Returning standings response:', {
