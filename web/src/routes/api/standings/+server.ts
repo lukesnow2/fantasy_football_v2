@@ -375,7 +375,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			standingsCount: standingsWithStats.length,
 			isSeasonComplete: !!championshipData,
 			isFinalStandings: !!championshipData,
-			firstFewStandings: standingsWithStats.slice(0, 3).map(s => `${s.rank}: ${s.teamName} (${s.managerName})`)
+			firstFewStandings: standingsWithStats.slice(0, 3).map(s => `${s.rank}: ${s.teamName} (${s.managerName})`),
+			allRanks: standingsWithStats.map(s => s.rank).sort((a, b) => a - b)
 		});
 		
 		return json(responseData);

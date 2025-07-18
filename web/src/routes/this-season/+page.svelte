@@ -98,6 +98,8 @@
 				console.log('Standings array:', standingsData.standings);
 				console.log('Standings count:', standingsData.standings.length);
 				console.log('First few standings:', standingsData.standings.slice(0, 3));
+				console.log('All ranks in standings:', standingsData.standings.map(s => s.rank).sort((a, b) => a - b));
+				console.log('Teams with playoff tiers:', standingsData.standings.map(s => `${s.rank}: ${s.teamName} (${s.playoffTier})`));
 				standings = standingsData.standings;
 				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
