@@ -228,7 +228,9 @@ export const GET: RequestHandler = async ({ url }) => {
 				const playoffResult = await db.execute(sql.raw(playoffQuery));
 				playoffGames = Array.from(playoffResult);
 				console.log('Playoff games found:', playoffGames.length);
-				console.log('Playoff games:', playoffGames);
+				console.log('Raw playoff result:', playoffResult);
+				console.log('First playoff game:', playoffGames[0]);
+				console.log('All playoff games:', playoffGames);
 			} catch (error) {
 				console.error('Error executing playoff query:', error);
 				playoffGames = [];
