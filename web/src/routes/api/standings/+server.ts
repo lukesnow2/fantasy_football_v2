@@ -159,17 +159,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			`;
 			
 			const lastPlaceResult = await db.execute(sql.raw(lastPlaceQuery));
-			console.log('Last place game result:', lastPlaceResult);
 			if (lastPlaceResult.length > 0) {
 				const loserData = lastPlaceResult[0] as any;
-				console.log('Loser data:', loserData);
-				console.log('Loser data keys:', Object.keys(loserData));
 				lastPlaceGameLoser = {
-					teamKey: loserData.loser_team_key,
-					teamName: loserData.loser_team_name,
-					managerName: loserData.loser_manager_name
+					teamKey: loserData.loserTeamKey,
+					teamName: loserData.loserTeamName,
+					managerName: loserData.loserManagerName
 				};
-				console.log('Last place game loser:', lastPlaceGameLoser);
 			}
 		}
 
