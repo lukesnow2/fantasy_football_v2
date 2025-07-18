@@ -456,7 +456,18 @@ export const GET: RequestHandler = async ({ url }) => {
 				championshipDataFound: !!championshipData,
 				playoffGamesCount: playoffGames?.length || 0,
 				playoffStandingsMapSize: playoffStandings?.size || 0,
-				teamsWithPlayoffTiers: standingsWithStats.filter(s => s.playoffTier && s.playoffTier !== 'Regular Season').length
+				teamsWithPlayoffTiers: standingsWithStats.filter(s => s.playoffTier && s.playoffTier !== 'Regular Season').length,
+				// Additional debugging
+				playoffGames: playoffGames?.map(g => ({
+					team1: g.team1_name,
+					team2: g.team2_name,
+					is_championship: g.is_championship,
+					winner_team_key: g.winner_team_key,
+					team1_key: g.team1_key,
+					team2_key: g.team2_key
+				})) || [],
+				championshipGameFound: !!playoffGames?.find(g => g.is_championship),
+				playoffStandingsEntries: Array.from(playoffStandings?.entries() || [])
 			}
 		};
 		
