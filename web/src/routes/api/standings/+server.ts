@@ -239,16 +239,31 @@ export const GET: RequestHandler = async ({ url }) => {
 			
 			// 1st and 2nd place from championship
 			const championshipGame = playoffGames.find(game => game.is_championship);
+			console.log('=== CHAMPIONSHIP GAME DEBUG ===');
+			console.log('All playoff games:', playoffGames.map(g => ({ 
+				team1: g.team1_name, 
+				team2: g.team2_name, 
+				is_championship: g.is_championship,
+				winner_team_key: g.winner_team_key,
+				team1_key: g.team1_key,
+				team2_key: g.team2_key
+			})));
+			console.log('Championship game found:', championshipGame);
 			if (championshipGame) {
 				console.log('Found championship game:', championshipGame);
+				console.log('Winner team key:', championshipGame.winner_team_key);
+				console.log('Team1 key:', championshipGame.team1_key);
+				console.log('Team2 key:', championshipGame.team2_key);
 				playoffStandings.set(championshipGame.winner_team_key, { rank: 1, tier: 'Champion' });
 				const runnerUpKey = championshipGame.team1_key === championshipGame.winner_team_key 
 					? championshipGame.team2_key : championshipGame.team1_key;
 				playoffStandings.set(runnerUpKey, { rank: 2, tier: 'Runner-up' });
 				console.log('Set champion and runner-up:', { champion: championshipGame.winner_team_key, runnerUp: runnerUpKey });
+				console.log('Playoff standings map after championship:', Array.from(playoffStandings.entries()));
 			} else {
 				console.log('No championship game found in playoff games');
 			}
+			console.log('=== END CHAMPIONSHIP GAME DEBUG ===');
 			
 			// 3rd and 4th place from semifinals losers
 			const semifinalGames = playoffGames.filter(game => game.is_semifinal);
