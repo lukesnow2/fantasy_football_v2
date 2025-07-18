@@ -460,14 +460,19 @@ export const GET: RequestHandler = async ({ url }) => {
 				playoffStandingsMapSize: playoffStandings?.size || 0,
 				teamsWithPlayoffTiers: standingsWithStats.filter(s => s.playoffTier && s.playoffTier !== 'Regular Season').length,
 				// Additional debugging
-				playoffGames: playoffGames?.map(g => ({
-					team1: g.team1_name,
-					team2: g.team2_name,
-					is_championship: g.is_championship,
-					winner_team_key: g.winner_team_key,
-					team1_key: g.team1_key,
-					team2_key: g.team2_key
-				})) || [],
+				playoffGames: playoffGames?.map(g => {
+					console.log('Mapping playoff game:', g);
+					console.log('Game keys:', Object.keys(g));
+					return {
+						team1: g.team1_name,
+						team2: g.team2_name,
+						is_championship: g.is_championship,
+						winner_team_key: g.winner_team_key,
+						team1_key: g.team1_key,
+						team2_key: g.team2_key,
+						raw_game: g // Include raw game data for debugging
+					};
+				}) || [],
 				championshipGameFound: !!playoffGames?.find(g => g.is_championship),
 				playoffStandingsEntries: Array.from(playoffStandings?.entries() || [])
 			}
