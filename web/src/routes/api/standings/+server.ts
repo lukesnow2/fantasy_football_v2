@@ -232,10 +232,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			// 1st and 2nd place from championship
 			const championshipGame = playoffGames.find(game => game.is_championship);
 			if (championshipGame) {
+				console.log('Found championship game:', championshipGame);
 				playoffStandings.set(championshipGame.winner_team_key, { rank: 1, tier: 'Champion' });
 				const runnerUpKey = championshipGame.team1_key === championshipGame.winner_team_key 
 					? championshipGame.team2_key : championshipGame.team1_key;
 				playoffStandings.set(runnerUpKey, { rank: 2, tier: 'Runner-up' });
+				console.log('Set champion and runner-up:', { champion: championshipGame.winner_team_key, runnerUp: runnerUpKey });
+			} else {
+				console.log('No championship game found in playoff games');
 			}
 			
 			// 3rd and 4th place from semifinals losers
@@ -271,6 +275,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			console.log('Available teams in standings:', standings.map(s => `${s.teamName} (${s.managerName})`));
 			console.log('Teams in playoff games:', playoffGames.map(g => `${g.team1_name} (${g.team1_manager}) vs ${g.team2_name} (${g.team2_manager})`));
 			
+			// Debug: Check what's in the playoff standings map
+			console.log('=== PLAYOFF STANDINGS MAP DEBUG ===');
+			console.log('Playoff standings map size:', playoffStandings.size);
+			playoffStandings.forEach((rank, key) => {
+				console.log(`Key: ${key}, Rank: ${rank.rank}, Tier: ${rank.tier}`);
+			});
+			console.log('=== END PLAYOFF STANDINGS MAP DEBUG ===');
+			
 			finalStandings = standings.map((team, index) => {
 				// Find team key by matching name and manager
 				let teamKey = null;
@@ -279,11 +291,19 @@ export const GET: RequestHandler = async ({ url }) => {
 				for (const game of playoffGames) {
 					console.log(`Checking playoff game: "${game.team1_name}" (${game.team1_manager}) vs "${game.team2_name}" (${game.team2_manager})`);
 					
-					const team1Match = game.team1_name === team.teamName && game.team1_manager === team.managerName;
-					const team2Match = game.team2_name === team.teamName && game.team2_manager === team.managerName;
+					// Normalize strings for comparison (trim whitespace, lowercase)
+					const normalizeStr = (str: any) => String(str || '').trim().toLowerCase();
 					
-					console.log(`Team1 match: ${team1Match} (name: ${game.team1_name === team.teamName}, manager: ${game.team1_manager === team.managerName})`);
-					console.log(`Team2 match: ${team2Match} (name: ${game.team2_name === team.teamName}, manager: ${game.team2_manager === team.managerName})`);
+					const team1NameMatch = normalizeStr(game.team1_name) === normalizeStr(team.teamName);
+					const team1ManagerMatch = normalizeStr(game.team1_manager) === normalizeStr(team.managerName);
+					const team2NameMatch = normalizeStr(game.team2_name) === normalizeStr(team.teamName);
+					const team2ManagerMatch = normalizeStr(game.team2_manager) === normalizeStr(team.managerName);
+					
+					const team1Match = team1NameMatch && team1ManagerMatch;
+					const team2Match = team2NameMatch && team2ManagerMatch;
+					
+					console.log(`Team1 match: ${team1Match} (name: ${team1NameMatch}, manager: ${team1ManagerMatch})`);
+					console.log(`Team2 match: ${team2Match} (name: ${team2NameMatch}, manager: ${team2ManagerMatch})`);
 					
 					if (team1Match || team2Match) {
 						teamKey = team1Match ? game.team1_key : game.team2_key;
