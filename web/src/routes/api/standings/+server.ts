@@ -169,38 +169,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 		}
 
-		let finalStandings = standings;
-
-		if (championshipData) {
-			// Season is complete - build final standings based on playoff results
-			console.log('Championship completed, building final playoff standings...');
-			console.log('Original standings count:', standings.length);
-			console.log('Championship data found, entering playoff logic');
-			
-					// Get playoff bracket results
-		const playoffQuery = `
-			SELECT 
-				fm.team1_key,
-				fm.team2_key,
-				fm.winner_team_key,
-				fm.is_championship,
-				fm.is_semifinal,
-				fm.is_quarterfinal,
-				dt1.team_name as team1_name,
-				dt1.manager_name as team1_manager,
-				dt2.team_name as team2_name,
-				dt2.manager_name as team2_manager
-			FROM edw.fact_matchup fm
-			JOIN edw.dim_league dl ON fm.league_key = dl.league_key
-			JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
-			JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-			WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
-			  AND fm.is_playoffs = true
-			  AND fm.is_consolation = false
-			ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
-		`;
-		
-		// Debug: Check what playoff games exist
+		// Debug: Check what playoff games exist (moved outside championshipData check)
+		console.log('=== DEBUGGING PLAYOFF QUERIES ===');
+		console.log('Championship data found:', !!championshipData);
 		console.log('Checking playoff games for season 2024...');
 		
 		// Simple test query to see if we can find any playoff games
@@ -217,6 +188,38 @@ export const GET: RequestHandler = async ({ url }) => {
 		const championshipTestQuery = `SELECT MAX(season_year) as max_season FROM edw.fact_draft`;
 		const championshipTestResult = await db.execute(sql.raw(championshipTestQuery));
 		console.log('Championship test - max season:', championshipTestResult[0]);
+		console.log('=== END DEBUGGING ===');
+
+		let finalStandings = standings;
+
+		if (championshipData) {
+			// Season is complete - build final standings based on playoff results
+			console.log('Championship completed, building final playoff standings...');
+			console.log('Original standings count:', standings.length);
+			console.log('Championship data found, entering playoff logic');
+			
+			// Get playoff bracket results
+			const playoffQuery = `
+				SELECT 
+					fm.team1_key,
+					fm.team2_key,
+					fm.winner_team_key,
+					fm.is_championship,
+					fm.is_semifinal,
+					fm.is_quarterfinal,
+					dt1.team_name as team1_name,
+					dt1.manager_name as team1_manager,
+					dt2.team_name as team2_name,
+					dt2.manager_name as team2_manager
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+				JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+				WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
+				  AND fm.is_playoffs = true
+				  AND fm.is_consolation = false
+				ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
+			`;
 			
 			console.log('Executing playoff query...');
 			const playoffResult = await db.execute(sql.raw(playoffQuery));
