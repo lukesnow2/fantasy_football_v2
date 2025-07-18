@@ -315,6 +315,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				
 				for (const game of playoffGames) {
 					console.log(`Checking playoff game: "${game.team1Name}" (${game.team1Manager}) vs "${game.team2Name}" (${game.team2Manager})`);
+					console.log(`Game object keys:`, Object.keys(game));
+					console.log(`Game raw data:`, game);
 					
 					// Normalize strings for comparison (trim whitespace, lowercase)
 					const normalizeStr = (str: any) => String(str || '').trim().toLowerCase();
