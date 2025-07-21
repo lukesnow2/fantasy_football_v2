@@ -499,7 +499,6 @@
 								</div>
 							</div>
 						</div>
-					{/if}
 					{:else}
 						<!-- Regular Season Standings -->
 						<div class="space-y-2">
