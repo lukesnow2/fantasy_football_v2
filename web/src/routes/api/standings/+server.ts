@@ -443,22 +443,22 @@ export const GET: RequestHandler = async ({ url }) => {
 				console.log('Found consolation games:', consolationGames.length);
 				console.log('Consolation games raw data:', consolationGames);
 				console.log('Consolation games:', consolationGames.map((g: any) => ({
-					week: g.week_key,
-					team1: g.team1_name,
-					team2: g.team2_name,
-					winner: g.winner_team_key ? (g.team1_key === g.winner_team_key ? g.team1_name : g.team2_name) : 'Tie',
-					is_last_place_game: g.is_last_place_game
+					week: g.weekKey,
+					team1: g.team1Name,
+					team2: g.team2Name,
+					winner: g.winnerTeamKey ? (g.team1Key === g.winnerTeamKey ? g.team1Name : g.team2Name) : 'Tie',
+					is_last_place_game: g.isLastPlaceGame
 				})));
 				
 				// Find the last place game (should be the game with is_last_place_game = true)
-				const lastPlaceGame = consolationGames.find((g: any) => g.is_last_place_game);
+				const lastPlaceGame = consolationGames.find((g: any) => g.isLastPlaceGame);
 				console.log('Last place game:', lastPlaceGame);
 				
 				if (lastPlaceGame) {
 					// The loser of the last place game gets rank 10
-					const lastPlaceLoserKey = lastPlaceGame.team1_key === lastPlaceGame.winner_team_key 
-						? lastPlaceGame.team2_key : lastPlaceGame.team1_key;
-					const lastPlaceWinnerKey = lastPlaceGame.winner_team_key;
+					const lastPlaceLoserKey = lastPlaceGame.team1Key === lastPlaceGame.winnerTeamKey 
+						? lastPlaceGame.team2Key : lastPlaceGame.team1Key;
+					const lastPlaceWinnerKey = lastPlaceGame.winnerTeamKey;
 					
 					console.log('Last place winner:', lastPlaceWinnerKey);
 					console.log('Last place loser:', lastPlaceLoserKey);
@@ -469,15 +469,15 @@ export const GET: RequestHandler = async ({ url }) => {
 					// The winner of the last place game gets rank 9
 					consolationStandings.set(lastPlaceWinnerKey, { rank: 9, tier: 'Consolation 3rd' });
 					
-											// Find the consolation championship game (should be the other game in the final week)
-						const finalWeek = Math.max(...consolationGames.map((g: any) => g.week_key));
-						const finalWeekGames = consolationGames.filter((g: any) => g.week_key === finalWeek);
-					const consolationChampionshipGame = finalWeekGames.find((g: any) => !g.is_last_place_game);
+					// Find the consolation championship game (should be the other game in the final week)
+					const finalWeek = Math.max(...consolationGames.map((g: any) => g.weekKey));
+					const finalWeekGames = consolationGames.filter((g: any) => g.weekKey === finalWeek);
+					const consolationChampionshipGame = finalWeekGames.find((g: any) => !g.isLastPlaceGame);
 					
 					if (consolationChampionshipGame) {
-						const consolationWinnerKey = consolationChampionshipGame.winner_team_key;
-						const consolationLoserKey = consolationChampionshipGame.team1_key === consolationWinnerKey 
-							? consolationChampionshipGame.team2_key : consolationChampionshipGame.team1_key;
+						const consolationWinnerKey = consolationChampionshipGame.winnerTeamKey;
+						const consolationLoserKey = consolationChampionshipGame.team1Key === consolationWinnerKey 
+							? consolationChampionshipGame.team2Key : consolationChampionshipGame.team1Key;
 						
 						console.log('Consolation winner:', consolationWinnerKey);
 						console.log('Consolation runner-up:', consolationLoserKey);
@@ -512,6 +512,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				let teamKey = null;
 				console.log(`\n--- Matching team: "${team.teamName}" (${team.managerName}) ---`);
 				
+				// First try to find in playoff games
 				for (const game of playoffGames) {
 					console.log(`Checking playoff game: "${game.team1Name}" (${game.team1Manager}) vs "${game.team2Name}" (${game.team2Manager})`);
 					console.log(`Game object keys:`, Object.keys(game));
@@ -538,10 +539,43 @@ export const GET: RequestHandler = async ({ url }) => {
 					}
 				}
 				
+				// If not found in playoff games, try consolation games
+				if (!teamKey) {
+					console.log(`Team not found in playoff games, checking consolation games...`);
+					for (const game of consolationGames) {
+						console.log(`Checking consolation game: "${game.team1Name}" (${game.team1Manager}) vs "${game.team2Name}" (${game.team2Manager})`);
+						
+						// Normalize strings for comparison (trim whitespace, lowercase)
+						const normalizeStr = (str: any) => String(str || '').trim().toLowerCase();
+						
+						const team1NameMatch = normalizeStr(game.team1Name) === normalizeStr(team.teamName);
+						const team1ManagerMatch = normalizeStr(game.team1Manager) === normalizeStr(team.managerName);
+						const team2NameMatch = normalizeStr(game.team2Name) === normalizeStr(team.teamName);
+						const team2ManagerMatch = normalizeStr(game.team2Manager) === normalizeStr(team.managerName);
+						
+						const team1Match = team1NameMatch && team1ManagerMatch;
+						const team2Match = team2NameMatch && team2ManagerMatch;
+						
+						console.log(`Consolation Team1 match: ${team1Match} (name: ${team1NameMatch}, manager: ${team1ManagerMatch})`);
+						console.log(`Consolation Team2 match: ${team2Match} (name: ${team2NameMatch}, manager: ${team2ManagerMatch})`);
+						
+						if (team1Match || team2Match) {
+							teamKey = team1Match ? game.team1Key : game.team2Key;
+							console.log(`✅ Found consolation team key ${teamKey} for ${team.teamName} (${team.managerName})`);
+							break;
+						}
+					}
+				}
+				
 				if (!teamKey) {
 					console.log(`❌ No team key found for ${team.teamName} (${team.managerName})`);
 					console.log(`Available playoff teams:`);
 					playoffGames.forEach(game => {
+						console.log(`  - "${game.team1Name}" (${game.team1Manager})`);
+						console.log(`  - "${game.team2Name}" (${game.team2Manager})`);
+					});
+					console.log(`Available consolation teams:`);
+					consolationGames.forEach(game => {
 						console.log(`  - "${game.team1Name}" (${game.team1Manager})`);
 						console.log(`  - "${game.team2Name}" (${game.team2Manager})`);
 					});
