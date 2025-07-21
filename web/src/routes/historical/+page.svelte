@@ -20,7 +20,7 @@
 	let showAllH2H = false; // Track whether to show all results or just top 20
 
 	// Computed filtered head-to-head data
-	$: filteredH2HData = filterH2HData(h2hData?.head_to_head || [], h2hManagerA, h2hManagerB);
+	$: filteredH2HData = filterH2HData(h2hData?.headToHead || [], h2hManagerA, h2hManagerB);
 
 	// Computed display data based on filters and show more state
 	$: displayH2HData = getDisplayH2HData(filteredH2HData, h2hManagerA, h2hManagerB, showAllH2H);
@@ -188,7 +188,7 @@
 			if (response.ok) {
 				h2hData = await response.json();
 				// Extract available managers for filtering
-				availableManagers = extractUniqueManagers(h2hData.head_to_head || []);
+				availableManagers = extractUniqueManagers(h2hData.headToHead || []);
 				console.log('H2H data loaded:', h2hData);
 			} else {
 				console.error('Failed to fetch H2H data:', response.status, response.statusText);
@@ -588,7 +588,7 @@
 						<div class="flex items-center justify-between">
 							<div class="text-sm text-slate-400">
 								{#if h2hManagerA || h2hManagerB}
-									Showing {displayH2HData.length} of {h2hData?.head_to_head?.length || 0} matchups
+									Showing {displayH2HData.length} of {h2hData?.headToHead?.length || 0} matchups
 								{:else}
 									Showing {displayH2HData.length} of {filteredH2HData.length} rivalries
 								{/if}
@@ -620,27 +620,27 @@
 								{#each displayH2HData as matchup}
 									<tr class="border-b border-slate-700/50">
 										<td class="py-3 px-4">
-											<div class="font-bold text-white">{matchup.manager_a_name} vs {matchup.manager_b_name}</div>
-											<div class="text-xs text-slate-400">{matchup.seasons_played_together} seasons • {matchup.first_matchup_date} - {matchup.last_matchup_date}</div>
+											<div class="font-bold text-white">{matchup.managerAName || matchup.manager_a_name} vs {matchup.managerBName || matchup.manager_b_name}</div>
+											<div class="text-xs text-slate-400">{matchup.seasonsPlayedTogether || matchup.seasons_played_together} seasons • {matchup.firstMatchupDate || matchup.first_matchup_date} - {matchup.lastMatchupDate || matchup.last_matchup_date}</div>
 										</td>
-										<td class="text-center py-3 px-4 font-bold text-blue-400">{matchup.total_matchups}</td>
+										<td class="text-center py-3 px-4 font-bold text-blue-400">{matchup.totalMatchups || matchup.total_matchups}</td>
 										<td class="text-center py-3 px-4">
-											<div class="font-mono font-bold text-white">{matchup.series_record}</div>
-											<div class="text-xs text-slate-400">{matchup.series_leader}</div>
+											<div class="font-mono font-bold text-white">{matchup.seriesRecord || matchup.series_record}</div>
+											<div class="text-xs text-slate-400">{matchup.seriesLeader || matchup.series_leader}</div>
 										</td>
 										<td class="text-center py-3 px-4">
-											<div class="font-bold text-white">{parseFloat(matchup.avg_total_points_per_game || 0).toFixed(1)}</div>
+											<div class="font-bold text-white">{parseFloat(matchup.avgTotalPointsPerGame || matchup.avg_total_points_per_game || 0).toFixed(1)}</div>
 											<div class="text-xs text-slate-400">pts/game</div>
 										</td>
 										<td class="text-center py-3 px-4">
-											<div class="font-bold text-amber-400">{parseFloat(matchup.most_lopsided_game || 0).toFixed(1)}</div>
+											<div class="font-bold text-amber-400">{parseFloat(matchup.mostLopsidedGame || matchup.most_lopsided_game || 0).toFixed(1)}</div>
 											<div class="text-xs text-slate-400">margin</div>
 										</td>
 										<td class="text-center py-3 px-4">
-											{#if matchup.championship_matchups > 0}
-												<span class="text-amber-400 font-bold">🏆 {matchup.championship_matchups}</span>
-											{:else if matchup.playoff_matchups > 0}
-												<span class="text-blue-400 font-bold">⚔️ {matchup.playoff_matchups}</span>
+											{#if (matchup.championshipMatchups || matchup.championship_matchups) > 0}
+												<span class="text-amber-400 font-bold">🏆 {matchup.championshipMatchups || matchup.championship_matchups}</span>
+											{:else if (matchup.playoffMatchups || matchup.playoff_matchups) > 0}
+												<span class="text-blue-400 font-bold">⚔️ {matchup.playoffMatchups || matchup.playoff_matchups}</span>
 											{:else}
 												<span class="text-slate-500">-</span>
 											{/if}
@@ -684,33 +684,33 @@
 						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 							<div class="bg-gradient-to-r from-green-500/10 to-green-600/5 border border-green-500/20 rounded-lg p-4">
 								<h3 class="font-bold text-white mb-2">Highest Score</h3>
-								<div class="text-2xl font-bold text-green-400">{parseFloat(h2hData.analytics.records.highest_score_value || 0).toFixed(1)}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.highest_score_manager}</div>
+								<div class="text-2xl font-bold text-green-400">{parseFloat(h2hData.analytics.records.highestScoreValue || h2hData.analytics.records.highest_score_value || 0).toFixed(1)}</div>
+								<div class="text-slate-300 font-medium">{h2hData.analytics.records.highestScoreManager || h2hData.analytics.records.highest_score_manager}</div>
 							</div>
 							
 							<div class="bg-gradient-to-r from-red-500/10 to-red-600/5 border border-red-500/20 rounded-lg p-4">
 								<h3 class="font-bold text-white mb-2">Biggest Blowout</h3>
-								<div class="text-2xl font-bold text-red-400">{parseFloat(h2hData.analytics.records.biggest_win_value || 0).toFixed(1)}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.biggest_win_manager}</div>
+								<div class="text-2xl font-bold text-red-400">{parseFloat(h2hData.analytics.records.biggestWinValue || h2hData.analytics.records.biggest_win_value || 0).toFixed(1)}</div>
+								<div class="text-slate-300 font-medium">{h2hData.analytics.records.biggestWinManager || h2hData.analytics.records.biggest_win_manager}</div>
 							</div>
 							
 							<div class="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-lg p-4">
 								<h3 class="font-bold text-white mb-2">Hot Streak</h3>
-								<div class="text-2xl font-bold text-blue-400">{h2hData.analytics.records.longest_streak_value || 0}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.longest_streak_manager}</div>
+								<div class="text-2xl font-bold text-blue-400">{h2hData.analytics.records.longestStreakValue || h2hData.analytics.records.longest_streak_value || 0}</div>
+								<div class="text-slate-300 font-medium">{h2hData.analytics.records.longestStreakManager || h2hData.analytics.records.longest_streak_manager}</div>
 							</div>
 							
 							<div class="bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-lg p-4">
 								<h3 class="font-bold text-white mb-2">Cold Streak</h3>
-								<div class="text-2xl font-bold text-purple-400">{h2hData.analytics.records.worst_streak_value || 0}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.worst_streak_manager}</div>
+								<div class="text-2xl font-bold text-purple-400">{h2hData.analytics.records.worstStreakValue || h2hData.analytics.records.worst_streak_value || 0}</div>
+								<div class="text-slate-300 font-medium">{h2hData.analytics.records.worstStreakManager || h2hData.analytics.records.worst_streak_manager}</div>
 							</div>
 						</div>
 					</section>
 				{/if}
 
 				<!-- Playoff Impact -->
-				{#if h2hData.analytics?.playoff_impact && h2hData.analytics.playoff_impact.length > 0}
+				{#if h2hData.analytics?.playoffImpact && h2hData.analytics.playoffImpact.length > 0}
 					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 							<Target class="w-6 h-6 text-red-400 mr-3" />
@@ -718,19 +718,19 @@
 						</h2>
 						
 						<div class="space-y-4">
-							{#each h2hData.analytics.playoff_impact.slice(0, 8) as battle}
+							{#each h2hData.analytics.playoffImpact.slice(0, 8) as battle}
 								<div class="bg-slate-700/30 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
-										<div class="font-bold text-white">{battle.manager_a_name} vs {battle.manager_b_name}</div>
+										<div class="font-bold text-white">{battle.managerAName || battle.manager_a_name} vs {battle.managerBName || battle.manager_b_name}</div>
 										<div class="flex items-center space-x-2">
-											{#if battle.championship_matchups > 0}
+											{#if (battle.championshipMatchups || battle.championship_matchups) > 0}
 												<span class="bg-amber-500 text-black px-2 py-1 rounded text-xs font-bold">
-													{battle.championship_matchups} Title Games
+													{battle.championshipMatchups || battle.championship_matchups} Title Games
 												</span>
 											{/if}
-											{#if battle.playoff_matchups > 0}
+											{#if (battle.playoffMatchups || battle.playoff_matchups) > 0}
 												<span class="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold">
-													{battle.playoff_matchups} Playoff Games
+													{battle.playoffMatchups || battle.playoff_matchups} Playoff Games
 												</span>
 											{/if}
 										</div>
@@ -738,22 +738,22 @@
 									
 									<div class="grid grid-cols-2 gap-4 text-sm">
 										<div>
-											<span class="text-blue-400 font-medium">{battle.manager_a_name}:</span>
+											<span class="text-blue-400 font-medium">{battle.managerAName || battle.manager_a_name}:</span>
 											<span class="text-slate-300">
-												{battle.manager_a_championship_wins || 0} titles, {battle.manager_a_playoff_wins || 0} playoff wins
+												{battle.managerAChampionshipWins || battle.manager_a_championship_wins || 0} titles, {battle.managerAPlayoffWins || battle.manager_a_playoff_wins || 0} playoff wins
 											</span>
 										</div>
 										<div>
-											<span class="text-purple-400 font-medium">{battle.manager_b_name}:</span>
+											<span class="text-purple-400 font-medium">{battle.managerBName || battle.manager_b_name}:</span>
 											<span class="text-slate-300">
-												{battle.manager_b_championship_wins || 0} titles, {battle.manager_b_playoff_wins || 0} playoff wins
+												{battle.managerBChampionshipWins || battle.manager_b_championship_wins || 0} titles, {battle.managerBPlayoffWins || battle.manager_b_playoff_wins || 0} playoff wins
 											</span>
 										</div>
 									</div>
 									
-									{#if battle.most_important_game_winner}
+									{#if battle.mostImportantGameWinner || battle.most_important_game_winner}
 										<div class="mt-2 pt-2 border-t border-slate-600 text-xs text-slate-400">
-											Most Important: {battle.most_important_game_winner} ({battle.most_important_game_type}, {battle.most_important_game_season})
+											Most Important: {battle.mostImportantGameWinner || battle.most_important_game_winner} ({battle.mostImportantGameType || battle.most_important_game_type}, {battle.mostImportantGameSeason || battle.most_important_game_season})
 										</div>
 									{/if}
 								</div>

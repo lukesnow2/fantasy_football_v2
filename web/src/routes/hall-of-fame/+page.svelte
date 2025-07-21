@@ -72,7 +72,7 @@
 		return 'text-slate-400';
 	}
 
-	$: managers = hallOfFameData?.hall_of_fame || [];
+	$: managers = hallOfFameData?.hallOfFame || [];
 	$: analytics = hallOfFameData?.analytics || {};
 	$: tiers = hallOfFameData?.tiers || [];
 </script>
