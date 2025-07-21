@@ -201,15 +201,115 @@ export const GET: RequestHandler = async ({ url }) => {
 			data.advanced_metrics = Array.from(advancedResult);
 		}
 
+		// Convert snake_case to camelCase for frontend compatibility
+		const camelCaseData: any = {};
+		
+		if (data.league_evolution) {
+			camelCaseData.leagueEvolution = data.league_evolution.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				leagueName: item.leagueName || item.league_name,
+				totalTeams: item.totalTeams || item.total_teams,
+				totalTransactions: item.totalTransactions || item.total_transactions,
+				averageWeeklyScore: item.averageWeeklyScore || item.average_weekly_score,
+				highestSingleWeekScore: item.highestSingleWeekScore || item.highest_single_week_score,
+				championManager: item.championManager || item.champion_manager,
+				runnerUpManager: item.runnerUpManager || item.runner_up_manager,
+				highestScorerManager: item.highestScorerManager || item.highest_scorer_manager
+			}));
+		}
+
+		if (data.competitiveness) {
+			camelCaseData.competitiveness = data.competitiveness.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				winParityScore: item.winParityScore || item.win_parity_score,
+				pointSpreadScore: item.pointSpreadScore || item.point_spread_score,
+				playoffRaceScore: item.playoffRaceScore || item.playoff_race_score,
+				closeGamesScore: item.closeGamesScore || item.close_games_score,
+				totalTeams: item.totalTeams || item.total_teams,
+				totalTransactions: item.totalTransactions || item.total_transactions
+			}));
+		}
+
+		if (data.scoring_patterns) {
+			camelCaseData.scoringPatterns = data.scoring_patterns.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				avgWeeklyScore: item.avgWeeklyScore || item.avg_weekly_score,
+				maxWeeklyScore: item.maxWeeklyScore || item.max_weekly_score,
+				minWeeklyScore: item.minWeeklyScore || item.min_weekly_score,
+				scoreVolatility: item.scoreVolatility || item.score_volatility,
+				totalTeamWeeks: item.totalTeamWeeks || item.total_team_weeks,
+				p90Score: item.p90Score || item.p90_score,
+				p10Score: item.p10Score || item.p10_score
+			}));
+		}
+
+		if (data.trade_activity) {
+			camelCaseData.tradeActivity = data.trade_activity.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				totalTrades: item.totalTrades || item.total_trades,
+				avgPlayersPerTrade: item.avgPlayersPerTrade || item.avg_players_per_trade,
+				championshipTrades: item.championshipTrades || item.championship_trades,
+				avgScoreDifferential: item.avgScoreDifferential || item.avg_score_differential,
+				decisiveTrades: item.decisiveTrades || item.decisive_trades,
+				avgProductionImpact: item.avgProductionImpact || item.avg_production_impact
+			}));
+		}
+
+		if (data.player_trends) {
+			camelCaseData.playerTrends = data.player_trends.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				totalPlayers: item.totalPlayers || item.total_players,
+				avgFantasyPoints: item.avgFantasyPoints || item.avg_fantasy_points,
+				avgDraftPosition: item.avgDraftPosition || item.avg_draft_position,
+				valuePicks: item.valuePicks || item.value_picks,
+				highestPlayerScore: item.highestPlayerScore || item.highest_player_score,
+				avgOwnershipRate: item.avgOwnershipRate || item.avg_ownership_rate
+			}));
+		}
+
+		if (data.manager_evolution) {
+			camelCaseData.managerEvolution = data.manager_evolution.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				winningTeams: item.winningTeams || item.winning_teams,
+				totalTeams: item.totalTeams || item.total_teams,
+				avgTeamScore: item.avgTeamScore || item.avg_team_score,
+				scoreParity: item.scoreParity || item.score_parity,
+				avgWinPercentage: item.avgWinPercentage || item.avg_win_percentage
+			}));
+		}
+
+		if (data.championship_trends) {
+			camelCaseData.championshipTrends = data.championship_trends.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				championManager: item.championManager || item.champion_manager,
+				runnerUpManager: item.runnerUpManager || item.runner_up_manager,
+				highestScorerManager: item.highestScorerManager || item.highest_scorer_manager,
+				totalTeams: item.totalTeams || item.total_teams,
+				playoffTeams: item.playoffTeams || item.playoff_teams
+			}));
+		}
+
+		if (data.advanced_metrics) {
+			camelCaseData.advancedMetrics = data.advanced_metrics.map((item: any) => ({
+				seasonYear: item.seasonYear || item.season_year,
+				waiverActivity: item.waiverActivity || item.waiver_activity,
+				scoringLevel: item.scoringLevel || item.scoring_level,
+				competitiveness: item.competitiveness,
+				scoringSpread: item.scoringSpread || item.scoring_spread,
+				tradeCount: item.tradeCount || item.trade_count,
+				tradeImpactScore: item.tradeImpactScore || item.trade_impact_score
+			}));
+		}
+
 		console.log(`Overview API returning data for metric: ${metric}`);
 		
 		return json({
-			data,
+			data: camelCaseData,
 			meta: {
 				metric,
-				seasons_covered: '2005-2024',
-				total_seasons: 20,
-				generated_at: new Date().toISOString()
+				seasonsCovered: '2005-2024',
+				totalSeasons: 20,
+				generatedAt: new Date().toISOString()
 			}
 		});
 
