@@ -264,10 +264,14 @@
 			<div class="flex items-center justify-center py-8">
 				<div class="text-blue-400">Loading draft data...</div>
 			</div>
-		{:else if draftData?.data?.availableSeasons}
+		{:else if draftData?.data}
 			<div class="space-y-6">
 				<div class="text-sm text-gray-400 mb-4">
-					{draftData.data.availableSeasons.length} seasons available ({draftData.data.availableSeasons[draftData.data.availableSeasons.length - 1]} - {draftData.data.availableSeasons[0]})
+					{draftData.data.availableSeasons?.length || 0} seasons available 
+					{draftData.data.availableSeasons?.length > 0 ? `(${draftData.data.availableSeasons[draftData.data.availableSeasons.length - 1]} - ${draftData.data.availableSeasons[0]})` : ''}
+				</div>
+				<div class="text-xs text-gray-500 mb-4">
+					Debug: availableSeasons = {JSON.stringify(draftData.data.availableSeasons)}
 				</div>
 				
 				<!-- Season Selector -->
