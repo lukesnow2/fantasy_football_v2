@@ -470,37 +470,36 @@
 								</div>
 							{/if}
 
-							<!-- Non-Playoff Teams -->
-							{#if standings.filter(team => team.playoffTier === 'Regular Season').length > 0}
-								<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
-									<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
-										📋 Final Standings
-									</h3>
-									<div class="space-y-2">
-										{#each standings.filter(team => team.playoffTier === 'Regular Season') as team}
-											<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
-												<div class="flex items-center space-x-4">
-													<div class="text-xl font-bold text-slate-400">{team.rank}</div>
-													<div>
-														<div class="font-semibold text-white flex items-center">
-															{team.teamName}
-															{#if team.isLastPlaceLoser}
-																<span class="ml-2 text-2xl" title="Last Place Game Loser">💩</span>
-															{/if}
-														</div>
-														<div class="text-slate-400 text-sm">{team.managerName}</div>
+							<!-- Final Standings: All Teams -->
+							<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
+								<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
+									📋 Final Standings
+								</h3>
+								<div class="space-y-2">
+									{#each standings as team}
+										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
+											<div class="flex items-center space-x-4">
+												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
+												<div>
+													<div class="font-semibold text-white flex items-center">
+														{team.teamName}
+														{#if team.isLastPlaceLoser}
+															<span class="ml-2 text-2xl" title="Last Place Game Loser">💩</span>
+														{/if}
 													</div>
-												</div>
-												<div class="text-right">
-													<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
-													<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+													<div class="text-slate-400 text-sm">{team.managerName}</div>
 												</div>
 											</div>
-										{/each}
-									</div>
+											<div class="text-right">
+												<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+												<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+											</div>
+										</div>
+									{/each}
 								</div>
-							{/if}
+							</div>
 						</div>
+					{/if}
 					{:else}
 						<!-- Regular Season Standings -->
 						<div class="space-y-2">
