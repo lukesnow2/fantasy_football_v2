@@ -13,7 +13,7 @@
 		loadTradeData();
 	});
 
-			// Load trade data
+	// Load trade data
 	async function loadTradeData(season = 'all') {
 		loadingTrades = true;
 		try {

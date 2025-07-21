@@ -4,6 +4,22 @@ import { vwCurrentSeasonDashboard } from '$lib/server/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
+// Utility to convert snake_case keys to camelCase
+function toCamelCase(obj: any): any {
+	if (Array.isArray(obj)) {
+		return obj.map(toCamelCase);
+	}
+	if (obj !== null && typeof obj === 'object') {
+		const newObj: any = {};
+		for (const key in obj) {
+			const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+			newObj[camelKey] = toCamelCase(obj[key]);
+		}
+		return newObj;
+	}
+	return obj;
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const requestedSeason = url.searchParams.get('season') || '2024';
@@ -231,7 +247,9 @@ export const GET: RequestHandler = async ({ url }) => {
 					fm.winner_team_key,
 					fm.team1_points,
 					fm.team2_points,
-					fm.week_number,
+					fm.week_key,
+					fm.is_last_place_game,
+					fm.is_consolation,
 					dt1.team_name as team1_name,
 					dt1.manager_name as team1_manager,
 					dt2.team_name as team2_name,
@@ -242,7 +260,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
 				WHERE dl.season_year = 2024
 				  AND fm.is_consolation = true
-				ORDER BY fm.week_number DESC
+				ORDER BY fm.week_key DESC
 			`;
 			
 			console.log('Executing playoff query...');
@@ -262,10 +280,99 @@ export const GET: RequestHandler = async ({ url }) => {
 			// Get consolation bracket data
 			let consolationGames: any[] = [];
 			try {
+				console.log('=== EXECUTING CONSOLATION QUERY ===');
+				console.log('Consolation query SQL:', consolationQuery);
+				
+				// First, let's debug what's in the fact_matchup table
+				console.log('=== DEBUGGING CONSOLATION QUERY ===');
+				const debugQuery = `
+					SELECT 
+						fm.team1_key,
+						fm.team2_key,
+						fm.winner_team_key,
+						fm.is_consolation,
+						fm.is_playoffs,
+						fm.is_last_place_game,
+						fm.week_key,
+						dt1.team_name as team1_name,
+						dt2.team_name as team2_name
+					FROM edw.fact_matchup fm
+					JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+					JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+					JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+					WHERE dl.season_year = 2024
+					  AND fm.week_key >= 14
+					ORDER BY fm.week_key DESC
+				`;
+				
+				// Also check all games to see what flags exist
+				const allGamesQuery = `
+					SELECT 
+						fm.team1_key,
+						fm.team2_key,
+						fm.winner_team_key,
+						fm.is_consolation,
+						fm.is_playoffs,
+						fm.is_last_place_game,
+						fm.week_key,
+						dt1.team_name as team1_name,
+						dt2.team_name as team2_name
+					FROM edw.fact_matchup fm
+					JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+					JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+					JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+					WHERE dl.season_year = 2024
+					ORDER BY fm.week_key DESC
+				`;
+				
+				const debugResult = await db.execute(sql.raw(debugQuery));
+				const debugGames = Array.from(debugResult);
+				console.log('All playoff/consolation games (week 14+):', debugGames.length);
+				console.log('Games with is_consolation flag:', debugGames.filter((g: any) => g.is_consolation));
+				console.log('Games with is_playoffs flag:', debugGames.filter((g: any) => g.is_playoffs));
+				console.log('All games:', debugGames.map((g: any) => ({
+					week: g.week_key,
+					team1: g.team1_name,
+					team2: g.team2_name,
+					is_consolation: g.is_consolation,
+					is_playoffs: g.is_playoffs,
+					is_last_place_game: g.is_last_place_game,
+					winner: g.winner_team_key
+				})));
+				
+				// Check all games to see what flags exist
+				const allGamesResult = await db.execute(sql.raw(allGamesQuery));
+				const allGames = Array.from(allGamesResult);
+				console.log('All games in season 2024:', allGames.length);
+				console.log('Games with is_consolation = true:', allGames.filter((g: any) => g.is_consolation === true));
+				console.log('Games with is_consolation = false:', allGames.filter((g: any) => g.is_consolation === false));
+				console.log('Games with is_consolation = null:', allGames.filter((g: any) => g.is_consolation === null));
+				console.log('Sample of all games:', allGames.slice(0, 5).map((g: any) => ({
+					week: g.week_number,
+					team1: g.team1_name,
+					team2: g.team2_name,
+					is_consolation: g.is_consolation,
+					is_playoffs: g.is_playoffs,
+					is_last_place_game: g.is_last_place_game
+				})));
+				
+				// Now try the actual consolation query
+				console.log('About to execute consolation query...');
 				const consolationResult = await db.execute(sql.raw(consolationQuery));
+				console.log('Consolation query executed, raw result:', consolationResult);
 				consolationGames = Array.from(consolationResult);
 				console.log('Consolation games found:', consolationGames.length);
 				console.log('Consolation games:', consolationGames);
+				
+				// After fetching consolationGames, convert to camelCase
+				consolationGames = toCamelCase(Array.from(consolationResult));
+				
+				// Debug: Check the exact field names in the first consolation game
+				if (consolationGames.length > 0) {
+					console.log('First consolation game field names:', Object.keys(consolationGames[0]));
+					console.log('First consolation game data:', consolationGames[0]);
+				}
+				console.log('=== END DEBUGGING CONSOLATION QUERY ===');
 			} catch (error) {
 				console.error('Error executing consolation query:', error);
 				consolationGames = [];
@@ -332,30 +439,57 @@ export const GET: RequestHandler = async ({ url }) => {
 			// Build consolation standings for the 4 non-playoff teams (ranks 7-10)
 			const consolationStandings = new Map();
 			if (consolationGames.length > 0) {
-				// Find the latest consolation game to determine final order
-				const latestConsolationGame = consolationGames[0]; // Already ordered by week_number DESC
-				if (latestConsolationGame) {
-					// Determine final consolation order based on the latest game
-					const winnerKey = latestConsolationGame.winnerTeamKey;
-					const loserKey = latestConsolationGame.team1Key === winnerKey 
-						? latestConsolationGame.team2Key : latestConsolationGame.team1Key;
+				console.log('=== CONSOLATION BRACKET ANALYSIS ===');
+				console.log('Found consolation games:', consolationGames.length);
+				console.log('Consolation games raw data:', consolationGames);
+				console.log('Consolation games:', consolationGames.map((g: any) => ({
+					week: g.week_key,
+					team1: g.team1_name,
+					team2: g.team2_name,
+					winner: g.winner_team_key ? (g.team1_key === g.winner_team_key ? g.team1_name : g.team2_name) : 'Tie',
+					is_last_place_game: g.is_last_place_game
+				})));
+				
+				// Find the last place game (should be the game with is_last_place_game = true)
+				const lastPlaceGame = consolationGames.find((g: any) => g.is_last_place_game);
+				console.log('Last place game:', lastPlaceGame);
+				
+				if (lastPlaceGame) {
+					// The loser of the last place game gets rank 10
+					const lastPlaceLoserKey = lastPlaceGame.team1_key === lastPlaceGame.winner_team_key 
+						? lastPlaceGame.team2_key : lastPlaceGame.team1_key;
+					const lastPlaceWinnerKey = lastPlaceGame.winner_team_key;
 					
-					// Assign ranks 7-10 based on consolation bracket results
-					consolationStandings.set(winnerKey, { rank: 7, tier: 'Consolation Winner' });
-					consolationStandings.set(loserKey, { rank: 8, tier: 'Consolation Runner-up' });
+					console.log('Last place winner:', lastPlaceWinnerKey);
+					console.log('Last place loser:', lastPlaceLoserKey);
 					
-					// For the other 2 teams, we'll need to look at earlier consolation games
-					// This is a simplified approach - in a real scenario you'd track the full bracket
-					const otherTeams = standings
-						.filter(team => !playoffStandings.has(team.teamKey) && 
-							team.teamKey !== winnerKey && team.teamKey !== loserKey)
-						.slice(0, 2);
+					// Assign rank 10 to the last place loser
+					consolationStandings.set(lastPlaceLoserKey, { rank: 10, tier: 'Consolation 4th (Last Place)' });
 					
-					if (otherTeams.length >= 2) {
-						consolationStandings.set(otherTeams[0].teamKey, { rank: 9, tier: 'Consolation 3rd' });
-						consolationStandings.set(otherTeams[1].teamKey, { rank: 10, tier: 'Consolation 4th' });
+					// The winner of the last place game gets rank 9
+					consolationStandings.set(lastPlaceWinnerKey, { rank: 9, tier: 'Consolation 3rd' });
+					
+											// Find the consolation championship game (should be the other game in the final week)
+						const finalWeek = Math.max(...consolationGames.map((g: any) => g.week_key));
+						const finalWeekGames = consolationGames.filter((g: any) => g.week_key === finalWeek);
+					const consolationChampionshipGame = finalWeekGames.find((g: any) => !g.is_last_place_game);
+					
+					if (consolationChampionshipGame) {
+						const consolationWinnerKey = consolationChampionshipGame.winner_team_key;
+						const consolationLoserKey = consolationChampionshipGame.team1_key === consolationWinnerKey 
+							? consolationChampionshipGame.team2_key : consolationChampionshipGame.team1_key;
+						
+						console.log('Consolation winner:', consolationWinnerKey);
+						console.log('Consolation runner-up:', consolationLoserKey);
+						
+						// Assign ranks 7-8 based on consolation championship
+						consolationStandings.set(consolationWinnerKey, { rank: 7, tier: 'Consolation Winner' });
+						consolationStandings.set(consolationLoserKey, { rank: 8, tier: 'Consolation Runner-up' });
 					}
 				}
+				
+				console.log('Final consolation standings:', Array.from(consolationStandings.entries()));
+				console.log('=== END CONSOLATION BRACKET ANALYSIS ===');
 			}
 			
 			// Apply playoff rankings to standings
