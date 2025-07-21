@@ -52,7 +52,9 @@
 		// Apply specific manager filters
 		if (managerA || managerB) {
 			filtered = filtered.filter(matchup => {
-				const matchupManagers = [matchup.manager_a_name, matchup.manager_b_name];
+				const managerAName = matchup.managerAName || matchup.manager_a_name;
+				const managerBName = matchup.managerBName || matchup.manager_b_name;
+				const matchupManagers = [managerAName, managerBName];
 				
 				let matchesA = !managerA || matchupManagers.includes(managerA);
 				let matchesB = !managerB || matchupManagers.includes(managerB);
@@ -75,8 +77,8 @@
 		
 		const managers = new Set<string>();
 		h2hData.forEach(matchup => {
-			if (matchup.manager_a_name) managers.add(matchup.manager_a_name);
-			if (matchup.manager_b_name) managers.add(matchup.manager_b_name);
+			if (matchup.managerAName || matchup.manager_a_name) managers.add(matchup.managerAName || matchup.manager_a_name);
+			if (matchup.managerBName || matchup.manager_b_name) managers.add(matchup.managerBName || matchup.manager_b_name);
 		});
 		
 		return Array.from(managers).sort();

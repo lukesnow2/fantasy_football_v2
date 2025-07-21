@@ -25,11 +25,11 @@
 				// Debug analytics data
 				if (tradeData.analytics) {
 					console.log('Analytics overview:', tradeData.analytics.overview);
-					console.log('Best trades count:', tradeData.analytics.best_trades?.length);
-					console.log('Championship trades count:', tradeData.analytics.championship_trades?.length);
-					if (tradeData.analytics.best_trades?.length > 0) {
-						console.log('First best trade:', tradeData.analytics.best_trades[0]);
-						console.log('Best trade fields:', Object.keys(tradeData.analytics.best_trades[0]));
+					console.log('Best trades count:', tradeData.analytics.bestTrades?.length);
+					console.log('Championship trades count:', tradeData.analytics.championshipTrades?.length);
+					if (tradeData.analytics.bestTrades?.length > 0) {
+						console.log('First best trade:', tradeData.analytics.bestTrades[0]);
+						console.log('Best trade fields:', Object.keys(tradeData.analytics.bestTrades[0]));
 					}
 				}
 				
@@ -137,7 +137,7 @@
 					</select>
 				</div>
 				<div class="text-slate-400 text-sm">
-					{tradeData.meta?.total_returned || 0} trades • {selectedSeason === 'all' ? 'All seasons' : selectedSeason}
+					{tradeData.meta?.totalReturned || 0} trades • {selectedSeason === 'all' ? 'All seasons' : selectedSeason}
 				</div>
 			</div>
 
@@ -175,16 +175,16 @@
 			{/if}
 
 			<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-				<!-- Best Trades -->
-				{#if tradeData.analytics?.best_trades}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<TrendingUp class="w-6 h-6 text-green-400 mr-3" />
-							Most Decisive Trades ({tradeData.analytics.best_trades.length})
-						</h2>
-						
-						<div class="space-y-4">
-							{#each tradeData.analytics.best_trades as trade, index}
+							<!-- Best Trades -->
+			{#if tradeData.analytics?.bestTrades}
+				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
+						<TrendingUp class="w-6 h-6 text-green-400 mr-3" />
+						Most Decisive Trades ({tradeData.analytics.bestTrades.length})
+					</h2>
+					
+					<div class="space-y-4">
+						{#each tradeData.analytics.bestTrades as trade, index}
 								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								<!-- Debug trade {index}: {trade.tradeWinner} vs {trade.teamAManager} -->
@@ -218,7 +218,7 @@
 				{/if}
 
 				<!-- Championship Impact Trades -->
-				{#if tradeData.analytics?.championship_trades}
+				{#if tradeData.analytics?.championshipTrades}
 					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
@@ -226,7 +226,7 @@
 						</h2>
 						
 						<div class="space-y-4">
-							{#each tradeData.analytics.championship_trades as trade}
+							{#each tradeData.analytics.championshipTrades as trade}
 								{@const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager}
 								<div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
