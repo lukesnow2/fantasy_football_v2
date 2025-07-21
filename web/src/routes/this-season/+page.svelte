@@ -102,8 +102,8 @@
 				console.log('Standings array:', standingsData.standings);
 				console.log('Standings count:', standingsData.standings.length);
 				console.log('First few standings:', standingsData.standings.slice(0, 3));
-				console.log('All ranks in standings:', standingsData.standings.map(s => s.rank).sort((a, b) => a - b));
-				console.log('Teams with playoff tiers:', standingsData.standings.map(s => `${s.rank}: ${s.teamName} (${s.playoffTier})`));
+				console.log('All ranks in standings:', standingsData.standings.map((s: any) => s.rank).sort((a: any, b: any) => a - b));
+				console.log('Teams with playoff tiers:', standingsData.standings.map((s: any) => `${s.rank}: ${s.teamName} (${s.playoffTier})`));
 				standings = standingsData.standings;
 				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
@@ -474,7 +474,7 @@
 							{#if standings.filter(team => team.playoffTier === 'Regular Season').length > 0}
 								<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
 									<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
-										📋 Regular Season Finish
+										📋 Final Standings
 									</h3>
 									<div class="space-y-2">
 										{#each standings.filter(team => team.playoffTier === 'Regular Season') as team}
