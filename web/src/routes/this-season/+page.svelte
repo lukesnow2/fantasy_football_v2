@@ -470,13 +470,13 @@
 								</div>
 							{/if}
 
-							<!-- Final Standings: All Teams -->
+							<!-- Final Standings: Consolation Bracket (Non-Playoff Teams) -->
 							<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
 								<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
-									📋 Final Standings
+									📋 Final Standings (Consolation Bracket)
 								</h3>
 								<div class="space-y-2">
-									{#each standings as team}
+									{#each standings.filter(team => team.rank > 6) as team}
 										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
 											<div class="flex items-center space-x-4">
 												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
@@ -488,6 +488,9 @@
 														{/if}
 													</div>
 													<div class="text-slate-400 text-sm">{team.managerName}</div>
+													{#if team.playoffTier && team.playoffTier !== 'Regular Season'}
+														<div class="text-xs text-slate-500 font-medium">{team.playoffTier}</div>
+													{/if}
 												</div>
 											</div>
 											<div class="text-right">
@@ -743,13 +746,26 @@
 							<span class="text-slate-300">3rd Place:</span>
 							<span class="text-orange-400 font-medium">{standings[2]?.teamName || 'TBD'}</span>
 						</div>
+						<div class="flex justify-between">
+							<span class="text-slate-300">Consolation Winner:</span>
+							<span class="text-blue-400 font-medium">{standings[6]?.teamName || 'TBD'}</span>
+						</div>
 					</div>
 					
 					<div class="mt-4 pt-3 border-t border-green-500/20">
-						<div class="text-xs text-slate-400 mb-2">Final Rankings:</div>
+						<div class="text-xs text-slate-400 mb-2">Playoff Rankings:</div>
 						<div class="space-y-1">
-							{#each standings.slice(0, 5) as team, i}
+							{#each standings.slice(0, 6) as team, i}
 								<div class="text-xs text-white">#{i + 1} {team.teamName}</div>
+							{/each}
+						</div>
+					</div>
+					
+					<div class="mt-3 pt-3 border-t border-slate-500/20">
+						<div class="text-xs text-slate-400 mb-2">Consolation Rankings:</div>
+						<div class="space-y-1">
+							{#each standings.filter(team => team.rank > 6).slice(0, 4) as team, i}
+								<div class="text-xs text-white">#{team.rank} {team.teamName}</div>
 							{/each}
 						</div>
 					</div>

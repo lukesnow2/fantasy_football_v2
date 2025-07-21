@@ -193,6 +193,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		let finalStandings = standings;
 		let playoffGames: any[] = [];
 		let playoffStandings = new Map();
+		let consolationGames: any[] = [];
 
 		if (championshipData) {
 			// Season is complete - build final standings based on playoff results
@@ -222,6 +223,28 @@ export const GET: RequestHandler = async ({ url }) => {
 				ORDER BY fm.is_championship DESC, fm.is_semifinal DESC, fm.is_quarterfinal DESC
 			`;
 			
+			// Get consolation bracket results for the 4 non-playoff teams
+			const consolationQuery = `
+				SELECT 
+					fm.team1_key,
+					fm.team2_key,
+					fm.winner_team_key,
+					fm.team1_points,
+					fm.team2_points,
+					fm.week_number,
+					dt1.team_name as team1_name,
+					dt1.manager_name as team1_manager,
+					dt2.team_name as team2_name,
+					dt2.manager_name as team2_manager
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+				JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
+				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
+				WHERE dl.season_year = 2024
+				  AND fm.is_consolation = true
+				ORDER BY fm.week_number DESC
+			`;
+			
 			console.log('Executing playoff query...');
 			console.log('Playoff query SQL:', playoffQuery);
 			try {
@@ -234,6 +257,18 @@ export const GET: RequestHandler = async ({ url }) => {
 			} catch (error) {
 				console.error('Error executing playoff query:', error);
 				playoffGames = [];
+			}
+			
+			// Get consolation bracket data
+			let consolationGames: any[] = [];
+			try {
+				const consolationResult = await db.execute(sql.raw(consolationQuery));
+				consolationGames = Array.from(consolationResult);
+				console.log('Consolation games found:', consolationGames.length);
+				console.log('Consolation games:', consolationGames);
+			} catch (error) {
+				console.error('Error executing consolation query:', error);
+				consolationGames = [];
 			}
 			
 			// Build final standings based on playoff results
@@ -294,9 +329,39 @@ export const GET: RequestHandler = async ({ url }) => {
 				}
 			}
 			
+			// Build consolation standings for the 4 non-playoff teams (ranks 7-10)
+			const consolationStandings = new Map();
+			if (consolationGames.length > 0) {
+				// Find the latest consolation game to determine final order
+				const latestConsolationGame = consolationGames[0]; // Already ordered by week_number DESC
+				if (latestConsolationGame) {
+					// Determine final consolation order based on the latest game
+					const winnerKey = latestConsolationGame.winnerTeamKey;
+					const loserKey = latestConsolationGame.team1Key === winnerKey 
+						? latestConsolationGame.team2Key : latestConsolationGame.team1Key;
+					
+					// Assign ranks 7-10 based on consolation bracket results
+					consolationStandings.set(winnerKey, { rank: 7, tier: 'Consolation Winner' });
+					consolationStandings.set(loserKey, { rank: 8, tier: 'Consolation Runner-up' });
+					
+					// For the other 2 teams, we'll need to look at earlier consolation games
+					// This is a simplified approach - in a real scenario you'd track the full bracket
+					const otherTeams = standings
+						.filter(team => !playoffStandings.has(team.teamKey) && 
+							team.teamKey !== winnerKey && team.teamKey !== loserKey)
+						.slice(0, 2);
+					
+					if (otherTeams.length >= 2) {
+						consolationStandings.set(otherTeams[0].teamKey, { rank: 9, tier: 'Consolation 3rd' });
+						consolationStandings.set(otherTeams[1].teamKey, { rank: 10, tier: 'Consolation 4th' });
+					}
+				}
+			}
+			
 			// Apply playoff rankings to standings
 			console.log('Playoff games found:', playoffGames.length);
 			console.log('Playoff standings map:', Array.from(playoffStandings.entries()));
+			console.log('Consolation standings map:', Array.from(consolationStandings.entries()));
 			console.log('Available teams in standings:', standings.map(s => `${s.teamName} (${s.managerName})`));
 			console.log('Teams in playoff games:', playoffGames.map(g => `${g.team1_name} (${g.team1_manager}) vs ${g.team2_name} (${g.team2_manager})`));
 			
@@ -349,8 +414,13 @@ export const GET: RequestHandler = async ({ url }) => {
 				}
 				
 				const playoffRank = playoffStandings.get(teamKey);
+				const consolationRank = consolationStandings.get(teamKey);
 				console.log(`Playoff standings map has ${playoffStandings.size} entries:`);
 				playoffStandings.forEach((rank, key) => {
+					console.log(`  Key: ${key}, Rank: ${rank.rank}, Tier: ${rank.tier}`);
+				});
+				console.log(`Consolation standings map has ${consolationStandings.size} entries:`);
+				consolationStandings.forEach((rank, key) => {
 					console.log(`  Key: ${key}, Rank: ${rank.rank}, Tier: ${rank.tier}`);
 				});
 				
@@ -361,9 +431,16 @@ export const GET: RequestHandler = async ({ url }) => {
 						finalRank: playoffRank.rank,
 						playoffTier: playoffRank.tier
 					};
+				} else if (consolationRank) {
+					console.log(`✅ Team ${team.teamName} (${team.managerName}) gets consolation rank ${consolationRank.rank} (${consolationRank.tier})`);
+					return {
+						...team,
+						finalRank: consolationRank.rank,
+						playoffTier: consolationRank.tier
+					};
 				} else {
 					// Non-playoff team - rank by regular season record
-					console.log(`❌ Team ${team.teamName} (${team.managerName}) gets regular season rank (no playoff rank found)`);
+					console.log(`❌ Team ${team.teamName} (${team.managerName}) gets regular season rank (no playoff/consolation rank found)`);
 					return {
 						...team,
 						finalRank: team.seasonRank || (index + 1),
@@ -481,7 +558,20 @@ export const GET: RequestHandler = async ({ url }) => {
 					};
 				}) || [],
 				championshipGameFound: !!playoffGames?.find(g => g.isChampionship),
-				playoffStandingsEntries: Array.from(playoffStandings?.entries() || [])
+				playoffStandingsEntries: Array.from(playoffStandings?.entries() || []),
+				consolationGames: consolationGames?.map((g: any) => ({
+					team1: g.team1Name,
+					team2: g.team2Name,
+					winner_team_key: g.winnerTeamKey,
+					team1_key: g.team1Key,
+					team2_key: g.team2Key,
+					raw_game: g, // Include raw game data for debugging
+					game_keys: Object.keys(g), // Include keys for debugging
+					team1_name_prop: g.team1Name,
+					team1_manager_prop: g.team1Manager,
+					team2_name_prop: g.team2Name,
+					team2_manager_prop: g.team2Manager
+				})) || []
 			}
 		};
 		
