@@ -476,7 +476,7 @@
 									📋 Final Standings (Consolation Bracket)
 								</h3>
 								<div class="space-y-2">
-									{#each standings.filter(team => team.rank > 6) as team}
+									{#each standings.filter(team => team.rank > 6).sort((a, b) => a.rank - b.rank) as team}
 										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
 											<div class="flex items-center space-x-4">
 												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
