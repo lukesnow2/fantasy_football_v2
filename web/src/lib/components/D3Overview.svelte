@@ -100,6 +100,10 @@
 			default:
 				return [];
 		}
+		if (rawData.length > 0) {
+			console.log('First raw data object:', rawData[0]);
+			console.log('Keys in first raw data object:', Object.keys(rawData[0]));
+		}
 		
 		// Convert string values to numbers and ensure data integrity
 		const processedData = rawData.map((d: any) => {
@@ -120,7 +124,12 @@
 			
 			return processed;
 		});
-		
+		if (processedData.length > 0) {
+			console.log('First processed data object:', processedData[0]);
+			console.log('Keys in first processed data object:', Object.keys(processedData[0]));
+			console.log('metric.yKey:', metrics.find(m => m.id === metricId)?.yKey);
+			console.log('metric.secondaryKey:', metrics.find(m => m.id === metricId)?.secondaryKey);
+		}
 		console.log('Processed data for', metricId, ':', processedData.slice(0, 3));
 		return processedData;
 	}
