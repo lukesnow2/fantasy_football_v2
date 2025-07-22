@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { dimLeague, dimManager, factTransaction, factMatchup, factTeamPerformance } from '$lib/server/db/schema';
 import { count, countDistinct, max, min, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
+import { sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
 	try {
@@ -53,6 +54,26 @@ export const GET: RequestHandler = async () => {
 			})
 			.from(factTeamPerformance);
 
+		// Query for all-time leader (Hall of Fame #1)
+		const hallOfFameLeaderResult = await db.execute(sql.raw(`
+			SELECT manager_name
+			FROM meta_data.vw_hall_of_fame
+			WHERE hall_of_fame_rank = 1
+			ORDER BY hall_of_fame_rank ASC
+			LIMIT 1
+		`));
+		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.manager_name || 'TBD';
+
+		// Query for biggest rivalry (most games played between two managers)
+		const biggestRivalryResult = await db.execute(sql.raw(`
+			SELECT manager_a_name, manager_b_name, total_matchups
+			FROM meta_data.vw_head_to_head
+			ORDER BY total_matchups DESC
+			LIMIT 1
+		`));
+		const rivalryRow = Array.from(biggestRivalryResult)[0];
+		const biggestRivalry = rivalryRow ? `${rivalryRow.manager_a_name} vs ${rivalryRow.manager_b_name}` : 'Analyzing...';
+
 		const overview = {
 			totalSeasons: leagueStats[0]?.totalSeasons || 0,
 			totalLeagues: leagueStats[0]?.totalLeagues || 0,
@@ -66,7 +87,9 @@ export const GET: RequestHandler = async () => {
 			championshipGames: championshipStats[0]?.championshipGames || 0,
 			dataPoints: (teamStats[0]?.totalTeamSeasons || 0) + 
 						(transactionStats[0]?.totalTransactions || 0) + 
-						(matchupStats[0]?.totalMatchups || 0)
+						(matchupStats[0]?.totalMatchups || 0),
+			allTimeLeader,
+			biggestRivalry
 		};
 
 		return json({

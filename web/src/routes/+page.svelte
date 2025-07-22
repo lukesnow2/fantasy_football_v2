@@ -148,11 +148,15 @@
 				</div>
 				<div class="flex justify-between items-center py-2 border-b border-slate-700/30">
 					<span class="text-slate-300">All-Time Leader</span>
-					<span class="text-amber-400 font-semibold">TBD</span>
+					<span class="text-amber-400 font-semibold">
+						{loading ? '...' : leagueOverview.allTimeLeader || 'TBD'}
+					</span>
 				</div>
 				<div class="flex justify-between items-center py-2">
 					<span class="text-slate-300">Biggest Rivalry</span>
-					<span class="text-red-400 font-semibold">Analyzing...</span>
+					<span class="text-red-400 font-semibold">
+						{loading ? '...' : leagueOverview.biggestRivalry || 'Analyzing...'}
+					</span>
 				</div>
 			</div>
 			<a 
