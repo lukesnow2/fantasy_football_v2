@@ -230,8 +230,8 @@
 
 	function createLineChart(g: any, data: any[], xScale: any, yScale: any, secondaryScale: any, metric: any) {
 		const line = d3.line<any>()
-			.x(d => xScale(d.seasonYear || d.season_year))
-			.y(d => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		// Main line
@@ -247,8 +247,8 @@
 			.data(data)
 			.enter().append('circle')
 			.attr('class', 'dot')
-			.attr('cx', (d: any) => xScale(d.seasonYear || d.season_year))
-			.attr('cy', (d: any) => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('r', 4)
 			.attr('fill', metric.color)
 			.on('mouseover', function(event: any, d: any) {
@@ -265,13 +265,13 @@
 					.style('opacity', 0);
 
 				tooltip.transition().duration(200).style('opacity', 1);
-				const seasonYear = d.seasonYear || d.season_year;
-				const yVal = d[metric.yKey] || d[camelToSnake(metric.yKey)];
-				const secondaryVal = metric.secondaryKey ? (d[metric.secondaryKey] || d[camelToSnake(metric.secondaryKey)]) : null;
+				const seasonYear = getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int');
+				const yVal = getNumeric(d, metric.yKey);
+				const secondaryVal = metric.secondaryKey ? getNumeric(d, metric.secondaryKey) : null;
 				tooltip.html(`
 					<strong>${seasonYear}</strong><br/>
-					${metric.yKey.replace(/_/g, ' ')}: ${parseFloat(yVal).toFixed(1)}
-					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + (secondaryVal !== null ? parseFloat(secondaryVal).toFixed(1) : '') : ''}
+					${metric.yKey.replace(/_/g, ' ')}: ${yVal.toFixed(1)}
+					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + (secondaryVal !== null ? secondaryVal.toFixed(1) : '') : ''}
 				`)
 				.style('left', (event.pageX + 10) + 'px')
 				.style('top', (event.pageY - 10) + 'px');
@@ -283,8 +283,8 @@
 		// Secondary line if available
 		if (secondaryScale && metric.secondaryKey) {
 			const secondaryLine = d3.line<any>()
-				.x(d => xScale(d.seasonYear || d.season_year))
-				.y(d => secondaryScale(d[metric.secondaryKey] || d[camelToSnake(metric.secondaryKey)]))
+				.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+				.y(d => secondaryScale(getNumeric(d, metric.secondaryKey)))
 				.curve(d3.curveMonotoneX);
 
 			g.append('path')
@@ -299,9 +299,9 @@
 
 	function createAreaChart(g: any, data: any[], xScale: any, yScale: any, metric: any) {
 		const area = d3.area<any>()
-			.x(d => xScale(d.seasonYear || d.season_year))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
 			.y0(height)
-			.y1(d => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.y1(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
@@ -312,8 +312,8 @@
 
 		// Add line on top
 		const line = d3.line<any>()
-			.x(d => xScale(d.seasonYear || d.season_year))
-			.y(d => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
@@ -331,10 +331,10 @@
 			.data(data)
 			.enter().append('rect')
 			.attr('class', 'bar')
-			.attr('x', (d: any) => xScale(d.seasonYear || d.season_year) - barWidth / 2)
-			.attr('y', (d: any) => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.attr('x', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')) - barWidth / 2)
+			.attr('y', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('width', barWidth)
-			.attr('height', (d: any) => height - yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+			.attr('height', (d: any) => height - yScale(getNumeric(d, metric.yKey)))
 			.attr('fill', metric.color)
 			.attr('fill-opacity', 0.7)
 			.on('mouseover', function(event: any, d: any) {
@@ -352,8 +352,8 @@
 				.data(data)
 				.enter().append('circle')
 				.attr('class', 'dot')
-				.attr('cx', (d: any) => xScale(d.seasonYear || d.season_year))
-				.attr('cy', (d: any) => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
+				.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+				.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 				.attr('r', 6)
 				.attr('fill', metric.color)
 				.attr('fill-opacity', 0.7);
@@ -365,8 +365,8 @@
 			.data(data)
 			.enter().append('circle')
 			.attr('class', 'dot')
-			.attr('cx', (d: any) => yScale(d[metric.yKey] || d[camelToSnake(metric.yKey)]))
-			.attr('cy', (d: any) => secondaryScale(d[metric.secondaryKey] || d[camelToSnake(metric.secondaryKey)]))
+			.attr('cx', (d: any) => yScale(getNumeric(d, metric.yKey)))
+			.attr('cy', (d: any) => secondaryScale(getNumeric(d, metric.secondaryKey)))
 			.attr('r', 6)
 			.attr('fill', metric.color)
 			.attr('fill-opacity', 0.7);
@@ -375,6 +375,16 @@
 	// Helper to convert camelCase to snake_case
 	function camelToSnake(str: string) {
 		return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+	}
+	// Helper to robustly get a numeric value from both camelCase and snake_case
+	function getNumeric(obj: any, key: string, type: 'float' | 'int' = 'float') {
+		const camel = obj[key];
+		const snake = obj[camelToSnake(key)];
+		let val = camel !== undefined ? camel : snake;
+		if (val === undefined || val === null || val === '') return 0;
+		if (typeof val === 'string' && val.trim() === '') return 0;
+		if (type === 'int') return parseInt(val, 10) || 0;
+		return parseFloat(val) || 0;
 	}
 
 	onMount(async () => {
