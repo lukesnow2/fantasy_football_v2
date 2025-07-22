@@ -16,40 +16,40 @@
 			id: 'scoring', 
 			name: 'Scoring Evolution', 
 			description: 'Average weekly scores and volatility over time',
-			yKey: 'avg_weekly_score',
-			secondaryKey: 'score_volatility',
+			yKey: 'avgWeeklyScore',
+			secondaryKey: 'scoreVolatility',
 			color: '#3b82f6'
 		},
 		{ 
 			id: 'competitiveness', 
 			name: 'League Competitiveness', 
 			description: 'Parity and close games metrics',
-			yKey: 'win_parity_score',
-			secondaryKey: 'close_games_score',
+			yKey: 'winParityScore',
+			secondaryKey: 'closeGamesScore',
 			color: '#ef4444'
 		},
 		{ 
 			id: 'activity', 
 			name: 'League Activity', 
 			description: 'Transactions and trade activity',
-			yKey: 'total_transactions',
-			secondaryKey: 'total_trades',
+			yKey: 'totalTransactions',
+			secondaryKey: 'totalTrades',
 			color: '#10b981'
 		},
 		{ 
 			id: 'players', 
 			name: 'Player Value Trends', 
 			description: 'Average fantasy points and draft positions',
-			yKey: 'avg_fantasy_points',
-			secondaryKey: 'avg_draft_position',
+			yKey: 'avgFantasyPoints',
+			secondaryKey: 'avgDraftPosition',
 			color: '#f59e0b'
 		},
 		{ 
 			id: 'spread', 
 			name: 'Scoring Distribution', 
 			description: 'High scores vs scoring spread',
-			yKey: 'highest_single_week_score',
-			secondaryKey: 'point_spread_score',
+			yKey: 'highestSingleWeekScore',
+			secondaryKey: 'pointSpreadScore',
 			color: '#8b5cf6'
 		}
 	];
@@ -100,6 +100,10 @@
 			default:
 				return [];
 		}
+		if (rawData.length > 0) {
+			console.log('First raw data object:', rawData[0]);
+			console.log('Keys in first raw data object:', Object.keys(rawData[0]));
+		}
 		
 		// Convert string values to numbers and ensure data integrity
 		const processedData = rawData.map((d: any) => {
@@ -120,7 +124,12 @@
 			
 			return processed;
 		});
-		
+		if (processedData.length > 0) {
+			console.log('First processed data object:', processedData[0]);
+			console.log('Keys in first processed data object:', Object.keys(processedData[0]));
+			console.log('metric.yKey:', metrics.find(m => m.id === metricId)?.yKey);
+			console.log('metric.secondaryKey:', metrics.find(m => m.id === metricId)?.secondaryKey);
+		}
 		console.log('Processed data for', metricId, ':', processedData.slice(0, 3));
 		return processedData;
 	}
@@ -151,8 +160,11 @@
 			.attr('transform', `translate(${margin.left},${margin.top})`);
 
 		// Scales
-		const xDomain = d3.extent(chartData, (d: any) => d.season_year) as [number, number];
-		const yDomain = d3.extent(chartData, (d: any) => d[currentMetric.yKey]) as [number, number];
+		const xDomain = d3.extent(chartData, (d: any) => getNumeric(d, 'seasonYear', 'int')) as [number, number];
+		const yDomain = d3.extent(chartData, (d: any) => getNumeric(d, currentMetric.yKey)) as [number, number];
+		const secondaryDomain = currentMetric.secondaryKey
+			? d3.extent(chartData, (d: any) => getNumeric(d, currentMetric.secondaryKey))
+			: null;
 		
 		console.log('X domain (years):', xDomain);
 		console.log('Y domain (values):', yDomain);
@@ -167,7 +179,7 @@
 			.range([height, 0]);
 
 		const secondaryScale = currentMetric.secondaryKey ? d3.scaleLinear()
-			.domain(d3.extent(chartData, (d: any) => d[currentMetric.secondaryKey]) as [number, number])
+			.domain(secondaryDomain as [number, number])
 			.nice()
 			.range([height, 0]) : null;
 
@@ -230,8 +242,8 @@
 
 	function createLineChart(g: any, data: any[], xScale: any, yScale: any, secondaryScale: any, metric: any) {
 		const line = d3.line<any>()
-			.x(d => xScale(d.season_year))
-			.y(d => yScale(d[metric.yKey]))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
+			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		// Main line
@@ -247,8 +259,8 @@
 			.data(data)
 			.enter().append('circle')
 			.attr('class', 'dot')
-			.attr('cx', (d: any) => xScale(d.season_year))
-			.attr('cy', (d: any) => yScale(d[metric.yKey]))
+			.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
+			.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('r', 4)
 			.attr('fill', metric.color)
 			.on('mouseover', function(event: any, d: any) {
@@ -265,13 +277,13 @@
 					.style('opacity', 0);
 
 				tooltip.transition().duration(200).style('opacity', 1);
-				const seasonYear = d.seasonYear || d.season_year;
-				const yVal = d[metric.yKey] || d[camelToSnake(metric.yKey)];
-				const secondaryVal = metric.secondaryKey ? (d[metric.secondaryKey] || d[camelToSnake(metric.secondaryKey)]) : null;
+				const seasonYear = getNumeric(d, 'seasonYear', 'int');
+				const yVal = getNumeric(d, metric.yKey);
+				const secondaryVal = metric.secondaryKey ? getNumeric(d, metric.secondaryKey) : null;
 				tooltip.html(`
 					<strong>${seasonYear}</strong><br/>
-					${metric.yKey.replace(/_/g, ' ')}: ${parseFloat(yVal).toFixed(1)}
-					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + (secondaryVal !== null ? parseFloat(secondaryVal).toFixed(1) : '') : ''}
+					${metric.yKey.replace(/_/g, ' ')}: ${yVal.toFixed(1)}
+					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + (secondaryVal !== null ? secondaryVal.toFixed(1) : '') : ''}
 				`)
 				.style('left', (event.pageX + 10) + 'px')
 				.style('top', (event.pageY - 10) + 'px');
@@ -283,8 +295,8 @@
 		// Secondary line if available
 		if (secondaryScale && metric.secondaryKey) {
 			const secondaryLine = d3.line<any>()
-				.x(d => xScale(d.season_year))
-				.y(d => secondaryScale(d[metric.secondaryKey]))
+				.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
+				.y(d => secondaryScale(getNumeric(d, metric.secondaryKey)))
 				.curve(d3.curveMonotoneX);
 
 			g.append('path')
@@ -299,9 +311,9 @@
 
 	function createAreaChart(g: any, data: any[], xScale: any, yScale: any, metric: any) {
 		const area = d3.area<any>()
-			.x(d => xScale(d.season_year))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.y0(height)
-			.y1(d => yScale(d[metric.yKey]))
+			.y1(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
@@ -312,8 +324,8 @@
 
 		// Add line on top
 		const line = d3.line<any>()
-			.x(d => xScale(d.season_year))
-			.y(d => yScale(d[metric.yKey]))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
+			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
@@ -331,10 +343,10 @@
 			.data(data)
 			.enter().append('rect')
 			.attr('class', 'bar')
-			.attr('x', (d: any) => xScale(d.season_year) - barWidth / 2)
-			.attr('y', (d: any) => yScale(d[metric.yKey]))
+			.attr('x', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')) - barWidth / 2)
+			.attr('y', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('width', barWidth)
-			.attr('height', (d: any) => height - yScale(d[metric.yKey]))
+			.attr('height', (d: any) => height - yScale(getNumeric(d, metric.yKey)))
 			.attr('fill', metric.color)
 			.attr('fill-opacity', 0.7)
 			.on('mouseover', function(event: any, d: any) {
@@ -352,8 +364,8 @@
 				.data(data)
 				.enter().append('circle')
 				.attr('class', 'dot')
-				.attr('cx', (d: any) => xScale(d.season_year))
-				.attr('cy', (d: any) => yScale(d[metric.yKey]))
+				.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
+				.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 				.attr('r', 6)
 				.attr('fill', metric.color)
 				.attr('fill-opacity', 0.7);
@@ -365,8 +377,8 @@
 			.data(data)
 			.enter().append('circle')
 			.attr('class', 'dot')
-			.attr('cx', (d: any) => yScale(d[metric.yKey]))
-			.attr('cy', (d: any) => secondaryScale(d[metric.secondaryKey]))
+			.attr('cx', (d: any) => yScale(getNumeric(d, metric.yKey)))
+			.attr('cy', (d: any) => secondaryScale(getNumeric(d, metric.secondaryKey)))
 			.attr('r', 6)
 			.attr('fill', metric.color)
 			.attr('fill-opacity', 0.7);
@@ -375,6 +387,16 @@
 	// Helper to convert camelCase to snake_case
 	function camelToSnake(str: string) {
 		return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+	}
+	// Helper to robustly get a numeric value from both camelCase and snake_case
+	function getNumeric(obj: any, key: string, type: 'float' | 'int' = 'float') {
+		const camel = obj[key];
+		const snake = obj[camelToSnake(key)];
+		let val = camel !== undefined ? camel : snake;
+		if (val === undefined || val === null || val === '') return 0;
+		if (typeof val === 'string' && val.trim() === '') return 0;
+		if (type === 'int') return parseInt(val, 10) || 0;
+		return parseFloat(val) || 0;
 	}
 
 	onMount(async () => {
