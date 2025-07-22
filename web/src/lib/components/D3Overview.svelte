@@ -160,7 +160,7 @@
 			.attr('transform', `translate(${margin.left},${margin.top})`);
 
 		// Scales
-		const xDomain = d3.extent(chartData, (d: any) => d.season_year) as [number, number];
+		const xDomain = d3.extent(chartData, (d: any) => getNumeric(d, 'seasonYear', 'int')) as [number, number];
 		const yDomain = d3.extent(chartData, (d: any) => d[currentMetric.yKey]) as [number, number];
 		
 		console.log('X domain (years):', xDomain);
@@ -239,7 +239,7 @@
 
 	function createLineChart(g: any, data: any[], xScale: any, yScale: any, secondaryScale: any, metric: any) {
 		const line = d3.line<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
@@ -256,7 +256,7 @@
 			.data(data)
 			.enter().append('circle')
 			.attr('class', 'dot')
-			.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('r', 4)
 			.attr('fill', metric.color)
@@ -274,7 +274,7 @@
 					.style('opacity', 0);
 
 				tooltip.transition().duration(200).style('opacity', 1);
-				const seasonYear = getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int');
+				const seasonYear = getNumeric(d, 'seasonYear', 'int');
 				const yVal = getNumeric(d, metric.yKey);
 				const secondaryVal = metric.secondaryKey ? getNumeric(d, metric.secondaryKey) : null;
 				tooltip.html(`
@@ -292,7 +292,7 @@
 		// Secondary line if available
 		if (secondaryScale && metric.secondaryKey) {
 			const secondaryLine = d3.line<any>()
-				.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+				.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
 				.y(d => secondaryScale(getNumeric(d, metric.secondaryKey)))
 				.curve(d3.curveMonotoneX);
 
@@ -308,7 +308,7 @@
 
 	function createAreaChart(g: any, data: any[], xScale: any, yScale: any, metric: any) {
 		const area = d3.area<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.y0(height)
 			.y1(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
@@ -321,7 +321,7 @@
 
 		// Add line on top
 		const line = d3.line<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.y(d => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
@@ -340,7 +340,7 @@
 			.data(data)
 			.enter().append('rect')
 			.attr('class', 'bar')
-			.attr('x', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')) - barWidth / 2)
+			.attr('x', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')) - barWidth / 2)
 			.attr('y', (d: any) => yScale(getNumeric(d, metric.yKey)))
 			.attr('width', barWidth)
 			.attr('height', (d: any) => height - yScale(getNumeric(d, metric.yKey)))
@@ -361,7 +361,7 @@
 				.data(data)
 				.enter().append('circle')
 				.attr('class', 'dot')
-				.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int') || getNumeric(d, 'season_year', 'int')))
+				.attr('cx', (d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
 				.attr('cy', (d: any) => yScale(getNumeric(d, metric.yKey)))
 				.attr('r', 6)
 				.attr('fill', metric.color)
