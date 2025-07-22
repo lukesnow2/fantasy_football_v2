@@ -161,7 +161,10 @@
 
 		// Scales
 		const xDomain = d3.extent(chartData, (d: any) => getNumeric(d, 'seasonYear', 'int')) as [number, number];
-		const yDomain = d3.extent(chartData, (d: any) => d[currentMetric.yKey]) as [number, number];
+		const yDomain = d3.extent(chartData, (d: any) => getNumeric(d, currentMetric.yKey)) as [number, number];
+		const secondaryDomain = currentMetric.secondaryKey
+			? d3.extent(chartData, (d: any) => getNumeric(d, currentMetric.secondaryKey))
+			: null;
 		
 		console.log('X domain (years):', xDomain);
 		console.log('Y domain (values):', yDomain);
@@ -176,7 +179,7 @@
 			.range([height, 0]);
 
 		const secondaryScale = currentMetric.secondaryKey ? d3.scaleLinear()
-			.domain(d3.extent(chartData, (d: any) => d[currentMetric.secondaryKey]) as [number, number])
+			.domain(secondaryDomain as [number, number])
 			.nice()
 			.range([height, 0]) : null;
 
