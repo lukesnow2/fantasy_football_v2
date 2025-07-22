@@ -73,24 +73,28 @@
 		let rawData = [];
 		switch (metricId) {
 			case 'scoring':
-				rawData = data.scoring_patterns || [];
+				rawData = data.scoringPatterns || data.scoring_patterns || [];
 				break;
 			case 'competitiveness':
 				rawData = data.competitiveness || [];
 				break;
 			case 'activity':
-				rawData = (data.league_evolution || []).map((d: any, i: number) => ({
+				const leagueEvolution = data.leagueEvolution || data.league_evolution || [];
+				const tradeActivity = data.tradeActivity || data.trade_activity || [];
+				rawData = leagueEvolution.map((d: any, i: number) => ({
 					...d,
-					total_trades: (data.trade_activity && data.trade_activity[i]) ? data.trade_activity[i].total_trades : 0
+					total_trades: (tradeActivity && tradeActivity[i]) ? (tradeActivity[i].totalTrades || tradeActivity[i].total_trades) : 0
 				}));
 				break;
 			case 'players':
-				rawData = data.player_trends || [];
+				rawData = data.playerTrends || data.player_trends || [];
 				break;
 			case 'spread':
-				rawData = (data.league_evolution || []).map((d: any, i: number) => ({
+				const leagueEvolutionSpread = data.leagueEvolution || data.league_evolution || [];
+				const competitivenessSpread = data.competitiveness || [];
+				rawData = leagueEvolutionSpread.map((d: any, i: number) => ({
 					...d,
-					point_spread_score: (data.competitiveness && data.competitiveness[i]) ? data.competitiveness[i].point_spread_score : 0
+					point_spread_score: (competitivenessSpread && competitivenessSpread[i]) ? (competitivenessSpread[i].pointSpreadScore || competitivenessSpread[i].point_spread_score) : 0
 				}));
 				break;
 			default:
@@ -261,10 +265,13 @@
 					.style('opacity', 0);
 
 				tooltip.transition().duration(200).style('opacity', 1);
+				const seasonYear = d.seasonYear || d.season_year;
+				const yVal = d[metric.yKey] || d[camelToSnake(metric.yKey)];
+				const secondaryVal = metric.secondaryKey ? (d[metric.secondaryKey] || d[camelToSnake(metric.secondaryKey)]) : null;
 				tooltip.html(`
-					<strong>${d.season_year}</strong><br/>
-					${metric.yKey.replace(/_/g, ' ')}: ${parseFloat(d[metric.yKey]).toFixed(1)}
-					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + parseFloat(d[metric.secondaryKey]).toFixed(1) : ''}
+					<strong>${seasonYear}</strong><br/>
+					${metric.yKey.replace(/_/g, ' ')}: ${parseFloat(yVal).toFixed(1)}
+					${metric.secondaryKey ? '<br/>' + metric.secondaryKey.replace(/_/g, ' ') + ': ' + (secondaryVal !== null ? parseFloat(secondaryVal).toFixed(1) : '') : ''}
 				`)
 				.style('left', (event.pageX + 10) + 'px')
 				.style('top', (event.pageY - 10) + 'px');
@@ -363,6 +370,11 @@
 			.attr('r', 6)
 			.attr('fill', metric.color)
 			.attr('fill-opacity', 0.7);
+	}
+
+	// Helper to convert camelCase to snake_case
+	function camelToSnake(str: string) {
+		return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 	}
 
 	onMount(async () => {
