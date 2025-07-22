@@ -43,15 +43,15 @@ export const GET: RequestHandler = async () => {
 			return 'Other Records';
 		};
 
-		// Format data for frontend
-		const formattedRecords = records.map(record => ({
-			record: record.record_name,
-			value: record.record_value,
-			holder: record.team_name ? `${record.manager_name} (${record.team_name})` : record.manager_name,
-			year: record.season_year?.toString() || '',
-			manager: record.manager_name,
-			team: record.team_name,
-			category: categorizeRecord(String(record.record_name || ''))
+		// Format data for frontend with camelCase fallback
+		const formattedRecords = records.map((record: any) => ({
+			record: record.recordName || record.record_name,
+			value: record.recordValue || record.record_value,
+			holder: (record.teamName || record.team_name) ? `${record.managerName || record.manager_name} (${record.teamName || record.team_name})` : (record.managerName || record.manager_name),
+			year: (record.seasonYear || record.season_year)?.toString() || '',
+			manager: record.managerName || record.manager_name,
+			team: record.teamName || record.team_name,
+			category: categorizeRecord(String(record.recordName || record.record_name || ''))
 		}));
 
 		// Group records by category

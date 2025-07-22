@@ -46,25 +46,25 @@ export const GET: RequestHandler = async ({ url }) => {
 		const draftResult = await db.execute(sql.raw(draftQuery));
 		// Convert snake_case to camelCase for frontend compatibility
 		data.drafts = Array.from(draftResult).map((pick: any) => ({
-			seasonYear: pick.season_year,
-			overallPick: pick.overall_pick,
-			roundNumber: pick.round_number,
-			pickInRound: pick.pick_in_round,
-			draftCost: pick.draft_cost,
-			isKeeperPick: pick.is_keeper_pick,
-			seasonPoints: pick.season_points,
-			fantasyGamesPlayed: pick.fantasy_games_played,
-			pointsPerWeek: pick.points_per_week,
-			managerName: pick.manager_name,
-			teamName: pick.team_name,
-			playerName: pick.player_name,
-			primaryPosition: pick.primary_position,
-			eligiblePositions: pick.eligible_positions,
-			nflTeam: pick.nfl_team,
-			jerseyNumber: pick.jersey_number,
-			rookieYear: pick.rookie_year,
-			leagueName: pick.league_name,
-			numTeams: pick.num_teams
+			seasonYear: pick.seasonYear || pick.season_year,
+			overallPick: pick.overallPick || pick.overall_pick,
+			roundNumber: pick.roundNumber || pick.round_number,
+			pickInRound: pick.pickInRound || pick.pick_in_round,
+			draftCost: pick.draftCost || pick.draft_cost,
+			isKeeperPick: pick.isKeeperPick || pick.is_keeper_pick,
+			seasonPoints: pick.seasonPoints || pick.season_points,
+			fantasyGamesPlayed: pick.fantasyGamesPlayed || pick.fantasy_games_played,
+			pointsPerWeek: pick.pointsPerWeek || pick.points_per_week,
+			managerName: pick.managerName || pick.manager_name,
+			teamName: pick.teamName || pick.team_name,
+			playerName: pick.playerName || pick.player_name,
+			primaryPosition: pick.primaryPosition || pick.primary_position,
+			eligiblePositions: pick.eligiblePositions || pick.eligible_positions,
+			nflTeam: pick.nflTeam || pick.nfl_team,
+			jerseyNumber: pick.jerseyNumber || pick.jersey_number,
+			rookieYear: pick.rookieYear || pick.rookie_year,
+			leagueName: pick.leagueName || pick.league_name,
+			numTeams: pick.numTeams || pick.num_teams
 		}));
 
 		// Draft analytics
@@ -95,19 +95,19 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			const seasonStatsResult = await db.execute(sql.raw(seasonStatsQuery));
 			data.seasonStats = Array.from(seasonStatsResult).map((stat: any) => ({
-				seasonYear: stat.season_year,
-				totalPicks: stat.total_picks,
-				numManagers: stat.num_managers,
-				avgSeasonPoints: stat.avg_season_points,
-				highestSeasonPoints: stat.highest_season_points,
-				lowestSeasonPoints: stat.lowest_season_points,
-				keeperPicks: stat.keeper_picks,
-				qbPicks: stat.qb_picks,
-				rbPicks: stat.rb_picks,
-				wrPicks: stat.wr_picks,
-				tePicks: stat.te_picks,
-				specialPicks: stat.special_picks,
-				avgDraftCost: stat.avg_draft_cost
+				seasonYear: stat.seasonYear || stat.season_year,
+				totalPicks: stat.totalPicks || stat.total_picks,
+				numManagers: stat.numManagers || stat.num_managers,
+				avgSeasonPoints: stat.avgSeasonPoints || stat.avg_season_points,
+				highestSeasonPoints: stat.highestSeasonPoints || stat.highest_season_points,
+				lowestSeasonPoints: stat.lowestSeasonPoints || stat.lowest_season_points,
+				keeperPicks: stat.keeperPicks || stat.keeper_picks,
+				qbPicks: stat.qbPicks || stat.qb_picks,
+				rbPicks: stat.rbPicks || stat.rb_picks,
+				wrPicks: stat.wrPicks || stat.wr_picks,
+				tePicks: stat.tePicks || stat.te_picks,
+				specialPicks: stat.specialPicks || stat.special_picks,
+				avgDraftCost: stat.avgDraftCost || stat.avg_draft_cost
 			}));
 
 			// Manager draft performance
@@ -132,16 +132,16 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			const managerStatsResult = await db.execute(sql.raw(managerStatsQuery));
 			data.managerPerformance = Array.from(managerStatsResult).map((manager: any) => ({
-				managerName: manager.manager_name,
-				...(manager.season_year && { seasonYear: manager.season_year }),
-				picksCount: manager.picks_count,
-				avgPointsPerPick: manager.avg_points_per_pick,
-				totalDraftPoints: manager.total_draft_points,
-				avgPickPosition: manager.avg_pick_position,
-				earliestPick: manager.earliest_pick,
-				latestPick: manager.latest_pick,
-				keeperCount: manager.keeper_count,
-				avgDraftCost: manager.avg_draft_cost
+				managerName: manager.managerName || manager.manager_name,
+				...((manager.seasonYear || manager.season_year) && { seasonYear: manager.seasonYear || manager.season_year }),
+				picksCount: manager.picksCount || manager.picks_count,
+				avgPointsPerPick: manager.avgPointsPerPick || manager.avg_points_per_pick,
+				totalDraftPoints: manager.totalDraftPoints || manager.total_draft_points,
+				avgPickPosition: manager.avgPickPosition || manager.avg_pick_position,
+				earliestPick: manager.earliestPick || manager.earliest_pick,
+				latestPick: manager.latestPick || manager.latest_pick,
+				keeperCount: manager.keeperCount || manager.keeper_count,
+				avgDraftCost: manager.avgDraftCost || manager.avg_draft_cost
 			}));
 
 			// Best and worst picks by season
@@ -179,14 +179,14 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			const bestWorstResult = await db.execute(sql.raw(bestWorstQuery));
 			data.bestWorstPicks = Array.from(bestWorstResult).map((pick: any) => ({
-				seasonYear: pick.season_year,
-				overallPick: pick.overall_pick,
-				roundNumber: pick.round_number,
-				seasonPoints: pick.season_points,
-				managerName: pick.manager_name,
-				playerName: pick.player_name,
-				primaryPosition: pick.primary_position,
-				pickType: pick.pick_type
+				seasonYear: pick.seasonYear || pick.season_year,
+				overallPick: pick.overallPick || pick.overall_pick,
+				roundNumber: pick.roundNumber || pick.round_number,
+				seasonPoints: pick.seasonPoints || pick.season_points,
+				managerName: pick.managerName || pick.manager_name,
+				playerName: pick.playerName || pick.player_name,
+				primaryPosition: pick.primaryPosition || pick.primary_position,
+				pickType: pick.pickType || pick.pick_type
 			}));
 
 			// Position trends over time
@@ -209,13 +209,13 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			const positionTrendsResult = await db.execute(sql.raw(positionTrendsQuery));
 			data.positionTrends = Array.from(positionTrendsResult).map((trend: any) => ({
-				seasonYear: trend.season_year,
-				primaryPosition: trend.primary_position,
-				picksCount: trend.picks_count,
-				avgPickPosition: trend.avg_pick_position,
-				avgSeasonPoints: trend.avg_season_points,
-				earliestPositionPick: trend.earliest_position_pick,
-				latestPositionPick: trend.latest_position_pick
+				seasonYear: trend.seasonYear || trend.season_year,
+				primaryPosition: trend.primaryPosition || trend.primary_position,
+				picksCount: trend.picksCount || trend.picks_count,
+				avgPickPosition: trend.avgPickPosition || trend.avg_pick_position,
+				avgSeasonPoints: trend.avgSeasonPoints || trend.avg_season_points,
+				earliestPositionPick: trend.earliestPositionPick || trend.earliest_position_pick,
+				latestPositionPick: trend.latestPositionPick || trend.latest_position_pick
 			}));
 		}
 
@@ -246,30 +246,34 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			const boardResult = await db.execute(sql.raw(boardQuery));
 			data.draftBoard = Array.from(boardResult).map((pick: any) => ({
-				overallPick: pick.overall_pick,
-				roundNumber: pick.round_number,
-				pickInRound: pick.pick_in_round,
-				seasonPoints: pick.season_points,
-				draftCost: pick.draft_cost,
-				isKeeperPick: pick.is_keeper_pick,
-				managerName: pick.manager_name,
-				teamName: pick.team_name,
-				playerName: pick.player_name,
-				primaryPosition: pick.primary_position,
-				nflTeam: pick.nfl_team,
-				numTeams: pick.num_teams
+				overallPick: pick.overallPick || pick.overall_pick,
+				roundNumber: pick.roundNumber || pick.round_number,
+				pickInRound: pick.pickInRound || pick.pick_in_round,
+				seasonPoints: pick.seasonPoints || pick.season_points,
+				draftCost: pick.draftCost || pick.draft_cost,
+				isKeeperPick: pick.isKeeperPick || pick.is_keeper_pick,
+				managerName: pick.managerName || pick.manager_name,
+				teamName: pick.teamName || pick.team_name,
+				playerName: pick.playerName || pick.player_name,
+				primaryPosition: pick.primaryPosition || pick.primary_position,
+				nflTeam: pick.nflTeam || pick.nfl_team,
+				numTeams: pick.numTeams || pick.num_teams
 			}));
 		}
 
 		// Available seasons
 		const seasonsQuery = `
-			SELECT DISTINCT season_year
-			FROM edw.fact_draft
-			ORDER BY season_year DESC
+			SELECT DISTINCT fd.season_year
+			FROM edw.fact_draft fd
+			WHERE fd.season_year IS NOT NULL
+			ORDER BY fd.season_year DESC
 		`;
 
 		const seasonsResult = await db.execute(sql.raw(seasonsQuery));
-		data.availableSeasons = Array.from(seasonsResult).map(row => row.season_year);
+		console.log('Seasons query result:', Array.from(seasonsResult));
+		console.log('First row keys:', Object.keys(Array.from(seasonsResult)[0] || {}));
+		data.availableSeasons = Array.from(seasonsResult).map((row: any) => row.seasonYear || row.season_year);
+		console.log('Available seasons from API:', data.availableSeasons);
 
 		// Meta information
 		data.meta = {

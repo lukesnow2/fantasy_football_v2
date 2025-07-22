@@ -95,16 +95,64 @@ export const GET: RequestHandler = async ({ url }) => {
 		const tiersResult = await db.execute(sql.raw(tiersQuery));
 		const tiers = Array.from(tiersResult);
 
-		console.log(`Returning ${hallOfFameData.length} Hall of Fame entries with complete column set`);
+		// Convert snake_case to camelCase for frontend compatibility
+		const hallOfFameArray = hallOfFameData.map((entry: any) => ({
+			managerName: entry.managerName || entry.manager_name,
+			totalSeasons: entry.totalSeasons || entry.total_seasons,
+			championshipsWon: entry.championshipsWon || entry.championships_won,
+			careerWins: entry.careerWins || entry.career_wins,
+			careerLosses: entry.careerLosses || entry.career_losses,
+			careerTies: entry.careerTies || entry.career_ties,
+			careerWinPercentage: entry.careerWinPercentage || entry.career_win_percentage,
+			totalPointsScored: entry.totalPointsScored || entry.total_points_scored,
+			avgPointsPerGame: entry.avgPointsPerGame || entry.avg_points_per_game,
+			playoffAppearances: entry.playoffAppearances || entry.playoff_appearances,
+			seasonConsistencyScore: entry.seasonConsistencyScore || entry.season_consistency_score,
+			hallOfFameIndex: entry.hallOfFameIndex || entry.hall_of_fame_index,
+			hallOfFameRank: entry.hallOfFameRank || entry.hall_of_fame_rank
+		}));
+
+		// Convert analytics to camelCase
+		const camelCaseAnalytics = {
+			totalManagers: analytics.totalManagers || analytics.total_managers,
+			avgChampionships: analytics.avgChampionships || analytics.avg_championships,
+			avgWinPercentage: analytics.avgWinPercentage || analytics.avg_win_percentage,
+			avgSeasonsPlayed: analytics.avgSeasonsPlayed || analytics.avg_seasons_played,
+			avgCareerPoints: analytics.avgCareerPoints || analytics.avg_career_points,
+			avgPointsPerGame: analytics.avgPointsPerGame || analytics.avg_points_per_game,
+			avgHallOfFameIndex: analytics.avgHallOfFameIndex || analytics.avg_hall_of_fame_index,
+			totalCareerWins: analytics.totalCareerWins || analytics.total_career_wins,
+			totalCareerLosses: analytics.totalCareerLosses || analytics.total_career_losses,
+			totalCareerTies: analytics.totalCareerTies || analytics.total_career_ties,
+			highestWinPercentage: analytics.highestWinPercentage || analytics.highest_win_percentage,
+			lowestWinPercentage: analytics.lowestWinPercentage || analytics.lowest_win_percentage,
+			highestHallOfFameIndex: analytics.highestHallOfFameIndex || analytics.highest_hall_of_fame_index,
+			lowestHallOfFameIndex: analytics.lowestHallOfFameIndex || analytics.lowest_hall_of_fame_index
+		};
+
+		// Convert tiers to camelCase
+		const camelCaseTiers = tiers.map((tier: any) => ({
+			tier: tier.tier,
+			managerCount: tier.managerCount || tier.manager_count,
+			avgWinPct: tier.avgWinPct || tier.avg_win_pct,
+			avgChampionships: tier.avgChampionships || tier.avg_championships,
+			avgSeasons: tier.avgSeasons || tier.avg_seasons,
+			avgHallOfFameIndex: tier.avgHallOfFameIndex || tier.avg_hall_of_fame_index,
+			avgPointsPerGame: tier.avgPointsPerGame || tier.avg_points_per_game,
+			totalWins: tier.totalWins || tier.total_wins,
+			totalLosses: tier.totalLosses || tier.total_losses
+		}));
+
+		console.log(`Returning ${hallOfFameArray.length} Hall of Fame entries with complete column set`);
 
 		return json({
-			hall_of_fame: hallOfFameData,
-			analytics,
-			tiers,
+			hallOfFame: hallOfFameArray,
+			analytics: camelCaseAnalytics,
+			tiers: camelCaseTiers,
 			meta: {
 				manager,
 				limit,
-				total_returned: hallOfFameData.length
+				total_returned: hallOfFameArray.length
 			}
 		});
 

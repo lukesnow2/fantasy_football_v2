@@ -80,14 +80,14 @@
 				>
 					<!-- Profile Picture -->
 					{#if manager.managerName}
-						<ManagerProfilePicture 
+					<ManagerProfilePicture 
 							managerName={manager.managerName}
-							size="small"
-							className="transition-all duration-200 
+						size="small"
+						className="transition-all duration-200 
 								{manager.managerName === selectedManagerName 
-									? 'ring-2 ring-blue-400 scale-110' 
-									: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
-						/>
+								? 'ring-2 ring-blue-400 scale-110' 
+								: 'ring-1 ring-slate-600 hover:ring-slate-500 hover:scale-105'}"
+					/>
 					{/if}
 					
 
@@ -103,11 +103,11 @@
 					<div class="flex items-center gap-6">
 						<!-- Large Profile Picture -->
 						{#if currentManager.managerName}
-							<ManagerProfilePicture 
+						<ManagerProfilePicture 
 								managerName={currentManager.managerName}
-								size="medium"
-								className="ring-2 ring-slate-600"
-							/>
+							size="medium"
+							className="ring-2 ring-slate-600"
+						/>
 						{/if}
 						
 						<!-- Manager Info -->

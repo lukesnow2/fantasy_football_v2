@@ -72,7 +72,7 @@
 		return 'text-slate-400';
 	}
 
-	$: managers = hallOfFameData?.hall_of_fame || [];
+	$: managers = hallOfFameData?.hallOfFame || [];
 	$: analytics = hallOfFameData?.analytics || {};
 	$: tiers = hallOfFameData?.tiers || [];
 </script>
@@ -242,10 +242,10 @@
 									
 									<div class="flex items-center space-x-4">
 										{#if manager.managerName}
-											<ManagerProfilePicture 
+										<ManagerProfilePicture 
 												managerName={manager.managerName} 
-												className="w-16 h-16" 
-											/>
+											className="w-16 h-16" 
+										/>
 										{:else}
 											<div class="w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center">
 												<span class="text-white font-bold text-lg">?</span>

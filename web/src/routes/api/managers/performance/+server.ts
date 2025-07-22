@@ -45,7 +45,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		const statsResult = await db.execute(sql.raw(managerStatsQuery));
 		const managerStats = Array.from(statsResult);
-		
+
 		// Debug: Log the raw data to see what we're getting
 		console.log('Raw manager stats from database:', managerStats);
 

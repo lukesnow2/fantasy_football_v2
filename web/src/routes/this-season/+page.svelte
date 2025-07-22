@@ -88,15 +88,29 @@
 
 	onMount(async () => {
 		try {
+			console.log('This Season page loading - calling standings API...');
 			// Fetch current season standings
 			const standingsResponse = await fetch('/api/standings?season=2024');
+			console.log('Standings API response status:', standingsResponse.status);
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();
+				console.log('Standings data received:', standingsData);
+				console.log('Debug info:', standingsData.debug);
+				console.log('Playoff games:', standingsData.debug.playoffGames);
+				console.log('Championship game found:', standingsData.debug.championshipGameFound);
+				console.log('Playoff standings entries:', standingsData.debug.playoffStandingsEntries);
+				console.log('Standings array:', standingsData.standings);
+				console.log('Standings count:', standingsData.standings.length);
+				console.log('First few standings:', standingsData.standings.slice(0, 3));
+				console.log('All ranks in standings:', standingsData.standings.map((s: any) => s.rank).sort((a: any, b: any) => a - b));
+				console.log('Teams with playoff tiers:', standingsData.standings.map((s: any) => `${s.rank}: ${s.teamName} (${s.playoffTier})`));
 				standings = standingsData.standings;
 				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
 				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
+			} else {
+				console.error('Standings API failed:', standingsResponse.status, standingsResponse.statusText);
 			}
 
 			// Fetch recent transactions
@@ -373,10 +387,10 @@
 								<div class="space-y-2">
 									{#each standings.filter(team => team.playoffTier === 'Champion' || team.playoffTier === 'Runner-up') as team}
 										<div class="flex items-center justify-between p-3 rounded-lg 
-											{team.playoffTier === 'Champion' ? 'bg-amber-500 bg-opacity-20 border border-amber-500 border-opacity-40' : 'bg-slate-600 bg-opacity-40'}">
+											{team.playoffTier === 'Champion' ? 'bg-amber-200/20 border border-amber-300/30' : 'bg-slate-600 bg-opacity-40'}">
 											<div class="flex items-center space-x-4">
 												<div class="text-2xl font-bold 
-													{team.playoffTier === 'Champion' ? 'text-amber-400' : 'text-slate-300'}">
+													{team.playoffTier === 'Champion' ? 'text-amber-300' : 'text-slate-300'}">
 													{team.rank}
 												</div>
 												<div>
@@ -456,36 +470,37 @@
 								</div>
 							{/if}
 
-							<!-- Non-Playoff Teams -->
-							{#if standings.filter(team => team.playoffTier === 'Regular Season').length > 0}
-								<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
-									<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
-										📋 Regular Season Finish
-									</h3>
-									<div class="space-y-2">
-										{#each standings.filter(team => team.playoffTier === 'Regular Season') as team}
-											<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
-												<div class="flex items-center space-x-4">
-													<div class="text-xl font-bold text-slate-400">{team.rank}</div>
-													<div>
-														<div class="font-semibold text-white flex items-center">
-															{team.teamName}
-															{#if team.isLastPlaceLoser}
-																<span class="ml-2 text-2xl" title="Last Place Game Loser">💩</span>
-															{/if}
-														</div>
-														<div class="text-slate-400 text-sm">{team.managerName}</div>
+							<!-- Final Standings: Consolation Bracket (Non-Playoff Teams) -->
+							<div class="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
+								<h3 class="text-lg font-bold text-slate-400 mb-3 flex items-center">
+									📋 Final Standings (Consolation Bracket)
+								</h3>
+								<div class="space-y-2">
+									{#each standings.filter(team => team.rank > 6).sort((a, b) => a.rank - b.rank) as team}
+										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
+											<div class="flex items-center space-x-4">
+												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
+												<div>
+													<div class="font-semibold text-white flex items-center">
+														{team.teamName}
+														{#if team.isLastPlaceLoser}
+															<span class="ml-2 text-2xl" title="Last Place Game Loser">💩</span>
+														{/if}
 													</div>
-												</div>
-												<div class="text-right">
-													<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
-													<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+													<div class="text-slate-400 text-sm">{team.managerName}</div>
+													{#if team.playoffTier && team.playoffTier !== 'Regular Season'}
+														<div class="text-xs text-slate-500 font-medium">{team.playoffTier}</div>
+													{/if}
 												</div>
 											</div>
-										{/each}
-									</div>
+											<div class="text-right">
+												<div class="font-semibold text-white">{team.wins}-{team.losses}</div>
+												<div class="text-slate-400 text-sm">{parseFloat(team.pointsFor).toFixed(1)} PF</div>
+											</div>
+										</div>
+									{/each}
 								</div>
-							{/if}
+							</div>
 						</div>
 					{:else}
 						<!-- Regular Season Standings -->
@@ -731,13 +746,26 @@
 							<span class="text-slate-300">3rd Place:</span>
 							<span class="text-orange-400 font-medium">{standings[2]?.teamName || 'TBD'}</span>
 						</div>
+						<div class="flex justify-between">
+							<span class="text-slate-300">Consolation Winner:</span>
+							<span class="text-blue-400 font-medium">{standings[6]?.teamName || 'TBD'}</span>
+						</div>
 					</div>
 					
 					<div class="mt-4 pt-3 border-t border-green-500/20">
-						<div class="text-xs text-slate-400 mb-2">Final Rankings:</div>
+						<div class="text-xs text-slate-400 mb-2">Playoff Rankings:</div>
 						<div class="space-y-1">
-							{#each standings.slice(0, 5) as team, i}
+							{#each standings.slice(0, 6) as team, i}
 								<div class="text-xs text-white">#{i + 1} {team.teamName}</div>
+							{/each}
+						</div>
+					</div>
+					
+					<div class="mt-3 pt-3 border-t border-slate-500/20">
+						<div class="text-xs text-slate-400 mb-2">Consolation Rankings:</div>
+						<div class="space-y-1">
+							{#each standings.filter(team => team.rank > 6).slice(0, 4) as team, i}
+								<div class="text-xs text-white">#{team.rank} {team.teamName}</div>
 							{/each}
 						</div>
 					</div>
