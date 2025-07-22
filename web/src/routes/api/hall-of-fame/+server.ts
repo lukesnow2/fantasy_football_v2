@@ -24,7 +24,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				season_consistency_score,
 				hall_of_fame_index,
 				hall_of_fame_rank
-			FROM vw_manager_hall_of_fame
+			FROM edw.vw_manager_hall_of_fame
 			WHERE 1=1
 		`;
 
@@ -56,7 +56,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				MIN(career_win_percentage) as lowest_win_percentage,
 				MAX(hall_of_fame_index) as highest_hall_of_fame_index,
 				MIN(hall_of_fame_index) as lowest_hall_of_fame_index
-			FROM vw_manager_hall_of_fame
+			FROM edw.vw_manager_hall_of_fame
 		`;
 
 		const analyticsResult = await db.execute(sql.raw(analyticsQuery));
@@ -80,7 +80,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				AVG(avg_points_per_game) as avg_points_per_game,
 				SUM(career_wins) as total_wins,
 				SUM(career_losses) as total_losses
-			FROM vw_manager_hall_of_fame
+			FROM edw.vw_manager_hall_of_fame
 			GROUP BY 
 				CASE 
 					WHEN hall_of_fame_rank <= 3 THEN 'Hall of Fame Elite'

@@ -62,6 +62,13 @@ export const GET: RequestHandler = async () => {
 			ORDER BY hall_of_fame_rank ASC
 			LIMIT 1
 		`));
+		
+		// Debug logging for Hall of Fame query
+		console.log('=== DEBUG: Hall of Fame Query ===');
+		console.log('Hall of Fame Result:', Array.from(hallOfFameLeaderResult));
+		console.log('Hall of Fame First Row:', Array.from(hallOfFameLeaderResult)[0]);
+		console.log('Hall of Fame Columns:', Array.from(hallOfFameLeaderResult)[0] ? Object.keys(Array.from(hallOfFameLeaderResult)[0]) : 'No rows');
+		
 		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.manager_name || 'TBD';
 
 		// Query for biggest rivalry (most games played between two managers)
@@ -71,6 +78,14 @@ export const GET: RequestHandler = async () => {
 			ORDER BY total_matchups DESC
 			LIMIT 1
 		`));
+		
+		// Debug logging for Rivalry query
+		console.log('=== DEBUG: Biggest Rivalry Query ===');
+		console.log('Rivalry Result:', Array.from(biggestRivalryResult));
+		console.log('Rivalry First Row:', Array.from(biggestRivalryResult)[0]);
+		console.log('Rivalry Columns:', Array.from(biggestRivalryResult)[0] ? Object.keys(Array.from(biggestRivalryResult)[0]) : 'No rows');
+		console.log('=== END DEBUG ===');
+		
 		const rivalryRow = Array.from(biggestRivalryResult)[0];
 		const biggestRivalry = rivalryRow ? `${rivalryRow.manager_a_name} vs ${rivalryRow.manager_b_name}` : 'Analyzing...';
 
