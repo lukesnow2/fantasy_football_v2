@@ -16,40 +16,40 @@
 			id: 'scoring', 
 			name: 'Scoring Evolution', 
 			description: 'Average weekly scores and volatility over time',
-			yKey: 'avg_weekly_score',
-			secondaryKey: 'score_volatility',
+			yKey: 'avgWeeklyScore',
+			secondaryKey: 'scoreVolatility',
 			color: '#3b82f6'
 		},
 		{ 
 			id: 'competitiveness', 
 			name: 'League Competitiveness', 
 			description: 'Parity and close games metrics',
-			yKey: 'win_parity_score',
-			secondaryKey: 'close_games_score',
+			yKey: 'winParityScore',
+			secondaryKey: 'closeGamesScore',
 			color: '#ef4444'
 		},
 		{ 
 			id: 'activity', 
 			name: 'League Activity', 
 			description: 'Transactions and trade activity',
-			yKey: 'total_transactions',
-			secondaryKey: 'total_trades',
+			yKey: 'totalTransactions',
+			secondaryKey: 'totalTrades',
 			color: '#10b981'
 		},
 		{ 
 			id: 'players', 
 			name: 'Player Value Trends', 
 			description: 'Average fantasy points and draft positions',
-			yKey: 'avg_fantasy_points',
-			secondaryKey: 'avg_draft_position',
+			yKey: 'avgFantasyPoints',
+			secondaryKey: 'avgDraftPosition',
 			color: '#f59e0b'
 		},
 		{ 
 			id: 'spread', 
 			name: 'Scoring Distribution', 
 			description: 'High scores vs scoring spread',
-			yKey: 'highest_single_week_score',
-			secondaryKey: 'point_spread_score',
+			yKey: 'highestSingleWeekScore',
+			secondaryKey: 'pointSpreadScore',
 			color: '#8b5cf6'
 		}
 	];
