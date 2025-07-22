@@ -465,19 +465,19 @@
 						
 						<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
 							<div class="text-center">
-								<div class="text-3xl font-bold text-blue-400">{h2hData.analytics.overview.total_rivalries || 0}</div>
+								<div class="text-3xl font-bold text-blue-400">{h2hData.analytics.overview.totalRivalries || h2hData.analytics.overview.total_rivalries || 0}</div>
 								<div class="text-slate-400">Total Rivalries</div>
 							</div>
 							<div class="text-center">
-								<div class="text-3xl font-bold text-green-400">{parseFloat(h2hData.analytics.overview.avg_matchups_per_rivalry || 0).toFixed(1)}</div>
+								<div class="text-3xl font-bold text-green-400">{parseFloat(h2hData.analytics.overview.avgMatchupsPerRivalry || h2hData.analytics.overview.avg_matchups_per_rivalry || 0).toFixed(1)}</div>
 								<div class="text-slate-400">Avg Games</div>
 							</div>
 							<div class="text-center">
-								<div class="text-3xl font-bold text-amber-400">{h2hData.analytics.overview.longest_rivalry_seasons || 0}</div>
+								<div class="text-3xl font-bold text-amber-400">{h2hData.analytics.overview.longestRivalrySeasons || h2hData.analytics.overview.longest_rivalry_seasons || 0}</div>
 								<div class="text-slate-400">Longest Rivalry</div>
 							</div>
 							<div class="text-center">
-								<div class="text-3xl font-bold text-purple-400">{h2hData.analytics.overview.championship_rivalries || 0}</div>
+								<div class="text-3xl font-bold text-purple-400">{h2hData.analytics.overview.championshipRivalries || h2hData.analytics.overview.championship_rivalries || 0}</div>
 								<div class="text-slate-400">Championship Battles</div>
 							</div>
 						</div>
@@ -485,7 +485,7 @@
 				{/if}
 
 				<!-- Top Rivalries -->
-				{#if h2hData.analytics?.top_rivalries}
+				{#if h2hData.analytics?.topRivalries}
 					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
@@ -493,44 +493,44 @@
 						</h2>
 						
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-							{#each h2hData.analytics.top_rivalries.slice(0, 6) as rivalry}
+							{#each h2hData.analytics.topRivalries.slice(0, 6) as rivalry}
 								<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 border-amber-400">
 									<div class="flex items-center justify-between mb-3">
 										<div class="font-bold text-white text-lg">
-											{rivalry.manager_a_name} vs {rivalry.manager_b_name}
+											{rivalry.managerAName || rivalry.manager_a_name} vs {rivalry.managerBName || rivalry.manager_b_name}
 										</div>
-										<span class="text-xs px-2 py-1 rounded {getRivalryTierColor(rivalry.rivalry_tier)} bg-slate-600/50">
-											{rivalry.rivalry_tier}
+										<span class="text-xs px-2 py-1 rounded {getRivalryTierColor(rivalry.rivalryTier || rivalry.rivalry_tier)} bg-slate-600/50">
+											{rivalry.rivalryTier || rivalry.rivalry_tier}
 										</span>
 									</div>
 									
 									<div class="grid grid-cols-2 gap-4 text-sm">
 										<div>
 											<div class="text-slate-400">Total Games</div>
-											<div class="font-bold text-white">{rivalry.total_matchups}</div>
+											<div class="font-bold text-white">{rivalry.totalMatchups || rivalry.total_matchups}</div>
 										</div>
 										<div>
 											<div class="text-slate-400">Seasons Together</div>
-											<div class="font-bold text-white">{rivalry.seasons_played_together}</div>
+											<div class="font-bold text-white">{rivalry.seasonsPlayedTogether || rivalry.seasons_played_together}</div>
 										</div>
 										<div>
 											<div class="text-slate-400">Series Leader</div>
-											<div class="font-bold text-green-400">{rivalry.series_leader}</div>
+											<div class="font-bold text-green-400">{rivalry.seriesLeader || rivalry.series_leader}</div>
 										</div>
 										<div>
 											<div class="text-slate-400">Record</div>
-											<div class="font-mono font-bold text-white">{rivalry.series_record}</div>
+											<div class="font-mono font-bold text-white">{rivalry.seriesRecord || rivalry.series_record}</div>
 										</div>
 									</div>
 									
-									{#if rivalry.playoff_matchups > 0 || rivalry.championship_matchups > 0}
+									{#if (rivalry.playoffMatchups || rivalry.playoff_matchups) > 0 || (rivalry.championshipMatchups || rivalry.championship_matchups) > 0}
 										<div class="mt-3 pt-3 border-t border-slate-600">
 											<div class="flex items-center space-x-4 text-xs">
-												{#if rivalry.championship_matchups > 0}
-													<span class="text-amber-400">🏆 {rivalry.championship_matchups} Title Games</span>
+												{#if (rivalry.championshipMatchups || rivalry.championship_matchups) > 0}
+													<span class="text-amber-400">🏆 {rivalry.championshipMatchups || rivalry.championship_matchups} Title Games</span>
 												{/if}
-												{#if rivalry.playoff_matchups > 0}
-													<span class="text-blue-400">🏆 {rivalry.playoff_matchups} Playoff Games</span>
+												{#if (rivalry.playoffMatchups || rivalry.playoff_matchups) > 0}
+													<span class="text-blue-400">🏆 {rivalry.playoffMatchups || rivalry.playoff_matchups} Playoff Games</span>
 												{/if}
 											</div>
 										</div>
