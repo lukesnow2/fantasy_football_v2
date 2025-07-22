@@ -57,7 +57,7 @@ export const GET: RequestHandler = async () => {
 		// Query for all-time leader (Hall of Fame #1)
 		const hallOfFameLeaderResult = await db.execute(sql.raw(`
 			SELECT manager_name
-			FROM edw.vw_hall_of_fame
+			FROM vw_manager_hall_of_fame
 			WHERE hall_of_fame_rank = 1
 			ORDER BY hall_of_fame_rank ASC
 			LIMIT 1
@@ -67,7 +67,7 @@ export const GET: RequestHandler = async () => {
 		// Query for biggest rivalry (most games played between two managers)
 		const biggestRivalryResult = await db.execute(sql.raw(`
 			SELECT manager_a_name, manager_b_name, total_matchups
-			FROM edw.vw_head_to_head
+			FROM edw.mart_manager_h2h
 			ORDER BY total_matchups DESC
 			LIMIT 1
 		`));
