@@ -387,10 +387,10 @@
 								<div class="space-y-2">
 									{#each standings.filter(team => team.playoffTier === 'Champion' || team.playoffTier === 'Runner-up') as team}
 										<div class="flex items-center justify-between p-3 rounded-lg 
-											{team.playoffTier === 'Champion' ? 'bg-amber-500 bg-opacity-20 border border-amber-500 border-opacity-40' : 'bg-slate-600 bg-opacity-40'}">
+											{team.playoffTier === 'Champion' ? 'bg-amber-200/20 border border-amber-300/30' : 'bg-slate-600 bg-opacity-40'}">
 											<div class="flex items-center space-x-4">
 												<div class="text-2xl font-bold 
-													{team.playoffTier === 'Champion' ? 'text-amber-400' : 'text-slate-300'}">
+													{team.playoffTier === 'Champion' ? 'text-amber-300' : 'text-slate-300'}">
 													{team.rank}
 												</div>
 												<div>
