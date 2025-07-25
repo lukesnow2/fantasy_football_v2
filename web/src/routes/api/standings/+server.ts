@@ -258,7 +258,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
 				JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
 				JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-				WHERE dl.season_year = 2024
+				WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
 				  AND fm.is_consolation = true
 				ORDER BY fm.week_key DESC
 			`;
@@ -300,7 +300,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_league dl ON fm.league_key = dl.league_key
 					JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
 					JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-					WHERE dl.season_year = 2024
+					WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
 					  AND fm.week_key >= 14
 					ORDER BY fm.week_key DESC
 				`;
@@ -321,7 +321,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_league dl ON fm.league_key = dl.league_key
 					JOIN edw.dim_team dt1 ON fm.team1_key = dt1.team_key
 					JOIN edw.dim_team dt2 ON fm.team2_key = dt2.team_key
-					WHERE dl.season_year = 2024
+					WHERE dl.season_year = (SELECT MAX(season_year) FROM edw.fact_draft)
 					ORDER BY fm.week_key DESC
 				`;
 				

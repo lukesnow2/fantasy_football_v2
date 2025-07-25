@@ -3,8 +3,10 @@ import { db } from '$lib/server/db';
 import { dimLeague, dimManager, factTransaction, factMatchup, factTeamPerformance } from '$lib/server/db/schema';
 import { count, countDistinct, max, min, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
+import { sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
+	console.log('=== API ENDPOINT CALLED ===');
 	try {
 		// Get basic league counts
 		const leagueStats = await db
@@ -53,6 +55,87 @@ export const GET: RequestHandler = async () => {
 			})
 			.from(factTeamPerformance);
 
+		// Query for all-time leader (Hall of Fame #1)
+		const hallOfFameLeaderResult = await db.execute(sql.raw(`
+			SELECT manager_name
+			FROM vw_manager_hall_of_fame
+			WHERE hall_of_fame_rank = 1
+			ORDER BY hall_of_fame_rank ASC
+			LIMIT 1
+		`));
+		
+		// Debug logging for Hall of Fame query
+		console.log('=== DEBUG: Hall of Fame Query ===');
+		console.log('Hall of Fame Result:', Array.from(hallOfFameLeaderResult));
+		console.log('Hall of Fame First Row:', Array.from(hallOfFameLeaderResult)[0]);
+		console.log('Hall of Fame Columns:', Array.from(hallOfFameLeaderResult)[0] ? Object.keys(Array.from(hallOfFameLeaderResult)[0]) : 'No rows');
+		
+		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.managerName || 'TBD';
+
+		// Query for biggest rivalry (most games played between two managers)
+		const biggestRivalryResult = await db.execute(sql.raw(`
+			SELECT manager_a_name, manager_b_name, total_matchups
+			FROM edw.mart_manager_h2h
+			ORDER BY total_matchups DESC
+			LIMIT 1
+		`));
+		
+		// Debug logging for Rivalry query
+		console.log('=== DEBUG: Biggest Rivalry Query ===');
+		console.log('Rivalry Result:', Array.from(biggestRivalryResult));
+		console.log('Rivalry First Row:', Array.from(biggestRivalryResult)[0]);
+		console.log('Rivalry Columns:', Array.from(biggestRivalryResult)[0] ? Object.keys(Array.from(biggestRivalryResult)[0]) : 'No rows');
+		console.log('=== END DEBUG ===');
+		
+		const rivalryRow = Array.from(biggestRivalryResult)[0];
+		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';
+
+		// Get current season data directly from database
+		let currentSeasonData = {
+			currentWeek: 1,
+			isSeasonComplete: false,
+			playoffStatus: 'Regular Season',
+			tradeDeadlineStatus: 'Active'
+		};
+
+		try {
+			// Get the latest season and its current week
+			const latestSeasonResult = await db.execute(sql.raw(`
+				SELECT MAX(season_year) as latest_season 
+				FROM edw.fact_draft
+			`));
+			const latestSeason = parseInt(latestSeasonResult[0]?.latestSeason?.toString() || '2024');
+			
+			// Get current week for the latest season
+			const currentWeekResult = await db.execute(sql.raw(`
+				SELECT MAX(week_number) as current_week 
+				FROM edw.dim_week dw
+				JOIN edw.fact_team_performance ftp ON dw.week_key = ftp.week_key
+				JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+				WHERE dl.season_year = ${latestSeason}
+			`));
+			const currentWeek = parseInt(currentWeekResult[0]?.currentWeek?.toString() || '1');
+			
+			// Check if season is complete (has championship game)
+			const championshipResult = await db.execute(sql.raw(`
+				SELECT COUNT(*) as championship_count
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+				WHERE dl.season_year = ${latestSeason} AND fm.is_championship = true
+			`));
+			const championshipCount = parseInt(championshipResult[0]?.championshipCount?.toString() || '0');
+			const isSeasonComplete = championshipCount > 0;
+			
+			currentSeasonData = {
+				currentWeek: currentWeek,
+				isSeasonComplete: isSeasonComplete,
+				playoffStatus: isSeasonComplete ? 'Championship Decided' : (currentWeek >= 14 ? 'Playoffs' : 'Regular Season'),
+				tradeDeadlineStatus: currentWeek >= 10 ? 'Passed' : 'Active'
+			};
+		} catch (error) {
+			console.warn('Could not fetch current season data from database:', error);
+		}
+
 		const overview = {
 			totalSeasons: leagueStats[0]?.totalSeasons || 0,
 			totalLeagues: leagueStats[0]?.totalLeagues || 0,
@@ -66,7 +149,13 @@ export const GET: RequestHandler = async () => {
 			championshipGames: championshipStats[0]?.championshipGames || 0,
 			dataPoints: (teamStats[0]?.totalTeamSeasons || 0) + 
 						(transactionStats[0]?.totalTransactions || 0) + 
-						(matchupStats[0]?.totalMatchups || 0)
+						(matchupStats[0]?.totalMatchups || 0),
+			allTimeLeader,
+			biggestRivalry,
+			// Current season data
+			currentWeek: currentSeasonData.currentWeek,
+			playoffStatus: currentSeasonData.playoffStatus,
+			tradeDeadlineStatus: currentSeasonData.tradeDeadlineStatus
 		};
 
 		return json({

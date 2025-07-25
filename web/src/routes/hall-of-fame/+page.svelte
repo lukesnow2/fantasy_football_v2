@@ -199,7 +199,7 @@
 										</div>
 									</td>
 									<td class="py-3 text-center">
-										<span class="text-white font-bold">{tier.manager_count}</span>
+										<span class="text-white font-bold">{tier.managerCount || tier.manager_count}</span>
 									</td>
 									<td class="py-3 text-center">
 										<span class="text-amber-400 font-bold">{parseFloat(tier.avgChampionships || 0).toFixed(1)}</span>
