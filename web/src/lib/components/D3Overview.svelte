@@ -83,7 +83,7 @@
 				const tradeActivity = data.tradeActivity || data.trade_activity || [];
 				rawData = leagueEvolution.map((d: any, i: number) => ({
 					...d,
-					total_trades: (tradeActivity && tradeActivity[i]) ? (tradeActivity[i].totalTrades || tradeActivity[i].total_trades) : 0
+					totalTrades: (tradeActivity && tradeActivity[i]) ? (tradeActivity[i].totalTrades || tradeActivity[i].total_trades) : 0
 				}));
 				break;
 			case 'players':
@@ -109,18 +109,18 @@
 		const processedData = rawData.map((d: any) => {
 			const processed = { ...d };
 			
-			// Convert common string fields to numbers
-			if (processed.avg_weekly_score) processed.avg_weekly_score = parseFloat(processed.avg_weekly_score);
-			if (processed.score_volatility) processed.score_volatility = parseFloat(processed.score_volatility);
-			if (processed.highest_single_week_score) processed.highest_single_week_score = parseFloat(processed.highest_single_week_score);
-			if (processed.average_weekly_score) processed.average_weekly_score = parseFloat(processed.average_weekly_score);
-			if (processed.total_transactions) processed.total_transactions = parseInt(processed.total_transactions);
-			if (processed.total_trades) processed.total_trades = parseInt(processed.total_trades);
-			if (processed.win_parity_score) processed.win_parity_score = parseFloat(processed.win_parity_score);
-			if (processed.close_games_score) processed.close_games_score = parseFloat(processed.close_games_score);
-			if (processed.avg_fantasy_points) processed.avg_fantasy_points = parseFloat(processed.avg_fantasy_points);
-			if (processed.avg_draft_position) processed.avg_draft_position = parseFloat(processed.avg_draft_position);
-			if (processed.point_spread_score) processed.point_spread_score = parseFloat(processed.point_spread_score);
+			// Convert common string fields to numbers with camelCase fallback
+			if (processed.avgWeeklyScore || processed.avg_weekly_score) processed.avgWeeklyScore = parseFloat(processed.avgWeeklyScore || processed.avg_weekly_score);
+			if (processed.scoreVolatility || processed.score_volatility) processed.scoreVolatility = parseFloat(processed.scoreVolatility || processed.score_volatility);
+			if (processed.highestSingleWeekScore || processed.highest_single_week_score) processed.highestSingleWeekScore = parseFloat(processed.highestSingleWeekScore || processed.highest_single_week_score);
+			if (processed.averageWeeklyScore || processed.average_weekly_score) processed.averageWeeklyScore = parseFloat(processed.averageWeeklyScore || processed.average_weekly_score);
+			if (processed.totalTransactions || processed.total_transactions) processed.totalTransactions = parseInt(processed.totalTransactions || processed.total_transactions);
+			if (processed.totalTrades || processed.total_trades) processed.totalTrades = parseInt(processed.totalTrades || processed.total_trades);
+			if (processed.winParityScore || processed.win_parity_score) processed.winParityScore = parseFloat(processed.winParityScore || processed.win_parity_score);
+			if (processed.closeGamesScore || processed.close_games_score) processed.closeGamesScore = parseFloat(processed.closeGamesScore || processed.close_games_score);
+			if (processed.avgFantasyPoints || processed.avg_fantasy_points) processed.avgFantasyPoints = parseFloat(processed.avgFantasyPoints || processed.avg_fantasy_points);
+			if (processed.avgDraftPosition || processed.avg_draft_position) processed.avgDraftPosition = parseFloat(processed.avgDraftPosition || processed.avg_draft_position);
+			if (processed.pointSpreadScore || processed.point_spread_score) processed.pointSpreadScore = parseFloat(processed.pointSpreadScore || processed.point_spread_score);
 			
 			return processed;
 		});
@@ -241,9 +241,9 @@
 	}
 
 	function createLineChart(g: any, data: any[], xScale: any, yScale: any, secondaryScale: any, metric: any) {
-		const line = d3.line<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
-			.y(d => yScale(getNumeric(d, metric.yKey)))
+		const line = d3.line()
+			.x((d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
+			.y((d: any) => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		// Main line
@@ -294,9 +294,9 @@
 
 		// Secondary line if available
 		if (secondaryScale && metric.secondaryKey) {
-			const secondaryLine = d3.line<any>()
-				.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
-				.y(d => secondaryScale(getNumeric(d, metric.secondaryKey)))
+			const secondaryLine = d3.line()
+				.x((d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
+				.y((d: any) => secondaryScale(getNumeric(d, metric.secondaryKey)))
 				.curve(d3.curveMonotoneX);
 
 			g.append('path')
@@ -310,10 +310,10 @@
 	}
 
 	function createAreaChart(g: any, data: any[], xScale: any, yScale: any, metric: any) {
-		const area = d3.area<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
+		const area = d3.area()
+			.x((d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
 			.y0(height)
-			.y1(d => yScale(getNumeric(d, metric.yKey)))
+			.y1((d: any) => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
@@ -323,9 +323,9 @@
 			.attr('d', area);
 
 		// Add line on top
-		const line = d3.line<any>()
-			.x(d => xScale(getNumeric(d, 'seasonYear', 'int')))
-			.y(d => yScale(getNumeric(d, metric.yKey)))
+		const line = d3.line()
+			.x((d: any) => xScale(getNumeric(d, 'seasonYear', 'int')))
+			.y((d: any) => yScale(getNumeric(d, metric.yKey)))
 			.curve(d3.curveMonotoneX);
 
 		g.append('path')
