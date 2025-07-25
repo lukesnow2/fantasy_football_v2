@@ -90,6 +90,29 @@ export const GET: RequestHandler = async () => {
 		const rivalryRow = Array.from(biggestRivalryResult)[0];
 		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';
 
+		// Get current season data from standings endpoint
+		let currentSeasonData = {
+			currentWeek: 1,
+			isSeasonComplete: false,
+			playoffStatus: 'Regular Season',
+			tradeDeadlineStatus: 'Active'
+		};
+
+		try {
+			const standingsResponse = await fetch(`${process.env.APP_URL || 'http://localhost:5173'}/api/standings?season=2024`);
+			if (standingsResponse.ok) {
+				const standingsData = await standingsResponse.json();
+				currentSeasonData = {
+					currentWeek: standingsData.currentWeek || 1,
+					isSeasonComplete: standingsData.isSeasonComplete || false,
+					playoffStatus: standingsData.isSeasonComplete ? 'Championship Decided' : 'Heating Up',
+					tradeDeadlineStatus: standingsData.currentWeek >= 10 ? 'Passed' : 'Active'
+				};
+			}
+		} catch (error) {
+			console.warn('Could not fetch current season data from standings:', error);
+		}
+
 		const overview = {
 			totalSeasons: leagueStats[0]?.totalSeasons || 0,
 			totalLeagues: leagueStats[0]?.totalLeagues || 0,
@@ -105,7 +128,11 @@ export const GET: RequestHandler = async () => {
 						(transactionStats[0]?.totalTransactions || 0) + 
 						(matchupStats[0]?.totalMatchups || 0),
 			allTimeLeader,
-			biggestRivalry
+			biggestRivalry,
+			// Current season data
+			currentWeek: currentSeasonData.currentWeek,
+			playoffStatus: currentSeasonData.playoffStatus,
+			tradeDeadlineStatus: currentSeasonData.tradeDeadlineStatus
 		};
 
 		return json({

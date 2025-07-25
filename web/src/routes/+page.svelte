@@ -120,15 +120,21 @@
 			<div class="space-y-4">
 				<div class="flex justify-between items-center py-2 border-b border-slate-700/30">
 					<span class="text-slate-300">Current Week</span>
-					<span class="text-white font-semibold">Week 15</span>
+					<span class="text-white font-semibold">
+						{loading ? '...' : `Week ${leagueOverview.currentWeek || 1}`}
+					</span>
 				</div>
 				<div class="flex justify-between items-center py-2 border-b border-slate-700/30">
 					<span class="text-slate-300">Playoff Picture</span>
-					<span class="text-green-400 font-semibold">Heating Up</span>
+					<span class="text-green-400 font-semibold">
+						{loading ? '...' : leagueOverview.playoffStatus || 'Regular Season'}
+					</span>
 				</div>
 				<div class="flex justify-between items-center py-2">
 					<span class="text-slate-300">Trade Deadline</span>
-					<span class="text-red-400 font-semibold">Passed</span>
+					<span class="text-red-400 font-semibold">
+						{loading ? '...' : leagueOverview.tradeDeadlineStatus || 'Active'}
+					</span>
 				</div>
 			</div>
 			<a 
