@@ -90,7 +90,7 @@ export const GET: RequestHandler = async () => {
 		const rivalryRow = Array.from(biggestRivalryResult)[0];
 		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';
 
-		// Get current season data from standings endpoint
+		// Get current season data directly from database
 		let currentSeasonData = {
 			currentWeek: 1,
 			isSeasonComplete: false,
@@ -99,18 +99,41 @@ export const GET: RequestHandler = async () => {
 		};
 
 		try {
-			const standingsResponse = await fetch(`${process.env.APP_URL || 'http://localhost:5173'}/api/standings?season=2024`);
-			if (standingsResponse.ok) {
-				const standingsData = await standingsResponse.json();
-				currentSeasonData = {
-					currentWeek: standingsData.currentWeek || 1,
-					isSeasonComplete: standingsData.isSeasonComplete || false,
-					playoffStatus: standingsData.isSeasonComplete ? 'Championship Decided' : 'Heating Up',
-					tradeDeadlineStatus: standingsData.currentWeek >= 10 ? 'Passed' : 'Active'
-				};
-			}
+			// Get the latest season and its current week
+			const latestSeasonResult = await db.execute(sql.raw(`
+				SELECT MAX(season_year) as latest_season 
+				FROM edw.fact_draft
+			`));
+			const latestSeason = parseInt(latestSeasonResult[0]?.latestSeason?.toString() || '2024');
+			
+			// Get current week for the latest season
+			const currentWeekResult = await db.execute(sql.raw(`
+				SELECT MAX(week_number) as current_week 
+				FROM edw.dim_week dw
+				JOIN edw.fact_team_performance ftp ON dw.week_key = ftp.week_key
+				JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+				WHERE dl.season_year = ${latestSeason}
+			`));
+			const currentWeek = parseInt(currentWeekResult[0]?.currentWeek?.toString() || '1');
+			
+			// Check if season is complete (has championship game)
+			const championshipResult = await db.execute(sql.raw(`
+				SELECT COUNT(*) as championship_count
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_league dl ON fm.league_key = dl.league_key
+				WHERE dl.season_year = ${latestSeason} AND fm.is_championship = true
+			`));
+			const championshipCount = parseInt(championshipResult[0]?.championshipCount?.toString() || '0');
+			const isSeasonComplete = championshipCount > 0;
+			
+			currentSeasonData = {
+				currentWeek: currentWeek,
+				isSeasonComplete: isSeasonComplete,
+				playoffStatus: isSeasonComplete ? 'Championship Decided' : (currentWeek >= 14 ? 'Playoffs' : 'Regular Season'),
+				tradeDeadlineStatus: currentWeek >= 10 ? 'Passed' : 'Active'
+			};
 		} catch (error) {
-			console.warn('Could not fetch current season data from standings:', error);
+			console.warn('Could not fetch current season data from database:', error);
 		}
 
 		const overview = {
