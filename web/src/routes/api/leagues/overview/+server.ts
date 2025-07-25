@@ -6,6 +6,7 @@ import type { RequestHandler } from './$types';
 import { sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
+	console.log('=== API ENDPOINT CALLED ===');
 	try {
 		// Get basic league counts
 		const leagueStats = await db
@@ -69,7 +70,7 @@ export const GET: RequestHandler = async () => {
 		console.log('Hall of Fame First Row:', Array.from(hallOfFameLeaderResult)[0]);
 		console.log('Hall of Fame Columns:', Array.from(hallOfFameLeaderResult)[0] ? Object.keys(Array.from(hallOfFameLeaderResult)[0]) : 'No rows');
 		
-		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.manager_name || 'TBD';
+		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.managerName || 'TBD';
 
 		// Query for biggest rivalry (most games played between two managers)
 		const biggestRivalryResult = await db.execute(sql.raw(`
@@ -87,7 +88,7 @@ export const GET: RequestHandler = async () => {
 		console.log('=== END DEBUG ===');
 		
 		const rivalryRow = Array.from(biggestRivalryResult)[0];
-		const biggestRivalry = rivalryRow ? `${rivalryRow.manager_a_name} vs ${rivalryRow.manager_b_name}` : 'Analyzing...';
+		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';
 
 		const overview = {
 			totalSeasons: leagueStats[0]?.totalSeasons || 0,
