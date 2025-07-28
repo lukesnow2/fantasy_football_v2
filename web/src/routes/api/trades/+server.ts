@@ -490,15 +490,19 @@ export const GET: RequestHandler = async ({ url }) => {
 				leagueName: trade.leagueName || trade.league_name,
 				seasonYear: trade.seasonYear || trade.season_year,
 				transactionDate: trade.transactionDate || trade.transaction_date,
+				transactionWeek: trade.transactionWeek || trade.transaction_week,
 				teamAName: trade.teamAName || trade.team_a_name,
 				teamAManager: trade.teamAManager || trade.team_a_manager,
+				teamAGives: trade.teamAGives || trade.team_a_gives,
 				teamBName: trade.teamBName || trade.team_b_name,
 				teamBManager: trade.teamBManager || trade.team_b_manager,
+				teamBGives: trade.teamBGives || trade.team_b_gives,
 				tradeWinner: trade.tradeWinner || trade.trade_winner,
 				teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
 				teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
 				productionDifferential: trade.productionDifferential || trade.production_differential,
-				tradeResult: trade.tradeResult || trade.trade_result
+				tradeResult: trade.tradeResult || trade.trade_result,
+				tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis
 			}));
 		}
 
