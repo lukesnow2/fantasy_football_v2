@@ -31,6 +31,7 @@
 						console.log('First best trade:', tradeData.analytics.bestTrades[0]);
 						console.log('Best trade fields:', Object.keys(tradeData.analytics.bestTrades[0]));
 					}
+					
 				}
 				
 				// Debug trades data
@@ -224,6 +225,10 @@
 							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
 							Championship Impact Trades
 						</h2>
+						
+						<div class="text-sm text-slate-400 mb-4">
+							Showing trades with positive 50+ point production differentials that involved championship winners
+						</div>
 						
 						<div class="space-y-4">
 							{#each tradeData.analytics.championshipTrades as trade}

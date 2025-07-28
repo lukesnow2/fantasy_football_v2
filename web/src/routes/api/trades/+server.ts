@@ -15,6 +15,47 @@ export const GET: RequestHandler = async ({ url }) => {
 			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_trade_analysis`;
 			const testResult = await db.execute(sql.raw(testQuery));
 			console.log('Trade analysis view count:', testResult[0]);
+			
+			// DEBUG: Check raw championship data from view
+			const championshipViewQuery = `
+				SELECT 
+					season_year,
+					team_a_manager,
+					team_b_manager,
+					team_a_champion,
+					team_b_champion,
+					trade_winner,
+					production_differential
+				FROM edw.vw_trade_analysis
+				WHERE team_a_champion = 1 OR team_b_champion = 1
+				ORDER BY season_year DESC
+				LIMIT 10
+			`;
+			const championshipViewResult = await db.execute(sql.raw(championshipViewQuery));
+			console.log('=== DATABASE VIEW CHAMPIONSHIP DEBUG ===');
+			console.log('Championship trades in view:', championshipViewResult.length);
+			Array.from(championshipViewResult).forEach((trade: any) => {
+				console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
+				console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
+				console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
+			});
+			console.log('=== END DATABASE VIEW CHAMPIONSHIP DEBUG ===\n');
+			
+			// DEBUG: Check if any trades have champion flags at all
+			const anyChampionQuery = `
+				SELECT 
+					COUNT(*) as total_trades,
+					COUNT(*) FILTER (WHERE team_a_champion IS NOT NULL) as team_a_champion_count,
+					COUNT(*) FILTER (WHERE team_b_champion IS NOT NULL) as team_b_champion_count,
+					COUNT(*) FILTER (WHERE team_a_champion = 1) as team_a_champion_true,
+					COUNT(*) FILTER (WHERE team_b_champion = 1) as team_b_champion_true
+				FROM edw.vw_trade_analysis
+			`;
+			const anyChampionResult = await db.execute(sql.raw(anyChampionQuery));
+			console.log('=== CHAMPION FLAGS SUMMARY ===');
+			console.log('Champion flags summary:', Array.from(anyChampionResult)[0]);
+			console.log('=== END CHAMPION FLAGS SUMMARY ===\n');
+			
 		} catch (error) {
 			console.error('Trade analysis view error:', error);
 		}
@@ -87,7 +128,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					AVG(ABS(production_differential)) as avg_production_impact,
 					COUNT(*) FILTER (WHERE ABS(team_a_final_score - team_b_final_score) >= 8) as decisive_trades,
 					COUNT(*) FILTER (WHERE trade_winner = 'Even Trade') as even_trades,
-					COUNT(*) FILTER (WHERE team_a_champion = 1 OR team_b_champion = 1) as championship_impact_trades,
+					COUNT(*) FILTER (WHERE (team_a_champion = 1 OR team_b_champion = 1) AND production_differential >= 50) as championship_impact_trades,
 					AVG(total_players) as avg_players_per_trade,
 					MAX(total_players) as biggest_trade_players,
 					COUNT(DISTINCT team_a_manager) + COUNT(DISTINCT team_b_manager) as active_traders
@@ -176,7 +217,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					COUNT(*) as total_trades,
 					AVG(total_players) as avg_players_per_trade,
 					COUNT(*) FILTER (WHERE trade_winner != 'Even Trade') as decisive_trades,
-					COUNT(*) FILTER (WHERE team_a_champion = 1 OR team_b_champion = 1) as championship_impact,
+					COUNT(*) FILTER (WHERE (team_a_champion = 1 OR team_b_champion = 1) AND production_differential >= 50) as championship_impact,
 					AVG(ABS(production_differential)) as avg_production_impact,
 					COUNT(*) FILTER (WHERE transaction_week >= 10) as late_season_trades
 				FROM edw.vw_trade_analysis
@@ -193,85 +234,215 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		if (analysis === 'best_worst' || analysis === 'all') {
-			// Best and worst trades
-			const bestWorstQuery = `
-				WITH ranked_trades AS (
-					SELECT *,
-						ABS(team_a_final_score - team_b_final_score) as score_gap,
-						CASE 
-							WHEN team_a_final_score > team_b_final_score THEN 
-								CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
-							WHEN team_b_final_score > team_a_final_score THEN 
-								CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
-							ELSE 'Even Trade'
-						END as trade_result
-					FROM edw.vw_trade_analysis
-					${season && season !== 'all' ? `WHERE season_year = ${parseInt(season)}` : ''}
-				)
-				(
-					SELECT 'best' as category, * FROM ranked_trades 
-					WHERE trade_winner != 'Even Trade'
-					ORDER BY score_gap DESC, ABS(production_differential) DESC
-					LIMIT 5
-				)
-				UNION ALL
-				(
-					SELECT 'championship' as category, * FROM ranked_trades 
-					WHERE team_a_champion = 1 OR team_b_champion = 1
-					ORDER BY season_year DESC
-					LIMIT 5
-				)
+			// Best trades query
+			const bestTradesQuery = `
+				SELECT 
+					'best' as category,
+					*,
+					ABS(team_a_final_score - team_b_final_score) as score_gap,
+					CASE 
+						WHEN team_a_final_score > team_b_final_score THEN 
+							CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
+						WHEN team_b_final_score > team_a_final_score THEN 
+							CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
+						ELSE 'Even Trade'
+					END as trade_result
+				FROM edw.vw_trade_analysis
+				WHERE trade_winner != 'Even Trade'
+				${season && season !== 'all' ? `AND season_year = ${parseInt(season)}` : ''}
+				ORDER BY ABS(team_a_final_score - team_b_final_score) DESC, ABS(production_differential) DESC
+				LIMIT 5
 			`;
 
-			console.log('Executing best/worst query');
-			const bestWorstResult = await db.execute(sql.raw(bestWorstQuery));
-			const bestWorstArray = Array.from(bestWorstResult);
+			// Championship trades query (separate to avoid UNION issues)
+			const championshipTradesQuery = `
+				SELECT 
+					'championship' as category,
+					*,
+					ABS(team_a_final_score - team_b_final_score) as score_gap,
+					CASE 
+						WHEN team_a_final_score > team_b_final_score THEN 
+							CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
+						WHEN team_b_final_score > team_a_final_score THEN 
+							CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
+						ELSE 'Even Trade'
+					END as trade_result
+				FROM edw.vw_trade_analysis
+				WHERE (team_a_champion = 1 OR team_b_champion = 1)
+				AND production_differential >= 50
+				${season && season !== 'all' ? `AND season_year = ${parseInt(season)}` : ''}
+				ORDER BY production_differential DESC
+				LIMIT 5
+			`;
+
+			console.log('Executing best trades query');
+			const bestTradesResult = await db.execute(sql.raw(bestTradesQuery));
+			const bestTradesArray = Array.from(bestTradesResult);
 			
-			const bestTrades = bestWorstArray.filter((t: any) => t.category === 'best');
-			const championshipTrades = bestWorstArray.filter((t: any) => t.category === 'championship');
+			console.log('Executing championship trades query');
+			const championshipTradesResult = await db.execute(sql.raw(championshipTradesQuery));
+			const championshipTradesArray = Array.from(championshipTradesResult);
+			
+			// DEBUG: Add comprehensive logging for championship trades
+			console.log('=== CHAMPIONSHIP TRADES DEBUG ===');
+			console.log('Best trades query result count:', bestTradesArray.length);
+			console.log('Championship trades query result count:', championshipTradesArray.length);
+			
+			// Log all championship trades with detailed information
+			console.log('Championship trades found:', championshipTradesArray.length);
+			
+			championshipTradesArray.forEach((trade: any, index: number) => {
+				console.log(`\n--- Championship Trade ${index + 1} ---`);
+				console.log('Season:', trade.season_year);
+				console.log('Team A Manager:', trade.team_a_manager);
+				console.log('Team B Manager:', trade.team_b_manager);
+				console.log('Team A Champion Flag:', trade.team_a_champion);
+				console.log('Team B Champion Flag:', trade.team_b_champion);
+				console.log('Trade Winner:', trade.trade_winner);
+				console.log('Production Differential:', trade.production_differential);
+				console.log('Team A Final Score:', trade.team_a_final_score);
+				console.log('Team B Final Score:', trade.team_b_final_score);
+				console.log('Trade Analysis:', trade.trade_analysis);
+			});
+			
+			// DEBUG: Check raw championship data in fact_matchup
+			try {
+				const championshipDataQuery = `
+					SELECT 
+						fm.season_year,
+						fm.winner_team_key,
+						fm.is_championship,
+						dt.team_name,
+						dt.manager_name
+					FROM edw.fact_matchup fm
+					LEFT JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
+					WHERE fm.is_championship = 1
+					ORDER BY fm.season_year DESC
+				`;
+				const championshipData = await db.execute(sql.raw(championshipDataQuery));
+				console.log('\n=== RAW CHAMPIONSHIP DATA ===');
+				console.log('Championship matchups found:', championshipData.length);
+				Array.from(championshipData).forEach((champ: any) => {
+					console.log(`Season ${champ.season_year}: ${champ.manager_name} (${champ.team_name}) - Team Key: ${champ.winner_team_key}`);
+				});
+			} catch (error) {
+				console.error('Error fetching championship data:', error);
+			}
+			
+			// DEBUG: Check team-manager mappings
+			try {
+				// First check the schema of dim_team and dim_manager
+				const schemaQuery = `
+					SELECT 
+						table_name,
+						column_name,
+						data_type
+					FROM information_schema.columns 
+					WHERE table_name IN ('dim_team', 'dim_manager')
+					AND table_schema = 'edw'
+					ORDER BY table_name, ordinal_position
+				`;
+				const schemaData = await db.execute(sql.raw(schemaQuery));
+				console.log('\n=== DATABASE SCHEMA DEBUG ===');
+				console.log('Schema info:', Array.from(schemaData));
+				
+				const teamManagerQuery = `
+					SELECT DISTINCT
+						dt.team_key,
+						dt.team_name,
+						dt.manager_name
+					FROM edw.dim_team dt
+					WHERE dt.manager_name ILIKE '%omar%' OR dt.manager_name ILIKE '%luke%'
+					ORDER BY dt.manager_name
+				`;
+				const teamManagerData = await db.execute(sql.raw(teamManagerQuery));
+				console.log('\n=== TEAM-MANAGER MAPPINGS ===');
+				console.log('Omar/Luke team mappings:', Array.from(teamManagerData));
+			} catch (error) {
+				console.error('Error fetching team-manager mappings:', error);
+			}
+			
+			// DEBUG: Check trade analysis view for Omar's trades
+			try {
+				const omarTradesQuery = `
+					SELECT 
+						season_year,
+						team_a_manager,
+						team_b_manager,
+						team_a_champion,
+						team_b_champion,
+						trade_winner,
+						production_differential
+					FROM edw.vw_trade_analysis
+					WHERE team_a_manager ILIKE '%omar%' OR team_b_manager ILIKE '%omar%'
+					ORDER BY season_year DESC, transaction_date DESC
+				`;
+				const omarTrades = await db.execute(sql.raw(omarTradesQuery));
+				console.log('\n=== OMAR TRADES DEBUG ===');
+				console.log('Omar trades found:', omarTrades.length);
+				Array.from(omarTrades).forEach((trade: any) => {
+					console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
+					console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
+					console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
+				});
+			} catch (error) {
+				console.error('Error fetching Omar trades:', error);
+			}
+			
+			console.log('=== END CHAMPIONSHIP TRADES DEBUG ===\n');
+			
+			console.log('Best trades count:', bestTradesArray.length);
+			console.log('Championship trades count:', championshipTradesArray.length);
+			if (championshipTradesArray.length > 0) {
+				console.log('First championship trade:', championshipTradesArray[0]);
+			}
 
 			analytics = {
 				...analytics,
-				best_trades: bestTrades,
-				championship_trades: championshipTrades
+				best_trades: bestTradesArray,
+				championship_trades: championshipTradesArray
 			};
 		}
 
 		// Convert snake_case to camelCase for frontend compatibility
-		const tradesArray = Array.from(trades).map((trade: any) => ({
-			leagueName: trade.leagueName || trade.league_name,
-			seasonYear: trade.seasonYear || trade.season_year,
-			transactionDate: trade.transactionDate || trade.transaction_date,
-			transactionWeek: trade.transactionWeek || trade.transaction_week,
-			teamAName: trade.teamAName || trade.team_a_name,
-			teamAManager: trade.teamAManager || trade.team_a_manager,
-			teamAGives: trade.teamAGives || trade.team_a_gives,
-			teamBName: trade.teamBName || trade.team_b_name,
-			teamBManager: trade.teamBManager || trade.team_b_manager,
-			teamBGives: trade.teamBGives || trade.team_b_gives,
-			tradeType: trade.tradeType || trade.trade_type,
-			totalPlayers: trade.totalPlayers || trade.total_players,
-			teamAProduction: trade.teamAProduction || trade.team_a_production,
-			teamBProduction: trade.teamBProduction || trade.team_b_production,
-			productionDifferential: trade.productionDifferential || trade.production_differential,
-			teamAPreTradeAvg: trade.teamAPreTradeAvg || trade.team_a_pre_trade_avg,
-			teamBPreTradeAvg: trade.teamBPreTradeAvg || trade.team_b_pre_trade_avg,
-			opportunityDifferential: trade.opportunityDifferential || trade.opportunity_differential,
-			teamAMadePlayoffs: trade.teamAMadePlayoffs || trade.team_a_made_playoffs,
-			teamBMadePlayoffs: trade.teamBMadePlayoffs || trade.team_b_made_playoffs,
-			teamAChampion: trade.teamAChampion || trade.team_a_champion,
-			teamBChampion: trade.teamBChampion || trade.team_b_champion,
-			teamAProductionScore: trade.teamAProductionScore || trade.team_a_production_score,
-			teamAPlayoffScore: trade.teamAPlayoffScore || trade.team_a_playoff_score,
-			teamAOpportunityScore: trade.teamAOpportunityScore || trade.team_a_opportunity_score,
-			teamAContextScore: trade.teamAContextScore || trade.team_a_context_score,
-			teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
-			teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
-			tradeWinner: trade.tradeWinner || trade.trade_winner,
-			tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis,
-			evaluationStatus: trade.evaluationStatus || trade.evaluation_status,
-			tradeGroupId: trade.tradeGroupId || trade.trade_group_id
-		}));
+		const tradesArray = Array.from(trades).map((trade: any) => {
+			const convertedTrade = {
+				leagueName: trade.leagueName || trade.league_name,
+				seasonYear: trade.seasonYear || trade.season_year,
+				transactionDate: trade.transactionDate || trade.transaction_date,
+				transactionWeek: trade.transactionWeek || trade.transaction_week,
+				teamAName: trade.teamAName || trade.team_a_name,
+				teamAManager: trade.teamAManager || trade.team_a_manager,
+				teamAGives: trade.teamAGives || trade.team_a_gives,
+				teamBName: trade.teamBName || trade.team_b_name,
+				teamBManager: trade.teamBManager || trade.team_b_manager,
+				teamBGives: trade.teamBGives || trade.team_b_gives,
+				tradeType: trade.tradeType || trade.trade_type,
+				totalPlayers: trade.totalPlayers || trade.total_players,
+				teamAProduction: trade.teamAProduction || trade.team_a_production,
+				teamBProduction: trade.teamBProduction || trade.team_b_production,
+				productionDifferential: trade.productionDifferential || trade.production_differential,
+				teamAPreTradeAvg: trade.teamAPreTradeAvg || trade.team_a_pre_trade_avg,
+				teamBPreTradeAvg: trade.teamBPreTradeAvg || trade.team_b_pre_trade_avg,
+				opportunityDifferential: trade.opportunityDifferential || trade.opportunity_differential,
+				teamAMadePlayoffs: trade.teamAMadePlayoffs || trade.team_a_made_playoffs,
+				teamBMadePlayoffs: trade.teamBMadePlayoffs || trade.team_b_made_playoffs,
+				teamAChampion: trade.teamAChampion || trade.team_a_champion,
+				teamBChampion: trade.teamBChampion || trade.team_b_champion,
+				teamAProductionScore: trade.teamAProductionScore || trade.team_a_production_score,
+				teamAPlayoffScore: trade.teamAPlayoffScore || trade.team_a_playoff_score,
+				teamAOpportunityScore: trade.teamAOpportunityScore || trade.team_a_opportunity_score,
+				teamAContextScore: trade.teamAContextScore || trade.team_a_context_score,
+				teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
+				teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
+				tradeWinner: trade.tradeWinner || trade.trade_winner,
+				tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis,
+				evaluationStatus: trade.evaluationStatus || trade.evaluation_status,
+				tradeGroupId: trade.tradeGroupId || trade.trade_group_id
+			};
+			
+			return convertedTrade;
+		});
 
 		// Convert analytics to camelCase
 		const camelCaseAnalytics: any = {};
@@ -332,24 +503,39 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		if (analytics.championship_trades) {
-			camelCaseAnalytics.championshipTrades = analytics.championship_trades.map((trade: any) => ({
-				category: trade.category,
-				leagueName: trade.leagueName || trade.league_name,
-				seasonYear: trade.seasonYear || trade.season_year,
-				transactionDate: trade.transactionDate || trade.transaction_date,
-				teamAName: trade.teamAName || trade.team_a_name,
-				teamAManager: trade.teamAManager || trade.team_a_manager,
-				teamBName: trade.teamBName || trade.team_b_name,
-				teamBManager: trade.teamBManager || trade.team_b_manager,
-				tradeWinner: trade.tradeWinner || trade.trade_winner,
-				teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
-				teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
-				productionDifferential: trade.productionDifferential || trade.production_differential,
-				tradeResult: trade.tradeResult || trade.trade_result
-			}));
+			camelCaseAnalytics.championshipTrades = analytics.championship_trades.map((trade: any) => {
+				const convertedChampionshipTrade = {
+					category: trade.category,
+					leagueName: trade.leagueName || trade.league_name,
+					seasonYear: trade.seasonYear || trade.season_year,
+					transactionDate: trade.transactionDate || trade.transaction_date,
+					transactionWeek: trade.transactionWeek || trade.transaction_week,
+					teamAName: trade.teamAName || trade.team_a_name,
+					teamAManager: trade.teamAManager || trade.team_a_manager,
+					teamAGives: trade.teamAGives || trade.team_a_gives,
+					teamBName: trade.teamBName || trade.team_b_name,
+					teamBManager: trade.teamBManager || trade.team_b_manager,
+					teamBGives: trade.teamBGives || trade.team_b_gives,
+					tradeWinner: trade.tradeWinner || trade.trade_winner,
+					teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
+					teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
+					productionDifferential: trade.productionDifferential || trade.production_differential,
+					tradeResult: trade.tradeResult || trade.trade_result,
+					teamAChampion: trade.teamAChampion || trade.team_a_champion,
+					teamBChampion: trade.teamBChampion || trade.team_b_champion,
+					tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis
+				};
+				
+				return convertedChampionshipTrade;
+			});
 		}
 
 		console.log(`Returning ${tradesArray.length} trades and analytics:`, Object.keys(camelCaseAnalytics));
+		
+		// Debug analytics structure
+		console.log('Analytics overview:', camelCaseAnalytics.overview);
+		console.log('Analytics championshipTrades:', camelCaseAnalytics.championshipTrades);
+		console.log('Analytics championshipTrades length:', camelCaseAnalytics.championshipTrades?.length);
 
 		return json({
 			trades: tradesArray,

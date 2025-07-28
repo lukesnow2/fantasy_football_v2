@@ -78,7 +78,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					season_year,
 					COUNT(*) as total_trades,
 					AVG(total_players) as avg_players_per_trade,
-					COUNT(*) FILTER (WHERE team_a_champion = 1 OR team_b_champion = 1) as championship_trades,
+					COUNT(*) FILTER (WHERE (team_a_champion = 1 OR team_b_champion = 1) AND production_differential >= 50) as championship_trades,
 					AVG(ABS(team_a_final_score - team_b_final_score)) as avg_score_differential,
 					COUNT(*) FILTER (WHERE trade_winner != 'Even Trade') as decisive_trades,
 					AVG(ABS(production_differential)) as avg_production_impact
