@@ -615,6 +615,16 @@
 									<th class="text-center py-3 px-4 text-slate-300">Record</th>
 									<th class="text-center py-3 px-4 text-slate-300">Avg Score</th>
 									<th class="text-center py-3 px-4 text-slate-300">Biggest Win</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<span class="cursor-help" title="Expected wins based on points scored vs points against. Higher = better performance relative to scoring.">
+											Pythagorean Wins
+										</span>
+									</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<span class="cursor-help" title="Difference between actual wins and expected wins. Positive = lucky, negative = unlucky.">
+											Luck Factor
+										</span>
+									</th>
 									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
 								</tr>
 							</thead>
@@ -637,6 +647,18 @@
 										<td class="text-center py-3 px-4">
 											<div class="font-bold text-amber-400">{parseFloat(matchup.mostLopsidedGame || matchup.most_lopsided_game || 0).toFixed(1)}</div>
 											<div class="text-xs text-slate-400">margin</div>
+										</td>
+										<td class="text-center py-3 px-4">
+											<div class="font-bold text-purple-400">
+												{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0).toFixed(1)} - {parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0).toFixed(1)}
+											</div>
+											<div class="text-xs text-slate-400">expected wins</div>
+										</td>
+										<td class="text-center py-3 px-4">
+											<div class="font-bold {parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0) > 0 ? 'text-green-400' : 'text-red-400'}">
+												{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0).toFixed(1)} / {parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0).toFixed(1)}
+											</div>
+											<div class="text-xs text-slate-400">luck factor</div>
 										</td>
 										<td class="text-center py-3 px-4">
 											{#if (matchup.championshipMatchups || matchup.championship_matchups) > 0}
