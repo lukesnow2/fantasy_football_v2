@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { Search, X } from 'lucide-svelte';
 	
 	export let showCustomEmojis = true;
 	
 	const dispatch = createEventDispatcher();
+	
+	// Get user from page data
+	$: user = $page.data.user;
 	
 	let searchTerm = '';
 	let activeTab = 'recent';
@@ -111,6 +116,13 @@
 	
 	// Handle emoji selection
 	function handleEmojiSelect(emoji: any) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		// Add to recent emojis
 		if (emoji.type === 'unicode') {
 			recentEmojis = [emoji.emoji, ...recentEmojis.filter(e => e !== emoji.emoji)].slice(0, 20);

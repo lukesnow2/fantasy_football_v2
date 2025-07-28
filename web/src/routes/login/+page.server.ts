@@ -8,9 +8,10 @@ import { getAvailableManagers } from '$lib/server/auth-manager';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-	// If already logged in, redirect to homepage
+	// If already logged in, redirect to homepage or specified redirect URL
 	if (event.locals.user) {
-		return redirect(302, '/');
+		const redirectUrl = event.url.searchParams.get('redirect');
+		return redirect(302, redirectUrl || '/');
 	}
 
 	// Check for success messages
@@ -81,7 +82,9 @@ export const actions: Actions = {
 		const session = await auth.createSession(sessionToken, userData.user.id);
 		auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
 
-		return redirect(302, '/');
+		// Redirect to specified URL or homepage
+		const redirectUrl = event.url.searchParams.get('redirect');
+		return redirect(302, redirectUrl || '/');
 	},
 	
 	register: async (event) => {
@@ -216,7 +219,9 @@ export const actions: Actions = {
 			return fail(500, { message: `${isClaimingPlaceholder ? 'Account claiming' : 'Registration'} failed. Please try again.` });
 		}
 		
-		return redirect(302, '/');
+		// Redirect to specified URL or homepage
+		const redirectUrl = event.url.searchParams.get('redirect');
+		return redirect(302, redirectUrl || '/');
 	}
 };
 
