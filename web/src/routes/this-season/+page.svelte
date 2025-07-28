@@ -13,6 +13,7 @@
 	let isFinalStandings = false;
 	let isSeasonComplete = false;
 	let lastPlaceGameLoser: any = null;
+	let leagueOverview: any = {};
 	
 	// Chat state
 	let messages: any[] = [];
@@ -89,6 +90,16 @@
 	onMount(async () => {
 		try {
 			console.log('This Season page loading - calling standings API...');
+			
+			// Fetch league overview to get current week
+			const overviewResponse = await fetch('/api/leagues/overview');
+			if (overviewResponse.ok) {
+				const overviewData = await overviewResponse.json();
+				leagueOverview = overviewData.overview;
+				currentWeek = leagueOverview.currentWeek || 1;
+				console.log('Current week from overview:', currentWeek);
+			}
+			
 			// Fetch current season standings
 			const standingsResponse = await fetch('/api/standings?season=2024');
 			console.log('Standings API response status:', standingsResponse.status);
@@ -105,7 +116,6 @@
 				console.log('All ranks in standings:', standingsData.standings.map((s: any) => s.rank).sort((a: any, b: any) => a - b));
 				console.log('Teams with playoff tiers:', standingsData.standings.map((s: any) => `${s.rank}: ${s.teamName} (${s.playoffTier})`));
 				standings = standingsData.standings;
-				currentWeek = standingsData.currentWeek || 1;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
 				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
@@ -337,12 +347,15 @@
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-4xl font-bold text-white mb-2">This Season</h1>
-			<p class="text-slate-400">Week 15 • Playoffs are heating up</p>
+			<p class="text-slate-400">
+				Week {currentWeek} • 
+				{currentWeek >= 17 ? 'Season Complete' : 
+				 currentWeek >= 14 ? 'Playoffs are heating up' : 
+				 currentWeek >= 10 ? 'Trade deadline passed' : 
+				 'Regular season in progress'}
+			</p>
 		</div>
 		<div class="flex items-center space-x-4">
-			<div class="bg-green-500/20 text-green-400 px-4 py-2 rounded-lg font-medium">
-				Live
-			</div>
 			<a 
 				href="https://yahoo.com" 
 				target="_blank"
