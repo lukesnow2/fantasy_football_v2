@@ -1,29 +1,38 @@
 <script lang="ts">
-	import { BarChart3, TrendingUp, Trophy, Users, Target, Calendar, Zap } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { Trophy, TrendingUp, Users, Target, Calendar, BarChart3, MessageSquare, ExternalLink } from 'lucide-svelte';
+	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	
-	let h2hData: any = null;
+	// Real data from API
+	let h2hData: any = {};
 	let overviewData: any = null;
 	let recordBookData: any = null;
 	let loading = true;
 	let loadingH2H = false;
 	let loadingOverview = false;
 	let loadingRecords = false;
+	let error = '';
+	let selectedTab = 'head-to-head';
 	let selectedSeason = 'all';
-
-	// Head-to-Head filtering state
+	
+	// Filter state
 	let h2hManagerA = '';
 	let h2hManagerB = '';
+	let showAllH2H = false;
+	
+	// Available managers for filtering
 	let availableManagers: string[] = [];
-	let showAllH2H = false; // Track whether to show all results or just top 20
-
-	// Computed filtered head-to-head data
-	$: filteredH2HData = filterH2HData(h2hData?.headToHead || [], h2hManagerA, h2hManagerB);
-
-	// Computed display data based on filters and show more state
-	$: displayH2HData = getDisplayH2HData(filteredH2HData, h2hManagerA, h2hManagerB, showAllH2H);
+	
+	// Computed filtered data
+	$: filteredH2HData = h2hData.headToHead ? h2hData.headToHead.filter((matchup: any) => {
+		if (h2hManagerA && !matchup.managerAName?.includes(h2hManagerA) && !matchup.managerBName?.includes(h2hManagerA)) return false;
+		if (h2hManagerB && !matchup.managerAName?.includes(h2hManagerB) && !matchup.managerBName?.includes(h2hManagerB)) return false;
+		return true;
+	}) : [];
+	
+	$: displayH2HData = showAllH2H ? filteredH2HData : filteredH2HData.slice(0, 20);
 
 	// Function to get display data
 	function getDisplayH2HData(data: any[], managerA: string, managerB: string, showAll: boolean) {
@@ -156,19 +165,35 @@
 
 
 
-	let selectedTab = 'overview';
+	// Tab configuration
 	const tabs = [
-		{ id: 'overview', name: 'Overview', icon: BarChart3 },
-		{ id: 'head-to-head', name: 'Head to Head', icon: Users },
-		{ id: 'records', name: 'Record Book', icon: Trophy },
+		{ id: 'head-to-head', label: 'Head-to-Head', icon: Users },
+		{ id: 'overview', label: 'League Overview', icon: BarChart3 },
+		{ id: 'records', label: 'Record Book', icon: Trophy }
 	];
-
+	
 	// D3 Chart placeholder - will implement actual charts
 	let chartContainer: HTMLDivElement;
 	
 	onMount(async () => {
 		// Skip the failing managers/historical endpoint for now
 		loading = false;
+		
+		// Test the meta-data API endpoint
+		console.log('=== TESTING META-DATA API ===');
+		try {
+			const testResponse = await fetch('/api/meta-data?metric_id=pythagorean_wins');
+			console.log('Meta-data API response status:', testResponse.status);
+			if (testResponse.ok) {
+				const testData = await testResponse.json();
+				console.log('Meta-data API response data:', testData);
+			} else {
+				console.error('Meta-data API failed:', testResponse.status, testResponse.statusText);
+			}
+		} catch (err) {
+			console.error('Meta-data API error:', err);
+		}
+		console.log('=== END META-DATA API TEST ===');
 		
 		// Load overview data since it's the default tab - use setTimeout to ensure it runs after mount
 		setTimeout(() => {
@@ -304,7 +329,7 @@
 				on:click={() => handleTabSelect(tab.id)}
 			>
 				<svelte:component this={tab.icon} class="w-4 h-4 mr-2" />
-				{tab.name}
+				{tab.label}
 			</button>
 		{/each}
 	</div>
@@ -606,7 +631,8 @@
 						</div>
 					</div>
 					
-					<div class="overflow-x-auto">
+					<div class="relative">
+						<!-- TEMPORARY: Removed overflow-x-auto to test tooltip positioning -->
 						<table class="w-full text-sm">
 							<thead>
 								<tr class="border-b border-slate-700">
@@ -624,6 +650,12 @@
 										<span class="cursor-help" title="Difference between actual wins and expected wins. Positive = lucky, negative = unlucky.">
 											Luck Factor
 										</span>
+									</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<!-- Test tooltip to see if component works -->
+										<MetricTooltip metricId="total_matchups" position="top" maxWidth="400px">
+											<span class="cursor-help text-red-400" on:mouseenter={() => console.log('Test tooltip mouseenter')} on:mouseleave={() => console.log('Test tooltip mouseleave')}>Test Tooltip</span>
+										</MetricTooltip>
 									</th>
 									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
 								</tr>

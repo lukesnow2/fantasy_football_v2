@@ -34,9 +34,12 @@
 	async function fetchMetricDefinition() {
 		if (!metricId) return;
 		
+		console.log('MetricTooltip: fetchMetricDefinition called for metricId:', metricId);
+		
 		// Check cache first
 		const cached = metricDefinitionsStore.getMetric(metricId);
 		if (cached) {
+			console.log('MetricTooltip: Using cached data for metricId:', metricId);
 			metricDefinition = cached.metric;
 			relatedMetrics = cached.related_metrics || [];
 			return;
@@ -46,13 +49,17 @@
 		error = null;
 		
 		try {
+			console.log('MetricTooltip: Fetching from API for metricId:', metricId);
 			const response = await fetch(`/api/meta-data?metric_id=${encodeURIComponent(metricId)}&include_related=${includeRelated}`);
+			
+			console.log('MetricTooltip: API response status:', response.status);
 			
 			if (!response.ok) {
 				throw new Error(`Failed to fetch metric definition: ${response.status}`);
 			}
 			
 			const data = await response.json();
+			console.log('MetricTooltip: API response data:', data);
 			
 			if (data.error) {
 				throw new Error(data.error);
@@ -65,7 +72,7 @@
 			metricDefinitionsStore.setMetric(metricId, data);
 			
 		} catch (err) {
-			console.error('Error fetching metric definition:', err);
+			console.error('MetricTooltip: Error fetching metric definition:', err);
 			error = err instanceof Error ? err.message : 'Unknown error occurred';
 		} finally {
 			loading = false;
@@ -73,11 +80,13 @@
 	}
 	
 	function showTooltip() {
+		console.log('MetricTooltip: showTooltip called for metricId:', metricId);
 		visible = true;
 		dispatch('show', { metricId });
 	}
 	
 	function hideTooltip() {
+		console.log('MetricTooltip: hideTooltip called for metricId:', metricId);
 		visible = false;
 		dispatch('hide', { metricId });
 	}
