@@ -225,6 +225,11 @@ class EdwEtlProcessor:
     
     def load_data(self) -> bool:
         """Load data from JSON file or operational database tables"""
+        logger.info(f"🔍 DEBUG: load_data() called with data_file = '{self.data_file}'")
+        logger.info(f"🔍 DEBUG: data_file type = {type(self.data_file)}")
+        logger.info(f"🔍 DEBUG: data_file is None? {self.data_file is None}")
+        logger.info(f"🔍 DEBUG: bool(data_file) = {bool(self.data_file)}")
+        
         if not self.data_file:
             logger.info("📊 No data file provided - using database-only mode")
             return self.load_data_from_database()
@@ -252,17 +257,49 @@ class EdwEtlProcessor:
         """Load data directly from operational database tables"""
         try:
             logger.info("📊 Loading data from operational database tables...")
+            logger.info(f"🔗 Using database engine: {self.engine.url}")
             
             self.data = {}
             operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics']
             
             with self.engine.connect() as conn:
+                logger.info("🔌 Database connection established successfully")
+                
+                # Test connection with a simple query
+                try:
+                    test_result = conn.execute(text("SELECT 1 as test"))
+                    logger.info(f"✅ Database test query successful: {test_result.fetchone()}")
+                except Exception as test_e:
+                    logger.error(f"❌ Database test query failed: {test_e}")
+                    return False
+                
                 for table in operational_tables:
                     try:
+                        logger.info(f"🔍 Loading table: {table}")
+                        
+                        # Check if table exists first
+                        table_check = conn.execute(text("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables 
+                                WHERE table_schema = 'public' 
+                                AND table_name = :table_name
+                            )
+                        """), {"table_name": table})
+                        table_exists = table_check.fetchone()[0]
+                        
+                        if not table_exists:
+                            logger.error(f"❌ Table {table} does not exist in public schema!")
+                            self.data[table] = []
+                            continue
+                        
                         # Load all records from operational table
-                        result = conn.execute(text(f"SELECT * FROM {table}"))
+                        logger.info(f"🔍 Executing: SELECT * FROM public.{table}")
+                        result = conn.execute(text(f"SELECT * FROM public.{table}"))
                         records = []
+                        row_count = 0
+                        
                         for row in result:
+                            row_count += 1
                             record = dict(row._mapping)
                             # Convert any datetime fields to strings for consistency
                             for key, value in record.items():
@@ -271,20 +308,35 @@ class EdwEtlProcessor:
                             records.append(record)
                         
                         self.data[table] = records
+                        logger.info(f"✅ {table}: {len(records):,} records loaded successfully")
+                        
                         if records:
-                            logger.info(f"  📊 {table}: {len(records):,} records")
                             self.changed_tables.add(table)
+                            # Show first record as sample
+                            logger.info(f"📄 Sample record from {table}: {records[0] if records else 'None'}")
+                        else:
+                            logger.warning(f"⚠️ {table} table exists but contains no records")
                         
                     except Exception as e:
-                        logger.warning(f"⚠️ Could not load {table}: {e}")
+                        logger.error(f"❌ Error loading {table}: {str(e)}")
+                        logger.error(f"❌ Exception type: {type(e).__name__}")
+                        import traceback
+                        logger.error(f"❌ Full traceback: {traceback.format_exc()}")
                         self.data[table] = []
             
             total_records = sum(len(records) for records in self.data.values())
             logger.info(f"✅ Database data loaded: {total_records:,} total records")
+            
+            # Log summary of what was loaded
+            for table, records in self.data.items():
+                logger.info(f"📊 Final count - {table}: {len(records)} records")
+            
             return True
             
         except Exception as e:
             logger.error(f"❌ Database data loading failed: {e}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
             return False
     
     def detect_operational_changes(self) -> bool:
@@ -3896,14 +3948,19 @@ class EdwEtlProcessor:
                         -- Check if teams made playoffs
                         MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_a_made_playoffs,
                         MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_b_made_playoffs,
-                        -- Check championship outcomes  
-                        MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.season_rank = 1 THEN 1 ELSE 0 END) as team_a_champion,
-                        MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.season_rank = 1 THEN 1 ELSE 0 END) as team_b_champion
+                         -- Check championship outcomes  
+                        MAX(CASE WHEN fm.winner_team_key = ts.team_a_key THEN 1 ELSE 0 END) as team_a_champion,
+                        MAX(CASE WHEN fm.winner_team_key = ts.team_b_key THEN 1 ELSE 0 END) as team_b_champion
                     FROM trade_synthesis ts
                     LEFT JOIN edw.fact_team_performance ftp ON (
                         ftp.league_key = ts.league_key 
                         AND ftp.season_year = ts.season_year
-                        AND ftp.team_key IN (ts.team_a_key, ts.team_b_key)
+                        AND ftp.team_key IN (ts.team_a_key, ts.team_b_key))
+					LEFT JOIN edw.fact_matchup fm ON (
+						fm.league_key = ts.league_key
+						AND fm.season_year = fm.season_year
+						AND fm.winner_team_key IN (ts.team_a_key, ts.team_b_key)
+						AND is_championship = TRUE
                     )
                     GROUP BY ts.synthetic_trade_group_id
                 ),
@@ -5959,7 +6016,7 @@ class EdwEtlProcessor:
                     mp.season_year as most_important_game_season,
                     CASE 
                         WHEN mp.matchup_identifier LIKE '%W%' THEN 
-                            CAST(SUBSTRING(mp.matchup_identifier FROM 'W(\d+)') AS INTEGER)
+                            CAST(SUBSTRING(mp.matchup_identifier FROM 'W(\\d+)') AS INTEGER)
                         ELSE NULL 
                     END as most_important_game_week,
                     mp.league_name as most_important_game_league,
@@ -6180,6 +6237,11 @@ class EdwEtlProcessor:
                     # Use bulk insert for clean rebuild
                     logger.info(f"⚡ Bulk inserting {len(df)} records...")
                     df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
+                    
+                    # Force rebuild: skip incremental logic entirely
+                    conn.commit()
+                    logger.info(f"✅ Successfully loaded {len(data)} records into {table_name}")
+                    return True
                 else:
                     # Incremental loading: truncate and reload for marts (they are aggregations)
                     logger.info(f"🔄 Refreshing mart table {table_name}...")

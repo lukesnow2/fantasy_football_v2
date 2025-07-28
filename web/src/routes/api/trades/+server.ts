@@ -227,8 +227,109 @@ export const GET: RequestHandler = async ({ url }) => {
 			const bestWorstResult = await db.execute(sql.raw(bestWorstQuery));
 			const bestWorstArray = Array.from(bestWorstResult);
 			
-			const bestTrades = bestWorstArray.filter((t: any) => t.category === 'best');
+			// DEBUG: Add comprehensive logging for championship trades
+			console.log('=== CHAMPIONSHIP TRADES DEBUG ===');
+			console.log('Best/worst query result count:', bestWorstArray.length);
+			
+			// Log all championship trades with detailed information
 			const championshipTrades = bestWorstArray.filter((t: any) => t.category === 'championship');
+			console.log('Championship trades found:', championshipTrades.length);
+			
+			championshipTrades.forEach((trade: any, index: number) => {
+				console.log(`\n--- Championship Trade ${index + 1} ---`);
+				console.log('Season:', trade.season_year);
+				console.log('Team A Manager:', trade.team_a_manager);
+				console.log('Team B Manager:', trade.team_b_manager);
+				console.log('Team A Champion Flag:', trade.team_a_champion);
+				console.log('Team B Champion Flag:', trade.team_b_champion);
+				console.log('Trade Winner:', trade.trade_winner);
+				console.log('Production Differential:', trade.production_differential);
+				console.log('Team A Final Score:', trade.team_a_final_score);
+				console.log('Team B Final Score:', trade.team_b_final_score);
+				console.log('Trade Analysis:', trade.trade_analysis);
+			});
+			
+			// DEBUG: Check raw championship data in fact_matchup
+			try {
+				const championshipDataQuery = `
+					SELECT 
+						fm.season_year,
+						fm.winner_team_key,
+						fm.is_championship,
+						dt.team_name,
+						dm.manager_name
+					FROM edw.fact_matchup fm
+					LEFT JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
+					LEFT JOIN edw.dim_manager dm ON dt.manager_key = dm.manager_key
+					WHERE fm.is_championship = 1
+					ORDER BY fm.season_year DESC
+				`;
+				const championshipData = await db.execute(sql.raw(championshipDataQuery));
+				console.log('\n=== RAW CHAMPIONSHIP DATA ===');
+				console.log('Championship matchups found:', championshipData.length);
+				Array.from(championshipData).forEach((champ: any) => {
+					console.log(`Season ${champ.season_year}: ${champ.manager_name} (${champ.team_name}) - Team Key: ${champ.winner_team_key}`);
+				});
+			} catch (error) {
+				console.error('Error fetching championship data:', error);
+			}
+			
+			// DEBUG: Check team-manager mappings
+			try {
+				const teamManagerQuery = `
+					SELECT DISTINCT
+						dt.team_key,
+						dt.team_name,
+						dm.manager_name,
+						dm.manager_key
+					FROM edw.dim_team dt
+					LEFT JOIN edw.dim_manager dm ON dt.manager_key = dm.manager_key
+					WHERE dm.manager_name ILIKE '%omar%' OR dm.manager_name ILIKE '%luke%'
+					ORDER BY dm.manager_name
+				`;
+				const teamManagerData = await db.execute(sql.raw(teamManagerQuery));
+				console.log('\n=== TEAM-MANAGER MAPPINGS ===');
+				console.log('Omar/Luke team mappings:', Array.from(teamManagerData));
+			} catch (error) {
+				console.error('Error fetching team-manager mappings:', error);
+			}
+			
+			// DEBUG: Check trade analysis view for Omar's trades
+			try {
+				const omarTradesQuery = `
+					SELECT 
+						season_year,
+						team_a_manager,
+						team_b_manager,
+						team_a_champion,
+						team_b_champion,
+						trade_winner,
+						production_differential
+					FROM edw.vw_trade_analysis
+					WHERE team_a_manager ILIKE '%omar%' OR team_b_manager ILIKE '%omar%'
+					ORDER BY season_year DESC, transaction_date DESC
+				`;
+				const omarTrades = await db.execute(sql.raw(omarTradesQuery));
+				console.log('\n=== OMAR TRADES DEBUG ===');
+				console.log('Omar trades found:', omarTrades.length);
+				Array.from(omarTrades).forEach((trade: any) => {
+					console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
+					console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
+					console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
+				});
+			} catch (error) {
+				console.error('Error fetching Omar trades:', error);
+			}
+			
+			console.log('=== END CHAMPIONSHIP TRADES DEBUG ===\n');
+			
+			const bestTrades = bestWorstArray.filter((t: any) => t.category === 'best');
+			
+			console.log('Best trades count:', bestTrades.length);
+			console.log('Championship trades count:', championshipTrades.length);
+			if (championshipTrades.length > 0) {
+				console.log('First championship trade:', championshipTrades[0]);
+			}
 
 			analytics = {
 				...analytics,
@@ -350,6 +451,11 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		console.log(`Returning ${tradesArray.length} trades and analytics:`, Object.keys(camelCaseAnalytics));
+		
+		// Debug analytics structure
+		console.log('Analytics overview:', camelCaseAnalytics.overview);
+		console.log('Analytics championshipTrades:', camelCaseAnalytics.championshipTrades);
+		console.log('Analytics championshipTrades length:', camelCaseAnalytics.championshipTrades?.length);
 
 		return json({
 			trades: tradesArray,

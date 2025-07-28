@@ -277,15 +277,21 @@ class EdwDeployment:
             logger.info("🔄 Running EDW ETL process...")
             
             # Create and configure ETL processor
-            etl_processor = EdwEtlProcessor(database_url=self.database_url)
+            etl_processor = EdwEtlProcessor(database_url=self.database_url, force_rebuild=self.force_rebuild)
             
             # Connect to database first
             if not etl_processor.connect():
                 logger.error("❌ ETL processor failed to connect to database")
                 return False
             
+            # Load operational data from database
+            if not etl_processor.load_data():
+                logger.error("❌ ETL processor failed to load operational data")
+                return False
+            
             # Process operational data to EDW (includes view creation)
-            if etl_processor.process_incremental_edw():
+            # Use full ETL process to ensure all dimensions are loaded
+            if etl_processor.run_etl():
                 logger.info("✅ EDW ETL process completed successfully")
                 return True
             else:
