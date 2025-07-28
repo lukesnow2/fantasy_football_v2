@@ -312,10 +312,9 @@ export const GET: RequestHandler = async ({ url }) => {
 						fm.winner_team_key,
 						fm.is_championship,
 						dt.team_name,
-						dm.manager_name
+						dt.manager_name
 					FROM edw.fact_matchup fm
 					LEFT JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
-					LEFT JOIN edw.dim_manager dm ON dt.manager_key = dm.manager_key
 					WHERE fm.is_championship = 1
 					ORDER BY fm.season_year DESC
 				`;
@@ -350,12 +349,10 @@ export const GET: RequestHandler = async ({ url }) => {
 					SELECT DISTINCT
 						dt.team_key,
 						dt.team_name,
-						dm.manager_name,
-						dm.manager_key
+						dt.manager_name
 					FROM edw.dim_team dt
-					LEFT JOIN edw.dim_manager dm ON dt.manager_key = dm.manager_key
-					WHERE dm.manager_name ILIKE '%omar%' OR dm.manager_name ILIKE '%luke%'
-					ORDER BY dm.manager_name
+					WHERE dt.manager_name ILIKE '%omar%' OR dt.manager_name ILIKE '%luke%'
+					ORDER BY dt.manager_name
 				`;
 				const teamManagerData = await db.execute(sql.raw(teamManagerQuery));
 				console.log('\n=== TEAM-MANAGER MAPPINGS ===');
@@ -511,17 +508,21 @@ export const GET: RequestHandler = async ({ url }) => {
 					leagueName: trade.leagueName || trade.league_name,
 					seasonYear: trade.seasonYear || trade.season_year,
 					transactionDate: trade.transactionDate || trade.transaction_date,
+					transactionWeek: trade.transactionWeek || trade.transaction_week,
 					teamAName: trade.teamAName || trade.team_a_name,
 					teamAManager: trade.teamAManager || trade.team_a_manager,
+					teamAGives: trade.teamAGives || trade.team_a_gives,
 					teamBName: trade.teamBName || trade.team_b_name,
 					teamBManager: trade.teamBManager || trade.team_b_manager,
+					teamBGives: trade.teamBGives || trade.team_b_gives,
 					tradeWinner: trade.tradeWinner || trade.trade_winner,
 					teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
 					teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
 					productionDifferential: trade.productionDifferential || trade.production_differential,
 					tradeResult: trade.tradeResult || trade.trade_result,
 					teamAChampion: trade.teamAChampion || trade.team_a_champion,
-					teamBChampion: trade.teamBChampion || trade.team_b_champion
+					teamBChampion: trade.teamBChampion || trade.team_b_champion,
+					tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis
 				};
 				
 				return convertedChampionshipTrade;
