@@ -167,8 +167,8 @@
 
 	// Tab configuration
 	const tabs = [
-		{ id: 'head-to-head', label: 'Head-to-Head', icon: Users },
 		{ id: 'overview', label: 'League Overview', icon: BarChart3 },
+		{ id: 'head-to-head', label: 'Head-to-Head', icon: Users },
 		{ id: 'records', label: 'Record Book', icon: Trophy }
 	];
 	
@@ -178,22 +178,6 @@
 	onMount(async () => {
 		// Skip the failing managers/historical endpoint for now
 		loading = false;
-		
-		// Test the meta-data API endpoint
-		console.log('=== TESTING META-DATA API ===');
-		try {
-			const testResponse = await fetch('/api/meta-data?metric_id=pythagorean_wins');
-			console.log('Meta-data API response status:', testResponse.status);
-			if (testResponse.ok) {
-				const testData = await testResponse.json();
-				console.log('Meta-data API response data:', testData);
-			} else {
-				console.error('Meta-data API failed:', testResponse.status, testResponse.statusText);
-			}
-		} catch (err) {
-			console.error('Meta-data API error:', err);
-		}
-		console.log('=== END META-DATA API TEST ===');
 		
 		// Load overview data since it's the default tab - use setTimeout to ensure it runs after mount
 		setTimeout(() => {
@@ -631,8 +615,7 @@
 						</div>
 					</div>
 					
-					<div class="relative">
-						<!-- TEMPORARY: Removed overflow-x-auto to test tooltip positioning -->
+					<div class="overflow-x-auto">
 						<table class="w-full text-sm">
 							<thead>
 								<tr class="border-b border-slate-700">
@@ -642,20 +625,31 @@
 									<th class="text-center py-3 px-4 text-slate-300">Avg Score</th>
 									<th class="text-center py-3 px-4 text-slate-300">Biggest Win</th>
 									<th class="text-center py-3 px-4 text-slate-300">
-										<span class="cursor-help" title="Expected wins based on points scored vs points against. Higher = better performance relative to scoring.">
-											Pythagorean Wins
-										</span>
+										<div class="relative group">
+											<span class="cursor-help text-purple-400 font-medium">Pythagorean Wins</span>
+											<!-- Custom tooltip -->
+											<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+												<div class="font-semibold mb-1">Pythagorean Wins</div>
+												<div class="text-xs text-slate-300">Expected wins based on points scored vs points allowed. Higher = better performance relative to scoring.</div>
+												<div class="text-xs text-slate-400 mt-1">Formula: (Points For)² ÷ ((Points For)² + (Points Against)²) × Games Played</div>
+												<!-- Arrow -->
+												<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+											</div>
+										</div>
 									</th>
 									<th class="text-center py-3 px-4 text-slate-300">
-										<span class="cursor-help" title="Difference between actual wins and expected wins. Positive = lucky, negative = unlucky.">
-											Luck Factor
-										</span>
-									</th>
-									<th class="text-center py-3 px-4 text-slate-300">
-										<!-- Test tooltip to see if component works -->
-										<MetricTooltip metricId="total_matchups" position="top" maxWidth="400px">
-											<span class="cursor-help text-red-400" on:mouseenter={() => console.log('Test tooltip mouseenter')} on:mouseleave={() => console.log('Test tooltip mouseleave')}>Test Tooltip</span>
-										</MetricTooltip>
+										<div class="relative group">
+											<span class="cursor-help text-green-400 font-medium">Luck Factor</span>
+											<!-- Custom tooltip -->
+											<div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg shadow-xl border border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+												<div class="font-semibold mb-1">Luck Factor</div>
+												<div class="text-xs text-slate-300">Difference between actual wins and expected wins. Positive = lucky, negative = unlucky.</div>
+												<div class="text-xs text-slate-400 mt-1">Formula: Actual Wins - Pythagorean Wins</div>
+												<div class="text-xs text-slate-400">±2.0 games is typical variance, ±3.0+ is significant luck/unluck.</div>
+												<!-- Arrow -->
+												<div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+											</div>
+										</div>
 									</th>
 									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
 								</tr>
