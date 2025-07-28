@@ -226,6 +226,10 @@
 							Championship Impact Trades
 						</h2>
 						
+						<div class="text-sm text-slate-400 mb-4">
+							Showing trades with positive 50+ point production differentials that involved championship winners
+						</div>
+						
 						<div class="space-y-4">
 							{#each tradeData.analytics.championshipTrades as trade}
 								{@const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager}

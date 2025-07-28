@@ -128,7 +128,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					AVG(ABS(production_differential)) as avg_production_impact,
 					COUNT(*) FILTER (WHERE ABS(team_a_final_score - team_b_final_score) >= 8) as decisive_trades,
 					COUNT(*) FILTER (WHERE trade_winner = 'Even Trade') as even_trades,
-					COUNT(*) FILTER (WHERE team_a_champion = 1 OR team_b_champion = 1) as championship_impact_trades,
+					COUNT(*) FILTER (WHERE (team_a_champion = 1 OR team_b_champion = 1) AND production_differential >= 50) as championship_impact_trades,
 					AVG(total_players) as avg_players_per_trade,
 					MAX(total_players) as biggest_trade_players,
 					COUNT(DISTINCT team_a_manager) + COUNT(DISTINCT team_b_manager) as active_traders
@@ -217,7 +217,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					COUNT(*) as total_trades,
 					AVG(total_players) as avg_players_per_trade,
 					COUNT(*) FILTER (WHERE trade_winner != 'Even Trade') as decisive_trades,
-					COUNT(*) FILTER (WHERE team_a_champion = 1 OR team_b_champion = 1) as championship_impact,
+					COUNT(*) FILTER (WHERE (team_a_champion = 1 OR team_b_champion = 1) AND production_differential >= 50) as championship_impact,
 					AVG(ABS(production_differential)) as avg_production_impact,
 					COUNT(*) FILTER (WHERE transaction_week >= 10) as late_season_trades
 				FROM edw.vw_trade_analysis
@@ -268,9 +268,10 @@ export const GET: RequestHandler = async ({ url }) => {
 						ELSE 'Even Trade'
 					END as trade_result
 				FROM edw.vw_trade_analysis
-				WHERE team_a_champion = 1 OR team_b_champion = 1
+				WHERE (team_a_champion = 1 OR team_b_champion = 1)
+				AND production_differential >= 50
 				${season && season !== 'all' ? `AND season_year = ${parseInt(season)}` : ''}
-				ORDER BY season_year DESC
+				ORDER BY production_differential DESC
 				LIMIT 5
 			`;
 
