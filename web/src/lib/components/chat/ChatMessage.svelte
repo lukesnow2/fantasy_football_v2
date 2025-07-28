@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { MessageSquare, MoreHorizontal, Edit3, Trash2, Reply, Plus } from 'lucide-svelte';
 	import ChatReactions from './ChatReactions.svelte';
 	import EmojiPicker from './EmojiPicker.svelte';
@@ -48,7 +50,17 @@
 		}
 	}
 	
+	// Get user from page data
+	$: user = $page.data.user;
+	
 	function handleEdit() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		isEditing = true;
 		showMessageActions = false;
 	}
@@ -69,6 +81,13 @@
 	}
 	
 	function handleDelete() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		dispatch('delete', {
 			messageId: message.messageId
 		});
@@ -76,6 +95,13 @@
 	}
 	
 	function handleReply() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		dispatch('reply', {
 			messageId: message.messageId,
 			messageKey: message.messageKey
@@ -84,10 +110,24 @@
 	}
 	
 	function handleReaction(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		dispatch('reaction', event.detail);
 	}
 	
 	function handleEmojiSelect(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const { emoji, emojiType } = event.detail;
 		
 		dispatch('reaction', {
@@ -101,16 +141,37 @@
 	}
 	
 	function handleAddReactionClick(event: MouseEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		event.stopPropagation();
 		event.preventDefault();
 		showEmojiPicker = !showEmojiPicker;
 	}
 	
 	function handleMoreActions() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		showMessageActions = !showMessageActions;
 	}
 	
 	function handleThreadClick() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		dispatch('thread', {
 			messageId: message.messageId,
 			messageKey: message.messageKey
