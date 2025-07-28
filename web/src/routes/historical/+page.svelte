@@ -616,8 +616,16 @@
 									<th class="text-center py-3 px-4 text-slate-300">Record</th>
 									<th class="text-center py-3 px-4 text-slate-300">Avg Score</th>
 									<th class="text-center py-3 px-4 text-slate-300">Biggest Win</th>
-									<th class="text-center py-3 px-4 text-slate-300">Pythagorean Wins</th>
-									<th class="text-center py-3 px-4 text-slate-300">Luck Factor</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<MetricTooltip metricId="pythagorean_wins" position="top" maxWidth="300px">
+											<span class="cursor-help">Pythagorean Wins</span>
+										</MetricTooltip>
+									</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<MetricTooltip metricId="luck_factor" position="top" maxWidth="300px">
+											<span class="cursor-help">Luck Factor</span>
+										</MetricTooltip>
+									</th>
 									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
 								</tr>
 							</thead>
@@ -642,20 +650,22 @@
 											<div class="text-xs text-slate-400">margin</div>
 										</td>
 										<td class="text-center py-3 px-4">
-											<MetricTooltip metricId="pythagorean_wins" position="top" maxWidth="300px">
-												<div class="font-bold text-purple-400">
-													{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0).toFixed(1)} - {parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0).toFixed(1)}
-												</div>
-												<div class="text-xs text-slate-400">A vs B</div>
-											</MetricTooltip>
+											<div class="font-bold text-purple-400">
+												{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0).toFixed(1)} - {parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0).toFixed(1)}
+											</div>
+											<div class="text-xs text-slate-400">{matchup.managerAName || matchup.manager_a_name} vs {matchup.managerBName || matchup.manager_b_name}</div>
 										</td>
 										<td class="text-center py-3 px-4">
-											<MetricTooltip metricId="luck_factor" position="top" maxWidth="300px">
-												<div class="font-bold text-green-400">
-													{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0).toFixed(2)} - {parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0).toFixed(2)}
-												</div>
-												<div class="text-xs text-slate-400">A vs B</div>
-											</MetricTooltip>
+											<div class="font-bold">
+												<span class="{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0) >= 0 ? 'text-green-400' : 'text-red-400'}">
+													{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0).toFixed(2)}
+												</span>
+												<span class="text-slate-400"> / </span>
+												<span class="{parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0) >= 0 ? 'text-green-400' : 'text-red-400'}">
+													{parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0).toFixed(2)}
+												</span>
+											</div>
+											<div class="text-xs text-slate-400">{matchup.managerAName || matchup.manager_a_name} vs {matchup.managerBName || matchup.manager_b_name}</div>
 										</td>
 										<td class="text-center py-3 px-4">
 											{#if (matchup.championshipMatchups || matchup.championship_matchups) > 0}
