@@ -15,6 +15,47 @@ export const GET: RequestHandler = async ({ url }) => {
 			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_trade_analysis`;
 			const testResult = await db.execute(sql.raw(testQuery));
 			console.log('Trade analysis view count:', testResult[0]);
+			
+			// DEBUG: Check raw championship data from view
+			const championshipViewQuery = `
+				SELECT 
+					season_year,
+					team_a_manager,
+					team_b_manager,
+					team_a_champion,
+					team_b_champion,
+					trade_winner,
+					production_differential
+				FROM edw.vw_trade_analysis
+				WHERE team_a_champion = 1 OR team_b_champion = 1
+				ORDER BY season_year DESC
+				LIMIT 10
+			`;
+			const championshipViewResult = await db.execute(sql.raw(championshipViewQuery));
+			console.log('=== DATABASE VIEW CHAMPIONSHIP DEBUG ===');
+			console.log('Championship trades in view:', championshipViewResult.length);
+			Array.from(championshipViewResult).forEach((trade: any) => {
+				console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
+				console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
+				console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
+			});
+			console.log('=== END DATABASE VIEW CHAMPIONSHIP DEBUG ===\n');
+			
+			// DEBUG: Check if any trades have champion flags at all
+			const anyChampionQuery = `
+				SELECT 
+					COUNT(*) as total_trades,
+					COUNT(*) FILTER (WHERE team_a_champion IS NOT NULL) as team_a_champion_count,
+					COUNT(*) FILTER (WHERE team_b_champion IS NOT NULL) as team_b_champion_count,
+					COUNT(*) FILTER (WHERE team_a_champion = 1) as team_a_champion_true,
+					COUNT(*) FILTER (WHERE team_b_champion = 1) as team_b_champion_true
+				FROM edw.vw_trade_analysis
+			`;
+			const anyChampionResult = await db.execute(sql.raw(anyChampionQuery));
+			console.log('=== CHAMPION FLAGS SUMMARY ===');
+			console.log('Champion flags summary:', Array.from(anyChampionResult)[0]);
+			console.log('=== END CHAMPION FLAGS SUMMARY ===\n');
+			
 		} catch (error) {
 			console.error('Trade analysis view error:', error);
 		}
@@ -339,40 +380,59 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Convert snake_case to camelCase for frontend compatibility
-		const tradesArray = Array.from(trades).map((trade: any) => ({
-			leagueName: trade.leagueName || trade.league_name,
-			seasonYear: trade.seasonYear || trade.season_year,
-			transactionDate: trade.transactionDate || trade.transaction_date,
-			transactionWeek: trade.transactionWeek || trade.transaction_week,
-			teamAName: trade.teamAName || trade.team_a_name,
-			teamAManager: trade.teamAManager || trade.team_a_manager,
-			teamAGives: trade.teamAGives || trade.team_a_gives,
-			teamBName: trade.teamBName || trade.team_b_name,
-			teamBManager: trade.teamBManager || trade.team_b_manager,
-			teamBGives: trade.teamBGives || trade.team_b_gives,
-			tradeType: trade.tradeType || trade.trade_type,
-			totalPlayers: trade.totalPlayers || trade.total_players,
-			teamAProduction: trade.teamAProduction || trade.team_a_production,
-			teamBProduction: trade.teamBProduction || trade.team_b_production,
-			productionDifferential: trade.productionDifferential || trade.production_differential,
-			teamAPreTradeAvg: trade.teamAPreTradeAvg || trade.team_a_pre_trade_avg,
-			teamBPreTradeAvg: trade.teamBPreTradeAvg || trade.team_b_pre_trade_avg,
-			opportunityDifferential: trade.opportunityDifferential || trade.opportunity_differential,
-			teamAMadePlayoffs: trade.teamAMadePlayoffs || trade.team_a_made_playoffs,
-			teamBMadePlayoffs: trade.teamBMadePlayoffs || trade.team_b_made_playoffs,
-			teamAChampion: trade.teamAChampion || trade.team_a_champion,
-			teamBChampion: trade.teamBChampion || trade.team_b_champion,
-			teamAProductionScore: trade.teamAProductionScore || trade.team_a_production_score,
-			teamAPlayoffScore: trade.teamAPlayoffScore || trade.team_a_playoff_score,
-			teamAOpportunityScore: trade.teamAOpportunityScore || trade.team_a_opportunity_score,
-			teamAContextScore: trade.teamAContextScore || trade.team_a_context_score,
-			teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
-			teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
-			tradeWinner: trade.tradeWinner || trade.trade_winner,
-			tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis,
-			evaluationStatus: trade.evaluationStatus || trade.evaluation_status,
-			tradeGroupId: trade.tradeGroupId || trade.trade_group_id
-		}));
+		const tradesArray = Array.from(trades).map((trade: any) => {
+			// DEBUG: Log raw trade data before conversion
+			console.log('=== TRADE DATA CONVERSION DEBUG ===');
+			console.log('Raw trade data keys:', Object.keys(trade));
+			console.log('Raw team_a_champion:', trade.team_a_champion);
+			console.log('Raw team_b_champion:', trade.team_b_champion);
+			console.log('Raw team_a_manager:', trade.team_a_manager);
+			console.log('Raw team_b_manager:', trade.team_b_manager);
+			
+			const convertedTrade = {
+				leagueName: trade.leagueName || trade.league_name,
+				seasonYear: trade.seasonYear || trade.season_year,
+				transactionDate: trade.transactionDate || trade.transaction_date,
+				transactionWeek: trade.transactionWeek || trade.transaction_week,
+				teamAName: trade.teamAName || trade.team_a_name,
+				teamAManager: trade.teamAManager || trade.team_a_manager,
+				teamAGives: trade.teamAGives || trade.team_a_gives,
+				teamBName: trade.teamBName || trade.team_b_name,
+				teamBManager: trade.teamBManager || trade.team_b_manager,
+				teamBGives: trade.teamBGives || trade.team_b_gives,
+				tradeType: trade.tradeType || trade.trade_type,
+				totalPlayers: trade.totalPlayers || trade.total_players,
+				teamAProduction: trade.teamAProduction || trade.team_a_production,
+				teamBProduction: trade.teamBProduction || trade.team_b_production,
+				productionDifferential: trade.productionDifferential || trade.production_differential,
+				teamAPreTradeAvg: trade.teamAPreTradeAvg || trade.team_a_pre_trade_avg,
+				teamBPreTradeAvg: trade.teamBPreTradeAvg || trade.team_b_pre_trade_avg,
+				opportunityDifferential: trade.opportunityDifferential || trade.opportunity_differential,
+				teamAMadePlayoffs: trade.teamAMadePlayoffs || trade.team_a_made_playoffs,
+				teamBMadePlayoffs: trade.teamBMadePlayoffs || trade.team_b_made_playoffs,
+				teamAChampion: trade.teamAChampion || trade.team_a_champion,
+				teamBChampion: trade.teamBChampion || trade.team_b_champion,
+				teamAProductionScore: trade.teamAProductionScore || trade.team_a_production_score,
+				teamAPlayoffScore: trade.teamAPlayoffScore || trade.team_a_playoff_score,
+				teamAOpportunityScore: trade.teamAOpportunityScore || trade.team_a_opportunity_score,
+				teamAContextScore: trade.teamAContextScore || trade.team_a_context_score,
+				teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
+				teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
+				tradeWinner: trade.tradeWinner || trade.trade_winner,
+				tradeAnalysis: trade.tradeAnalysis || trade.trade_analysis,
+				evaluationStatus: trade.evaluationStatus || trade.evaluation_status,
+				tradeGroupId: trade.tradeGroupId || trade.trade_group_id
+			};
+			
+			// DEBUG: Log converted trade data
+			console.log('Converted teamAChampion:', convertedTrade.teamAChampion);
+			console.log('Converted teamBChampion:', convertedTrade.teamBChampion);
+			console.log('Converted teamAManager:', convertedTrade.teamAManager);
+			console.log('Converted teamBManager:', convertedTrade.teamBManager);
+			console.log('=== END TRADE DATA CONVERSION DEBUG ===\n');
+			
+			return convertedTrade;
+		});
 
 		// Convert analytics to camelCase
 		const camelCaseAnalytics: any = {};
@@ -433,21 +493,42 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		if (analytics.championship_trades) {
-			camelCaseAnalytics.championshipTrades = analytics.championship_trades.map((trade: any) => ({
-				category: trade.category,
-				leagueName: trade.leagueName || trade.league_name,
-				seasonYear: trade.seasonYear || trade.season_year,
-				transactionDate: trade.transactionDate || trade.transaction_date,
-				teamAName: trade.teamAName || trade.team_a_name,
-				teamAManager: trade.teamAManager || trade.team_a_manager,
-				teamBName: trade.teamBName || trade.team_b_name,
-				teamBManager: trade.teamBManager || trade.team_b_manager,
-				tradeWinner: trade.tradeWinner || trade.trade_winner,
-				teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
-				teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
-				productionDifferential: trade.productionDifferential || trade.production_differential,
-				tradeResult: trade.tradeResult || trade.trade_result
-			}));
+			camelCaseAnalytics.championshipTrades = analytics.championship_trades.map((trade: any) => {
+				// DEBUG: Log raw championship trade data before conversion
+				console.log('=== CHAMPIONSHIP TRADE CONVERSION DEBUG ===');
+				console.log('Raw championship trade keys:', Object.keys(trade));
+				console.log('Raw team_a_champion:', trade.team_a_champion);
+				console.log('Raw team_b_champion:', trade.team_b_champion);
+				console.log('Raw team_a_manager:', trade.team_a_manager);
+				console.log('Raw team_b_manager:', trade.team_b_manager);
+				
+				const convertedChampionshipTrade = {
+					category: trade.category,
+					leagueName: trade.leagueName || trade.league_name,
+					seasonYear: trade.seasonYear || trade.season_year,
+					transactionDate: trade.transactionDate || trade.transaction_date,
+					teamAName: trade.teamAName || trade.team_a_name,
+					teamAManager: trade.teamAManager || trade.team_a_manager,
+					teamBName: trade.teamBName || trade.team_b_name,
+					teamBManager: trade.teamBManager || trade.team_b_manager,
+					tradeWinner: trade.tradeWinner || trade.trade_winner,
+					teamAFinalScore: trade.teamAFinalScore || trade.team_a_final_score,
+					teamBFinalScore: trade.teamBFinalScore || trade.team_b_final_score,
+					productionDifferential: trade.productionDifferential || trade.production_differential,
+					tradeResult: trade.tradeResult || trade.trade_result,
+					teamAChampion: trade.teamAChampion || trade.team_a_champion,
+					teamBChampion: trade.teamBChampion || trade.team_b_champion
+				};
+				
+				// DEBUG: Log converted championship trade data
+				console.log('Converted teamAChampion:', convertedChampionshipTrade.teamAChampion);
+				console.log('Converted teamBChampion:', convertedChampionshipTrade.teamBChampion);
+				console.log('Converted teamAManager:', convertedChampionshipTrade.teamAManager);
+				console.log('Converted teamBManager:', convertedChampionshipTrade.teamBManager);
+				console.log('=== END CHAMPIONSHIP TRADE CONVERSION DEBUG ===\n');
+				
+				return convertedChampionshipTrade;
+			});
 		}
 
 		console.log(`Returning ${tradesArray.length} trades and analytics:`, Object.keys(camelCaseAnalytics));
