@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
 	
 	let h2hData: any = null;
 	let overviewData: any = null;
@@ -615,6 +616,8 @@
 									<th class="text-center py-3 px-4 text-slate-300">Record</th>
 									<th class="text-center py-3 px-4 text-slate-300">Avg Score</th>
 									<th class="text-center py-3 px-4 text-slate-300">Biggest Win</th>
+									<th class="text-center py-3 px-4 text-slate-300">Pythagorean Wins</th>
+									<th class="text-center py-3 px-4 text-slate-300">Luck Factor</th>
 									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
 								</tr>
 							</thead>
@@ -637,6 +640,22 @@
 										<td class="text-center py-3 px-4">
 											<div class="font-bold text-amber-400">{parseFloat(matchup.mostLopsidedGame || matchup.most_lopsided_game || 0).toFixed(1)}</div>
 											<div class="text-xs text-slate-400">margin</div>
+										</td>
+										<td class="text-center py-3 px-4">
+											<MetricTooltip metricId="pythagorean_wins" position="top" maxWidth="300px">
+												<div class="font-bold text-purple-400">
+													{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0).toFixed(1)} - {parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0).toFixed(1)}
+												</div>
+												<div class="text-xs text-slate-400">A vs B</div>
+											</MetricTooltip>
+										</td>
+										<td class="text-center py-3 px-4">
+											<MetricTooltip metricId="luck_factor" position="top" maxWidth="300px">
+												<div class="font-bold text-green-400">
+													{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0).toFixed(2)} - {parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0).toFixed(2)}
+												</div>
+												<div class="text-xs text-slate-400">A vs B</div>
+											</MetricTooltip>
 										</td>
 										<td class="text-center py-3 px-4">
 											{#if (matchup.championshipMatchups || matchup.championship_matchups) > 0}
