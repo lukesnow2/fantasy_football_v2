@@ -32,33 +32,6 @@
 						console.log('Best trade fields:', Object.keys(tradeData.analytics.bestTrades[0]));
 					}
 					
-					// DEBUG: Add comprehensive championship trades logging
-					if (tradeData.analytics.championshipTrades?.length > 0) {
-						console.log('=== FRONTEND CHAMPIONSHIP TRADES DEBUG ===');
-						console.log('Championship trades received:', tradeData.analytics.championshipTrades.length);
-						
-						tradeData.analytics.championshipTrades.forEach((trade: any, index: number) => {
-							console.log(`\n--- Frontend Championship Trade ${index + 1} ---`);
-							console.log('Season:', trade.seasonYear);
-							console.log('Team A Manager:', trade.teamAManager);
-							console.log('Team B Manager:', trade.teamBManager);
-							console.log('Team A Champion Flag:', trade.teamAChampion);
-							console.log('Team B Champion Flag:', trade.teamBChampion);
-							console.log('Trade Winner:', trade.tradeWinner);
-							console.log('Production Differential:', trade.productionDifferential);
-							console.log('Team A Final Score:', trade.teamAFinalScore);
-							console.log('Team B Final Score:', trade.teamBFinalScore);
-							console.log('Trade Analysis:', trade.tradeAnalysis);
-							
-							// Calculate what champion should be displayed
-							const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager;
-							console.log('Calculated champion for display:', champion);
-						});
-						
-						console.log('=== END FRONTEND CHAMPIONSHIP TRADES DEBUG ===\n');
-					} else {
-						console.log('No championship trades found in analytics data');
-					}
 				}
 				
 				// Debug trades data
@@ -256,14 +229,6 @@
 						<div class="space-y-4">
 							{#each tradeData.analytics.championshipTrades as trade}
 								{@const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager}
-								{@const debugInfo = console.log('Rendering championship trade:', { 
-									season: trade.seasonYear, 
-									teamA: trade.teamAManager, 
-									teamB: trade.teamBManager,
-									teamAChampion: trade.teamAChampion,
-									teamBChampion: trade.teamBChampion,
-									calculatedChampion: champion
-								})}
 								<div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{champion} 🏆</span>

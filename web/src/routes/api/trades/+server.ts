@@ -234,49 +234,63 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		if (analysis === 'best_worst' || analysis === 'all') {
-			// Best and worst trades
-			const bestWorstQuery = `
-				WITH ranked_trades AS (
-					SELECT *,
-						ABS(team_a_final_score - team_b_final_score) as score_gap,
-						CASE 
-							WHEN team_a_final_score > team_b_final_score THEN 
-								CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
-							WHEN team_b_final_score > team_a_final_score THEN 
-								CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
-							ELSE 'Even Trade'
-						END as trade_result
-					FROM edw.vw_trade_analysis
-					${season && season !== 'all' ? `WHERE season_year = ${parseInt(season)}` : ''}
-				)
-				(
-					SELECT 'best' as category, * FROM ranked_trades 
-					WHERE trade_winner != 'Even Trade'
-					ORDER BY score_gap DESC, ABS(production_differential) DESC
-					LIMIT 5
-				)
-				UNION ALL
-				(
-					SELECT 'championship' as category, * FROM ranked_trades 
-					WHERE team_a_champion = 1 OR team_b_champion = 1
-					ORDER BY season_year DESC
-					LIMIT 5
-				)
+			// Best trades query
+			const bestTradesQuery = `
+				SELECT 
+					'best' as category,
+					*,
+					ABS(team_a_final_score - team_b_final_score) as score_gap,
+					CASE 
+						WHEN team_a_final_score > team_b_final_score THEN 
+							CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
+						WHEN team_b_final_score > team_a_final_score THEN 
+							CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
+						ELSE 'Even Trade'
+					END as trade_result
+				FROM edw.vw_trade_analysis
+				WHERE trade_winner != 'Even Trade'
+				${season && season !== 'all' ? `AND season_year = ${parseInt(season)}` : ''}
+				ORDER BY ABS(team_a_final_score - team_b_final_score) DESC, ABS(production_differential) DESC
+				LIMIT 5
 			`;
 
-			console.log('Executing best/worst query');
-			const bestWorstResult = await db.execute(sql.raw(bestWorstQuery));
-			const bestWorstArray = Array.from(bestWorstResult);
+			// Championship trades query (separate to avoid UNION issues)
+			const championshipTradesQuery = `
+				SELECT 
+					'championship' as category,
+					*,
+					ABS(team_a_final_score - team_b_final_score) as score_gap,
+					CASE 
+						WHEN team_a_final_score > team_b_final_score THEN 
+							CONCAT(team_a_manager, ' (', team_a_final_score, ' vs ', team_b_final_score, ')')
+						WHEN team_b_final_score > team_a_final_score THEN 
+							CONCAT(team_b_manager, ' (', team_b_final_score, ' vs ', team_a_final_score, ')')
+						ELSE 'Even Trade'
+					END as trade_result
+				FROM edw.vw_trade_analysis
+				WHERE team_a_champion = 1 OR team_b_champion = 1
+				${season && season !== 'all' ? `AND season_year = ${parseInt(season)}` : ''}
+				ORDER BY season_year DESC
+				LIMIT 5
+			`;
+
+			console.log('Executing best trades query');
+			const bestTradesResult = await db.execute(sql.raw(bestTradesQuery));
+			const bestTradesArray = Array.from(bestTradesResult);
+			
+			console.log('Executing championship trades query');
+			const championshipTradesResult = await db.execute(sql.raw(championshipTradesQuery));
+			const championshipTradesArray = Array.from(championshipTradesResult);
 			
 			// DEBUG: Add comprehensive logging for championship trades
 			console.log('=== CHAMPIONSHIP TRADES DEBUG ===');
-			console.log('Best/worst query result count:', bestWorstArray.length);
+			console.log('Best trades query result count:', bestTradesArray.length);
+			console.log('Championship trades query result count:', championshipTradesArray.length);
 			
 			// Log all championship trades with detailed information
-			const championshipTrades = bestWorstArray.filter((t: any) => t.category === 'championship');
-			console.log('Championship trades found:', championshipTrades.length);
+			console.log('Championship trades found:', championshipTradesArray.length);
 			
-			championshipTrades.forEach((trade: any, index: number) => {
+			championshipTradesArray.forEach((trade: any, index: number) => {
 				console.log(`\n--- Championship Trade ${index + 1} ---`);
 				console.log('Season:', trade.season_year);
 				console.log('Team A Manager:', trade.team_a_manager);
@@ -317,6 +331,21 @@ export const GET: RequestHandler = async ({ url }) => {
 			
 			// DEBUG: Check team-manager mappings
 			try {
+				// First check the schema of dim_team and dim_manager
+				const schemaQuery = `
+					SELECT 
+						table_name,
+						column_name,
+						data_type
+					FROM information_schema.columns 
+					WHERE table_name IN ('dim_team', 'dim_manager')
+					AND table_schema = 'edw'
+					ORDER BY table_name, ordinal_position
+				`;
+				const schemaData = await db.execute(sql.raw(schemaQuery));
+				console.log('\n=== DATABASE SCHEMA DEBUG ===');
+				console.log('Schema info:', Array.from(schemaData));
+				
 				const teamManagerQuery = `
 					SELECT DISTINCT
 						dt.team_key,
@@ -364,31 +393,21 @@ export const GET: RequestHandler = async ({ url }) => {
 			
 			console.log('=== END CHAMPIONSHIP TRADES DEBUG ===\n');
 			
-			const bestTrades = bestWorstArray.filter((t: any) => t.category === 'best');
-			
-			console.log('Best trades count:', bestTrades.length);
-			console.log('Championship trades count:', championshipTrades.length);
-			if (championshipTrades.length > 0) {
-				console.log('First championship trade:', championshipTrades[0]);
+			console.log('Best trades count:', bestTradesArray.length);
+			console.log('Championship trades count:', championshipTradesArray.length);
+			if (championshipTradesArray.length > 0) {
+				console.log('First championship trade:', championshipTradesArray[0]);
 			}
 
 			analytics = {
 				...analytics,
-				best_trades: bestTrades,
-				championship_trades: championshipTrades
+				best_trades: bestTradesArray,
+				championship_trades: championshipTradesArray
 			};
 		}
 
 		// Convert snake_case to camelCase for frontend compatibility
 		const tradesArray = Array.from(trades).map((trade: any) => {
-			// DEBUG: Log raw trade data before conversion
-			console.log('=== TRADE DATA CONVERSION DEBUG ===');
-			console.log('Raw trade data keys:', Object.keys(trade));
-			console.log('Raw team_a_champion:', trade.team_a_champion);
-			console.log('Raw team_b_champion:', trade.team_b_champion);
-			console.log('Raw team_a_manager:', trade.team_a_manager);
-			console.log('Raw team_b_manager:', trade.team_b_manager);
-			
 			const convertedTrade = {
 				leagueName: trade.leagueName || trade.league_name,
 				seasonYear: trade.seasonYear || trade.season_year,
@@ -423,13 +442,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				evaluationStatus: trade.evaluationStatus || trade.evaluation_status,
 				tradeGroupId: trade.tradeGroupId || trade.trade_group_id
 			};
-			
-			// DEBUG: Log converted trade data
-			console.log('Converted teamAChampion:', convertedTrade.teamAChampion);
-			console.log('Converted teamBChampion:', convertedTrade.teamBChampion);
-			console.log('Converted teamAManager:', convertedTrade.teamAManager);
-			console.log('Converted teamBManager:', convertedTrade.teamBManager);
-			console.log('=== END TRADE DATA CONVERSION DEBUG ===\n');
 			
 			return convertedTrade;
 		});
@@ -494,14 +506,6 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		if (analytics.championship_trades) {
 			camelCaseAnalytics.championshipTrades = analytics.championship_trades.map((trade: any) => {
-				// DEBUG: Log raw championship trade data before conversion
-				console.log('=== CHAMPIONSHIP TRADE CONVERSION DEBUG ===');
-				console.log('Raw championship trade keys:', Object.keys(trade));
-				console.log('Raw team_a_champion:', trade.team_a_champion);
-				console.log('Raw team_b_champion:', trade.team_b_champion);
-				console.log('Raw team_a_manager:', trade.team_a_manager);
-				console.log('Raw team_b_manager:', trade.team_b_manager);
-				
 				const convertedChampionshipTrade = {
 					category: trade.category,
 					leagueName: trade.leagueName || trade.league_name,
@@ -519,13 +523,6 @@ export const GET: RequestHandler = async ({ url }) => {
 					teamAChampion: trade.teamAChampion || trade.team_a_champion,
 					teamBChampion: trade.teamBChampion || trade.team_b_champion
 				};
-				
-				// DEBUG: Log converted championship trade data
-				console.log('Converted teamAChampion:', convertedChampionshipTrade.teamAChampion);
-				console.log('Converted teamBChampion:', convertedChampionshipTrade.teamBChampion);
-				console.log('Converted teamAManager:', convertedChampionshipTrade.teamAManager);
-				console.log('Converted teamBManager:', convertedChampionshipTrade.teamBManager);
-				console.log('=== END CHAMPIONSHIP TRADE CONVERSION DEBUG ===\n');
 				
 				return convertedChampionshipTrade;
 			});
