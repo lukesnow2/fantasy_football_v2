@@ -9,7 +9,8 @@ import {
 	date,
 	pgSchema,
 	uniqueIndex,
-	serial
+	serial,
+	bigint
 } from 'drizzle-orm/pg-core';
 
 // Define schemas
@@ -201,6 +202,9 @@ export const user = appSchema.table('user', {
 	// User preferences stored as JSON
 	notificationPreferences: text('notification_preferences'),
 	profileSettings: text('profile_settings'),
+	// Passkey authentication fields
+	passkeyEnabled: boolean('passkey_enabled').default(false),
+	passkeyRegisteredAt: timestamp('passkey_registered_at'),
 	// Timestamps
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
@@ -220,6 +224,40 @@ export const passwordResetToken = appSchema.table('password_reset_token', {
 	email: text('email').notNull(),
 	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull()
+});
+
+// WebAuthn Tables for Biometric Passkeys
+export const webauthnCredentials = appSchema.table('webauthn_credentials', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	credentialId: text('credential_id').notNull().unique(),
+	publicKey: text('public_key').notNull(),
+	signCount: bigint('sign_count', { mode: 'number' }).notNull().default(0),
+	transports: text('transports').array(), // ['usb', 'nfc', 'ble', 'internal']
+	backupEligible: boolean('backup_eligible').notNull().default(false),
+	backupState: boolean('backup_state').notNull().default(false),
+	createdAt: timestamp('created_at').defaultNow(),
+	lastUsedAt: timestamp('last_used_at'),
+	deviceType: varchar('device_type', { length: 50 }), // 'phone', 'laptop', 'desktop', 'tablet'
+	authenticatorType: varchar('authenticator_type', { length: 50 }) // 'platform', 'cross-platform'
+});
+
+export const webauthnChallenges = appSchema.table('webauthn_challenges', {
+	id: text('id').primaryKey(),
+	challenge: text('challenge').notNull(),
+	userId: text('user_id').references(() => user.id),
+	type: varchar('type', { length: 20 }).notNull(), // 'registration', 'authentication'
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow()
+});
+
+export const backupCodes = appSchema.table('backup_codes', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	codeHash: text('code_hash').notNull(),
+	used: boolean('used').default(false),
+	usedAt: timestamp('used_at'),
+	createdAt: timestamp('created_at').defaultNow()
 });
 
 // Rule Proposal and Voting System Tables (Application features)

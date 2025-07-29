@@ -8,7 +8,8 @@ export default defineConfig({
 	dialect: 'postgresql',
 	dbCredentials: { 
 		// @ts-ignore
-		url: process.env.DATABASE_URL
+		url: process.env.DATABASE_URL,
+		ssl: true
 	},
 	verbose: true,
 	strict: true
