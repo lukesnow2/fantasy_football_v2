@@ -1,19 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import { WebAuthnBrowser, type WebAuthnError } from './browser';
   import { goto } from '$app/navigation';
   import { enhance } from '$app/forms';
 
   export let userId: string;
   export let username: string;
+  export let managerKey: string | undefined = undefined;
+  export let isRotationMode: boolean = false;
 
-  let managerKey = '';
+  const dispatch = createEventDispatcher();
+
   let credentialName = '';
-  let isSupported = false;
-  let isAvailable = false;
   let isLoading = false;
   let error = '';
   let success = false;
+  let isSupported = false;
+  let isAvailable = false;
   let biometricType = '';
 
   onMount(async () => {
@@ -27,7 +31,7 @@
   });
 
   async function handleRegistration() {
-    if (!managerKey.trim()) {
+    if (!managerKey?.trim() && !isRotationMode) {
       error = 'Manager key is required';
       return;
     }
@@ -69,8 +73,25 @@
         throw new Error(errorData.error || 'Registration verification failed');
       }
 
+      // If in rotation mode, call the rotation endpoint
+      if (isRotationMode) {
+        const rotationResponse = await fetch('/api/webauthn/credentials/rotate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userId, 
+            newCredentialId: registrationResponse.id 
+          })
+        });
+
+        if (!rotationResponse.ok) {
+          throw new Error('Failed to rotate credentials');
+        }
+      }
+
       success = true;
-      setTimeout(() => goto('/dashboard'), 2000);
+      // Emit success event for parent component to handle
+      dispatch('registrationSuccess', { userId, username, managerKey });
 
     } catch (err) {
       const webauthnError = err as WebAuthnError;
@@ -153,7 +174,7 @@
         <button
           type="button"
           on:click={handleRegistration}
-          disabled={isLoading || !managerKey.trim()}
+          disabled={isLoading || (!managerKey?.trim() && !isRotationMode)}
           class="primary-button"
         >
           {#if isLoading}

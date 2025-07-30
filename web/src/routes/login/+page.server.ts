@@ -195,11 +195,11 @@ export const actions: Actions = {
 				console.log(`✅ Successfully created new account for ${username}`);
 			}
 
-			const sessionToken = auth.generateSessionToken();
-			const session = await auth.createSession(sessionToken, userId);
-			auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
+			// Redirect to passkey setup instead of creating session immediately
+			return redirect(302, `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username as string)}&managerKey=${managerKey}`);
+			
 		} catch (error: any) {
-			if (error.code === '23505') { // Unique constraint violation
+			if (error.code === '23505') {
 				if (error.constraint === 'user_username_unique') {
 					return fail(400, { message: 'Username already taken' });
 				}
@@ -215,8 +215,6 @@ export const actions: Actions = {
 			console.error(`${actionType} error:`, error);
 			return fail(500, { message: `${isClaimingPlaceholder ? 'Account claiming' : 'Registration'} failed. Please try again.` });
 		}
-		
-		return redirect(302, '/');
 	}
 };
 
