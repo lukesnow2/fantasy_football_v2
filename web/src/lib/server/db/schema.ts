@@ -215,7 +215,12 @@ export const user = appSchema.table('user', {
 export const session = appSchema.table('session', {
 	id: text('id').primaryKey(),
 	userId: text('user_id').notNull(),
-	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull()
+	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	userAgent: text('user_agent'),
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	deviceType: varchar('device_type', { length: 50 })
 });
 
 export const passwordResetToken = appSchema.table('password_reset_token', {
@@ -246,9 +251,12 @@ export const webauthnChallenges = appSchema.table('webauthn_challenges', {
 	id: text('id').primaryKey(),
 	challenge: text('challenge').notNull(),
 	userId: text('user_id').references(() => user.id),
-	type: varchar('type', { length: 20 }).notNull(), // 'registration', 'authentication'
+	type: varchar('type', { length: 20 }).notNull(), // 'registration', 'authentication', 'csrf'
 	expiresAt: timestamp('expires_at').notNull(),
-	createdAt: timestamp('created_at').defaultNow()
+	createdAt: timestamp('created_at').defaultNow(),
+	usedAt: timestamp('used_at'), // When the challenge was used
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	userAgent: text('user_agent')
 });
 
 export const backupCodes = appSchema.table('backup_codes', {
@@ -388,6 +396,29 @@ export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	updatedAt: timestamp('updated_at').defaultNow()
 });
 
+// WebAuthn Audit Log Table
+export const webauthnAuditLog = appSchema.table('webauthn_audit_log', {
+	id: varchar('id', { length: 100 }).primaryKey(),
+	eventType: varchar('event_type', { length: 50 }).notNull(),
+	severity: varchar('severity', { length: 20 }).notNull(),
+	userId: varchar('user_id', { length: 100 }),
+	sessionId: varchar('session_id', { length: 100 }),
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	userAgent: text('user_agent'),
+	deviceType: varchar('device_type', { length: 50 }),
+	details: text('details'), // JSON string
+	timestamp: timestamp('timestamp').defaultNow(),
+	requestId: varchar('request_id', { length: 100 }),
+	errorCode: varchar('error_code', { length: 50 }),
+	errorMessage: text('error_message')
+}, (table) => ({
+	// Indexes for efficient querying
+	userIdIndex: uniqueIndex('webauthn_audit_user_id').on(table.userId, table.timestamp),
+	eventTypeIndex: uniqueIndex('webauthn_audit_event_type').on(table.eventType, table.timestamp),
+	severityIndex: uniqueIndex('webauthn_audit_severity').on(table.severity, table.timestamp),
+	timestampIndex: uniqueIndex('webauthn_audit_timestamp').on(table.timestamp)
+}));
+
 // Type exports
 export type DimLeague = typeof dimLeague.$inferSelect;
 export type DimTeam = typeof dimTeam.$inferSelect;
@@ -411,3 +442,6 @@ export type ChatThread = typeof chatThread.$inferSelect;
 export type ChatReaction = typeof chatReaction.$inferSelect;
 export type ChatRead = typeof chatRead.$inferSelect;
 export type ChatCustomEmoji = typeof chatCustomEmoji.$inferSelect;
+
+// WebAuthn Types
+export type WebAuthnAuditLog = typeof webauthnAuditLog.$inferSelect;
