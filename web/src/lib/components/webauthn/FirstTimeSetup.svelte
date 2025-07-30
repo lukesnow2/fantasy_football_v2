@@ -3,6 +3,7 @@
   import { WebAuthnBrowser } from './browser';
   import PasskeyRegistration from './PasskeyRegistration.svelte';
   import { goto } from '$app/navigation';
+  import { Fingerprint, Shield, AlertTriangle, CheckCircle, Loader2, ArrowRight } from 'lucide-svelte';
 
   export let userId: string;
   export let username: string;
@@ -72,117 +73,120 @@
 <div class="first-time-setup">
   {#if isLoading}
     <div class="loading-state">
-      <div class="spinner"></div>
+      <Loader2 class="h-8 w-8 animate-spin text-blue-400" />
       <p>Loading setup...</p>
     </div>
   {:else if !isSupported}
     <div class="error-banner">
-      <h3>⚠️ WebAuthn Not Supported</h3>
-      <p>Your browser doesn't support passkeys. You can continue using password authentication.</p>
+      <AlertTriangle class="h-5 w-5" />
+      <div>
+        <h3>WebAuthn Not Supported</h3>
+        <p>Your browser doesn't support passkeys. You can continue using password authentication.</p>
+      </div>
       <button on:click={handleSkip} class="primary-button">
+        <ArrowRight class="h-4 w-4" />
         Continue to Dashboard
       </button>
     </div>
   {:else if !isAvailable}
     <div class="warning-banner">
-      <h3>⚠️ Platform Authenticator Not Available</h3>
-      <p>Your device doesn't support biometric authentication. You can continue using password authentication.</p>
+      <AlertTriangle class="h-5 w-5" />
+      <div>
+        <h3>Platform Authenticator Not Available</h3>
+        <p>Your device doesn't support biometric authentication. You can continue using password authentication.</p>
+      </div>
       <button on:click={handleSkip} class="primary-button">
+        <ArrowRight class="h-4 w-4" />
         Continue to Dashboard
       </button>
     </div>
   {:else if setupComplete}
     <div class="success-state">
-      <h2>✅ Setup Complete!</h2>
+      <CheckCircle class="h-12 w-12 text-green-400" />
+      <h2>Setup Complete!</h2>
       <p>Your passkey has been successfully configured. You can now sign in securely with {biometricType}.</p>
-      <div class="spinner"></div>
+      <Loader2 class="h-6 w-6 animate-spin text-blue-400" />
       <p>Redirecting to dashboard...</p>
     </div>
   {:else}
     <div class="setup-container">
       <div class="setup-header">
-        <h2>🔐 Welcome to Secure Authentication</h2>
-        <p class="subtitle">Set up your passkey for secure, passwordless sign-in</p>
+        <Fingerprint class="h-8 w-8 text-blue-400" />
+        <h1>Set Up Your Passkey</h1>
+        <p>Secure your account with biometric authentication</p>
       </div>
 
-      <div class="setup-progress">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: {(currentStep / 3) * 100}%"></div>
+      <div class="step-indicator">
+        <div class="step {currentStep >= 1 ? 'active' : ''}">
+          <span class="step-number">1</span>
+          <span class="step-label">Welcome</span>
         </div>
-        <p class="progress-text">Step {currentStep} of 3</p>
+        <div class="step-connector"></div>
+        <div class="step {currentStep >= 2 ? 'active' : ''}">
+          <span class="step-number">2</span>
+          <span class="step-label">Create Passkey</span>
+        </div>
+        <div class="step-connector"></div>
+        <div class="step {currentStep >= 3 ? 'active' : ''}">
+          <span class="step-number">3</span>
+          <span class="step-label">Complete</span>
+        </div>
       </div>
 
       {#if currentStep === 1}
-        <div class="setup-step">
-          <h3>📱 What are Passkeys?</h3>
-          <div class="info-grid">
-            <div class="info-card">
-              <h4>🔐 Secure</h4>
-              <p>Biometric authentication using {biometricType} on your device</p>
+        <div class="step-content">
+          <div class="welcome-section">
+            <Shield class="h-12 w-12 text-blue-400" />
+            <h2>Welcome to Secure Authentication</h2>
+            <p>We're setting up a passkey for your account. This will allow you to sign in securely using {biometricType}.</p>
+            
+            <div class="benefits-list">
+              <h3>Benefits of using a passkey:</h3>
+              <ul>
+                <li>🔐 More secure than passwords</li>
+                <li>⚡ Faster sign-in experience</li>
+                <li>📱 Works across your devices</li>
+                <li>🛡️ Protection against phishing</li>
+              </ul>
             </div>
-            <div class="info-card">
-              <h4>⚡ Fast</h4>
-              <p>Sign in with a single touch or glance</p>
+
+            <div class="info-box">
+              <h4>How it works:</h4>
+              <ol>
+                <li>We'll create a unique passkey for your account</li>
+                <li>Your device will store it securely</li>
+                <li>You'll use {biometricType} to sign in</li>
+                <li>No more remembering passwords!</li>
+              </ol>
             </div>
-            <div class="info-card">
-              <h4>🛡️ Safe</h4>
-              <p>No passwords to remember or risk of theft</p>
+
+            <div class="button-group">
+              <button on:click={nextStep} class="primary-button">
+                <ArrowRight class="h-4 w-4" />
+                Get Started
+              </button>
+              <button on:click={handleSkip} class="secondary-button">
+                Skip for Now
+              </button>
             </div>
-            <div class="info-card">
-              <h4>🌐 Universal</h4>
-              <p>Works across all your devices automatically</p>
-            </div>
-          </div>
-          
-          <div class="step-actions">
-            <button on:click={handleSkip} class="secondary-button">
-              Skip for Now
-            </button>
-            <button on:click={nextStep} class="primary-button">
-              Get Started
-            </button>
           </div>
         </div>
       {:else if currentStep === 2}
-        <div class="setup-step">
-          <h3>🔑 Manager Key Verification</h3>
-          <p>To link your account to your fantasy league manager, please verify your manager key:</p>
-          
-          <div class="manager-info">
-            <p><strong>Username:</strong> {username}</p>
-            {#if managerKey}
-              <p><strong>Manager Key:</strong> {managerKey}</p>
-            {:else}
-              <p><strong>Manager Key:</strong> <em>Not set</em></p>
-            {/if}
-          </div>
-
-          <div class="verification-note">
-            <p>✅ Your manager key will be preserved during setup</p>
-            <p>✅ You'll be able to access all your league data</p>
-            <p>✅ Your account will be linked to your fantasy league profile</p>
-          </div>
-
-          <div class="step-actions">
-            <button on:click={previousStep} class="secondary-button">
-              Back
-            </button>
-            <button on:click={nextStep} class="primary-button">
-              Continue
-            </button>
-          </div>
-        </div>
-      {:else if currentStep === 3}
-        <div class="setup-step">
-          <h3>🔐 Set Up Your Passkey</h3>
-          <p>Create your passkey to enable secure, passwordless sign-in:</p>
-          
+        <div class="step-content">
           <PasskeyRegistration 
             {userId} 
             {username} 
             {managerKey}
             on:registrationSuccess={handleRegistrationSuccess}
           />
+        </div>
+      {:else if currentStep === 3}
+        <div class="step-content">
+          <div class="completion-section">
+            <CheckCircle class="h-12 w-12 text-green-400" />
+            <h2>Almost Done!</h2>
+            <p>Your passkey has been created successfully. You'll be redirected to your dashboard in a moment.</p>
+          </div>
         </div>
       {/if}
     </div>
@@ -191,201 +195,287 @@
 
 <style>
   .first-time-setup {
-    max-width: 800px;
+    width: 100%;
+    max-width: 600px;
     margin: 0 auto;
+  }
+
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
     padding: 2rem;
-  }
-
-  .loading-state, .success-state {
     text-align: center;
-    padding: 3rem;
-  }
-
-  .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+    color: #94a3b8;
   }
 
   .error-banner, .warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .error-banner {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+
+  .warning-banner {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+  }
+
+  .error-banner h3, .warning-banner h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .error-banner p, .warning-banner p {
+    margin: 0 0 1rem 0;
+    font-size: 0.875rem;
+  }
+
+  .success-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
     padding: 2rem;
-    border-radius: 12px;
+    text-align: center;
+    color: white;
+  }
+
+  .success-state h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .success-state p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.875rem;
+  }
+
+  .setup-container {
+    width: 100%;
+  }
+
+  .setup-header {
     text-align: center;
     margin-bottom: 2rem;
   }
 
-  .error-banner {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
-  }
-
-  .warning-banner {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
-  }
-
-  .setup-container {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-  }
-
-  .setup-header {
-    background: linear-gradient(135deg, #007bff, #0056b3);
+  .setup-header h1 {
+    margin: 0.5rem 0 0.25rem 0;
     color: white;
-    padding: 2rem;
+    font-size: 1.875rem;
+    font-weight: 700;
+  }
+
+  .setup-header p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.875rem;
+  }
+
+  .step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2rem;
+    gap: 0.5rem;
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+
+  .step.active {
+    opacity: 1;
+  }
+
+  .step-number {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: #475569;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .step.active .step-number {
+    background: #3b82f6;
+  }
+
+  .step-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .step.active .step-label {
+    color: white;
+  }
+
+  .step-connector {
+    width: 2rem;
+    height: 2px;
+    background: #475569;
+  }
+
+  .step-content {
+    width: 100%;
+  }
+
+  .welcome-section {
     text-align: center;
   }
 
-  .setup-header h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.75rem;
+  .welcome-section h2 {
+    margin: 1rem 0 0.5rem 0;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
   }
 
-  .subtitle {
+  .welcome-section p {
+    margin: 0 0 2rem 0;
+    color: #94a3b8;
+    font-size: 0.875rem;
+  }
+
+  .benefits-list {
+    background: rgba(51, 65, 85, 0.3);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    text-align: left;
+  }
+
+  .benefits-list h3 {
+    margin: 0 0 1rem 0;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .benefits-list ul {
     margin: 0;
-    opacity: 0.9;
-    font-size: 1.1rem;
+    padding-left: 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
   }
 
-  .setup-progress {
-    padding: 1rem 2rem;
-    background: #f8f9fa;
-    border-bottom: 1px solid #e1e5e9;
-  }
-
-  .progress-bar {
-    width: 100%;
-    height: 8px;
-    background: #e1e5e9;
-    border-radius: 4px;
-    overflow: hidden;
+  .benefits-list li {
     margin-bottom: 0.5rem;
   }
 
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #007bff, #0056b3);
-    transition: width 0.3s ease;
-  }
-
-  .progress-text {
-    margin: 0;
-    text-align: center;
-    color: #666;
-    font-size: 0.875rem;
-  }
-
-  .setup-step {
-    padding: 2rem;
-  }
-
-  .setup-step h3 {
-    margin: 0 0 1rem 0;
-    color: #333;
-    font-size: 1.5rem;
-  }
-
-  .info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin: 2rem 0;
-  }
-
-  .info-card {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    text-align: center;
-    border: 1px solid #e1e5e9;
-  }
-
-  .info-card h4 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-    font-size: 1.1rem;
-  }
-
-  .info-card p {
-    margin: 0;
-    color: #666;
-    font-size: 0.875rem;
-  }
-
-  .manager-info {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 6px;
-    margin: 1rem 0;
-  }
-
-  .manager-info p {
-    margin: 0.25rem 0;
-  }
-
-  .verification-note {
-    background: #d4edda;
-    color: #155724;
-    padding: 1rem;
-    border-radius: 6px;
-    margin: 1rem 0;
-  }
-
-  .verification-note p {
-    margin: 0.25rem 0;
-    font-size: 0.875rem;
-  }
-
-  .step-actions {
+  .info-box {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(51, 65, 85, 0.3);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    text-align: left;
+  }
+
+  .info-box h4 {
+    margin: 0 0 0.5rem 0;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .info-box ol {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+  }
+
+  .info-box li {
+    margin-bottom: 0.25rem;
+  }
+
+  .button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
     margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid #e1e5e9;
   }
 
   .primary-button {
-    padding: 0.75rem 1.5rem;
-    background: #007bff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: #3b82f6;
     color: white;
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
   }
 
   .primary-button:hover {
-    background: #0056b3;
+    background: #2563eb;
   }
 
   .secondary-button {
-    padding: 0.75rem 1.5rem;
+    padding: 0.75rem 1rem;
     background: transparent;
-    color: #6c757d;
-    border: 1px solid #6c757d;
-    border-radius: 6px;
-    font-size: 1rem;
+    color: #94a3b8;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .secondary-button:hover {
-    background: #6c757d;
+    background: #475569;
     color: white;
+  }
+
+  .completion-section {
+    text-align: center;
+    padding: 2rem;
+  }
+
+  .completion-section h2 {
+    margin: 1rem 0 0.5rem 0;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .completion-section p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.875rem;
   }
 </style> 

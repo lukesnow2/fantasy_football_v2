@@ -3,6 +3,7 @@
   import { WebAuthnBrowser, type WebAuthnError } from './browser';
   import { goto } from '$app/navigation';
   import { enhance } from '$app/forms';
+  import { Fingerprint, Shield, AlertTriangle, ArrowRight } from 'lucide-svelte';
 
   export let userId: string | undefined = undefined;
 
@@ -98,43 +99,58 @@
 <div class="passkey-authentication">
   {#if !isSupported}
     <div class="error-banner">
-      <h3>⚠️ WebAuthn Not Supported</h3>
-      <p>Your browser doesn't support passkeys. Please use a modern browser like Chrome, Safari, or Firefox.</p>
+      <AlertTriangle class="h-5 w-5" />
+      <div>
+        <h3>WebAuthn Not Supported</h3>
+        <p>Your browser doesn't support passkeys. Please use a modern browser like Chrome, Safari, or Firefox.</p>
+      </div>
       <button on:click={handleFallback} class="fallback-button">
         Use Password Login
       </button>
     </div>
   {:else if !isAvailable}
     <div class="warning-banner">
-      <h3>⚠️ Platform Authenticator Not Available</h3>
-      <p>Your device doesn't support biometric authentication. You may need to enable it in your system settings.</p>
+      <AlertTriangle class="h-5 w-5" />
+      <div>
+        <h3>Platform Authenticator Not Available</h3>
+        <p>Your device doesn't support biometric authentication. You may need to enable it in your system settings.</p>
+      </div>
       <button on:click={handleFallback} class="fallback-button">
         Use Password Login
       </button>
     </div>
   {:else}
     <div class="authentication-form">
-      <h2>🔐 Sign In with Passkey</h2>
-      <p class="subtitle">Use {biometricType} to sign in securely</p>
+      <div class="form-header">
+        <Fingerprint class="h-8 w-8 text-blue-400" />
+        <h2>Sign In with Passkey</h2>
+        <p class="subtitle">Use {biometricType} to sign in securely</p>
+      </div>
 
       <div class="info-box">
-        <h4>📱 How to sign in:</h4>
-        <ol>
-          <li>Click "Sign In with Passkey" below</li>
-          <li>Your browser will prompt for {biometricType}</li>
-          <li>Complete the biometric verification</li>
-          <li>You'll be signed in automatically</li>
-        </ol>
+        <Shield class="h-5 w-5 text-blue-400" />
+        <div>
+          <h4>How to sign in:</h4>
+          <ol>
+            <li>Click "Sign In with Passkey" below</li>
+            <li>Your browser will prompt for {biometricType}</li>
+            <li>Complete the biometric verification</li>
+            <li>You'll be signed in automatically</li>
+          </ol>
+        </div>
       </div>
 
       {#if error}
         <div class="error-message">
-          <p>{error}</p>
-          {#if retryCount < maxRetries}
-            <button on:click={handleRetry} class="retry-button">
-              Try Again
-            </button>
-          {/if}
+          <AlertTriangle class="h-4 w-4" />
+          <div>
+            <p>{error}</p>
+            {#if retryCount < maxRetries}
+              <button on:click={handleRetry} class="retry-button">
+                Try Again
+              </button>
+            {/if}
+          </div>
         </div>
       {/if}
 
@@ -147,13 +163,15 @@
         {#if isLoading}
           <span class="loading">Signing In...</span>
         {:else}
-          <span>🔐 Sign In with Passkey</span>
+          <Fingerprint class="h-4 w-4" />
+          <span>Sign In with Passkey</span>
         {/if}
       </button>
 
       <div class="fallback-options">
         <p>Having trouble?</p>
         <button on:click={handleFallback} class="secondary-button">
+          <ArrowRight class="h-4 w-4" />
           Use Password Instead
         </button>
       </div>
@@ -163,104 +181,144 @@
 
 <style>
   .passkey-authentication {
-    max-width: 500px;
-    margin: 0 auto;
-    padding: 2rem;
+    width: 100%;
   }
 
   .error-banner, .warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
     padding: 1rem;
     border-radius: 8px;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
   }
 
   .error-banner {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
   }
 
   .warning-banner {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+  }
+
+  .error-banner h3, .warning-banner h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .error-banner p, .warning-banner p {
+    margin: 0 0 1rem 0;
+    font-size: 0.875rem;
   }
 
   .authentication-form {
-    background: white;
-    padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 100%;
   }
 
-  h2 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-  }
-
-  .subtitle {
-    color: #666;
+  .form-header {
+    text-align: center;
     margin-bottom: 2rem;
   }
 
+  .form-header h2 {
+    margin: 0.5rem 0 0.25rem 0;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .subtitle {
+    color: #94a3b8;
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
   .info-box {
-    background: #f8f9fa;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(51, 65, 85, 0.3);
     padding: 1rem;
-    border-radius: 6px;
+    border-radius: 8px;
     margin: 1.5rem 0;
+    border: 1px solid rgba(148, 163, 184, 0.1);
   }
 
   .info-box h4 {
     margin: 0 0 0.5rem 0;
-    color: #333;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
   .info-box ol {
     margin: 0;
-    padding-left: 1.5rem;
+    padding-left: 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
   }
 
   .info-box li {
     margin-bottom: 0.25rem;
-    color: #555;
   }
 
   .error-message {
-    background: #fee;
-    color: #c33;
-    padding: 0.75rem;
-    border-radius: 6px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    padding: 1rem;
+    border-radius: 8px;
     margin: 1rem 0;
+  }
+
+  .error-message p {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
   }
 
   .primary-button {
     width: 100%;
-    padding: 1rem;
-    background: #007bff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: #3b82f6;
     color: white;
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
     margin-bottom: 1rem;
   }
 
   .primary-button:hover:not(:disabled) {
-    background: #0056b3;
+    background: #2563eb;
   }
 
   .primary-button:disabled {
-    background: #6c757d;
+    background: #64748b;
     cursor: not-allowed;
   }
 
   .secondary-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     padding: 0.5rem 1rem;
     background: transparent;
-    color: #007bff;
-    border: 1px solid #007bff;
+    color: #94a3b8;
+    border: 1px solid #475569;
     border-radius: 6px;
     font-size: 0.875rem;
     cursor: pointer;
@@ -268,14 +326,14 @@
   }
 
   .secondary-button:hover {
-    background: #007bff;
+    background: #475569;
     color: white;
   }
 
   .fallback-button {
-    margin-top: 1rem;
-    padding: 0.75rem 1rem;
-    background: #6c757d;
+    margin-top: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: #64748b;
     color: white;
     border: none;
     border-radius: 6px;
@@ -285,35 +343,35 @@
   }
 
   .fallback-button:hover {
-    background: #545b62;
+    background: #475569;
   }
 
   .retry-button {
     margin-top: 0.5rem;
     padding: 0.5rem 1rem;
-    background: #dc3545;
+    background: #dc2626;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 0.875rem;
     cursor: pointer;
     transition: background-color 0.2s;
   }
 
   .retry-button:hover {
-    background: #c82333;
+    background: #b91c1c;
   }
 
   .fallback-options {
     text-align: center;
     margin-top: 1.5rem;
     padding-top: 1.5rem;
-    border-top: 1px solid #e1e5e9;
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
   }
 
   .fallback-options p {
-    margin: 0 0 0.5rem 0;
-    color: #666;
+    margin: 0 0 0.75rem 0;
+    color: #94a3b8;
     font-size: 0.875rem;
   }
 
