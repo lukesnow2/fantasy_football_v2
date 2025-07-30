@@ -37,6 +37,10 @@
 
   function handleSetupComplete() {
     setupComplete = true;
+    // Get redirect URL from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectUrl = urlParams.get('redirect') || '/dashboard';
+    
     // Create session for the user
     fetch('/api/webauthn/setup-complete', {
       method: 'POST',
@@ -44,14 +48,14 @@
       body: JSON.stringify({ userId })
     }).then(response => {
       if (response.ok) {
-        setTimeout(() => goto('/dashboard'), 2000);
+        setTimeout(() => goto(redirectUrl), 2000);
       } else {
         console.error('Failed to create session');
-        setTimeout(() => goto('/dashboard'), 2000);
+        setTimeout(() => goto(redirectUrl), 2000);
       }
     }).catch(error => {
       console.error('Session creation error:', error);
-      setTimeout(() => goto('/dashboard'), 2000);
+      setTimeout(() => goto(redirectUrl), 2000);
     });
   }
 

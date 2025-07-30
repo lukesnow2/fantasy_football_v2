@@ -5,7 +5,7 @@ import { db } from '$lib/server/db';
 import { user } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
-export const POST: RequestHandler = async ({ request, cookies }) => {
+export const POST: RequestHandler = async ({ request, cookies, url }) => {
 	try {
 		const { userId } = await request.json();
 
@@ -49,10 +49,13 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		const session = await createSession(sessionToken, userRecord.id);
 		setSessionTokenCookie({ cookies } as any, sessionToken, session.expiresAt);
 
+		// Get redirect URL from query parameters
+		const redirectUrl = url.searchParams.get('redirect') || '/dashboard';
+
 		return json({
 			success: true,
 			message: 'Session created successfully',
-			redirectUrl: '/dashboard'
+			redirectUrl
 		});
 
 	} catch (error) {

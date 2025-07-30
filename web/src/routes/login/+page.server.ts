@@ -81,7 +81,9 @@ export const actions: Actions = {
 		const session = await auth.createSession(sessionToken, userData.user.id);
 		auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
 
-		return redirect(302, '/');
+		// Redirect to specified URL or homepage
+		const redirectUrl = event.url.searchParams.get('redirect');
+		return redirect(302, redirectUrl || '/');
 	},
 	
 	register: async (event) => {
@@ -196,7 +198,10 @@ export const actions: Actions = {
 			}
 
 			// Redirect to passkey setup instead of creating session immediately
-			return redirect(302, `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username as string)}&managerKey=${managerKey}`);
+			const redirectUrl = event.url.searchParams.get('redirect');
+			const setupUrl = `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username as string)}&managerKey=${managerKey}`;
+			const finalRedirectUrl = redirectUrl ? `${setupUrl}&redirect=${encodeURIComponent(redirectUrl)}` : setupUrl;
+			return redirect(302, finalRedirectUrl);
 			
 		} catch (error: any) {
 			if (error.code === '23505') {
