@@ -40,7 +40,7 @@
     setupComplete = true;
     // Get redirect URL from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
-    const redirectUrl = urlParams.get('redirect') || '/dashboard';
+    const redirectUrl = urlParams.get('redirect') || '/';
     
     // Create session for the user
     fetch('/api/webauthn/setup-complete', {
@@ -66,7 +66,7 @@
 
   function handleSkip() {
     // Redirect to dashboard with a note that passkey setup is recommended
-    goto('/dashboard?setup=skipped');
+    goto('/?setup=skipped');
   }
 </script>
 

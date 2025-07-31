@@ -50,7 +50,7 @@ export const POST: RequestHandler = async ({ request, cookies, url }) => {
 		setSessionTokenCookie({ cookies } as any, sessionToken, session.expiresAt);
 
 		// Get redirect URL from query parameters
-		const redirectUrl = url.searchParams.get('redirect') || '/dashboard';
+		const redirectUrl = url.searchParams.get('redirect') || '/';
 
 		return json({
 			success: true,

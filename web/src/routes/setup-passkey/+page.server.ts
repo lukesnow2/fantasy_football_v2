@@ -35,7 +35,7 @@ export const load: ServerLoad = async ({ url }) => {
 
 	// If user already has passkeys enabled, redirect to dashboard
 	if (userRecord.passkeyEnabled && userRecord.passkeyRegisteredAt) {
-		throw redirect(302, '/dashboard');
+		throw redirect(302, '/');
 	}
 
 	return {

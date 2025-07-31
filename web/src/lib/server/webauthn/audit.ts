@@ -90,26 +90,27 @@ export async function logAuditEvent(
 	context?: AuditContext,
 	error?: Error
 ): Promise<void> {
-	const now = new Date();
-	const eventId = crypto.randomUUID();
-
-	const auditEvent: AuditEvent = {
-		id: eventId,
-		eventType,
-		severity,
-		userId: context?.userId,
-		sessionId: context?.sessionId,
-		ipAddress: context?.ipAddress,
-		userAgent: context?.userAgent,
-		deviceType: context?.deviceType,
-		details,
-		timestamp: now,
-		requestId: context?.requestId,
-		errorCode: error?.name,
-		errorMessage: error?.message
-	};
-
 	try {
+		const now = new Date();
+		const eventId = crypto.randomUUID();
+
+		const auditEvent: AuditEvent = {
+			id: eventId,
+			eventType,
+			severity,
+			userId: context?.userId,
+			sessionId: context?.sessionId,
+			ipAddress: context?.ipAddress,
+			userAgent: context?.userAgent,
+			deviceType: context?.deviceType,
+			details,
+			timestamp: now,
+			requestId: context?.requestId,
+			errorCode: error?.name,
+			errorMessage: error?.message
+		};
+
+		// Insert audit event into database
 		await db.insert(webauthnAuditLog).values({
 			id: auditEvent.id,
 			eventType: auditEvent.eventType,
@@ -126,20 +127,17 @@ export async function logAuditEvent(
 			errorMessage: auditEvent.errorMessage
 		});
 
-		// Log to console in development
-		if (process.env.NODE_ENV === 'development') {
-			console.log('🔍 Audit Event:', {
-				eventType: auditEvent.eventType,
-				severity: auditEvent.severity,
-				userId: auditEvent.userId,
-				timestamp: auditEvent.timestamp,
-				details: auditEvent.details
-			});
-		}
+		console.log(`📊 Audit event logged: ${eventType} (${severity})`);
 	} catch (error) {
-		// Fallback logging if database fails
+		// Log the error but don't fail the main operation
 		console.error('Failed to log audit event:', error);
-		console.error('Audit event data:', auditEvent);
+		console.error('Audit event data:', {
+			eventType,
+			severity,
+			details,
+			context,
+			error: error instanceof Error ? error.message : 'Unknown error'
+		});
 	}
 }
 

@@ -85,19 +85,35 @@
       currentFlow = flow;
       flowMessage = message;
 
+      console.log('🔍 Flow detection:', {
+        flow,
+        message,
+        hasOptions: !!options,
+        optionsKeys: options ? Object.keys(options) : [],
+        allowCredentials: options?.allowCredentials
+      });
+
       // If this is a registration flow (no passkey exists), redirect to setup page
       if (flow === 'registration') {
         console.log('🔄 No passkey found, redirecting to setup page...');
         // Get the userId from the server response or make a separate request
         const userId = responseData.userId;
+        const managerKey = responseData.managerKey;
+        console.log('📋 Redirect data:', { userId, username, managerKey });
+        
         if (userId) {
-          goto(`/setup-passkey?userId=${userId}&username=${encodeURIComponent(username || '')}&managerKey=${responseData.managerKey || ''}`);
+          const setupUrl = `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username || '')}&managerKey=${managerKey || ''}`;
+          console.log('🚀 Redirecting to:', setupUrl);
+          goto(setupUrl);
         } else {
           // Fallback: redirect to login with error message
+          console.log('⚠️ No userId found, redirecting to login with error');
           goto('/login?message=setup-passkey-required');
         }
         return;
       }
+
+      console.log('✅ Proceeding with authentication flow...');
 
       // Step 2: Authenticate with browser
       console.log('🔑 Starting browser authentication...');
@@ -135,8 +151,8 @@
       
       if (success) {
         // Redirect to dashboard or intended page
-        console.log('🚀 Authentication successful, redirecting to dashboard...');
-        goto('/dashboard');
+        console.log('🚀 Authentication successful, redirecting to homepage...');
+        goto('/');
       } else {
         throw new Error('Authentication failed');
       }
