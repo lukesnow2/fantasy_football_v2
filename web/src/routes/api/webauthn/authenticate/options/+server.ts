@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { webauthnCredentials } from '$lib/server/db/schema';
+import { webauthnCredentials, user, dimManager } from '$lib/server/db/schema';
 import { createChallenge } from '$lib/server/webauthn/challenge';
 import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/errors';
 import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
@@ -10,7 +10,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 	try {
 		console.log('🔐 WebAuthn authentication options request received');
 		
-		const { userId } = await request.json();
+		const { managerName } = await request.json();
 		const clientAddress = getClientAddress();
 		
 		// Get the actual domain from the request
@@ -18,36 +18,67 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
 		
 		console.log('📊 Request data:', { 
-			userId, 
+			managerName, 
 			clientAddress,
 			origin,
 			rpId,
 			headers: Object.fromEntries(request.headers.entries())
 		});
 
+		// Validate required fields
+		if (!managerName) {
+			throw createWebAuthnError(
+				WebAuthnErrorCode.INVALID_USER_ID,
+				'Manager name is required for authentication'
+			);
+		}
+
+		// Look up user by manager name (join with dimManager)
+		const [userRecord] = await db
+			.select({
+				id: user.id,
+				username: user.username,
+				managerKey: user.managerKey,
+				managerName: dimManager.managerName,
+				passkeyEnabled: user.passkeyEnabled
+			})
+			.from(user)
+			.leftJoin(dimManager, eq(user.managerKey, dimManager.managerKey))
+			.where(eq(dimManager.managerName, managerName))
+			.limit(1);
+
+		if (!userRecord) {
+			throw createWebAuthnError(
+				WebAuthnErrorCode.INVALID_USER_ID,
+				`No account found for manager: ${managerName}`
+			);
+		}
+
+		const userId = userRecord.id;
+		console.log('👤 Found user:', { userId, managerName, passkeyEnabled: userRecord.passkeyEnabled });
+
 		// Get existing credentials for the user
 		let allowCredentials: any[] | undefined = undefined;
-		if (userId) {
-			const existingCredentials = await db
-				.select({
-					id: webauthnCredentials.credentialId,
-					type: webauthnCredentials.authenticatorType
-				})
-				.from(webauthnCredentials)
-				.where(eq(webauthnCredentials.userId, userId));
+		const existingCredentials = await db
+			.select({
+				id: webauthnCredentials.credentialId,
+				type: webauthnCredentials.authenticatorType
+			})
+			.from(webauthnCredentials)
+			.where(eq(webauthnCredentials.userId, userId));
 
-			console.log('🔑 Found existing credentials:', {
-				count: existingCredentials.length,
-				credentialIds: existingCredentials.map(c => c.id)
-			});
+		console.log('🔑 Found existing credentials:', {
+			count: existingCredentials.length,
+			credentialIds: existingCredentials.map(c => c.id)
+		});
 
-			if (existingCredentials.length > 0) {
-				allowCredentials = existingCredentials.map(cred => ({
-					id: cred.id,
-					type: 'public-key',
-					transports: ['internal']
-				}));
-			}
+		// If no credentials exist, don't include allowCredentials (triggers registration)
+		if (existingCredentials.length > 0) {
+			allowCredentials = existingCredentials.map(cred => ({
+				id: cred.id,
+				type: 'public-key',
+				transports: ['internal']
+			}));
 		}
 
 		// Generate authentication challenge
@@ -70,7 +101,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			challenge: challenge.challenge,
 			timeout: 60000, // 60 seconds
 			userVerification: 'preferred',
-			allowCredentials // Will be undefined if no credentials exist
+			allowCredentials // Will be undefined if no credentials exist (triggers registration)
 		};
 
 		console.log('✅ Authentication options generated:', {
@@ -80,20 +111,31 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			rpId: options.rpId,
 			origin,
 			hasAllowCredentials: !!allowCredentials,
-			credentialsCount: allowCredentials?.length || 0
+			credentialsCount: allowCredentials?.length || 0,
+			flow: allowCredentials ? 'authentication' : 'registration'
 		});
 
 		// Log audit event
 		await logAuditEvent(
 			AuditEventType.AUTHENTICATION_STARTED,
 			AuditSeverity.INFO,
-			{ challengeId: challenge.id, rpId, credentialsCount: allowCredentials?.length || 0 },
+			{ 
+				challengeId: challenge.id, 
+				rpId, 
+				credentialsCount: allowCredentials?.length || 0,
+				flow: allowCredentials ? 'authentication' : 'registration',
+				managerName
+			},
 			{ userId, ipAddress: clientAddress }
 		);
 
 		return json({
 			options,
-			challengeId: challenge.id
+			challengeId: challenge.id,
+			flow: allowCredentials ? 'authentication' : 'registration',
+			message: allowCredentials 
+				? `Sign in as ${managerName}` 
+				: `Set up your first passkey for ${managerName}`
 		});
 
 	} catch (error) {

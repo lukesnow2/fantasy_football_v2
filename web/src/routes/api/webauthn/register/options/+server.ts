@@ -1,14 +1,16 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { user, dimManager } from '$lib/server/db/schema';
 import { createChallenge } from '$lib/server/webauthn/challenge';
 import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/errors';
 import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
+import { eq } from 'drizzle-orm';
 
 export async function POST({ request, getClientAddress }: { request: Request; getClientAddress: () => string }) {
 	try {
 		console.log('🔐 WebAuthn registration options request received');
 		
-		const { userId, username, managerKey } = await request.json();
+		const { managerName } = await request.json();
 		const clientAddress = getClientAddress();
 		
 		// Get the actual domain from the request
@@ -16,21 +18,43 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
 		
 		console.log('📊 Registration request data:', { 
-			userId, 
-			username, 
-			managerKey, 
+			managerName, 
 			clientAddress,
 			origin,
 			rpId
 		});
 
 		// Validate required fields
-		if (!userId || !username) {
+		if (!managerName) {
 			throw createWebAuthnError(
 				WebAuthnErrorCode.INVALID_USER_ID,
-				'User ID and username are required for registration'
+				'Manager name is required for registration'
 			);
 		}
+
+		// Look up user by manager name (join with dimManager)
+		const [userRecord] = await db
+			.select({
+				id: user.id,
+				username: user.username,
+				managerKey: user.managerKey,
+				managerName: dimManager.managerName,
+				passkeyEnabled: user.passkeyEnabled
+			})
+			.from(user)
+			.leftJoin(dimManager, eq(user.managerKey, dimManager.managerKey))
+			.where(eq(dimManager.managerName, managerName))
+			.limit(1);
+
+		if (!userRecord) {
+			throw createWebAuthnError(
+				WebAuthnErrorCode.INVALID_USER_ID,
+				`No account found for manager: ${managerName}`
+			);
+		}
+
+		const userId = userRecord.id;
+		const username = userRecord.username;
 
 		// Generate registration challenge
 		const challenge = await createChallenge(userId, 'registration', {
@@ -55,7 +79,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			user: {
 				id: userId,
 				name: username,
-				displayName: username
+				displayName: managerName
 			},
 			challenge: challenge.challenge,
 			pubKeyCredParams: [
@@ -80,6 +104,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			optionsKeys: Object.keys(options),
 			userId,
 			username,
+			managerName,
 			rpId: options.rp.id
 		});
 
@@ -91,7 +116,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 				challengeId: challenge.id,
 				userId,
 				username,
-				managerKey: managerKey || null,
+				managerName,
 				rpId: options.rp.id
 			},
 			{ userId, ipAddress: clientAddress }
@@ -111,7 +136,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			AuditSeverity.ERROR,
 			{ 
 				error: error instanceof Error ? error.message : 'Unknown error',
-				userId: null // Can't access request.json() again in catch block
+				managerName: null // Can't access request.json() again in catch block
 			},
 			{ ipAddress: getClientAddress() },
 			error instanceof Error ? error : undefined
