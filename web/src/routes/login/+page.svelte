@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Users, Lock, Mail, Eye, EyeOff, Fingerprint } from 'lucide-svelte';
+	import { Users, Lock, Mail, Eye, EyeOff, Fingerprint, Shield } from 'lucide-svelte';
 	import { enhance } from '$app/forms';
 	import PasskeyAuthentication from '$lib/components/webauthn/PasskeyAuthentication.svelte';
 
@@ -208,14 +208,26 @@
 				</div>
 			</form>
 
-			<div class="mt-6 text-center">
-				<a
-					href="/forgot-password"
-					class="text-blue-400 hover:text-blue-300 text-sm transition-colors"
-				>
-					Forgot your password?
-				</a>
-			</div>
+			<!-- Hybrid Auth Notice for Users with Passkey Enabled -->
+			{#if username && selectedManager}
+				<div class="mt-6 p-4 bg-blue-900/20 border border-blue-600/30 rounded-lg">
+					<div class="flex items-start space-x-3">
+						<Shield class="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+						<div>
+							<h4 class="text-blue-300 font-medium">Enhanced Security Available</h4>
+							<p class="text-blue-200 text-sm mt-1">
+								You can also sign in with your passkey for faster, more secure authentication.
+							</p>
+							<button 
+								on:click={() => authMode = 'passkey'}
+								class="mt-2 text-blue-300 hover:text-blue-200 text-sm font-medium underline"
+							>
+								Try Passkey Sign In →
+							</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 		{/if}
 
 		<div class="mt-8 text-center">
