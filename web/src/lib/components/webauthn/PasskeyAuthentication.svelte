@@ -16,9 +16,24 @@
   const maxRetries = 3;
 
   onMount(async () => {
+    console.log('🔧 PasskeyAuthentication component mounting...');
+    console.log('🌐 Checking WebAuthn support...');
+    
     isSupported = WebAuthnBrowser.isSupported();
-    isAvailable = await WebAuthnBrowser.isPlatformAuthenticatorAvailable();
-    biometricType = WebAuthnBrowser.getBiometricType();
+    console.log('✅ WebAuthn supported:', isSupported);
+    
+    if (isSupported) {
+      console.log('🔍 Checking platform authenticator availability...');
+      isAvailable = await WebAuthnBrowser.isPlatformAuthenticatorAvailable();
+      console.log('✅ Platform authenticator available:', isAvailable);
+      
+      if (isAvailable) {
+        biometricType = WebAuthnBrowser.getBiometricType();
+        console.log('📱 Biometric type detected:', biometricType);
+      }
+    }
+    
+    console.log('🎯 Final state:', { isSupported, isAvailable, biometricType });
   });
 
   async function handleAuthentication() {
@@ -26,23 +41,54 @@
     error = '';
 
     try {
+      console.log('🔐 Starting WebAuthn authentication...');
+      console.log('📊 Current state:', { isSupported, isAvailable, biometricType, userId });
+      
       // Step 1: Get authentication options from server
+      console.log('🌐 Making request to /api/webauthn/authenticate/options...');
       const optionsResponse = await fetch('/api/webauthn/authenticate/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userId || undefined })
       });
 
+      console.log('📡 Response received:', {
+        status: optionsResponse.status,
+        statusText: optionsResponse.statusText,
+        ok: optionsResponse.ok,
+        headers: Object.fromEntries(optionsResponse.headers.entries())
+      });
+
       if (!optionsResponse.ok) {
-        throw new Error('Failed to get authentication options');
+        const errorText = await optionsResponse.text();
+        console.error('❌ Authentication options request failed:', {
+          status: optionsResponse.status,
+          statusText: optionsResponse.statusText,
+          errorText
+        });
+        throw new Error(`Failed to get authentication options: ${optionsResponse.status} ${optionsResponse.statusText}`);
       }
 
-      const { options, challengeId } = await optionsResponse.json();
+      const responseData = await optionsResponse.json();
+      console.log('✅ Authentication options received:', {
+        hasOptions: !!responseData.options,
+        hasChallengeId: !!responseData.challengeId,
+        optionsKeys: responseData.options ? Object.keys(responseData.options) : [],
+        challengeId: responseData.challengeId
+      });
+
+      const { options, challengeId } = responseData;
 
       // Step 2: Authenticate with browser
+      console.log('🔑 Starting browser authentication...');
       const authenticationResponse = await WebAuthnBrowser.authenticate(options);
+      console.log('✅ Browser authentication completed:', {
+        hasResponse: !!authenticationResponse,
+        responseKeys: authenticationResponse ? Object.keys(authenticationResponse) : []
+      });
 
       // Step 3: Verify authentication with server
+      console.log('🔍 Verifying authentication with server...');
       const verifyResponse = await fetch('/api/webauthn/authenticate/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,15 +98,24 @@
         })
       });
 
+      console.log('📡 Verification response received:', {
+        status: verifyResponse.status,
+        statusText: verifyResponse.statusText,
+        ok: verifyResponse.ok
+      });
+
       if (!verifyResponse.ok) {
         const errorData = await verifyResponse.json();
+        console.error('❌ Authentication verification failed:', errorData);
         throw new Error(errorData.error || 'Authentication verification failed');
       }
 
       const { success, userId: authenticatedUserId } = await verifyResponse.json();
+      console.log('✅ Authentication verification completed:', { success, authenticatedUserId });
       
       if (success) {
         // Redirect to dashboard or intended page
+        console.log('🚀 Authentication successful, redirecting to dashboard...');
         goto('/dashboard');
       } else {
         throw new Error('Authentication failed');
@@ -69,6 +124,14 @@
     } catch (err) {
       const webauthnError = err as WebAuthnError;
       retryCount++;
+      
+      console.error('💥 Authentication error:', {
+        error: webauthnError,
+        message: webauthnError.message,
+        code: webauthnError.code,
+        retryCount,
+        maxRetries
+      });
       
       if (webauthnError.code === 'AUTHENTICATION_FAILED') {
         if (retryCount < maxRetries) {
