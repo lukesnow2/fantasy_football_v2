@@ -190,6 +190,46 @@ export async function getAvailableManagers() {
 }
 
 /**
+ * Get all authenticated users for login (active accounts with manager info)
+ */
+export async function getAuthenticatedManagers() {
+	try {
+		console.log('🔍 getAuthenticatedManagers: Starting query...');
+		
+		// Get all active users with their manager information
+		const authenticatedManagers = await db
+			.select({
+				managerKey: dimManager.managerKey,
+				managerName: dimManager.managerName,
+				managerId: dimManager.managerId,
+				displayName: dimManager.displayName,
+				profileImageUrl: dimManager.profileImageUrl,
+				isActive: dimManager.isActive,
+				isCurrent: dimManager.isCurrent,
+				username: userTable.username,
+				accountStatus: userTable.accountStatus,
+				passkeyEnabled: userTable.passkeyEnabled
+			})
+			.from(dimManager)
+			.innerJoin(userTable, eq(dimManager.managerKey, userTable.managerKey))
+			.where(
+				and(
+					eq(dimManager.isCurrent, true),
+					eq(dimManager.isActive, true),
+					eq(userTable.accountStatus, 'active')
+				)
+			)
+			.orderBy(dimManager.managerName);
+
+		console.log('📋 getAuthenticatedManagers: Query result:', authenticatedManagers);
+		return authenticatedManagers;
+	} catch (error) {
+		console.error('Error getting authenticated managers:', error);
+		return [];
+	}
+}
+
+/**
  * Helper to get manager name from manager key
  */
 export async function getManagerNameByKey(managerKey: number): Promise<string | null> {

@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import * as auth from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user as userTable, dimManager } from '$lib/server/db/schema';
-import { getAvailableManagers } from '$lib/server/auth-manager';
+import { getAvailableManagers, getAuthenticatedManagers } from '$lib/server/auth-manager';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -21,11 +21,11 @@ export const load: PageServerLoad = async (event) => {
 		successMessage = 'Your password has been successfully reset. You can now log in with your new password.';
 	}
 
-	// Get available managers for the registration dropdown
-	const availableManagers = await getAvailableManagers();
+	// Get authenticated managers for login (active users with manager info)
+	const authenticatedManagers = await getAuthenticatedManagers();
 	
 	return {
-		availableManagers,
+		authenticatedManagers,
 		successMessage
 	};
 };

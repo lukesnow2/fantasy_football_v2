@@ -5,10 +5,13 @@
 	import PasskeyAuthentication from '$lib/components/webauthn/PasskeyAuthentication.svelte';
 
 	export let data: {
-		availableManagers?: Array<{
+		authenticatedManagers?: Array<{
 			managerKey: number;
 			managerName: string;
 			displayName: string | null;
+			username: string;
+			accountStatus: string;
+			passkeyEnabled: boolean;
 		}>;
 		successMessage?: string | null;
 		message?: string | null;
@@ -40,11 +43,11 @@
 	}
 
 	// Update selected manager when username changes
-	$: if (username && data?.availableManagers) {
+	$: if (username && data?.authenticatedManagers) {
 		console.log('🔍 Debug: Username changed to:', username);
-		console.log('📋 Available managers:', data.availableManagers);
+		console.log('📋 Authenticated managers:', data.authenticatedManagers);
 		
-		const user = data.availableManagers.find(m => m.managerName === username);
+		const user = data.authenticatedManagers.find(m => m.username === username);
 		console.log('🔍 Manager match result:', user);
 		
 		selectedManager = user ? user.managerName : '';
