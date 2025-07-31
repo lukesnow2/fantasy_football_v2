@@ -1,8 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { webauthnCredentials } from '$lib/server/db/schema';
 import { createChallenge } from '$lib/server/webauthn/challenge';
 import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/errors';
 import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
+import { eq } from 'drizzle-orm';
 
 export async function POST({ request, getClientAddress }: { request: Request; getClientAddress: () => string }) {
 	try {
@@ -22,6 +24,31 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			rpId,
 			headers: Object.fromEntries(request.headers.entries())
 		});
+
+		// Get existing credentials for the user
+		let allowCredentials: any[] | undefined = undefined;
+		if (userId) {
+			const existingCredentials = await db
+				.select({
+					id: webauthnCredentials.credentialId,
+					type: webauthnCredentials.authenticatorType
+				})
+				.from(webauthnCredentials)
+				.where(eq(webauthnCredentials.userId, userId));
+
+			console.log('🔑 Found existing credentials:', {
+				count: existingCredentials.length,
+				credentialIds: existingCredentials.map(c => c.id)
+			});
+
+			if (existingCredentials.length > 0) {
+				allowCredentials = existingCredentials.map(cred => ({
+					id: cred.id,
+					type: 'public-key',
+					transports: ['internal']
+				}));
+			}
+		}
 
 		// Generate authentication challenge
 		const challenge = await createChallenge(userId, 'authentication', {
@@ -43,13 +70,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			challenge: challenge.challenge,
 			timeout: 60000, // 60 seconds
 			userVerification: 'preferred',
-			allowCredentials: userId ? [
-				{
-					id: '', // Will be populated by the client
-					type: 'public-key',
-					transports: ['internal']
-				}
-			] : undefined
+			allowCredentials // Will be undefined if no credentials exist
 		};
 
 		console.log('✅ Authentication options generated:', {
@@ -57,14 +78,16 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			hasOptions: !!options,
 			optionsKeys: Object.keys(options),
 			rpId: options.rpId,
-			origin
+			origin,
+			hasAllowCredentials: !!allowCredentials,
+			credentialsCount: allowCredentials?.length || 0
 		});
 
 		// Log audit event
 		await logAuditEvent(
 			AuditEventType.AUTHENTICATION_STARTED,
 			AuditSeverity.INFO,
-			{ challengeId: challenge.id, rpId },
+			{ challengeId: challenge.id, rpId, credentialsCount: allowCredentials?.length || 0 },
 			{ userId, ipAddress: clientAddress }
 		);
 
