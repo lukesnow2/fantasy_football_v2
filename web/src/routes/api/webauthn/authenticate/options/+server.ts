@@ -4,7 +4,7 @@ import { webauthnCredentials, user, dimManager } from '$lib/server/db/schema';
 import { createChallenge } from '$lib/server/webauthn/challenge';
 import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/errors';
 import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 export async function POST({ request, getClientAddress }: { request: Request; getClientAddress: () => string }) {
 	try {
@@ -33,8 +33,9 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			);
 		}
 
-		// Look up user by username
-		const [userRecord] = await db
+		// DEBUG: Check if user table exists and has data
+		console.log('🔍 Checking user table...');
+		const allUsers = await db
 			.select({
 				id: user.id,
 				username: user.username,
@@ -42,16 +43,59 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 				passkeyEnabled: user.passkeyEnabled
 			})
 			.from(user)
-			.where(eq(user.username, username))
-			.limit(1);
+			.limit(5);
 
-		if (!userRecord) {
-			throw createWebAuthnError(
-				WebAuthnErrorCode.INVALID_USER_ID,
-				`No account found for username: ${username}`
-			);
+		console.log('📋 All users in database:', allUsers);
+
+		// Look up user by username with detailed logging
+		console.log('🔍 Looking up user by username:', username);
+		let userQuery = await db
+			.select({
+				id: user.id,
+				username: user.username,
+				managerKey: user.managerKey,
+				passkeyEnabled: user.passkeyEnabled
+			})
+			.from(user)
+			.where(eq(user.username, username));
+
+		console.log('🔍 User query result:', {
+			query: `WHERE username = '${username}'`,
+			result: userQuery,
+			count: userQuery.length
+		});
+
+		if (userQuery.length === 0) {
+			// Try case-insensitive search
+			console.log('🔍 Trying case-insensitive search...');
+			const caseInsensitiveQuery = await db
+				.select({
+					id: user.id,
+					username: user.username,
+					managerKey: user.managerKey,
+					passkeyEnabled: user.passkeyEnabled
+				})
+				.from(user)
+				.where(sql`LOWER(${user.username}) = LOWER(${username})`);
+
+			console.log('🔍 Case-insensitive query result:', {
+				query: `WHERE LOWER(username) = LOWER('${username}')`,
+				result: caseInsensitiveQuery,
+				count: caseInsensitiveQuery.length
+			});
+
+			if (caseInsensitiveQuery.length === 0) {
+				throw createWebAuthnError(
+					WebAuthnErrorCode.INVALID_USER_ID,
+					`No account found for username: ${username}`
+				);
+			} else {
+				console.log('✅ Found user with case-insensitive search');
+				userQuery = caseInsensitiveQuery;
+			}
 		}
 
+		const userRecord = userQuery[0];
 		const userId = userRecord.id;
 		console.log('👤 Found user:', { userId, username: userRecord.username, passkeyEnabled: userRecord.passkeyEnabled });
 
