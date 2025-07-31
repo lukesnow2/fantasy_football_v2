@@ -61,14 +61,14 @@
 - [x] **Logging Test**: Verify auth requests/responses are logged in staging environment
 
 ### **API Endpoints**
-- [ ] Create `/api/webauthn/register/options` endpoint
-- [ ] Create `/api/webauthn/register/verify` endpoint
-- [ ] Create `/api/webauthn/authenticate/options` endpoint
-- [ ] Create `/api/webauthn/authenticate/verify` endpoint
-- [ ] Create `/api/webauthn/credentials` endpoint for listing user credentials
-- [ ] Create `/api/webauthn/credentials/delete` endpoint
-- [ ] Add proper error handling and validation to all endpoints
-- [ ] Implement rate limiting on WebAuthn endpoints
+- [x] Create `/api/webauthn/register/options` endpoint
+- [x] Create `/api/webauthn/register/verify` endpoint
+- [x] Create `/api/webauthn/authenticate/options` endpoint
+- [x] Create `/api/webauthn/authenticate/verify` endpoint
+- [x] Create `/api/webauthn/credentials` endpoint for listing user credentials
+- [x] Create `/api/webauthn/credentials/delete` endpoint
+- [x] Add proper error handling and validation to all endpoints
+- [x] Implement rate limiting on WebAuthn endpoints
 
 **✅ Tests to Prove Success:**
 - [ ] **Endpoint Availability Test**: Verify all endpoints return 200 status for valid requests
@@ -344,7 +344,7 @@
 ## **Progress Tracking**
 
 **Phase 1 Progress**: 18 / 18 tasks completed (13 implementation + 5 tests) ✅
-**Phase 2 Progress**: 16 / 17 tasks completed (16 implementation + 1 test deferred)  
+**Phase 2 Progress**: 17 / 17 tasks completed (17 implementation + 0 tests deferred) ✅
 **Phase 3 Progress**: 25 / 35 tasks completed (25 implementation + 10 tests)
 **Phase 4 Progress**: 24 / 26 tasks completed (16 implementation + 8 tests) ✅
 **Phase 5 Progress**: ___ / 37 tasks completed (22 implementation + 15 tests)
