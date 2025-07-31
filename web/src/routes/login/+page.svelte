@@ -18,6 +18,7 @@
 	let authMode: 'passkey' | 'password' = 'passkey';
 	let isSupported = false;
 	let isAvailable = false;
+	let selectedManager = '';
 
 	onMount(async () => {
 		// Check WebAuthn support
@@ -88,7 +89,40 @@
 					</button>
 				</div>
 			{:else}
-				<PasskeyAuthentication />
+				<!-- Manager Selection for Passkey Authentication -->
+				<div class="space-y-4">
+					<div>
+						<label for="manager-select" class="block text-sm font-medium text-slate-300 mb-2">
+							<Users class="h-4 w-4 inline mr-2" />
+							Select Your Manager Account
+						</label>
+						<select
+							id="manager-select"
+							bind:value={selectedManager}
+							required
+							class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg 
+								text-white placeholder-slate-400 focus:outline-none focus:ring-2 
+								focus:ring-blue-500 focus:border-transparent transition-colors"
+						>
+							<option value="">Choose a manager...</option>
+							{#if data?.availableManagers}
+								{#each data.availableManagers as manager}
+									<option value={manager.managerName}>
+										{manager.displayName || manager.managerName}
+									</option>
+								{/each}
+							{/if}
+						</select>
+					</div>
+
+					{#if selectedManager}
+						<PasskeyAuthentication managerName={selectedManager} />
+					{:else}
+						<div class="text-center py-8">
+							<p class="text-slate-400">Please select a manager to continue with passkey authentication.</p>
+						</div>
+					{/if}
+				</div>
 			{/if}
 		{:else}
 			<!-- Password Authentication -->
