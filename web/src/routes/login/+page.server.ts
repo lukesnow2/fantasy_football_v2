@@ -19,6 +19,8 @@ export const load: PageServerLoad = async (event) => {
 	
 	if (message === 'password-reset-success') {
 		successMessage = 'Your password has been successfully reset. You can now log in with your new password.';
+	} else if (message === 'setup-passkey-required') {
+		successMessage = 'Please set up your passkey to continue with passkey authentication.';
 	}
 
 	// Get authenticated managers for login (active users with manager info)

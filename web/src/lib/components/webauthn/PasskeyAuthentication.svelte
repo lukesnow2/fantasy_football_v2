@@ -13,6 +13,8 @@
   let error = '';
   let biometricType = '';
   let retryCount = 0;
+  let currentFlow: 'authentication' | 'registration' | null = null;
+  let flowMessage = '';
   const maxRetries = 3;
 
   onMount(async () => {
@@ -79,7 +81,23 @@
         message: responseData.message
       });
 
-      const { options, challengeId } = responseData;
+      const { options, challengeId, flow, message } = responseData;
+      currentFlow = flow;
+      flowMessage = message;
+
+      // If this is a registration flow (no passkey exists), redirect to setup page
+      if (flow === 'registration') {
+        console.log('🔄 No passkey found, redirecting to setup page...');
+        // Get the userId from the server response or make a separate request
+        const userId = responseData.userId;
+        if (userId) {
+          goto(`/setup-passkey?userId=${userId}&username=${encodeURIComponent(username || '')}&managerKey=${responseData.managerKey || ''}`);
+        } else {
+          // Fallback: redirect to login with error message
+          goto('/login?message=setup-passkey-required');
+        }
+        return;
+      }
 
       // Step 2: Authenticate with browser
       console.log('🔑 Starting browser authentication...');
@@ -188,19 +206,51 @@
     <div class="authentication-form">
       <div class="form-header">
         <Fingerprint class="h-8 w-8 text-blue-400" />
-        <h2>Sign In with Passkey</h2>
-        <p class="subtitle">Use {biometricType} to sign in securely</p>
+        <h2>
+          {#if currentFlow === 'registration'}
+            Set Up Your Passkey
+          {:else if currentFlow === 'authentication'}
+            Sign In with Passkey
+          {:else}
+            Passkey Authentication
+          {/if}
+        </h2>
+        <p class="subtitle">
+          {#if currentFlow === 'registration'}
+            Create your first passkey for secure sign-in
+          {:else if currentFlow === 'authentication'}
+            Use {biometricType} to sign in securely
+          {:else}
+            Use {biometricType} to sign in securely
+          {/if}
+        </p>
+        {#if flowMessage}
+          <p class="flow-message">{flowMessage}</p>
+        {/if}
       </div>
 
       <div class="info-box">
         <Shield class="h-5 w-5 text-blue-400" />
         <div>
-          <h4>How to sign in:</h4>
+          <h4>
+            {#if currentFlow === 'registration'}
+              How to set up your passkey:
+            {:else}
+              How to sign in:
+            {/if}
+          </h4>
           <ol>
-            <li>Click "Sign In with Passkey" below</li>
-            <li>Your browser will prompt for {biometricType}</li>
-            <li>Complete the biometric verification</li>
-            <li>You'll be signed in automatically</li>
+            {#if currentFlow === 'registration'}
+              <li>Click "Set Up Passkey" below</li>
+              <li>Your browser will prompt for {biometricType}</li>
+              <li>Complete the biometric verification</li>
+              <li>Your passkey will be created and you'll be signed in</li>
+            {:else}
+              <li>Click "Sign In with Passkey" below</li>
+              <li>Your browser will prompt for {biometricType}</li>
+              <li>Complete the biometric verification</li>
+              <li>You'll be signed in automatically</li>
+            {/if}
           </ol>
         </div>
       </div>
@@ -226,10 +276,22 @@
         class="primary-button"
       >
         {#if isLoading}
-          <span class="loading">Signing In...</span>
+          <span class="loading">
+            {#if currentFlow === 'registration'}
+              Setting Up...
+            {:else}
+              Signing In...
+            {/if}
+          </span>
         {:else}
           <Fingerprint class="h-4 w-4" />
-          <span>Sign In with Passkey</span>
+          <span>
+            {#if currentFlow === 'registration'}
+              Set Up Your First Passkey
+            {:else}
+              Sign In with Passkey
+            {/if}
+          </span>
         {/if}
       </button>
 
@@ -300,6 +362,12 @@
   .subtitle {
     color: #94a3b8;
     margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .flow-message {
+    color: #94a3b8;
+    margin-top: 0.5rem;
     font-size: 0.875rem;
   }
 

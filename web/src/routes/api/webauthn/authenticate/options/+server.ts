@@ -179,6 +179,8 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			options,
 			challengeId: challenge.id,
 			flow: allowCredentials ? 'authentication' : 'registration',
+			userId: userRecord.id,
+			managerKey: userRecord.managerKey,
 			message: allowCredentials 
 				? `Sign in as ${userRecord.username}` 
 				: `Set up your first passkey for ${userRecord.username}`
