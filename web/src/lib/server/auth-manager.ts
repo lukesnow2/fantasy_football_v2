@@ -140,6 +140,7 @@ export async function getAvailableManagers() {
 			.where(
 				and(
 					eq(dimManager.isCurrent, true),
+					eq(dimManager.isActive, true), // Only include active managers
 					or(
 						isNull(userTable.managerKey), // No user account linked
 						eq(userTable.accountStatus, 'placeholder') // Or placeholder account that can be claimed

@@ -4,6 +4,7 @@
   import { WebAuthnBrowser, type WebAuthnError } from './browser';
   import { goto } from '$app/navigation';
   import { enhance } from '$app/forms';
+  import { Fingerprint, Shield, AlertTriangle, CheckCircle, Loader2, ArrowRight, Key } from 'lucide-svelte';
 
   export let userId: string;
   export let username: string;
@@ -105,246 +106,330 @@
       isLoading = false;
     }
   }
+
+  function handleRetry() {
+    error = '';
+    handleRegistration();
+  }
+
+  function handleSkip() {
+    // Emit skip event for parent component to handle
+    dispatch('registrationSkipped');
+  }
 </script>
 
 <div class="passkey-registration">
-  {#if !isSupported}
-    <div class="error-banner">
-      <h3>⚠️ WebAuthn Not Supported</h3>
-      <p>Your browser doesn't support passkeys. Please use a modern browser like Chrome, Safari, or Firefox.</p>
-    </div>
-  {:else if !isAvailable}
-    <div class="warning-banner">
-      <h3>⚠️ Platform Authenticator Not Available</h3>
-      <p>Your device doesn't support biometric authentication. You may need to enable it in your system settings.</p>
+  {#if success}
+    <div class="success-state">
+      <CheckCircle class="h-12 w-12 text-green-400" />
+      <h2>Passkey Created Successfully!</h2>
+      <p>Your passkey "{credentialName}" has been registered and is ready to use.</p>
+      <div class="success-details">
+        <p><strong>Device:</strong> {WebAuthnBrowser.detectDeviceType()}</p>
+        <p><strong>Authentication:</strong> {biometricType}</p>
+        <p><strong>Username:</strong> {username}</p>
+      </div>
     </div>
   {:else}
     <div class="registration-form">
-      <h2>🔐 Set Up Passkey</h2>
-      <p class="subtitle">Secure your account with {biometricType}</p>
+      <div class="form-header">
+        <Fingerprint class="h-8 w-8 text-blue-400" />
+        <h2>{isRotationMode ? 'Rotate Your Passkey' : 'Create Your Passkey'}</h2>
+        <p>Set up biometric authentication for secure sign-in</p>
+      </div>
 
-      <form method="POST" use:enhance>
-        <div class="form-group">
-          <label for="managerKey">Manager Key *</label>
-          <input
-            id="managerKey"
-            type="text"
-            bind:value={managerKey}
-            placeholder="Enter your fantasy league manager key"
-            required
-            disabled={isLoading}
-          />
-          <small>This links your account to your fantasy league manager</small>
+      {#if !isRotationMode}
+        <div class="manager-info">
+          <Key class="h-5 w-5 text-blue-400" />
+          <div>
+            <h4>Manager Information</h4>
+            <div class="info-grid">
+              <div>
+                <span class="label">Username:</span>
+                <span class="value">{username}</span>
+              </div>
+              <div>
+                <span class="label">Manager Key:</span>
+                <span class="value">{managerKey || 'Not set'}</span>
+              </div>
+            </div>
+          </div>
         </div>
+      {/if}
 
-        <div class="form-group">
-          <label for="credentialName">Device Name</label>
-          <input
-            id="credentialName"
-            type="text"
-            bind:value={credentialName}
-            placeholder="My iPhone"
-            disabled={isLoading}
-          />
-          <small>Give this device a memorable name</small>
+      <div class="credential-section">
+        <Shield class="h-5 w-5 text-blue-400" />
+        <div>
+          <h4>Passkey Details</h4>
+          <div class="credential-info">
+            <div>
+              <span class="label">Device:</span>
+              <span class="value">{WebAuthnBrowser.detectDeviceType()}</span>
+            </div>
+            <div>
+              <span class="label">Authentication:</span>
+              <span class="value">{biometricType}</span>
+            </div>
+            <div>
+              <span class="label">Name:</span>
+              <span class="value">{credentialName}</span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div class="info-box">
-          <h4>📱 What happens next?</h4>
-          <ol>
-            <li>Click "Create Passkey" below</li>
-            <li>Your browser will prompt for {biometricType}</li>
-            <li>Complete the biometric verification</li>
-            <li>Your passkey will be saved securely</li>
-          </ol>
-        </div>
-
-        {#if error}
-          <div class="error-message">
+      {#if error}
+        <div class="error-message">
+          <AlertTriangle class="h-4 w-4" />
+          <div>
             <p>{error}</p>
+            <button on:click={handleRetry} class="retry-button">
+              Try Again
+            </button>
           </div>
-        {/if}
+        </div>
+      {/if}
 
-        {#if success}
-          <div class="success-message">
-            <p>✅ Passkey created successfully! Redirecting...</p>
-          </div>
-        {/if}
+      <div class="registration-steps">
+        <h4>What happens next:</h4>
+        <ol>
+          <li>Click "Create Passkey" below</li>
+          <li>Your browser will prompt for {biometricType}</li>
+          <li>Complete the biometric verification</li>
+          <li>Your passkey will be created and saved</li>
+        </ol>
+      </div>
 
+      <div class="button-group">
         <button
           type="button"
           on:click={handleRegistration}
-          disabled={isLoading || (!managerKey?.trim() && !isRotationMode)}
+          disabled={isLoading}
           class="primary-button"
         >
           {#if isLoading}
-            <span class="loading">Creating Passkey...</span>
+            <Loader2 class="h-4 w-4 animate-spin" />
+            <span>Creating Passkey...</span>
           {:else}
-            <span>🔐 Create Passkey</span>
+            <Fingerprint class="h-4 w-4" />
+            <span>{isRotationMode ? 'Rotate Passkey' : 'Create Passkey'}</span>
           {/if}
         </button>
-      </form>
+
+        {#if !isRotationMode}
+          <button on:click={handleSkip} class="secondary-button">
+            Skip for Now
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
   .passkey-registration {
-    max-width: 500px;
-    margin: 0 auto;
-    padding: 2rem;
-  }
-
-  .error-banner, .warning-banner {
-    padding: 1rem;
-    border-radius: 8px;
-    margin-bottom: 1rem;
-  }
-
-  .error-banner {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
-  }
-
-  .warning-banner {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
-  }
-
-  .registration-form {
-    background: white;
-    padding: 2rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-
-  h2 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-  }
-
-  .subtitle {
-    color: #666;
-    margin-bottom: 2rem;
-  }
-
-  .form-group {
-    margin-bottom: 1.5rem;
-  }
-
-  label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #333;
-  }
-
-  input {
     width: 100%;
-    padding: 0.75rem;
-    border: 2px solid #e1e5e9;
-    border-radius: 6px;
-    font-size: 1rem;
-    transition: border-color 0.2s;
   }
 
-  input:focus {
-    outline: none;
-    border-color: #007bff;
+  .success-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+    color: white;
   }
 
-  input:disabled {
-    background: #f8f9fa;
-    cursor: not-allowed;
+  .success-state h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
   }
 
-  small {
-    display: block;
-    margin-top: 0.25rem;
-    color: #666;
+  .success-state p {
+    margin: 0;
+    color: #94a3b8;
     font-size: 0.875rem;
   }
 
-  .info-box {
-    background: #f8f9fa;
+  .success-details {
+    background: rgba(51, 65, 85, 0.3);
     padding: 1rem;
-    border-radius: 6px;
-    margin: 1.5rem 0;
+    border-radius: 8px;
+    margin-top: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    text-align: left;
   }
 
-  .info-box h4 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
+  .success-details p {
+    margin: 0.25rem 0;
+    font-size: 0.875rem;
   }
 
-  .info-box ol {
+  .registration-form {
+    width: 100%;
+  }
+
+  .form-header {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .form-header h2 {
+    margin: 0.5rem 0 0.25rem 0;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .form-header p {
     margin: 0;
-    padding-left: 1.5rem;
+    color: #94a3b8;
+    font-size: 0.875rem;
   }
 
-  .info-box li {
-    margin-bottom: 0.25rem;
-    color: #555;
+  .manager-info, .credential-section {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(51, 65, 85, 0.3);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+  }
+
+  .manager-info h4, .credential-section h4 {
+    margin: 0 0 0.5rem 0;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .info-grid, .credential-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .label {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: block;
+  }
+
+  .value {
+    color: #cbd5e1;
+    font-size: 0.875rem;
+    font-weight: 500;
   }
 
   .error-message {
-    background: #fee;
-    color: #c33;
-    padding: 0.75rem;
-    border-radius: 6px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    padding: 1rem;
+    border-radius: 8px;
     margin: 1rem 0;
   }
 
-  .success-message {
-    background: #d4edda;
-    color: #155724;
-    padding: 0.75rem;
-    border-radius: 6px;
-    margin: 1rem 0;
+  .error-message p {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+  }
+
+  .registration-steps {
+    background: rgba(51, 65, 85, 0.3);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+  }
+
+  .registration-steps h4 {
+    margin: 0 0 0.75rem 0;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .registration-steps ol {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+  }
+
+  .registration-steps li {
+    margin-bottom: 0.25rem;
+  }
+
+  .button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
   }
 
   .primary-button {
-    width: 100%;
-    padding: 1rem;
-    background: #007bff;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .primary-button:hover:not(:disabled) {
-    background: #0056b3;
-  }
-
-  .primary-button:disabled {
-    background: #6c757d;
-    cursor: not-allowed;
-  }
-
-  .loading {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  .loading::before {
-    content: '';
-    width: 16px;
-    height: 16px;
-    border: 2px solid transparent;
-    border-top: 2px solid currentColor;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
+  .primary-button:hover:not(:disabled) {
+    background: #2563eb;
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .primary-button:disabled {
+    background: #64748b;
+    cursor: not-allowed;
+  }
+
+  .secondary-button {
+    padding: 0.75rem 1rem;
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .secondary-button:hover {
+    background: #475569;
+    color: white;
+  }
+
+  .retry-button {
+    margin-top: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .retry-button:hover {
+    background: #b91c1c;
   }
 </style> 

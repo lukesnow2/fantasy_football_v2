@@ -3,6 +3,7 @@
   import { createEventDispatcher } from 'svelte';
   import { WebAuthnBrowser } from './browser';
   import PasskeyRegistration from './PasskeyRegistration.svelte';
+  import { Fingerprint, Shield, AlertTriangle, Trash2, RotateCcw, Plus, Smartphone, Monitor, Laptop, Tablet } from 'lucide-svelte';
 
   export let userId: string;
 
@@ -92,217 +93,264 @@
     });
   }
 
-  function getDeviceIcon(deviceType: string): string {
+  function getDeviceIcon(deviceType: string) {
     switch (deviceType?.toLowerCase()) {
-      case 'phone': return '📱';
-      case 'laptop': return '💻';
-      case 'desktop': return '🖥️';
-      case 'tablet': return '📱';
-      default: return '🔐';
+      case 'phone': return Smartphone;
+      case 'laptop': return Laptop;
+      case 'desktop': return Monitor;
+      case 'tablet': return Tablet;
+      default: return Smartphone;
+    }
+  }
+
+  function getAuthenticatorIcon(authenticatorType: string) {
+    switch (authenticatorType?.toLowerCase()) {
+      case 'fingerprint': return Fingerprint;
+      case 'face': return Shield;
+      default: return Fingerprint;
     }
   }
 </script>
 
 <div class="credential-manager">
-  <div class="header">
-    <h3>🔐 Passkey Management</h3>
-    <p class="subtitle">Manage your registered passkeys</p>
-  </div>
-
-  {#if error}
-    <div class="error-message">
-      <p>{error}</p>
-    </div>
-  {/if}
-
-  {#if isLoading}
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading credentials...</p>
-    </div>
-  {:else if credentials.length === 0}
-    <div class="empty-state">
-      <h4>No Passkeys Found</h4>
-      <p>You haven't registered any passkeys yet.</p>
+  {#if showRotationForm}
+    <div class="rotation-form">
+      <PasskeyRegistration 
+        {userId} 
+        username=""
+        managerKey=""
+        isRotationMode={true}
+        on:registrationSuccess={handleRotationSuccess}
+      />
+      <button on:click={cancelRotation} class="secondary-button">
+        Cancel Rotation
+      </button>
     </div>
   {:else}
-    <div class="credentials-list">
-      {#each credentials as credential}
-        <div class="credential-item">
-          <div class="credential-info">
-            <div class="device-icon">
-              {getDeviceIcon(credential.deviceType)}
-            </div>
-            <div class="credential-details">
-              <h4>{credential.deviceType || 'Unknown Device'}</h4>
-              <p class="credential-id">
-                ID: {credential.credentialId.substring(0, 16)}...
-              </p>
-              <p class="credential-dates">
-                Created: {formatDate(credential.createdAt)}
-                {#if credential.lastUsedAt}
-                  • Last used: {formatDate(credential.lastUsedAt)}
-                {/if}
-              </p>
-            </div>
-          </div>
-          <div class="credential-actions">
-            <button
-              on:click={() => deleteCredential(credential.credentialId)}
-              class="delete-button"
-              title="Delete passkey"
-            >
-              🗑️
-            </button>
-          </div>
-        </div>
-      {/each}
-    </div>
+    <div class="manager-container">
+      <div class="manager-header">
+        <Fingerprint class="h-8 w-8 text-blue-400" />
+        <h2>Passkey Manager</h2>
+        <p>Manage your biometric authentication devices</p>
+      </div>
 
-    <div class="rotation-section">
-      <h4>🔄 Replace Passkey</h4>
-      <p>Create a new passkey to replace your existing ones. This is useful when you get a new device or want to update your security.</p>
-      
-      {#if !isSupported}
-        <div class="error-banner">
-          <h5>⚠️ WebAuthn Not Supported</h5>
-          <p>Your browser doesn't support passkeys.</p>
+      {#if error}
+        <div class="error-message">
+          <AlertTriangle class="h-4 w-4" />
+          <div>
+            <p>{error}</p>
+          </div>
         </div>
-      {:else if !isAvailable}
-        <div class="warning-banner">
-          <h5>⚠️ Platform Authenticator Not Available</h5>
-          <p>Your device doesn't support biometric authentication.</p>
+      {/if}
+
+      {#if isLoading}
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>Loading credentials...</p>
+        </div>
+      {:else if credentials.length === 0}
+        <div class="empty-state">
+          <Shield class="h-12 w-12 text-blue-400" />
+          <h3>No Passkeys Found</h3>
+          <p>You haven't set up any passkeys yet. Create one to enable secure biometric authentication.</p>
         </div>
       {:else}
-        <button
-          on:click={startRotation}
-          class="rotation-button"
-          disabled={showRotationForm}
-        >
-          🔄 Replace Passkey
-        </button>
-      {/if}
-    </div>
-  {/if}
+        <div class="credentials-list">
+          {#each credentials as credential}
+            <div class="credential-card">
+              <div class="credential-header">
+                <div class="credential-icon">
+                  {#if getDeviceIcon(credential.deviceType)}
+                    <svelte:component this={getDeviceIcon(credential.deviceType)} class="h-5 w-5 text-blue-400" />
+                  {/if}
+                </div>
+                <div class="credential-info">
+                  <h4>{credential.deviceType} Passkey</h4>
+                  <p class="credential-details">
+                    {credential.authenticatorType} • Created {formatDate(credential.createdAt)}
+                  </p>
+                  {#if credential.lastUsedAt}
+                    <p class="last-used">Last used: {formatDate(credential.lastUsedAt)}</p>
+                  {/if}
+                </div>
+                <div class="credential-actions">
+                  <button 
+                    on:click={() => deleteCredential(credential.credentialId)}
+                    class="delete-button"
+                    title="Delete this passkey"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
 
-  {#if showRotationForm}
-    <div class="rotation-modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h4>🔄 Replace Passkey</h4>
-          <button on:click={cancelRotation} class="close-button">×</button>
+        <div class="manager-actions">
+          <button on:click={startRotation} class="primary-button">
+            <RotateCcw class="h-4 w-4" />
+            Rotate Passkey
+          </button>
+          <button on:click={() => dispatch('addNew')} class="secondary-button">
+            <Plus class="h-4 w-4" />
+            Add New Passkey
+          </button>
         </div>
-        
-        <div class="modal-body">
-          <p>Creating a new passkey will replace your existing ones. Make sure you can complete the setup process.</p>
-          
-          <PasskeyRegistration 
-            {userId}
-            username=""
-            managerKey=""
-            isRotationMode={true}
-            on:registrationSuccess={handleRotationSuccess}
-          />
-        </div>
-      </div>
+      {/if}
     </div>
   {/if}
 </div>
 
 <style>
   .credential-manager {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 2rem;
+    width: 100%;
   }
 
-  .header {
+  .rotation-form {
+    width: 100%;
+  }
+
+  .manager-container {
+    width: 100%;
+  }
+
+  .manager-header {
     text-align: center;
     margin-bottom: 2rem;
   }
 
-  .header h3 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
+  .manager-header h2 {
+    margin: 0.5rem 0 0.25rem 0;
+    color: white;
     font-size: 1.5rem;
+    font-weight: 600;
   }
 
-  .subtitle {
+  .manager-header p {
     margin: 0;
-    color: #666;
-    font-size: 1rem;
+    color: #94a3b8;
+    font-size: 0.875rem;
   }
 
-  .loading-state, .empty-state {
+  .error-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+
+  .error-message p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
     text-align: center;
-    padding: 3rem;
-    color: #666;
+    color: #94a3b8;
   }
 
   .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #007bff;
+    width: 2rem;
+    height: 2rem;
+    border: 2px solid transparent;
+    border-top: 2px solid #3b82f6;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin: 0 auto 1rem;
   }
 
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
 
-  .error-message {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
-    padding: 1rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+    color: white;
+  }
+
+  .empty-state h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .empty-state p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.875rem;
   }
 
   .credentials-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
     margin-bottom: 2rem;
   }
 
-  .credential-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    border: 1px solid #e1e5e9;
+  .credential-card {
+    background: rgba(51, 65, 85, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.1);
     border-radius: 8px;
-    margin-bottom: 1rem;
-    background: white;
+    padding: 1rem;
+    transition: all 0.2s;
   }
 
-  .credential-info {
+  .credential-card:hover {
+    background: rgba(51, 65, 85, 0.5);
+    border-color: rgba(148, 163, 184, 0.2);
+  }
+
+  .credential-header {
     display: flex;
     align-items: center;
     gap: 1rem;
   }
 
-  .device-icon {
-    font-size: 2rem;
+  .credential-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: 6px;
   }
 
-  .credential-details h4 {
+  .credential-info {
+    flex: 1;
+  }
+
+  .credential-info h4 {
     margin: 0 0 0.25rem 0;
-    color: #333;
-    font-size: 1.1rem;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
   }
 
-  .credential-id {
-    margin: 0 0 0.25rem 0;
-    color: #666;
-    font-size: 0.875rem;
-    font-family: monospace;
-  }
-
-  .credential-dates {
+  .credential-details {
     margin: 0;
-    color: #888;
+    color: #cbd5e1;
+    font-size: 0.875rem;
+  }
+
+  .last-used {
+    margin: 0.25rem 0 0 0;
+    color: #94a3b8;
     font-size: 0.75rem;
   }
 
@@ -312,141 +360,68 @@
   }
 
   .delete-button {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-  }
-
-  .delete-button:hover {
-    background: #fee;
-  }
-
-  .rotation-section {
-    background: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 8px;
-    border: 1px solid #e1e5e9;
-  }
-
-  .rotation-section h4 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-  }
-
-  .rotation-section p {
-    margin: 0 0 1rem 0;
-    color: #666;
-    font-size: 0.875rem;
-  }
-
-  .error-banner, .warning-banner {
-    padding: 1rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
-  }
-
-  .error-banner {
-    background: #fee;
-    border: 1px solid #fcc;
-    color: #c33;
-  }
-
-  .warning-banner {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
-  }
-
-  .error-banner h5, .warning-banner h5 {
-    margin: 0 0 0.25rem 0;
-    font-size: 0.875rem;
-  }
-
-  .error-banner p, .warning-banner p {
-    margin: 0;
-    font-size: 0.75rem;
-  }
-
-  .rotation-button {
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .rotation-button:hover:not(:disabled) {
-    background: #0056b3;
-  }
-
-  .rotation-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .rotation-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    width: 2rem;
+    height: 2rem;
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  .modal-content {
-    background: white;
-    border-radius: 12px;
-    max-width: 600px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
+  .delete-button:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
   }
 
-  .modal-header {
+  .manager-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  .primary-button {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 1.5rem;
-    border-bottom: 1px solid #e1e5e9;
-  }
-
-  .modal-header h4 {
-    margin: 0;
-    color: #333;
-  }
-
-  .close-button {
-    background: none;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: #3b82f6;
+    color: white;
     border: none;
-    font-size: 1.5rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
     cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
   }
 
-  .close-button:hover {
-    background: #f8f9fa;
+  .primary-button:hover {
+    background: #2563eb;
   }
 
-  .modal-body {
-    padding: 1.5rem;
+  .secondary-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
-  .modal-body p {
-    margin: 0 0 1rem 0;
-    color: #666;
+  .secondary-button:hover {
+    background: #475569;
+    color: white;
   }
 </style> 

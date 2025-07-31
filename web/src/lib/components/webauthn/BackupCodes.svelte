@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Key, Download, Copy, Eye, EyeOff, AlertTriangle, CheckCircle } from 'lucide-svelte';
 
   export let userId: string;
 
@@ -95,62 +96,75 @@
 </script>
 
 <div class="backup-codes">
-  <h3>🔑 Backup Codes</h3>
-  <p class="subtitle">Generate backup codes for emergency access to your account</p>
+  <div class="codes-header">
+    <Key class="h-8 w-8 text-blue-400" />
+    <h2>Backup Codes</h2>
+    <p>Generate backup codes for emergency access to your account</p>
+  </div>
 
   {#if error}
     <div class="error-message">
-      <p>{error}</p>
+      <AlertTriangle class="h-4 w-4" />
+      <div>
+        <p>{error}</p>
+      </div>
     </div>
   {/if}
 
-  <div class="status-info">
-    <p><strong>Available codes:</strong> {status.availableCodes}</p>
-    <p><strong>Used codes:</strong> {status.usedCodes}</p>
-    <p><strong>Total codes:</strong> {status.totalCodes}</p>
+  <div class="status-section">
+    <div class="status-card">
+      <div class="status-item">
+        <span class="status-label">Total Codes:</span>
+        <span class="status-value">{status.totalCodes}</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Available:</span>
+        <span class="status-value available">{status.availableCodes}</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Used:</span>
+        <span class="status-value used">{status.usedCodes}</span>
+      </div>
+    </div>
   </div>
 
-  {#if !status.hasCodes}
-    <div class="generate-section">
-      <h4>📝 Generate Backup Codes</h4>
-      <p>Backup codes allow you to access your account if you lose access to your passkey. Each code can only be used once.</p>
-      
-      <button 
-        on:click={generateCodes} 
-        disabled={isLoading}
-        class="primary-button"
-      >
-        {#if isLoading}
-          <span class="loading">Generating...</span>
-        {:else}
-          Generate Backup Codes
-        {/if}
-      </button>
+  {#if status.hasCodes && !showCodes}
+    <div class="existing-codes">
+      <CheckCircle class="h-5 w-5 text-green-400" />
+      <div>
+        <h4>Backup Codes Available</h4>
+        <p>You have {status.availableCodes} backup codes remaining. Generate new codes to replace the existing ones.</p>
+      </div>
     </div>
-  {:else if showCodes}
-    <div class="codes-section">
-      <h4>🔐 Your Backup Codes</h4>
-      <p class="warning">⚠️ Save these codes in a secure location. Each code can only be used once.</p>
-      
+  {/if}
+
+  {#if showCodes}
+    <div class="codes-display">
+      <div class="codes-header-section">
+        <h4>Your Backup Codes</h4>
+        <p>Save these codes in a secure location. Each code can only be used once.</p>
+      </div>
+
       <div class="codes-grid">
         {#each codes as code, index}
           <div class="code-item">
-            <span class="code-number">{index + 1}.</span>
+            <span class="code-number">{index + 1}</span>
             <span class="code-text">{code}</span>
             <button 
               on:click={() => copyToClipboard(code)}
               class="copy-button"
               title="Copy code"
             >
-              📋
+              <Copy class="h-3 w-3" />
             </button>
           </div>
         {/each}
       </div>
 
-      <div class="code-actions">
+      <div class="codes-actions">
         <button on:click={downloadCodes} class="secondary-button">
-          📥 Download Codes
+          <Download class="h-4 w-4" />
+          Download Codes
         </button>
         <button on:click={hideCodes} class="secondary-button">
           Hide Codes
@@ -158,165 +172,305 @@
       </div>
     </div>
   {:else}
-    <div class="existing-codes">
-      <h4>✅ Backup Codes Available</h4>
-      <p>You have {status.availableCodes} backup codes remaining.</p>
-      
-      <div class="code-actions">
-        <button on:click={generateCodes} class="secondary-button">
-          🔄 Regenerate Codes
-        </button>
+    <div class="generate-section">
+      <div class="info-box">
+        <AlertTriangle class="h-5 w-5 text-yellow-400" />
+        <div>
+          <h4>Important Security Information</h4>
+          <ul>
+            <li>Backup codes provide emergency access to your account</li>
+            <li>Each code can only be used once</li>
+            <li>Store codes securely and separately from your device</li>
+            <li>Generate new codes if you suspect they've been compromised</li>
+          </ul>
+        </div>
       </div>
+
+      <button
+        on:click={generateCodes}
+        disabled={isLoading}
+        class="primary-button"
+      >
+        {#if isLoading}
+          <span class="loading">Generating Codes...</span>
+        {:else}
+          <Key class="h-4 w-4" />
+          <span>Generate Backup Codes</span>
+        {/if}
+      </button>
     </div>
   {/if}
 </div>
 
 <style>
   .backup-codes {
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 2rem;
+    width: 100%;
   }
 
-  h3 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-  }
-
-  .subtitle {
-    color: #666;
+  .codes-header {
+    text-align: center;
     margin-bottom: 2rem;
   }
 
-  .error-message {
-    background: #fee;
-    color: #c33;
-    padding: 1rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
+  .codes-header h2 {
+    margin: 0.5rem 0 0.25rem 0;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 600;
   }
 
-  .status-info {
-    background: #f8f9fa;
-    padding: 1rem;
-    border-radius: 6px;
-    margin-bottom: 1.5rem;
-  }
-
-  .status-info p {
-    margin: 0.25rem 0;
+  .codes-header p {
+    margin: 0;
+    color: #94a3b8;
     font-size: 0.875rem;
   }
 
-  .generate-section, .codes-section, .existing-codes {
-    background: white;
-    padding: 1.5rem;
+  .error-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    padding: 1rem;
     border-radius: 8px;
-    border: 1px solid #e1e5e9;
-    margin-bottom: 1rem;
-  }
-
-  .generate-section h4, .codes-section h4, .existing-codes h4 {
-    margin: 0 0 0.5rem 0;
-    color: #333;
-  }
-
-  .warning {
-    background: #fff3cd;
-    color: #856404;
-    padding: 0.75rem;
-    border-radius: 4px;
     margin: 1rem 0;
+  }
+
+  .error-message p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .status-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .status-card {
+    background: rgba(51, 65, 85, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .status-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .status-label {
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .status-value {
+    color: white;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .status-value.available {
+    color: #22c55e;
+  }
+
+  .status-value.used {
+    color: #64748b;
+  }
+
+  .existing-codes {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #86efac;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+  }
+
+  .existing-codes h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .existing-codes p {
+    margin: 0;
+    font-size: 0.875rem;
+  }
+
+  .codes-display {
+    background: rgba(51, 65, 85, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+  }
+
+  .codes-header-section {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .codes-header-section h4 {
+    margin: 0 0 0.25rem 0;
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .codes-header-section p {
+    margin: 0;
+    color: #94a3b8;
     font-size: 0.875rem;
   }
 
   .codes-grid {
     display: grid;
-    gap: 0.5rem;
-    margin: 1rem 0;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
   }
 
   .code-item {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 6px;
     padding: 0.75rem;
-    background: #f8f9fa;
-    border-radius: 4px;
     font-family: monospace;
-    font-size: 0.875rem;
   }
 
   .code-number {
-    color: #666;
-    min-width: 2rem;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 1.5rem;
   }
 
   .code-text {
+    color: #cbd5e1;
+    font-size: 0.875rem;
+    font-weight: 500;
     flex: 1;
-    font-weight: 600;
-    color: #333;
   }
 
   .copy-button {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 4px;
-    transition: background-color 0.2s;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
   .copy-button:hover {
-    background: #e1e5e9;
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
   }
 
-  .code-actions {
+  .codes-actions {
     display: flex;
-    gap: 1rem;
-    margin-top: 1rem;
+    gap: 0.75rem;
+    justify-content: center;
+  }
+
+  .generate-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .info-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fcd34d;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .info-box h4 {
+    margin: 0 0 0.5rem 0;
+    color: #fcd34d;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .info-box ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    color: #fcd34d;
+    font-size: 0.875rem;
+  }
+
+  .info-box li {
+    margin-bottom: 0.25rem;
   }
 
   .primary-button {
-    padding: 0.75rem 1.5rem;
-    background: #007bff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    background: #3b82f6;
     color: white;
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
   }
 
   .primary-button:hover:not(:disabled) {
-    background: #0056b3;
+    background: #2563eb;
   }
 
   .primary-button:disabled {
-    background: #6c757d;
+    background: #64748b;
     cursor: not-allowed;
   }
 
   .secondary-button {
-    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
     background: transparent;
-    color: #007bff;
-    border: 1px solid #007bff;
-    border-radius: 6px;
+    color: #94a3b8;
+    border: 1px solid #475569;
+    border-radius: 8px;
     font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s;
   }
 
   .secondary-button:hover {
-    background: #007bff;
+    background: #475569;
     color: white;
   }
 
   .loading {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.5rem;
   }
 
