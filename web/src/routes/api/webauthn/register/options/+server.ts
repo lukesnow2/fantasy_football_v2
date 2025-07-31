@@ -10,7 +10,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 	try {
 		console.log('🔐 WebAuthn registration options request received');
 		
-		const { managerName } = await request.json();
+		const { username } = await request.json();
 		const clientAddress = getClientAddress();
 		
 		// Get the actual domain from the request
@@ -18,43 +18,41 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
 		
 		console.log('📊 Registration request data:', { 
-			managerName, 
+			username, 
 			clientAddress,
 			origin,
 			rpId
 		});
 
 		// Validate required fields
-		if (!managerName) {
+		if (!username) {
 			throw createWebAuthnError(
 				WebAuthnErrorCode.INVALID_USER_ID,
-				'Manager name is required for registration'
+				'Username is required for registration'
 			);
 		}
 
-		// Look up user by manager name (join with dimManager)
+		// Look up user by username
 		const [userRecord] = await db
 			.select({
 				id: user.id,
 				username: user.username,
 				managerKey: user.managerKey,
-				managerName: dimManager.managerName,
 				passkeyEnabled: user.passkeyEnabled
 			})
 			.from(user)
-			.leftJoin(dimManager, eq(user.managerKey, dimManager.managerKey))
-			.where(eq(dimManager.managerName, managerName))
+			.where(eq(user.username, username))
 			.limit(1);
 
 		if (!userRecord) {
 			throw createWebAuthnError(
 				WebAuthnErrorCode.INVALID_USER_ID,
-				`No account found for manager: ${managerName}`
+				`No account found for username: ${username}`
 			);
 		}
 
 		const userId = userRecord.id;
-		const username = userRecord.username;
+		const usernameValue = userRecord.username;
 
 		// Generate registration challenge
 		const challenge = await createChallenge(userId, 'registration', {
@@ -78,8 +76,8 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			},
 			user: {
 				id: userId,
-				name: username,
-				displayName: managerName
+				name: usernameValue,
+				displayName: userRecord.managerKey // Assuming managerKey is the display name for now
 			},
 			challenge: challenge.challenge,
 			pubKeyCredParams: [
@@ -104,7 +102,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			optionsKeys: Object.keys(options),
 			userId,
 			username,
-			managerName,
+			managerName: userRecord.managerKey, // Assuming managerKey is the display name for now
 			rpId: options.rp.id
 		});
 
@@ -116,7 +114,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 				challengeId: challenge.id,
 				userId,
 				username,
-				managerName,
+				managerName: userRecord.managerKey, // Assuming managerKey is the display name for now
 				rpId: options.rp.id
 			},
 			{ userId, ipAddress: clientAddress }

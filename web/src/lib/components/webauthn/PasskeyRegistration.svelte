@@ -45,7 +45,7 @@
       const optionsResponse = await fetch('/api/webauthn/register/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, username, managerKey })
+        body: JSON.stringify({ username })
       });
 
       if (!optionsResponse.ok) {
@@ -64,8 +64,7 @@
         body: JSON.stringify({
           response: registrationResponse,
           challengeId,
-          managerKey,
-          credentialName
+          username
         })
       });
 

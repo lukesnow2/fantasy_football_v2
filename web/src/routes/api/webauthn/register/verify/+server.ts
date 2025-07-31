@@ -10,13 +10,13 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 	try {
 		console.log('🔍 WebAuthn registration verification request received');
 		
-		const { response, challengeId, managerKey } = await request.json();
+		const { response, challengeId, username: requestUsername } = await request.json();
 		const clientAddress = getClientAddress();
 		
 		console.log('📊 Registration verification data:', { 
 			hasResponse: !!response, 
 			challengeId,
-			managerKey,
+			username: requestUsername,
 			responseKeys: response ? Object.keys(response) : []
 		});
 
@@ -54,7 +54,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			);
 		}
 
-		const userId = challengeRecord.userId;
+		const challengeUserId = challengeRecord.userId;
 
 		// TODO: Implement actual WebAuthn verification
 		// For now, we'll simulate a successful verification and store the credential
@@ -66,7 +66,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 
 		await db.insert(webauthnCredentials).values({
 			id: credentialId,
-			userId: userId || 'unknown',
+			userId: challengeUserId || 'unknown',
 			credentialId: response.id || credentialId,
 			publicKey: 'simulated-public-key', // TODO: Extract from actual verification
 			signCount: 0,
@@ -77,7 +77,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		});
 
 		// Update user table to mark passkey as enabled
-		if (userId) {
+		if (challengeUserId) {
 			await db
 				.update(user)
 				.set({
@@ -85,12 +85,12 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 					passkeyRegisteredAt: now,
 					updatedAt: now
 				})
-				.where(eq(user.id, userId));
+				.where(eq(user.id, challengeUserId));
 		}
 
 		console.log('💾 Credential stored successfully:', {
 			credentialId,
-			userId
+			userId: challengeUserId
 		});
 
 		// Log successful registration
@@ -100,15 +100,15 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			{ 
 				challengeId,
 				credentialId,
-				managerKey: managerKey || null
+				managerKey: null // managerKey is no longer passed
 			},
-			{ userId: userId || undefined, ipAddress: clientAddress }
+			{ userId: challengeUserId || undefined, ipAddress: clientAddress }
 		);
 
 		return json({
 			success: true,
 			credentialId,
-			userId
+			userId: challengeUserId
 		});
 
 	} catch (error) {

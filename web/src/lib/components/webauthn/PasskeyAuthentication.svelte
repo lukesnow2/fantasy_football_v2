@@ -5,7 +5,7 @@
   import { enhance } from '$app/forms';
   import { Fingerprint, Shield, AlertTriangle, ArrowRight } from 'lucide-svelte';
 
-  export let managerName: string | undefined = undefined;
+  export let username: string | undefined = undefined;
 
   let isSupported = false;
   let isAvailable = false;
@@ -42,14 +42,14 @@
 
     try {
       console.log('🔐 Starting WebAuthn authentication...');
-      console.log('📊 Current state:', { isSupported, isAvailable, biometricType, managerName });
+      console.log('📊 Current state:', { isSupported, isAvailable, biometricType, username });
       
       // Step 1: Get authentication options from server
       console.log('🌐 Making request to /api/webauthn/authenticate/options...');
       const optionsResponse = await fetch('/api/webauthn/authenticate/options', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ managerName: managerName || undefined })
+        body: JSON.stringify({ username: username || undefined })
       });
 
       console.log('📡 Response received:', {

@@ -19,6 +19,7 @@
 	let isSupported = false;
 	let isAvailable = false;
 	let selectedManager = '';
+	let username = '';
 
 	onMount(async () => {
 		// Check WebAuthn support
@@ -36,6 +37,12 @@
 
 	function togglePasswordVisibility() {
 		showPassword = !showPassword;
+	}
+
+	// Update selected manager when username changes
+	$: if (username && data?.availableManagers) {
+		const user = data.availableManagers.find(m => m.managerName === username);
+		selectedManager = user ? user.managerName : '';
 	}
 </script>
 
@@ -89,37 +96,39 @@
 					</button>
 				</div>
 			{:else}
-				<!-- Manager Selection for Passkey Authentication -->
+				<!-- Username and Manager Selection for Passkey Authentication -->
 				<div class="space-y-4">
 					<div>
-						<label for="manager-select" class="block text-sm font-medium text-slate-300 mb-2">
+						<label for="username-passkey" class="block text-sm font-medium text-slate-300 mb-2">
 							<Users class="h-4 w-4 inline mr-2" />
-							Select Your Manager Account
+							Username
 						</label>
-						<select
-							id="manager-select"
-							bind:value={selectedManager}
+						<input
+							type="text"
+							id="username-passkey"
+							bind:value={username}
 							required
 							class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg 
 								text-white placeholder-slate-400 focus:outline-none focus:ring-2 
 								focus:ring-blue-500 focus:border-transparent transition-colors"
-						>
-							<option value="">Choose a manager...</option>
-							{#if data?.availableManagers}
-								{#each data.availableManagers as manager}
-									<option value={manager.managerName}>
-										{manager.displayName || manager.managerName}
-									</option>
-								{/each}
-							{/if}
-						</select>
+							placeholder="Enter your username"
+						/>
 					</div>
 
-					{#if selectedManager}
-						<PasskeyAuthentication managerName={selectedManager} />
+					{#if username && selectedManager}
+						<div class="bg-slate-700/30 border border-slate-600 rounded-lg p-4">
+							<p class="text-slate-300 text-sm mb-2">Authenticating as:</p>
+							<p class="text-white font-medium">{selectedManager}</p>
+						</div>
+						<PasskeyAuthentication username={username} />
+					{:else if username && !selectedManager}
+						<div class="text-center py-8">
+							<p class="text-red-400">No account found for username: {username}</p>
+							<p class="text-slate-400 text-sm mt-2">Please check your username or sign up for an account.</p>
+						</div>
 					{:else}
 						<div class="text-center py-8">
-							<p class="text-slate-400">Please select a manager to continue with passkey authentication.</p>
+							<p class="text-slate-400">Please enter your username to continue with passkey authentication.</p>
 						</div>
 					{/if}
 				</div>
@@ -141,14 +150,15 @@
 			<form method="post" action="?/login" use:enhance>
 				<div class="space-y-4">
 					<div>
-						<label for="username" class="block text-sm font-medium text-slate-300 mb-2">
+						<label for="username-password" class="block text-sm font-medium text-slate-300 mb-2">
 							<Users class="h-4 w-4 inline mr-2" />
 							Username
 						</label>
 						<input
 							type="text"
-							id="username"
+							id="username-password"
 							name="username"
+							bind:value={username}
 							required
 							class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg 
 								text-white placeholder-slate-400 focus:outline-none focus:ring-2 

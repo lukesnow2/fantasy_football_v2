@@ -10,7 +10,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 	try {
 		console.log('🔐 WebAuthn authentication options request received');
 		
-		const { managerName } = await request.json();
+		const { username } = await request.json();
 		const clientAddress = getClientAddress();
 		
 		// Get the actual domain from the request
@@ -18,7 +18,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
 		
 		console.log('📊 Request data:', { 
-			managerName, 
+			username, 
 			clientAddress,
 			origin,
 			rpId,
@@ -26,36 +26,34 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		});
 
 		// Validate required fields
-		if (!managerName) {
+		if (!username) {
 			throw createWebAuthnError(
 				WebAuthnErrorCode.INVALID_USER_ID,
-				'Manager name is required for authentication'
+				'Username is required for authentication'
 			);
 		}
 
-		// Look up user by manager name (join with dimManager)
+		// Look up user by username
 		const [userRecord] = await db
 			.select({
 				id: user.id,
 				username: user.username,
 				managerKey: user.managerKey,
-				managerName: dimManager.managerName,
 				passkeyEnabled: user.passkeyEnabled
 			})
 			.from(user)
-			.leftJoin(dimManager, eq(user.managerKey, dimManager.managerKey))
-			.where(eq(dimManager.managerName, managerName))
+			.where(eq(user.username, username))
 			.limit(1);
 
 		if (!userRecord) {
 			throw createWebAuthnError(
 				WebAuthnErrorCode.INVALID_USER_ID,
-				`No account found for manager: ${managerName}`
+				`No account found for username: ${username}`
 			);
 		}
 
 		const userId = userRecord.id;
-		console.log('👤 Found user:', { userId, managerName, passkeyEnabled: userRecord.passkeyEnabled });
+		console.log('👤 Found user:', { userId, username: userRecord.username, passkeyEnabled: userRecord.passkeyEnabled });
 
 		// Get existing credentials for the user
 		let allowCredentials: any[] | undefined = undefined;
@@ -124,9 +122,9 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 				rpId, 
 				credentialsCount: allowCredentials?.length || 0,
 				flow: allowCredentials ? 'authentication' : 'registration',
-				managerName
+				managerName: userRecord.username // Assuming username is the manager name for audit
 			},
-			{ userId, ipAddress: clientAddress }
+			{ userId: userId, ipAddress: clientAddress }
 		);
 
 		return json({
@@ -134,8 +132,8 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			challengeId: challenge.id,
 			flow: allowCredentials ? 'authentication' : 'registration',
 			message: allowCredentials 
-				? `Sign in as ${managerName}` 
-				: `Set up your first passkey for ${managerName}`
+				? `Sign in as ${userRecord.username}` 
+				: `Set up your first passkey for ${userRecord.username}`
 		});
 
 	} catch (error) {
