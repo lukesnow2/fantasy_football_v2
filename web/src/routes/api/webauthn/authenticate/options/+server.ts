@@ -6,6 +6,10 @@ import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/err
 import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
 import { eq, sql } from 'drizzle-orm';
 
+export async function GET() {
+	return json({ message: 'WebAuthn authenticate options endpoint is working' });
+}
+
 export async function POST({ request, getClientAddress }: { request: Request; getClientAddress: () => string }) {
 	try {
 		console.log('🔐 WebAuthn authentication options request received');

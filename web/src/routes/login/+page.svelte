@@ -41,8 +41,14 @@
 
 	// Update selected manager when username changes
 	$: if (username && data?.availableManagers) {
+		console.log('🔍 Debug: Username changed to:', username);
+		console.log('📋 Available managers:', data.availableManagers);
+		
 		const user = data.availableManagers.find(m => m.managerName === username);
+		console.log('🔍 Manager match result:', user);
+		
 		selectedManager = user ? user.managerName : '';
+		console.log('✅ Selected manager set to:', selectedManager);
 	}
 </script>
 

@@ -13,7 +13,7 @@ import postgres from 'postgres';
 import { eq } from 'drizzle-orm';
 
 // Database connection
-const connectionString = process.env.DATABASE_URL || "postgres://u32cj4lo2153pg:pfc0a9f51f9f7890dd48356d34820a3d064bca9188026f02486783301b89fe715@cc6sr55p5nfmlu.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d51dajj867uua0";
+const connectionString = process.env.DATABASE_URL
 const client = postgres(connectionString);
 const db = drizzle(client);
 
