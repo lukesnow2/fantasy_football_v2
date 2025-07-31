@@ -11,7 +11,18 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const { userId, username, managerKey } = await request.json();
 		const clientAddress = getClientAddress();
 		
-		console.log('📊 Registration request data:', { userId, username, managerKey, clientAddress });
+		// Get the actual domain from the request
+		const origin = request.headers.get('origin') || request.headers.get('host') || 'localhost';
+		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
+		
+		console.log('📊 Registration request data:', { 
+			userId, 
+			username, 
+			managerKey, 
+			clientAddress,
+			origin,
+			rpId
+		});
 
 		// Validate required fields
 		if (!userId || !username) {
@@ -39,7 +50,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const options = {
 			rp: {
 				name: 'The League',
-				id: 'localhost' // TODO: Configure for production
+				id: rpId // Use dynamic RP ID based on actual domain
 			},
 			user: {
 				id: userId,
@@ -68,7 +79,8 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 			hasOptions: !!options,
 			optionsKeys: Object.keys(options),
 			userId,
-			username
+			username,
+			rpId: options.rp.id
 		});
 
 		// Log audit event
@@ -79,7 +91,8 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 				challengeId: challenge.id,
 				userId,
 				username,
-				managerKey: managerKey || null
+				managerKey: managerKey || null,
+				rpId: options.rp.id
 			},
 			{ userId, ipAddress: clientAddress }
 		);

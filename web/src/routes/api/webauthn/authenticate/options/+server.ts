@@ -11,7 +11,17 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		const { userId } = await request.json();
 		const clientAddress = getClientAddress();
 		
-		console.log('📊 Request data:', { userId, clientAddress });
+		// Get the actual domain from the request
+		const origin = request.headers.get('origin') || request.headers.get('host') || 'localhost';
+		const rpId = origin.includes('localhost') ? 'localhost' : origin.replace(/^https?:\/\//, '').split(':')[0];
+		
+		console.log('📊 Request data:', { 
+			userId, 
+			clientAddress,
+			origin,
+			rpId,
+			headers: Object.fromEntries(request.headers.entries())
+		});
 
 		// Generate authentication challenge
 		const challenge = await createChallenge(userId, 'authentication', {
@@ -29,7 +39,7 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 
 		// Create WebAuthn authentication options
 		const options = {
-			rpId: 'localhost', // TODO: Configure for production
+			rpId: rpId, // Use dynamic RP ID based on actual domain
 			challenge: challenge.challenge,
 			timeout: 60000, // 60 seconds
 			userVerification: 'preferred',
@@ -45,14 +55,16 @@ export async function POST({ request, getClientAddress }: { request: Request; ge
 		console.log('✅ Authentication options generated:', {
 			challengeId: challenge.id,
 			hasOptions: !!options,
-			optionsKeys: Object.keys(options)
+			optionsKeys: Object.keys(options),
+			rpId: options.rpId,
+			origin
 		});
 
 		// Log audit event
 		await logAuditEvent(
 			AuditEventType.AUTHENTICATION_STARTED,
 			AuditSeverity.INFO,
-			{ challengeId: challenge.id },
+			{ challengeId: challenge.id, rpId },
 			{ userId, ipAddress: clientAddress }
 		);
 
