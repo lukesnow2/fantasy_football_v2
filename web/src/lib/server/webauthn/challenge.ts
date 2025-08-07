@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { encodeBase64url } from '@oslojs/encoding';
 import { db } from '$lib/server/db';
 import { webauthnChallenges } from '$lib/server/db/schema';
-import { eq, lt, and } from 'drizzle-orm';
+import { eq, lt, and, gt, sql } from 'drizzle-orm';
 import { logAuditEvent, AuditEventType, AuditSeverity } from './audit';
 
 const CHALLENGE_LENGTH = 32;
@@ -308,7 +308,7 @@ export async function checkChallengeRateLimit(
 		.select({ createdAt: webauthnChallenges.createdAt })
 		.from(webauthnChallenges)
 		.where(and(
-			eq(webauthnChallenges.createdAt, windowStart),
+			sql`${webauthnChallenges.createdAt} > ${windowStart}`,
 			userId ? eq(webauthnChallenges.userId, userId) : undefined
 		));
 

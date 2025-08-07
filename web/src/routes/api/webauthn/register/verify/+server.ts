@@ -1,134 +1,41 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { webauthnCredentials, user, webauthnChallenges } from '$lib/server/db/schema';
-import { validateChallenge } from '$lib/server/webauthn/challenge';
-import { createWebAuthnError, WebAuthnErrorCode } from '$lib/server/webauthn/errors';
-import { logAuditEvent, AuditEventType, AuditSeverity } from '$lib/server/webauthn/audit';
+import { webauthnChallenges } from '$lib/server/db/schema';
+import { WebAuthnService } from '$lib/server/webauthn/service';
+import { webauthnConfig } from '$lib/server/webauthn/config';
+import { getValidationConfigForEnvironment, validateOrigin } from '$lib/server/webauthn/validation';
 import { eq } from 'drizzle-orm';
 
-export async function POST({ request, getClientAddress }: { request: Request; getClientAddress: () => string }) {
+export async function POST({ request }: { request: Request }) {
 	try {
-		console.log('🔍 WebAuthn registration verification request received');
-		
-		const { response, challengeId, username: requestUsername } = await request.json();
-		const clientAddress = getClientAddress();
-		
-		console.log('📊 Registration verification data:', { 
-			hasResponse: !!response, 
-			challengeId,
-			username: requestUsername,
-			responseKeys: response ? Object.keys(response) : []
-		});
-
+		const { response, challengeId, username } = await request.json();
 		if (!response || !challengeId) {
-			throw createWebAuthnError(
-				WebAuthnErrorCode.INVALID_REGISTRATION_RESPONSE,
-				'Missing registration response or challenge ID'
-			);
+			return json({ error: 'Missing registration response or challenge ID' }, { status: 400 });
 		}
 
-		// Validate the challenge
-		const challengeValidation = await validateChallenge(
-			response.challenge,
-			'registration'
-		);
-
-		if (!challengeValidation.valid) {
-			console.error('❌ Challenge validation failed:', challengeValidation.error);
-			throw createWebAuthnError(
-				WebAuthnErrorCode.INVALID_CHALLENGE,
-				challengeValidation.error || 'Invalid challenge'
-			);
+		const origin = request.headers.get('origin') || webauthnConfig.rpOrigin;
+		const originValidation = validateOrigin(origin, getValidationConfigForEnvironment());
+		if (!originValidation.valid) {
+			return json({ error: 'Origin not allowed' }, { status: 400 });
 		}
 
-		// Get the challenge details to find the user ID
+		// Find userId from challenge record
 		const [challengeRecord] = await db
-			.select()
+			.select({ id: webauthnChallenges.id, userId: webauthnChallenges.userId })
 			.from(webauthnChallenges)
-			.where(eq(webauthnChallenges.id, challengeValidation.challengeId || ''));
-
-		if (!challengeRecord) {
-			throw createWebAuthnError(
-				WebAuthnErrorCode.INVALID_CHALLENGE,
-				'Challenge record not found'
-			);
+			.where(eq(webauthnChallenges.id, challengeId))
+			.limit(1);
+		if (!challengeRecord?.userId) {
+			return json({ error: 'Challenge record not found' }, { status: 400 });
 		}
 
-		const challengeUserId = challengeRecord.userId;
-
-		// TODO: Implement actual WebAuthn verification
-		// For now, we'll simulate a successful verification and store the credential
-		console.log('✅ Registration verification completed (simulated)');
-
-		// Store the credential in the database
-		const credentialId = crypto.randomUUID();
-		const now = new Date();
-
-		await db.insert(webauthnCredentials).values({
-			id: credentialId,
-			userId: challengeUserId || 'unknown',
-			credentialId: response.id || credentialId,
-			publicKey: 'simulated-public-key', // TODO: Extract from actual verification
-			signCount: 0,
-			deviceType: 'unknown', // TODO: Detect from user agent
-			authenticatorType: 'platform',
-			createdAt: now,
-			lastUsedAt: null
-		});
-
-		// Update user table to mark passkey as enabled
-		if (challengeUserId) {
-			await db
-				.update(user)
-				.set({
-					passkeyEnabled: true,
-					passkeyRegisteredAt: now,
-					updatedAt: now
-				})
-				.where(eq(user.id, challengeUserId));
+		const result = await WebAuthnService.completeRegistration(response, challengeId, challengeRecord.userId, origin);
+		if (!result.success) {
+			return json({ error: 'Registration verification failed' }, { status: 400 });
 		}
 
-		console.log('💾 Credential stored successfully:', {
-			credentialId,
-			userId: challengeUserId
-		});
-
-		// Log successful registration
-		await logAuditEvent(
-			AuditEventType.REGISTRATION_COMPLETED,
-			AuditSeverity.INFO,
-			{ 
-				challengeId,
-				credentialId,
-				managerKey: null // managerKey is no longer passed
-			},
-			{ userId: challengeUserId || undefined, ipAddress: clientAddress }
-		);
-
-		return json({
-			success: true,
-			credentialId,
-			userId: challengeUserId
-		});
-
+		return json({ success: true, userId: challengeRecord.userId });
 	} catch (error) {
-		console.error('💥 Registration verification error:', error);
-		
-		// Log failed registration
-		await logAuditEvent(
-			AuditEventType.REGISTRATION_FAILED,
-			AuditSeverity.ERROR,
-			{ 
-				challengeId: null, // Can't access request.json() again in catch block
-				error: error instanceof Error ? error.message : 'Unknown error'
-			},
-			{ ipAddress: getClientAddress() },
-			error instanceof Error ? error : undefined
-		);
-
-		return json(
-			{ error: error instanceof Error ? error.message : 'Registration verification failed' },
-			{ status: 400 }
-		);
+		return json({ error: error instanceof Error ? error.message : 'Registration verification failed' }, { status: 400 });
 	}
 } 
