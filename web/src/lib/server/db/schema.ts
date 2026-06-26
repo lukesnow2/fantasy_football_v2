@@ -9,7 +9,8 @@ import {
 	date,
 	pgSchema,
 	uniqueIndex,
-	serial
+	serial,
+	bigint
 } from 'drizzle-orm/pg-core';
 
 // Define schemas
@@ -143,27 +144,35 @@ export const factMatchup = edwSchema.table('fact_matchup', {
 });
 
 // EDW Mart Tables for easy querying
+// Columns aligned to the actual edw.mart_manager_performance table produced by the ETL.
 export const martManagerPerformance = edwSchema.table('mart_manager_performance', {
-	managerKey: integer('manager_key').primaryKey(),
+	managerId: varchar('manager_id', { length: 100 }).primaryKey(),
 	managerName: varchar('manager_name', { length: 255 }).notNull(),
+	firstSeason: integer('first_season'),
+	lastSeason: integer('last_season'),
 	totalSeasons: integer('total_seasons'),
+	totalLeagues: integer('total_leagues'),
 	totalWins: integer('total_wins'),
 	totalLosses: integer('total_losses'),
 	totalTies: integer('total_ties'),
-	winPercentage: decimal('win_percentage', { precision: 5, scale: 4 }),
-	avgPointsFor: decimal('avg_points_for', { precision: 8, scale: 2 }),
-	avgPointsAgainst: decimal('avg_points_against', { precision: 8, scale: 2 }),
-	totalChampionships: integer('total_championships'),
-	totalPlayoffAppearances: integer('total_playoff_appearances'),
-	bestSeason: varchar('best_season', { length: 4 }),
-	worstSeason: varchar('worst_season', { length: 4 }),
-	firstSeason: varchar('first_season', { length: 4 }),
-	lastSeason: varchar('last_season', { length: 4 }),
-	longestWinStreak: integer('longest_win_streak'),
-	longestLossStreak: integer('longest_loss_streak'),
+	careerWinPercentage: decimal('career_win_percentage', { precision: 8, scale: 4 }),
+	totalPointsScored: decimal('total_points_scored', { precision: 15, scale: 2 }),
+	avgPointsPerGame: decimal('avg_points_per_game', { precision: 10, scale: 2 }),
+	avgPointsPerSeason: decimal('avg_points_per_season', { precision: 12, scale: 2 }),
+	championshipsWon: integer('championships_won'),
+	championshipAppearances: integer('championship_appearances'),
+	playoffAppearances: integer('playoff_appearances'),
+	playoffWinPercentage: decimal('playoff_win_percentage', { precision: 8, scale: 4 }),
+	avgDraftGrade: decimal('avg_draft_grade', { precision: 4, scale: 2 }),
+	bestDraftYear: integer('best_draft_year'),
+	worstDraftYear: integer('worst_draft_year'),
 	totalTransactions: integer('total_transactions'),
-	avgTransactionsPerSeason: decimal('avg_transactions_per_season', { precision: 5, scale: 2 }),
-	updatedAt: timestamp('updated_at').defaultNow()
+	avgTransactionsPerSeason: decimal('avg_transactions_per_season', { precision: 8, scale: 2 }),
+	faabEfficiencyRating: decimal('faab_efficiency_rating', { precision: 8, scale: 4 }),
+	seasonConsistencyScore: decimal('season_consistency_score', { precision: 8, scale: 4 }),
+	bestSeasonRecord: varchar('best_season_record', { length: 10 }),
+	worstSeasonRecord: varchar('worst_season_record', { length: 10 }),
+	lastUpdated: timestamp('last_updated').defaultNow()
 });
 
 // EDW Views
@@ -201,6 +210,9 @@ export const user = appSchema.table('user', {
 	// User preferences stored as JSON
 	notificationPreferences: text('notification_preferences'),
 	profileSettings: text('profile_settings'),
+	// Passkey authentication fields
+	passkeyEnabled: boolean('passkey_enabled').default(false),
+	passkeyRegisteredAt: timestamp('passkey_registered_at'),
 	// Timestamps
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
@@ -211,7 +223,12 @@ export const user = appSchema.table('user', {
 export const session = appSchema.table('session', {
 	id: text('id').primaryKey(),
 	userId: text('user_id').notNull(),
-	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull()
+	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	lastUsedAt: timestamp('last_used_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	userAgent: text('user_agent'),
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	deviceType: varchar('device_type', { length: 50 })
 });
 
 export const passwordResetToken = appSchema.table('password_reset_token', {
@@ -220,6 +237,43 @@ export const passwordResetToken = appSchema.table('password_reset_token', {
 	email: text('email').notNull(),
 	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull()
+});
+
+// WebAuthn Tables for Biometric Passkeys
+export const webauthnCredentials = appSchema.table('webauthn_credentials', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	credentialId: text('credential_id').notNull().unique(),
+	publicKey: text('public_key').notNull(),
+	signCount: bigint('sign_count', { mode: 'number' }).notNull().default(0),
+	transports: text('transports').array(), // ['usb', 'nfc', 'ble', 'internal']
+	backupEligible: boolean('backup_eligible').notNull().default(false),
+	backupState: boolean('backup_state').notNull().default(false),
+	createdAt: timestamp('created_at').defaultNow(),
+	lastUsedAt: timestamp('last_used_at'),
+	deviceType: varchar('device_type', { length: 50 }), // 'phone', 'laptop', 'desktop', 'tablet'
+	authenticatorType: varchar('authenticator_type', { length: 50 }) // 'platform', 'cross-platform'
+});
+
+export const webauthnChallenges = appSchema.table('webauthn_challenges', {
+	id: text('id').primaryKey(),
+	challenge: text('challenge').notNull(),
+	userId: text('user_id').references(() => user.id),
+	type: varchar('type', { length: 20 }).notNull(), // 'registration', 'authentication', 'csrf'
+	expiresAt: timestamp('expires_at').notNull(),
+	createdAt: timestamp('created_at').defaultNow(),
+	usedAt: timestamp('used_at'), // When the challenge was used
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	userAgent: text('user_agent')
+});
+
+export const backupCodes = appSchema.table('backup_codes', {
+	id: text('id').primaryKey(),
+	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+	codeHash: text('code_hash').notNull(),
+	used: boolean('used').default(false),
+	usedAt: timestamp('used_at'),
+	createdAt: timestamp('created_at').defaultNow()
 });
 
 // Rule Proposal and Voting System Tables (Application features)
@@ -350,6 +404,29 @@ export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	updatedAt: timestamp('updated_at').defaultNow()
 });
 
+// WebAuthn Audit Log Table
+export const webauthnAuditLog = appSchema.table('webauthn_audit_log', {
+	id: varchar('id', { length: 100 }).primaryKey(),
+	eventType: varchar('event_type', { length: 50 }).notNull(),
+	severity: varchar('severity', { length: 20 }).notNull(),
+	userId: varchar('user_id', { length: 100 }),
+	sessionId: varchar('session_id', { length: 100 }),
+	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
+	userAgent: text('user_agent'),
+	deviceType: varchar('device_type', { length: 50 }),
+	details: text('details'), // JSON string
+	timestamp: timestamp('timestamp').defaultNow(),
+	requestId: varchar('request_id', { length: 100 }),
+	errorCode: varchar('error_code', { length: 50 }),
+	errorMessage: text('error_message')
+}, (table) => ({
+	// Indexes for efficient querying
+	userIdIndex: uniqueIndex('webauthn_audit_user_id').on(table.userId, table.timestamp),
+	eventTypeIndex: uniqueIndex('webauthn_audit_event_type').on(table.eventType, table.timestamp),
+	severityIndex: uniqueIndex('webauthn_audit_severity').on(table.severity, table.timestamp),
+	timestampIndex: uniqueIndex('webauthn_audit_timestamp').on(table.timestamp)
+}));
+
 // Type exports
 export type DimLeague = typeof dimLeague.$inferSelect;
 export type DimTeam = typeof dimTeam.$inferSelect;
@@ -373,3 +450,6 @@ export type ChatThread = typeof chatThread.$inferSelect;
 export type ChatReaction = typeof chatReaction.$inferSelect;
 export type ChatRead = typeof chatRead.$inferSelect;
 export type ChatCustomEmoji = typeof chatCustomEmoji.$inferSelect;
+
+// WebAuthn Types
+export type WebAuthnAuditLog = typeof webauthnAuditLog.$inferSelect;

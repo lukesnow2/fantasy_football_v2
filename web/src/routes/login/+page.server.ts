@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import * as auth from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { user as userTable, dimManager } from '$lib/server/db/schema';
-import { getAvailableManagers } from '$lib/server/auth-manager';
+import { getAvailableManagers, getAuthenticatedManagers } from '$lib/server/auth-manager';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
@@ -20,13 +20,15 @@ export const load: PageServerLoad = async (event) => {
 	
 	if (message === 'password-reset-success') {
 		successMessage = 'Your password has been successfully reset. You can now log in with your new password.';
+	} else if (message === 'setup-passkey-required') {
+		successMessage = 'Please set up your passkey to continue with passkey authentication.';
 	}
 
-	// Get available managers for the registration dropdown
-	const availableManagers = await getAvailableManagers();
+	// Get authenticated managers for login (active users with manager info)
+	const authenticatedManagers = await getAuthenticatedManagers();
 	
 	return {
-		availableManagers,
+		authenticatedManagers,
 		successMessage
 	};
 };
@@ -198,11 +200,14 @@ export const actions: Actions = {
 				console.log(`✅ Successfully created new account for ${username}`);
 			}
 
-			const sessionToken = auth.generateSessionToken();
-			const session = await auth.createSession(sessionToken, userId);
-			auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
+			// Redirect to passkey setup instead of creating session immediately
+			const redirectUrl = event.url.searchParams.get('redirect');
+			const setupUrl = `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username as string)}&managerKey=${managerKey}`;
+			const finalRedirectUrl = redirectUrl ? `${setupUrl}&redirect=${encodeURIComponent(redirectUrl)}` : setupUrl;
+			return redirect(302, finalRedirectUrl);
+			
 		} catch (error: any) {
-			if (error.code === '23505') { // Unique constraint violation
+			if (error.code === '23505') {
 				if (error.constraint === 'user_username_unique') {
 					return fail(400, { message: 'Username already taken' });
 				}
@@ -218,10 +223,6 @@ export const actions: Actions = {
 			console.error(`${actionType} error:`, error);
 			return fail(500, { message: `${isClaimingPlaceholder ? 'Account claiming' : 'Registration'} failed. Please try again.` });
 		}
-		
-		// Redirect to specified URL or homepage
-		const redirectUrl = event.url.searchParams.get('redirect');
-		return redirect(302, redirectUrl || '/');
 	}
 };
 

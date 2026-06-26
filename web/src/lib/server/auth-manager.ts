@@ -105,21 +105,6 @@ export async function getManagerNameByUserId(userId: string): Promise<string | n
 }
 
 /**
- * Check if user is authenticated and has manager access
- */
-export function requireManagerAuth(user: User | null, managerKey?: number): boolean {
-	if (!user) return false;
-	
-	// If specific manager key provided, verify user has access to it
-	if (managerKey) {
-		// In the future, we could allow commissioners to manage other accounts
-		return true; // For now, trust the session
-	}
-	
-	return true;
-}
-
-/**
  * Get all managers available for registration (unclaimed)
  */
 export async function getAvailableManagers() {
@@ -140,6 +125,7 @@ export async function getAvailableManagers() {
 			.where(
 				and(
 					eq(dimManager.isCurrent, true),
+					eq(dimManager.isActive, true), // Only include active managers
 					or(
 						isNull(userTable.managerKey), // No user account linked
 						eq(userTable.accountStatus, 'placeholder') // Or placeholder account that can be claimed
@@ -151,6 +137,43 @@ export async function getAvailableManagers() {
 		return availableManagers;
 	} catch (error) {
 		console.error('Error getting available managers:', error);
+		return [];
+	}
+}
+
+/**
+ * Get all authenticated users for login (active accounts with manager info)
+ */
+export async function getAuthenticatedManagers() {
+	try {
+		// Get all active users with their manager information
+		const authenticatedManagers = await db
+			.select({
+				managerKey: dimManager.managerKey,
+				managerName: dimManager.managerName,
+				managerId: dimManager.managerId,
+				displayName: dimManager.displayName,
+				profileImageUrl: dimManager.profileImageUrl,
+				isActive: dimManager.isActive,
+				isCurrent: dimManager.isCurrent,
+				username: userTable.username,
+				accountStatus: userTable.accountStatus,
+				passkeyEnabled: userTable.passkeyEnabled
+			})
+			.from(dimManager)
+			.innerJoin(userTable, eq(dimManager.managerKey, userTable.managerKey))
+			.where(
+				and(
+					eq(dimManager.isCurrent, true),
+					eq(dimManager.isActive, true),
+					eq(userTable.accountStatus, 'active')
+				)
+			)
+			.orderBy(dimManager.managerName);
+
+		return authenticatedManagers;
+	} catch (error) {
+		console.error('Error getting authenticated managers:', error);
 		return [];
 	}
 }

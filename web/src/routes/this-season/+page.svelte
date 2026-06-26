@@ -23,7 +23,8 @@
 	
 	// Chat state
 	let messages: any[] = [];
-	let currentUserKey = authenticatedManager?.managerKey || 1; // Get from auth
+	// The logged-in manager's key (null when not authenticated).
+	$: currentUserKey = authenticatedManager?.managerKey ?? null;
 	let newMessage = '';
 	let loadingMessages = false;
 	let sendingMessage = false;
