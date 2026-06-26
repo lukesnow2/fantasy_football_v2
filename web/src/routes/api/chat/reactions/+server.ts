@@ -5,6 +5,17 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { getCurrentManagerKey } from '$lib/server/auth-manager';
 import type { RequestHandler } from './$types';
 
+// Resolve the authenticated user's manager key, or null if not authenticated.
+// Callers must return 401 on null — never fall back to a hardcoded key.
+async function resolveManagerKey(locals: App.Locals): Promise<number | null> {
+	if (!locals.user) return null;
+	try {
+		return (await getCurrentManagerKey(locals.user as any)) ?? null;
+	} catch {
+		return null;
+	}
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const messageId = url.searchParams.get('messageId');
@@ -75,17 +86,10 @@ export const GET: RequestHandler = async ({ url }) => {
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
-		// Get the authenticated manager key - use default for demo if no auth
-		let managerKey: number;
-		try {
-			if (locals.user) {
-				managerKey = await getCurrentManagerKey(locals.user as any) || 1;
-			} else {
-				managerKey = 1; // Default to manager key 1 for demo
-			}
-		} catch (error) {
-			console.warn('Auth error, using default manager key:', error);
-			managerKey = 1; // Default fallback
+		// Require an authenticated, manager-linked user.
+		const managerKey = await resolveManagerKey(locals);
+		if (!managerKey) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		const body = await request.json();
@@ -163,17 +167,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 export const DELETE: RequestHandler = async ({ request, locals }) => {
 	try {
-		// Get the authenticated manager key - use default for demo if no auth
-		let managerKey: number;
-		try {
-			if (locals.user) {
-				managerKey = await getCurrentManagerKey(locals.user as any) || 1;
-			} else {
-				managerKey = 1; // Default to manager key 1 for demo
-			}
-		} catch (error) {
-			console.warn('Auth error, using default manager key:', error);
-			managerKey = 1; // Default fallback
+		// Require an authenticated, manager-linked user.
+		const managerKey = await resolveManagerKey(locals);
+		if (!managerKey) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		const body = await request.json();

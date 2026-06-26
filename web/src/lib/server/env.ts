@@ -43,6 +43,11 @@ export const EMAIL_FROM_NAME = env.EMAIL_FROM_NAME || 'Fantasy League';
 
 // Application Configuration
 export const NODE_ENV = env.NODE_ENV || 'development';
+// In production ORIGIN must be set explicitly — a wrong/localhost origin silently
+// breaks WebAuthn (passkey) origin validation and CSRF checks.
+if (NODE_ENV === 'production' && !env.ORIGIN) {
+	throw error(500, 'ORIGIN environment variable must be set in production');
+}
 export const ORIGIN = env.ORIGIN || 'http://localhost:5173';
 export const PORT = parseInt(env.PORT || '3000');
 

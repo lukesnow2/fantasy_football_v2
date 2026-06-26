@@ -105,27 +105,10 @@ export async function getManagerNameByUserId(userId: string): Promise<string | n
 }
 
 /**
- * Check if user is authenticated and has manager access
- */
-export function requireManagerAuth(user: User | null, managerKey?: number): boolean {
-	if (!user) return false;
-	
-	// If specific manager key provided, verify user has access to it
-	if (managerKey) {
-		// In the future, we could allow commissioners to manage other accounts
-		return true; // For now, trust the session
-	}
-	
-	return true;
-}
-
-/**
  * Get all managers available for registration (unclaimed)
  */
 export async function getAvailableManagers() {
 	try {
-		console.log('🔍 getAvailableManagers: Starting query...');
-		
 		// Get managers that either have no user account or have placeholder accounts
 		const availableManagers = await db
 			.select({
@@ -151,37 +134,6 @@ export async function getAvailableManagers() {
 			)
 			.orderBy(dimManager.managerName);
 
-		console.log('📋 getAvailableManagers: Query result:', availableManagers);
-		
-		// Debug: Check Luke S specifically
-		const lukeSManager = await db
-			.select({
-				managerKey: dimManager.managerKey,
-				managerName: dimManager.managerName,
-				managerId: dimManager.managerId,
-				displayName: dimManager.displayName,
-				isActive: dimManager.isActive,
-				isCurrent: dimManager.isCurrent,
-				userAccountStatus: userTable.accountStatus,
-				userUsername: userTable.username
-			})
-			.from(dimManager)
-			.leftJoin(userTable, eq(dimManager.managerKey, userTable.managerKey))
-			.where(eq(dimManager.managerName, 'Luke S'));
-
-		console.log('🔍 getAvailableManagers: Luke S manager data:', lukeSManager);
-		
-		// Debug: Check all users
-		const allUsers = await db
-			.select({
-				username: userTable.username,
-				managerKey: userTable.managerKey,
-				accountStatus: userTable.accountStatus
-			})
-			.from(userTable);
-
-		console.log('👥 getAvailableManagers: All users:', allUsers);
-
 		return availableManagers;
 	} catch (error) {
 		console.error('Error getting available managers:', error);
@@ -194,8 +146,6 @@ export async function getAvailableManagers() {
  */
 export async function getAuthenticatedManagers() {
 	try {
-		console.log('🔍 getAuthenticatedManagers: Starting query...');
-		
 		// Get all active users with their manager information
 		const authenticatedManagers = await db
 			.select({
@@ -221,7 +171,6 @@ export async function getAuthenticatedManagers() {
 			)
 			.orderBy(dimManager.managerName);
 
-		console.log('📋 getAuthenticatedManagers: Query result:', authenticatedManagers);
 		return authenticatedManagers;
 	} catch (error) {
 		console.error('Error getting authenticated managers:', error);

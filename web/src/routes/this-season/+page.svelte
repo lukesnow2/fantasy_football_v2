@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Calendar, Trophy, TrendingUp, MessageSquare, ExternalLink, Users, Target, Send } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
 	
@@ -17,7 +18,8 @@
 	
 	// Chat state
 	let messages: any[] = [];
-	let currentUserKey = 1; // TODO: Get from auth
+	// The logged-in manager's key (null when not authenticated), from the layout load.
+	$: currentUserKey = $page.data.authenticatedManager?.managerKey ?? null;
 	let newMessage = '';
 	let loadingMessages = false;
 	let sendingMessage = false;

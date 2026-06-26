@@ -144,27 +144,35 @@ export const factMatchup = edwSchema.table('fact_matchup', {
 });
 
 // EDW Mart Tables for easy querying
+// Columns aligned to the actual edw.mart_manager_performance table produced by the ETL.
 export const martManagerPerformance = edwSchema.table('mart_manager_performance', {
-	managerKey: integer('manager_key').primaryKey(),
+	managerId: varchar('manager_id', { length: 100 }).primaryKey(),
 	managerName: varchar('manager_name', { length: 255 }).notNull(),
+	firstSeason: integer('first_season'),
+	lastSeason: integer('last_season'),
 	totalSeasons: integer('total_seasons'),
+	totalLeagues: integer('total_leagues'),
 	totalWins: integer('total_wins'),
 	totalLosses: integer('total_losses'),
 	totalTies: integer('total_ties'),
-	winPercentage: decimal('win_percentage', { precision: 5, scale: 4 }),
-	avgPointsFor: decimal('avg_points_for', { precision: 8, scale: 2 }),
-	avgPointsAgainst: decimal('avg_points_against', { precision: 8, scale: 2 }),
-	totalChampionships: integer('total_championships'),
-	totalPlayoffAppearances: integer('total_playoff_appearances'),
-	bestSeason: varchar('best_season', { length: 4 }),
-	worstSeason: varchar('worst_season', { length: 4 }),
-	firstSeason: varchar('first_season', { length: 4 }),
-	lastSeason: varchar('last_season', { length: 4 }),
-	longestWinStreak: integer('longest_win_streak'),
-	longestLossStreak: integer('longest_loss_streak'),
+	careerWinPercentage: decimal('career_win_percentage', { precision: 8, scale: 4 }),
+	totalPointsScored: decimal('total_points_scored', { precision: 15, scale: 2 }),
+	avgPointsPerGame: decimal('avg_points_per_game', { precision: 10, scale: 2 }),
+	avgPointsPerSeason: decimal('avg_points_per_season', { precision: 12, scale: 2 }),
+	championshipsWon: integer('championships_won'),
+	championshipAppearances: integer('championship_appearances'),
+	playoffAppearances: integer('playoff_appearances'),
+	playoffWinPercentage: decimal('playoff_win_percentage', { precision: 8, scale: 4 }),
+	avgDraftGrade: decimal('avg_draft_grade', { precision: 4, scale: 2 }),
+	bestDraftYear: integer('best_draft_year'),
+	worstDraftYear: integer('worst_draft_year'),
 	totalTransactions: integer('total_transactions'),
-	avgTransactionsPerSeason: decimal('avg_transactions_per_season', { precision: 5, scale: 2 }),
-	updatedAt: timestamp('updated_at').defaultNow()
+	avgTransactionsPerSeason: decimal('avg_transactions_per_season', { precision: 8, scale: 2 }),
+	faabEfficiencyRating: decimal('faab_efficiency_rating', { precision: 8, scale: 4 }),
+	seasonConsistencyScore: decimal('season_consistency_score', { precision: 8, scale: 4 }),
+	bestSeasonRecord: varchar('best_season_record', { length: 10 }),
+	worstSeasonRecord: varchar('worst_season_record', { length: 10 }),
+	lastUpdated: timestamp('last_updated').defaultNow()
 });
 
 // EDW Views

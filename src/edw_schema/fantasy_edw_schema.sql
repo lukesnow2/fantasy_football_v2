@@ -92,7 +92,10 @@ CREATE TABLE dim_player (
     is_active BOOLEAN DEFAULT TRUE,
     valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- ETL upserts on player_id (ON CONFLICT (player_id)); one row per player
+    UNIQUE(player_id)
 );
 
 CREATE INDEX idx_player_id ON dim_player (player_id);
@@ -412,42 +415,38 @@ CREATE INDEX idx_keepers ON fact_draft (is_keeper_pick);
 CREATE INDEX idx_auction_costs ON fact_draft (draft_cost);
 CREATE INDEX idx_draft_performance ON fact_draft (season_points, points_per_week);
 
--- Fact: Player Statistics (Season-level player performance)
+-- Fact: Player Statistics (WEEKLY player fantasy performance)
+-- Grain: one row per (league, player, season, week). The ETL emits weekly records.
 CREATE TABLE fact_player_statistics (
     stat_key SERIAL PRIMARY KEY,
     league_key INTEGER NOT NULL,
     player_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
-    
-    -- Basic Stats
-    total_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0,
+    week_number INTEGER NOT NULL,
+
+    -- Weekly Stats
+    weekly_fantasy_points DECIMAL(10,2) NOT NULL DEFAULT 0,
     position_type VARCHAR(10), -- O (Offense), K (Kicker), DEF (Defense)
-    
-    -- Performance Metrics
-    games_played INTEGER,
-    points_per_game DECIMAL(8,2),
-    consistency_score DECIMAL(8,4), -- Standard deviation of weekly scores
-    
-    -- Ranking Metrics (within league/position)
+
+    -- Ranking Metrics (season-level rank, repeated on each weekly row)
     position_rank INTEGER,
     league_rank INTEGER,
-    
+
     -- Value Metrics
     points_above_replacement DECIMAL(10,2),
-    draft_value_score DECIMAL(8,4), -- Actual vs expected performance
-    
+
     -- Source Data
     source_stat_id VARCHAR(100), -- Reference to original public.statistics record
     game_code VARCHAR(10) DEFAULT 'nfl',
-    
+
     -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
+
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
     FOREIGN KEY (player_key) REFERENCES dim_player(player_key),
-    
-    UNIQUE(league_key, player_key, season_year)
+
+    UNIQUE(league_key, player_key, season_year, week_number)
 );
 
 -- Indexes for fact_player_statistics
@@ -455,9 +454,9 @@ CREATE INDEX idx_player_stats_season ON fact_player_statistics (season_year);
 CREATE INDEX idx_player_stats_league ON fact_player_statistics (league_key, season_year);
 CREATE INDEX idx_player_stats_player ON fact_player_statistics (player_key, season_year);
 CREATE INDEX idx_player_stats_position ON fact_player_statistics (position_type, season_year);
-CREATE INDEX idx_player_stats_points ON fact_player_statistics (total_fantasy_points);
+CREATE INDEX idx_player_stats_points ON fact_player_statistics (weekly_fantasy_points);
+CREATE INDEX idx_player_stats_week ON fact_player_statistics (season_year, week_number);
 CREATE INDEX idx_player_stats_ranking ON fact_player_statistics (league_key, position_rank);
-CREATE INDEX idx_player_stats_performance ON fact_player_statistics (points_per_game, consistency_score);
 CREATE INDEX idx_player_stats_source ON fact_player_statistics (source_stat_id);
 
 -- ============================================================================
@@ -465,44 +464,35 @@ CREATE INDEX idx_player_stats_source ON fact_player_statistics (source_stat_id);
 -- ============================================================================
 
 -- Data Mart: League Summary Statistics
+-- Columns aligned to transform_mart_league_summary output (one row per league-season).
 CREATE TABLE mart_league_summary (
     league_key INTEGER PRIMARY KEY,
     league_name VARCHAR(255) NOT NULL,
     season_year INTEGER NOT NULL,
-    
+
     -- Basic Stats
     total_teams INTEGER,
     total_weeks INTEGER,
-    total_games INTEGER,
-    total_points DECIMAL(12,2),
-    
-    -- Scoring Stats
-    avg_team_points DECIMAL(10,2),
-    highest_team_score DECIMAL(10,2),
-    lowest_team_score DECIMAL(10,2),
-    total_point_differential DECIMAL(12,2),
-    
-    -- Parity Metrics
-    competitive_balance_index DECIMAL(8,4), -- Standard deviation of win %
-    avg_margin_of_victory DECIMAL(8,2),
-    blowout_games_count INTEGER, -- Games with >30 point difference
-    close_games_count INTEGER,   -- Games with <5 point difference
-    
+
+    -- Championship Info
+    champion_team_name VARCHAR(255),
+    champion_manager VARCHAR(255),
+    runner_up_team_name VARCHAR(255),
+    runner_up_manager VARCHAR(255),
+
+    -- Scoring leaders
+    highest_scorer_team VARCHAR(255),
+    highest_scorer_manager VARCHAR(255),
+    highest_single_week_score DECIMAL(10,2),
+    average_weekly_score DECIMAL(10,2),
+
     -- Activity Metrics
     total_transactions INTEGER,
-    avg_transactions_per_team DECIMAL(8,2),
-    total_faab_spent DECIMAL(12,2),
-    waiver_activity_index DECIMAL(8,4),
-    
-    -- Championship Info
-    champion_team_key INTEGER,
-    champion_final_record VARCHAR(10),
-    champion_total_points DECIMAL(10,2),
-    
+    most_active_trader VARCHAR(255),
+
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
-    FOREIGN KEY (champion_team_key) REFERENCES dim_team(team_key)
+
+    FOREIGN KEY (league_key) REFERENCES dim_league(league_key)
 );
 
 -- Data Mart: Manager Performance (Cross-league, Cross-season)
@@ -584,7 +574,8 @@ CREATE TABLE mart_player_value (
     points_above_replacement DECIMAL(10,2),
     draft_value_score DECIMAL(8,4), -- Actual performance vs draft cost
     waiver_pickup_value DECIMAL(8,4),
-    
+    games_played INTEGER,
+
     PRIMARY KEY (player_key, season_year),
     FOREIGN KEY (player_key) REFERENCES dim_player(player_key)
 );
@@ -648,8 +639,8 @@ CREATE TABLE mart_manager_h2h (
     
     -- Game Summary
     total_matchups INTEGER DEFAULT 0,
-    first_matchup_date DATE,
-    last_matchup_date DATE,
+    first_matchup_date VARCHAR(20), -- season-week identifier (e.g. "2006-W10"), not a calendar date
+    last_matchup_date VARCHAR(20),  -- season-week identifier (e.g. "2024-W9"), not a calendar date
     seasons_played_together INTEGER DEFAULT 0,
     leagues_played_together INTEGER DEFAULT 0,
     
@@ -706,7 +697,7 @@ CREATE TABLE mart_manager_h2h (
     
     -- Most Important Game Ever
     most_important_game_type VARCHAR(20),
-    most_important_game_date DATE,
+    most_important_game_date VARCHAR(20), -- season-week identifier (e.g. "2006-W10"), not a calendar date
     most_important_game_winner VARCHAR(255),
     most_important_game_score VARCHAR(100),
     most_important_game_margin DECIMAL(8,2),

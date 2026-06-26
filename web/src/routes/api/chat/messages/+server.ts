@@ -6,6 +6,18 @@ import { getCurrentManagerKey } from '$lib/server/auth-manager';
 import type { RequestHandler } from './$types';
 import { nanoid } from 'nanoid';
 
+// Resolve the authenticated user's manager key, or null if not authenticated /
+// not linked to a manager. Callers must return 401 on null — never fall back to a
+// hardcoded key (which previously let any unauthenticated user post as manager 1).
+async function resolveManagerKey(locals: App.Locals): Promise<number | null> {
+	if (!locals.user) return null;
+	try {
+		return (await getCurrentManagerKey(locals.user as any)) ?? null;
+	} catch {
+		return null;
+	}
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const channelId = url.searchParams.get('channelId') || 'general';
@@ -64,17 +76,10 @@ export const GET: RequestHandler = async ({ url }) => {
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
-		// Get the authenticated manager key - use default for demo if no auth
-		let managerKey: number;
-		try {
-			if (locals.user) {
-				managerKey = await getCurrentManagerKey(locals.user as any) || 1;
-			} else {
-				managerKey = 1; // Default to manager key 1 for demo
-			}
-		} catch (error) {
-			console.warn('Auth error, using default manager key:', error);
-			managerKey = 1; // Default fallback
+		// Require an authenticated, manager-linked user.
+		const managerKey = await resolveManagerKey(locals);
+		if (!managerKey) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		const body = await request.json();
@@ -137,17 +142,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 export const PUT: RequestHandler = async ({ request, locals }) => {
 	try {
-		// Get the authenticated manager key - use default for demo if no auth
-		let managerKey: number;
-		try {
-			if (locals.user) {
-				managerKey = await getCurrentManagerKey(locals.user as any) || 1;
-			} else {
-				managerKey = 1; // Default to manager key 1 for demo
-			}
-		} catch (error) {
-			console.warn('Auth error, using default manager key:', error);
-			managerKey = 1; // Default fallback
+		// Require an authenticated, manager-linked user.
+		const managerKey = await resolveManagerKey(locals);
+		if (!managerKey) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		const body = await request.json();
@@ -193,17 +191,10 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 
 export const DELETE: RequestHandler = async ({ request, locals }) => {
 	try {
-		// Get the authenticated manager key - use default for demo if no auth
-		let managerKey: number;
-		try {
-			if (locals.user) {
-				managerKey = await getCurrentManagerKey(locals.user as any) || 1;
-			} else {
-				managerKey = 1; // Default to manager key 1 for demo
-			}
-		} catch (error) {
-			console.warn('Auth error, using default manager key:', error);
-			managerKey = 1; // Default fallback
+		// Require an authenticated, manager-linked user.
+		const managerKey = await resolveManagerKey(locals);
+		if (!managerKey) {
+			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
 		const body = await request.json();

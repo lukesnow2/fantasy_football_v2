@@ -1768,6 +1768,7 @@ class EdwEtlProcessor:
                 'overall_pick': int(draft_pick['pick_number']),
                 'round_number': int(draft_pick.get('round_number', 1)),
                 'pick_in_round': int(draft_pick.get('pick_in_round', (draft_pick['pick_number'] - 1) % 12 + 1)),
+                'draft_type': 'auction' if draft_pick.get('is_auction_draft') else 'snake',
                 'draft_cost': float(draft_pick.get('cost', 0)) if draft_pick.get('cost') else None,
                 'is_keeper_pick': bool(draft_pick.get('is_keeper', False)),
                 'season_points': float(perf_data['season_points']),

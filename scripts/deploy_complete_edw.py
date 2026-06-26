@@ -102,13 +102,17 @@ class EdwDeployment:
             # 1. Ensure EDW schema exists
             logger.info("📋 Ensuring EDW schema exists...")
             cur.execute("CREATE SCHEMA IF NOT EXISTS edw")
+            # The DDL in fantasy_edw_schema.sql is schema-unqualified (CREATE TABLE dim_season),
+            # so set the search_path to edw to ensure objects are created in the edw schema
+            # rather than public (which only worked on Heroku due to a role-level search_path).
+            cur.execute("SET search_path TO edw, public")
             logger.info("✅ EDW schema ready")
             
             # 2. Check which tables exist
             expected_tables = ['dim_season', 'dim_league', 'dim_team', 'dim_player', 'dim_manager', 'dim_week',
-                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft', 
-                             'fact_player_statistics', 'mart_league_summary', 'mart_manager_performance', 
-                             'mart_player_value', 'mart_weekly_power_rankings']
+                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft',
+                             'fact_player_statistics', 'mart_league_summary', 'mart_manager_performance',
+                             'mart_player_value', 'mart_weekly_power_rankings', 'mart_manager_h2h']
             
             cur.execute("""
                 SELECT table_name 
@@ -164,30 +168,48 @@ class EdwDeployment:
             
             logger.info(f"📋 Found {len(create_table_stmts)} tables, {len(create_index_stmts)} indexes, {len(create_view_stmts)} views, {len(alter_stmts)} constraints")
             
-            # 5. Create missing tables only (with foreign keys and constraints)
+            # 5. Create any table that does not yet physically exist in the edw schema.
+            #    Use multi-pass retry to satisfy forward FK references in the DDL
+            #    (e.g. dim_team is defined before dim_manager, which it references).
+            #    Driven by what actually exists rather than a hardcoded expected list,
+            #    so tables omitted from expected_tables (e.g. mart_manager_h2h) still get created.
             logger.info("🏗️ Creating missing tables...")
+            import re
             tables_created = 0
-            
+            last_error = None
+            pending = []
             for stmt in create_table_stmts:
-                # Extract table name for logging
-                import re
                 match = re.search(r'CREATE\s+TABLE\s+(\w+)', stmt, re.IGNORECASE)
                 table_name = match.group(1) if match else "unknown"
-                
-                if table_name in missing_tables:
+                if table_name in existing_tables:
+                    logger.info(f"  ✓ {table_name} already exists")
+                else:
+                    pending.append((table_name, stmt))
+
+            # Retry pending creations until all succeed or no further progress is made
+            for _pass in range(len(pending) + 1):
+                if not pending:
+                    break
+                still_pending = []
+                progressed = False
+                for table_name, stmt in pending:
                     try:
-                        logger.info(f"  📋 Creating {table_name}...")
                         cur.execute(stmt)
                         logger.info(f"  ✅ {table_name} created successfully")
                         tables_created += 1
+                        progressed = True
                     except Exception as e:
                         if "already exists" in str(e).lower():
                             logger.info(f"  ✓ {table_name} already exists")
+                            progressed = True
                         else:
-                            logger.error(f"  ❌ Failed to create {table_name}: {e}")
-                            # Continue with next table
-                else:
-                    logger.info(f"  ✓ {table_name} already exists")
+                            last_error = e
+                            still_pending.append((table_name, stmt))
+                pending = still_pending
+                if not progressed:
+                    break
+            for table_name, stmt in pending:
+                logger.error(f"  ❌ Failed to create {table_name}: {last_error}")
             
             # 6. Create indexes (performance optimization)
             logger.info("📋 Creating indexes...")

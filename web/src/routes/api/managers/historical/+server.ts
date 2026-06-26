@@ -10,7 +10,7 @@ export const GET: RequestHandler = async () => {
 		const managerStats = await db
 			.select()
 			.from(martManagerPerformance)
-			.orderBy(desc(martManagerPerformance.totalChampionships), desc(martManagerPerformance.winPercentage));
+			.orderBy(desc(martManagerPerformance.championshipsWon), desc(martManagerPerformance.careerWinPercentage));
 
 		// Format data for frontend
 		const formattedStats = managerStats.map(manager => ({
@@ -19,17 +19,19 @@ export const GET: RequestHandler = async () => {
 			totalWins: manager.totalWins || 0,
 			totalLosses: manager.totalLosses || 0,
 			totalTies: manager.totalTies || 0,
-			winRate: manager.winPercentage ? parseFloat(manager.winPercentage.toString()) : 0,
-			avgPointsFor: manager.avgPointsFor ? parseFloat(manager.avgPointsFor.toString()) : 0,
-			avgPointsAgainst: manager.avgPointsAgainst ? parseFloat(manager.avgPointsAgainst.toString()) : 0,
-			championships: manager.totalChampionships || 0,
+			winRate: manager.careerWinPercentage ? parseFloat(manager.careerWinPercentage.toString()) : 0,
+			avgPointsPerGame: manager.avgPointsPerGame ? parseFloat(manager.avgPointsPerGame.toString()) : 0,
+			avgPointsPerSeason: manager.avgPointsPerSeason ? parseFloat(manager.avgPointsPerSeason.toString()) : 0,
+			totalPointsScored: manager.totalPointsScored ? parseFloat(manager.totalPointsScored.toString()) : 0,
+			championships: manager.championshipsWon || 0,
+			championshipAppearances: manager.championshipAppearances || 0,
 			totalTransactions: manager.totalTransactions || 0,
 			yearsActive: manager.totalSeasons || 0,
 			firstSeason: manager.firstSeason,
 			lastSeason: manager.lastSeason,
-			playoffAppearances: manager.totalPlayoffAppearances || 0,
-			longestWinStreak: manager.longestWinStreak || 0,
-			longestLossStreak: manager.longestLossStreak || 0
+			playoffAppearances: manager.playoffAppearances || 0,
+			bestSeasonRecord: manager.bestSeasonRecord,
+			worstSeasonRecord: manager.worstSeasonRecord
 		}));
 
 		return json({
