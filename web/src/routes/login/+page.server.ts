@@ -8,9 +8,10 @@ import { getAvailableManagers, getAuthenticatedManagers } from '$lib/server/auth
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-	// If already logged in, redirect to homepage
+	// If already logged in, redirect to homepage or specified redirect URL
 	if (event.locals.user) {
-		return redirect(302, '/');
+		const redirectUrl = event.url.searchParams.get('redirect');
+		return redirect(302, redirectUrl || '/');
 	}
 
 	// Check for success messages

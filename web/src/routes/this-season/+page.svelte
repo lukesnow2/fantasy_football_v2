@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Calendar, Trophy, TrendingUp, MessageSquare, ExternalLink, Users, Target, Send } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
@@ -16,10 +17,14 @@
 	let lastPlaceGameLoser: any = null;
 	let leagueOverview: any = {};
 	
+	// Get user from page data
+	$: user = $page.data.user;
+	$: authenticatedManager = $page.data.authenticatedManager;
+	
 	// Chat state
 	let messages: any[] = [];
-	// The logged-in manager's key (null when not authenticated), from the layout load.
-	$: currentUserKey = $page.data.authenticatedManager?.managerKey ?? null;
+	// The logged-in manager's key (null when not authenticated).
+	$: currentUserKey = authenticatedManager?.managerKey ?? null;
 	let newMessage = '';
 	let loadingMessages = false;
 	let sendingMessage = false;
@@ -165,6 +170,13 @@
 
 	// Send message
 	async function sendMessage() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		if (!newMessage.trim() || sendingMessage) return;
 		
 		try {
@@ -207,6 +219,13 @@
 
 	// Handle message edit
 	async function handleMessageEdit(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const { messageId, content } = event.detail;
 		
 		try {
@@ -234,6 +253,13 @@
 
 	// Handle message delete
 	async function handleMessageDelete(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const { messageId } = event.detail;
 		
 		try {
@@ -257,6 +283,13 @@
 
 	// Handle message reply
 	async function handleMessageReply(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const { messageId, messageKey } = event.detail;
 		
 		// For now, let's just log the reply action and focus the input
@@ -277,6 +310,13 @@
 
 	// Handle reaction
 	async function handleReaction(event: CustomEvent) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const { messageId, emoji, emojiType, action } = event.detail;
 		
 		try {

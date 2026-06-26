@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { Plus, Smile } from 'lucide-svelte';
 	
 	let isBrowser = false;
@@ -20,6 +22,9 @@
 	
 	const dispatch = createEventDispatcher();
 	
+	// Get user from page data
+	$: user = $page.data.user;
+	
 	let hoveredReaction: any = null;
 	let tooltipPosition = { x: 0, y: 0 };
 	
@@ -35,6 +40,13 @@
 	
 	// Handle clicking on a reaction
 	function handleReactionClick(reaction: any) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
+			return;
+		}
+		
 		const hasReacted = hasUserReacted(reaction);
 		
 		if (hasReacted) {

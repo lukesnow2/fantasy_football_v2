@@ -19,6 +19,8 @@
 		Trash2
 	} from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 
 	// Editing state
 	let editMode = false;
@@ -32,9 +34,13 @@
 	let amendments: any[] = [];
 	let loading = false;
 	
+	// Get user from page data
+	$: user = $page.data.user;
+	$: authenticatedManager = $page.data.authenticatedManager;
+	
 	// Mock current user (in real app, this would come from auth)
-	const currentUser = 1; // Manager key instead of name
-	const currentUserId = 'user-1';
+	const currentUser = authenticatedManager?.managerKey || 1; // Manager key instead of name
+	const currentUserId = user?.id || 'user-1';
 
 	// Table of contents
 	const tableOfContents = [
@@ -61,6 +67,13 @@
 
 	// Toggle edit mode
 	function toggleEditMode() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		editMode = !editMode;
 		if (!editMode) {
 			cancelEdit();
@@ -69,6 +82,13 @@
 
 	// Start editing a specific rule
 	function startEdit(sectionId: string, ruleIndex: number, currentText: string) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		editingRule = { sectionId, ruleIndex };
 		proposalText = currentText;
 		proposalType = 'edit';
@@ -77,6 +97,13 @@
 
 	// Start adding a new rule to a section
 	function startAdd(sectionId: string) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		editingRule = { sectionId, ruleIndex: -1 };
 		proposalText = '';
 		proposalType = 'add';
@@ -114,6 +141,13 @@
 
 	// Submit proposal
 	async function submitProposal() {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		if (!editingRule || !proposalText.trim() || !proposalRationale.trim()) {
 			return;
 		}
@@ -153,6 +187,13 @@
 
 	// Vote on proposal
 	async function voteOnProposal(proposalId: string, vote: 'yes' | 'no' | 'abstain') {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		loading = true;
 		try {
 			const response = await fetch('/api/rule-votes', {
@@ -177,6 +218,13 @@
 
 	// Delete proposal
 	async function deleteProposal(proposalKey: number) {
+		// Check if user is authenticated
+		if (!user) {
+			// Redirect to login page with return URL
+			goto(`/login?redirect=${encodeURIComponent('/constitution')}`);
+			return;
+		}
+		
 		if (!confirm('Are you sure you want to delete this proposal? This action cannot be undone.')) {
 			return;
 		}
