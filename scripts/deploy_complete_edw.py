@@ -52,17 +52,17 @@ class EdwDeployment:
             'verification_passed': False
         }
         
-        # Expected counts for verification
+        # Expected counts for verification (baseline: 2005-2025 seasons)
         self.expected_counts = {
-            'leagues': 20,
-            'seasons': 20,
-            'weeks': 324,
-            'matchups': 1499,
-            'transactions': 9691,
-            'draft_picks': 3192,
-            'teams': 196,
-            'player_statistics': 40715,  # Based on recent ETL run
-            'team_performance': 2998     # Based on recent ETL run
+            'leagues': 21,
+            'seasons': 21,
+            'weeks': 341,
+            'matchups': 1580,
+            'transactions': 10273,
+            'draft_picks': 3342,
+            'teams': 206,
+            'player_statistics': 43147,
+            'team_performance': 3160
         }
     
     def connect_database(self) -> bool:

@@ -108,7 +108,7 @@
 			}
 			
 			// Fetch current season standings
-			const standingsResponse = await fetch('/api/standings?season=2024');
+			const standingsResponse = await fetch('/api/standings?season=2025');
 			console.log('Standings API response status:', standingsResponse.status);
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();

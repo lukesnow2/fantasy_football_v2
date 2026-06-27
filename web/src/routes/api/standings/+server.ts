@@ -22,7 +22,7 @@ function toCamelCase(obj: any): any {
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
-		const requestedSeason = url.searchParams.get('season') || '2024';
+		const requestedSeason = url.searchParams.get('season') || '2025';
 		console.log('Standings API called with season:', requestedSeason);
 		
 		// Simple test response first
