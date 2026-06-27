@@ -463,8 +463,7 @@ class IncrementalDatabaseLoader:
                         count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).fetchone()[0]
                         logger.info(f"  {table_name.capitalize()}: {count:,} records")
                         total_db_records += count
-                    except:
-                        logger.info(f"  {table_name}: Table not found")
+                    except Exception:                        logger.info(f"  {table_name}: Table not found")
                 
                 logger.info(f"\nTOTAL DATABASE RECORDS: {total_db_records:,}")
                 logger.info("=" * 60)

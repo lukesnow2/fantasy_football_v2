@@ -290,7 +290,11 @@ INSERT INTO field_definitions (field_id, field_name, api_endpoint, metric_id, fi
 -- POPULATE METRIC RELATIONSHIPS
 -- ============================================================================
 
-INSERT INTO metric_relationships (primary_metric_id, related_metric_id, relationship_type, relationship_description, strength) VALUES
+-- Insert only relationships whose referenced metrics actually exist, so a stale
+-- reference doesn't abort the whole seed (some metric ids below predate renames).
+INSERT INTO metric_relationships (primary_metric_id, related_metric_id, relationship_type, relationship_description, strength)
+SELECT v.primary_metric_id, v.related_metric_id, v.relationship_type, v.relationship_description, v.strength
+FROM (VALUES
 
 -- Hall of Fame Index components
 ('hall_of_fame_index', 'career_win_percentage', 'component_of', 'Win percentage is 40% of Hall of Fame Index calculation', 9),
@@ -318,7 +322,10 @@ INSERT INTO metric_relationships (primary_metric_id, related_metric_id, relation
 ('power_score', 'strength_of_schedule', 'related_to', 'Power score accounts for schedule difficulty', 7),
 
 -- Efficiency relationships
-('faab_efficiency_rating', 'waiver_activity_index', 'related_to', 'FAAB efficiency relates to league waiver activity', 6);
+('faab_efficiency_rating', 'waiver_activity_index', 'related_to', 'FAAB efficiency relates to league waiver activity', 6)
+) AS v(primary_metric_id, related_metric_id, relationship_type, relationship_description, strength)
+WHERE EXISTS (SELECT 1 FROM metric_definitions d WHERE d.metric_id = v.primary_metric_id)
+  AND EXISTS (SELECT 1 FROM metric_definitions d WHERE d.metric_id = v.related_metric_id);
 
 -- ============================================================================
 -- SUCCESS MESSAGE

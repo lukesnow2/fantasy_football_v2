@@ -606,8 +606,7 @@ class HerokuPostgresDeployer:
                         status = "✅" if count == expected else "⚠️"
                         logger.info(f"{status} {table_name.capitalize()}: {count:,} records")
                         total_db_records += count
-                    except:
-                        logger.info(f"❌ {table_name}: Table not found")
+                    except Exception:                        logger.info(f"❌ {table_name}: Table not found")
                 
                 # League summary
                 try:
@@ -624,8 +623,7 @@ class HerokuPostgresDeployer:
                         total_teams += teams or 0
                     
                     logger.info(f"\nTOTAL: {total_leagues} leagues, {total_teams} teams")
-                except:
-                    logger.info("League summary not available")
+                except Exception:                    logger.info("League summary not available")
                 
                 # Championship verification
                 try:
@@ -646,8 +644,7 @@ class HerokuPostgresDeployer:
                             logger.info(f"  {league_id} {season}: {count} championships")
                     else:
                         logger.info(f"\n✅ CHAMPIONSHIP STATUS: All leagues have exactly 1 championship!")
-                except:
-                    logger.info("Championship verification not available")
+                except Exception:                    logger.info("Championship verification not available")
                 
                 logger.info(f"\nGRAND TOTAL: {total_db_records:,} database records")
                 logger.info("=" * 50)

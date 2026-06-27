@@ -570,8 +570,7 @@ class YahooFantasyExtractor:
                                     '222': 2009, '199': 2008, '175': 2007, '153': 2006, '124': 2005
                                 }
                                 potential_season = season_mapping.get(game_id_part, 2024)
-                            except:
-                                potential_season = 2024  # Default fallback
+                            except Exception:                                potential_season = 2024  # Default fallback
                             
                             # Fast pre-filter before expensive API call
                             if not self.is_league_of_record(league_id, potential_season):
