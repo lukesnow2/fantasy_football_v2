@@ -8,7 +8,7 @@ This platform automatically:
 - **Extracts** complete fantasy football data from Yahoo's API (leagues, rosters, transactions, drafts)
 - **Processes** 20+ years of historical data with incremental updates 
 - **Analyzes** performance trends, draft patterns, and competitive dynamics
-- **Maintains** a live PostgreSQL database with 16,000+ records across 26 leagues
+- **Maintains** a Neon (serverless PostgreSQL) database with 70,000+ records across 26 leagues
 - **Serves** data through a modern SvelteKit web application with interactive visualizations
 - **Runs automatically** via GitHub Actions during fantasy season
 
@@ -18,7 +18,7 @@ This platform automatically:
 - ✅ **Automated Pipeline**: Weekly data updates with zero maintenance  
 - ✅ **Performance Optimized**: 95% faster than traditional extraction methods
 - ✅ **Data Integrity**: Zero duplicates with comprehensive validation
-- ✅ **Live Database**: Real-time PostgreSQL with analytics views
+- ✅ **Live Database**: Neon serverless PostgreSQL with analytics views
 - ✅ **Modern Web Interface**: SvelteKit frontend with interactive dashboards
 - ✅ **Internationalization**: Multi-language support (English/Spanish)
 - ✅ **Security Hardened**: Protected credentials and clean git history

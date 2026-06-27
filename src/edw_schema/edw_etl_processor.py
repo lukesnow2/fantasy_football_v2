@@ -4612,25 +4612,33 @@ class EdwEtlProcessor:
         return name_mapping.get(manager_name, manager_name)
     
     def get_manager_name_by_team_id(self, team_id: str, original_manager_name: str) -> str:
-        """Get correct manager name based on team_id overrides, then apply consolidation"""
-        # Bobby's team IDs (override hidden manager names)
-        bobby_team_ids = {
-            "124.l.109785.t.3",
-            "273.l.107980.t.9", 
-            "314.l.319572.t.5",
-            "348.l.655822.t.2",
-            "359.l.696366.t.8",
-            "380.l.1143665.t.8",
-            "199.l.42364.t.3",
-            "222.l.222935.t.6",
-            "257.l.89145.t.4",
-            "199.l.42364.t.9"
+        """Get correct manager name based on team_id overrides, then apply consolidation.
+
+        Some teams have a Yahoo-private ("--hidden--") manager name, so they can only be
+        attributed by team_id. Owner-provided mapping of team_id -> canonical manager name.
+        """
+        team_id_overrides = {
+            # Bobby (hidden across several seasons)
+            "124.l.109785.t.3": "Bobby",   # 2005 The Commie Killerz
+            "273.l.107980.t.9": "Bobby",
+            "314.l.319572.t.5": "Bobby",
+            "348.l.655822.t.2": "Bobby",
+            "359.l.696366.t.8": "Bobby",
+            "380.l.1143665.t.8": "Bobby",
+            "199.l.42364.t.3": "Bobby",
+            "222.l.222935.t.6": "Bobby",
+            "257.l.89145.t.4": "Bobby",
+            "199.l.42364.t.9": "Bobby",
+            # 2005 league 124.l.109785 hidden teams (owner-identified)
+            "124.l.109785.t.1": "Trevor",        # Fire Fire
+            "124.l.109785.t.5": "Jesse Brown",   # Mcbumdabums
+            "124.l.109785.t.6": "Cody Benbow",   # hillbilles
+            "124.l.109785.t.7": "Ryan Pfiffer",  # FrOgLiCkErS
         }
-        
-        # Override manager name for Bobby's teams
-        if team_id in bobby_team_ids:
-            return 'Bobby'
-        
+
+        if team_id in team_id_overrides:
+            return team_id_overrides[team_id]
+
         # Apply normal consolidation for other teams
         return self.consolidate_manager_name(original_manager_name)
 

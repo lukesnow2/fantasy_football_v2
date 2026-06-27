@@ -65,8 +65,10 @@
   }
 
   function handleSkip() {
-    // Redirect to dashboard with a note that passkey setup is recommended
-    goto('/?setup=skipped');
+    // Registration created the account but did NOT establish a session, and skipping
+    // passkey setup means none was registered. Send the user to login (their password
+    // works) rather than dropping them on the home page unauthenticated.
+    goto('/login?setup=skipped');
   }
 </script>
 

@@ -48,7 +48,9 @@ class HerokuPostgresDeployer:
             
             # Fix URL for newer SQLAlchemy
             url = self.database_url.replace('postgres://', 'postgresql://', 1)
-            self.engine = create_engine(url)
+            # Pin search_path to public so unqualified raw-table writes land in public,
+            # regardless of any database-level search_path (the app uses app,edw,public).
+            self.engine = create_engine(url, connect_args={'options': '-csearch_path=public'})
             
             # Test connection
             with self.engine.connect() as conn:
@@ -379,8 +381,9 @@ class HerokuPostgresDeployer:
         try:
             logger.info("🏆 Fixing championship flags...")
             
-            # Historical league of record IDs (2005-2024)
+            # Historical league of record IDs (2005-2025)
             HISTORICAL_LEAGUE_IDS = {
+                "461.l.654923",    # Burning Down Tahoe (2025)
                 "449.l.674707",    # Idaho's DEI Quota (2024)
                 "423.l.841006",    # Move the Raiders to PDX (2023)
                 "414.l.1194955",   # Wet Hot Tahoe Summer (2022)
@@ -606,8 +609,7 @@ class HerokuPostgresDeployer:
                         status = "✅" if count == expected else "⚠️"
                         logger.info(f"{status} {table_name.capitalize()}: {count:,} records")
                         total_db_records += count
-                    except:
-                        logger.info(f"❌ {table_name}: Table not found")
+                    except Exception:                        logger.info(f"❌ {table_name}: Table not found")
                 
                 # League summary
                 try:
@@ -624,8 +626,7 @@ class HerokuPostgresDeployer:
                         total_teams += teams or 0
                     
                     logger.info(f"\nTOTAL: {total_leagues} leagues, {total_teams} teams")
-                except:
-                    logger.info("League summary not available")
+                except Exception:                    logger.info("League summary not available")
                 
                 # Championship verification
                 try:
@@ -646,8 +647,7 @@ class HerokuPostgresDeployer:
                             logger.info(f"  {league_id} {season}: {count} championships")
                     else:
                         logger.info(f"\n✅ CHAMPIONSHIP STATUS: All leagues have exactly 1 championship!")
-                except:
-                    logger.info("Championship verification not available")
+                except Exception:                    logger.info("Championship verification not available")
                 
                 logger.info(f"\nGRAND TOTAL: {total_db_records:,} database records")
                 logger.info("=" * 50)
