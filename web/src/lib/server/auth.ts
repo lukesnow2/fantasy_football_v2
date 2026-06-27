@@ -28,10 +28,8 @@ export async function createSession(token: string, userId: string) {
 }
 
 export async function validateSessionToken(token: string) {
-	console.log('🔍 Validating session token:', token.substring(0, 8) + '...');
 	const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
-	console.log('🔑 Session ID:', sessionId.substring(0, 8) + '...');
-	
+
 	const [result] = await db
 		.select({
 			// Adjust user table here to tweak returned data
@@ -43,22 +41,18 @@ export async function validateSessionToken(token: string) {
 		.where(eq(table.session.id, sessionId));
 
 	if (!result) {
-		console.log('❌ No session found in database');
 		return { session: null, user: null };
 	}
 	const { session, user } = result;
-	console.log('✅ Valid session found for user:', user.username);
 
 	const sessionExpired = Date.now() >= session.expiresAt.getTime();
 	if (sessionExpired) {
-		console.log('⏰ Session expired, deleting');
 		await db.delete(table.session).where(eq(table.session.id, session.id));
 		return { session: null, user: null };
 	}
 
 	const renewSession = Date.now() >= session.expiresAt.getTime() - DAY_IN_MS * 15;
 	if (renewSession) {
-		console.log('🔄 Renewing session');
 		session.expiresAt = new Date(Date.now() + DAY_IN_MS * 30);
 		await db
 			.update(table.session)
