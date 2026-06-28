@@ -231,10 +231,10 @@
 			<div class="space-y-3">
 				{#each managers as manager, index}
 					<div class="bg-gradient-to-r {getTierColor(manager.hallOfFameRank)} p-[1px] rounded-xl">
-						<div class="bg-slate-800 rounded-xl p-6">
-							<div class="flex items-center justify-between">
+						<div class="bg-slate-800 rounded-xl p-4 sm:p-6">
+							<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 								<!-- Left Side: Rank and Manager Info -->
-								<div class="flex items-center space-x-4">
+								<div class="flex items-center space-x-4 min-w-0">
 									<div class="flex-shrink-0 text-center">
 										<div class="text-3xl font-bold text-white">#{manager.hallOfFameRank}</div>
 										<div class="text-lg">{getTierBadge(manager.hallOfFameRank)}</div>

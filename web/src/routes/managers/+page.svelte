@@ -62,8 +62,8 @@
 			<div class="text-2xl text-slate-400">Loading manager profiles...</div>
 		</div>
 	{:else if currentManager}
-		<!-- Left Sidebar - Manager Selector -->
-		<div class="w-20 bg-slate-800/50 border-r border-slate-700/50 flex flex-col items-center py-6 space-y-3 overflow-y-auto">
+		<!-- Left Sidebar - Manager Selector (desktop) -->
+		<div class="hidden sm:flex w-20 bg-slate-800/50 border-r border-slate-700/50 flex-col items-center py-6 space-y-3 overflow-y-auto">
 			{#each managers as manager}
 				<button
 					on:click={() => selectManager(manager.managerName)}
@@ -88,11 +88,25 @@
 		</div>
 
 		<!-- Main Content Area -->
-		<div class="flex-1 flex flex-col">
+		<div class="flex-1 flex flex-col min-w-0">
+			<!-- Mobile Manager Selector -->
+			<div class="sm:hidden p-4 border-b border-slate-700/50">
+				<label for="mobile-manager-select" class="sr-only">Select manager</label>
+				<select
+					id="mobile-manager-select"
+					bind:value={selectedManagerName}
+					class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-blue-400 focus:outline-none text-base font-medium"
+				>
+					{#each managers as manager}
+						<option value={manager.managerName}>{manager.managerName}</option>
+					{/each}
+				</select>
+			</div>
+
 			<!-- Header -->
-			<div class="bg-slate-800/30 border-b border-slate-700/50 px-8 py-6">
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-6">
+			<div class="bg-slate-800/30 border-b border-slate-700/50 px-4 sm:px-8 py-6">
+				<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+					<div class="flex items-center gap-4 sm:gap-6 min-w-0">
 						<!-- Large Profile Picture -->
 						{#if currentManager.managerName}
 						<ManagerProfilePicture 
@@ -103,8 +117,8 @@
 						{/if}
 						
 						<!-- Manager Info -->
-						<div>
-							<h1 class="text-4xl font-bold text-white mb-2">
+						<div class="min-w-0">
+							<h1 class="text-3xl sm:text-4xl font-bold text-white mb-2 break-words">
 								{currentManager.managerName}
 								{#if currentManager.totalChampionships > 0}
 									<span class="ml-3">{getChampionshipBadge(currentManager.totalChampionships)}</span>
@@ -122,12 +136,12 @@
 					</div>
 					
 					<!-- Quick Stats -->
-					<div class="text-right">
-						<div class="flex items-baseline justify-end gap-6 mb-1">
-							<div class="text-3xl font-bold text-slate-300">
+					<div class="sm:text-right shrink-0">
+						<div class="flex items-baseline gap-6 mb-1 sm:justify-end">
+							<div class="text-2xl sm:text-3xl font-bold text-slate-300">
 								<span class="text-green-400">{currentManager.totalWins || 0}</span>-<span class="text-red-400">{currentManager.totalLosses || 0}</span>-<span class="text-amber-400">{currentManager.totalTies || 0}</span>
 							</div>
-							<div class="text-3xl font-bold {getWinPercentageColor(parseFloat(currentManager.winPercentage || 0))}">
+							<div class="text-2xl sm:text-3xl font-bold {getWinPercentageColor(parseFloat(currentManager.winPercentage || 0))}">
 								{parseFloat(currentManager.winPercentage || 0).toFixed(3)}
 							</div>
 						</div>
@@ -141,7 +155,7 @@
 			</div>
 
 			<!-- Main Stats Grid -->
-			<div class="flex-1 p-8 overflow-y-auto">
+			<div class="flex-1 p-4 sm:p-8 overflow-y-auto">
 				<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 					
 					<!-- Left Column: Core Stats -->
@@ -153,7 +167,7 @@
 								<BarChart3 class="w-5 h-5 text-blue-400 mr-2" />
 								League Tenure & Impact
 							</h3>
-							<div class="grid grid-cols-4 gap-6">
+							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
 								<div class="text-center">
 									<div class="text-3xl font-bold text-purple-400">{currentManager.totalSeasons}</div>
 									<div class="text-slate-400 font-medium">Seasons</div>
@@ -179,7 +193,7 @@
 								<Target class="w-5 h-5 text-green-400 mr-2" />
 								Scoring Performance
 							</h3>
-							<div class="grid grid-cols-3 gap-6">
+							<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
 								<div class="text-center">
 									<div class="text-2xl font-bold text-blue-400">{parseFloat(currentManager.avgPointsFor || 0).toFixed(1)}</div>
 									<div class="text-slate-400 text-sm">Avg Points/Season</div>
@@ -205,7 +219,7 @@
 								<Crown class="w-5 h-5 text-amber-400 mr-2" />
 								League Rankings
 							</h3>
-							<div class="grid grid-cols-4 gap-4">
+							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
 									<div class="text-xl font-bold text-amber-400">#{currentManager.championshipRank}</div>
 									<div class="text-slate-400 text-sm">Championships</div>
