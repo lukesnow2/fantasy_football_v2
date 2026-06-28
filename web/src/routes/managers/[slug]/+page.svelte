@@ -18,7 +18,6 @@
 			const response = await fetch(`/api/managers/performance?manager=${encodeURIComponent(managerName)}&analysis=all`);
 			if (response.ok) {
 				managerData = await response.json();
-				console.log('Manager profile loaded:', managerData);
 			} else {
 				console.error('Failed to fetch manager data:', response.status, response.statusText);
 			}
@@ -57,14 +56,14 @@
 		return '';
 	}
 
-	function getSeasonOutcome(season: any): string {
-		if (season.championshipWinner) return '🏆 Champion';
+	function getSeasonOutcome(season: any, champYears: number[]): string {
+		if (champYears.includes(Number(season.seasonYear))) return '🏆 Champion';
 		if (season.madePlayoffs) return '🔥 Playoffs';
 		return '📉 Missed Playoffs';
 	}
 
-	function getSeasonOutcomeColor(season: any): string {
-		if (season.championshipWinner) return 'text-amber-400';
+	function getSeasonOutcomeColor(season: any, champYears: number[]): string {
+		if (champYears.includes(Number(season.seasonYear))) return 'text-amber-400';
 		if (season.madePlayoffs) return 'text-blue-400';
 		return 'text-red-400';
 	}
@@ -73,6 +72,21 @@
 	$: manager = managerData?.data?.performance?.[0];
 	$: ranking = managerData?.data?.rankings?.[0];
 	$: achievements = managerData?.data?.achievements?.[0]?.allAchievements || [];
+	$: seasons = managerData?.data?.seasons ?? [];
+	$: championshipSeasons = managerData?.data?.championshipSeasons ?? [];
+
+	// Fields the mart doesn't carry, derived from the per-season breakdown.
+	$: careerPointsFor = manager?.totalPointsScored
+		? parseFloat(manager.totalPointsScored)
+		: seasons.reduce((s: number, x: any) => s + (parseFloat(x.pointsFor) || 0), 0);
+	$: careerPointsAgainst = seasons.reduce((s: number, x: any) => s + (parseFloat(x.pointsAgainst) || 0), 0);
+	$: pointDifferential = careerPointsFor - careerPointsAgainst;
+	$: bestSeasonPoints = seasons.length
+		? Math.max(...seasons.map((x: any) => parseFloat(x.pointsFor) || 0))
+		: null;
+	$: worstSeasonPoints = seasons.length
+		? Math.min(...seasons.map((x: any) => parseFloat(x.pointsFor) || 0))
+		: null;
 
 	const tabs = [
 		{ id: 'overview', name: 'Overview', icon: BarChart3 },
@@ -204,7 +218,7 @@
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Playoff Appearances</span>
-							<span class="font-bold text-blue-400">{manager.totalPlayoffAppearances}</span>
+							<span class="font-bold text-blue-400">{manager.playoffAppearances}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Playoff Win %</span>
@@ -214,16 +228,16 @@
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Career Points For</span>
-							<span class="font-bold text-green-400">{manager.careerPointsFor?.toLocaleString()}</span>
+							<span class="font-bold text-green-400">{Math.round(careerPointsFor).toLocaleString()}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Career Points Against</span>
-							<span class="font-bold text-red-400">{manager.careerPointsAgainst?.toLocaleString()}</span>
+							<span class="font-bold text-red-400">{Math.round(careerPointsAgainst).toLocaleString()}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Point Differential</span>
-							<span class="font-bold {manager.pointDifferential >= 0 ? 'text-green-400' : 'text-red-400'}">
-								{manager.pointDifferential >= 0 ? '+' : ''}{manager.pointDifferential?.toFixed(1)}
+							<span class="font-bold {pointDifferential >= 0 ? 'text-green-400' : 'text-red-400'}">
+								{pointDifferential >= 0 ? '+' : ''}{pointDifferential.toFixed(1)}
 							</span>
 						</div>
 					</div>
@@ -231,16 +245,8 @@
 
 				<!-- Streaks & Records -->
 				<div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h3 class="text-xl font-bold text-white mb-4">Records & Streaks</h3>
+					<h3 class="text-xl font-bold text-white mb-4">Season Records</h3>
 					<div class="space-y-4">
-						<div class="flex justify-between">
-							<span class="text-slate-400">Longest Win Streak</span>
-							<span class="font-bold text-green-400">{manager.longestWinStreak} games</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-400">Longest Loss Streak</span>
-							<span class="font-bold text-red-400">{manager.longestLossStreak} games</span>
-						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Best Season Record</span>
 							<span class="font-bold text-white">{manager.bestSeasonRecord}</span>
@@ -251,11 +257,15 @@
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Best Season Points</span>
-							<span class="font-bold text-green-400">{manager.bestSeasonPoints?.toFixed(1)}</span>
+							<span class="font-bold text-green-400">{bestSeasonPoints != null ? bestSeasonPoints.toFixed(1) : '—'}</span>
 						</div>
 						<div class="flex justify-between">
 							<span class="text-slate-400">Worst Season Points</span>
-							<span class="font-bold text-red-400">{manager.worstSeasonPoints?.toFixed(1)}</span>
+							<span class="font-bold text-red-400">{worstSeasonPoints != null ? worstSeasonPoints.toFixed(1) : '—'}</span>
+						</div>
+						<div class="flex justify-between">
+							<span class="text-slate-400">Total Transactions</span>
+							<span class="font-bold text-amber-400">{manager.totalTransactions ?? '—'}</span>
 						</div>
 					</div>
 				</div>
@@ -263,20 +273,20 @@
 		{:else if selectedTab === 'seasons'}
 			<div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 				<h3 class="text-xl font-bold text-white mb-6">Season-by-Season History</h3>
-				{#if managerData?.data?.seasons}
+				{#if seasons.length > 0}
 					<div class="overflow-x-auto">
 						<table class="w-full text-sm">
 							<thead>
 								<tr class="border-b border-slate-700">
 									<th class="text-left py-3 px-4 text-slate-300">Season</th>
 									<th class="text-center py-3 px-4 text-slate-300">Record</th>
-									<th class="text-center py-3 px-4 text-slate-300">Points</th>
-									<th class="text-center py-3 px-4 text-slate-300">Rank</th>
+									<th class="text-center py-3 px-4 text-slate-300">Points For</th>
+									<th class="text-center py-3 px-4 text-slate-300">Points Against</th>
 									<th class="text-center py-3 px-4 text-slate-300">Outcome</th>
 								</tr>
 							</thead>
 							<tbody>
-								{#each managerData.data.seasons as season}
+								{#each seasons as season}
 									<tr class="border-b border-slate-700/50">
 										<td class="py-3 px-4 font-bold text-white">{season.seasonYear}</td>
 										<td class="text-center py-3 px-4">
@@ -284,10 +294,10 @@
 												{season.wins}-{season.losses}-{season.ties}
 											</span>
 										</td>
-										<td class="text-center py-3 px-4 text-green-400">{season.pointsFor?.toFixed(1)}</td>
-										<td class="text-center py-3 px-4 text-slate-300">#{season.finalRank}</td>
-										<td class="text-center py-3 px-4 {getSeasonOutcomeColor(season)}">
-											{getSeasonOutcome(season)}
+										<td class="text-center py-3 px-4 text-green-400">{parseFloat(season.pointsFor).toFixed(1)}</td>
+										<td class="text-center py-3 px-4 text-red-400">{parseFloat(season.pointsAgainst).toFixed(1)}</td>
+										<td class="text-center py-3 px-4 {getSeasonOutcomeColor(season, championshipSeasons)}">
+											{getSeasonOutcome(season, championshipSeasons)}
 										</td>
 									</tr>
 								{/each}
@@ -299,9 +309,9 @@
 		{:else if selectedTab === 'head-to-head'}
 			<div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 				<h3 class="text-xl font-bold text-white mb-6">Head-to-Head Records</h3>
-				{#if managerData?.data?.headToHead}
+				{#if managerData?.data?.head_to_head?.length}
 					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-						{#each managerData.data.headToHead as h2h}
+						{#each managerData.data.head_to_head as h2h}
 							<div class="bg-slate-700/30 rounded-lg p-4">
 								<div class="flex justify-between items-center mb-2">
 									<span class="font-bold text-white">vs {h2h.opponent}</span>
@@ -326,12 +336,12 @@
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					<div>
 						<h4 class="text-lg font-semibold text-amber-400 mb-3">🏆 Championship History</h4>
-						{#if manager.championshipYears}
+						{#if championshipSeasons.length > 0}
 							<div class="space-y-2">
-								{#each manager.championshipYears.split(',') as year}
+								{#each championshipSeasons as year}
 									<div class="flex items-center gap-2">
 										<Trophy class="w-4 h-4 text-amber-400" />
-										<span class="text-white">{year.trim()} Champion</span>
+										<span class="text-white">{year} Champion</span>
 									</div>
 								{/each}
 							</div>

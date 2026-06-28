@@ -46,9 +46,6 @@ export const GET: RequestHandler = async ({ url }) => {
 		const statsResult = await db.execute(sql.raw(managerStatsQuery));
 		const managerStats = Array.from(statsResult);
 
-		// Debug: Log the raw data to see what we're getting
-		console.log('Raw manager stats from database:', managerStats);
-
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
 			// Handle both snake_case and camelCase field names from database
@@ -106,9 +103,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			mgr.scoringRank = sortedByScoring.findIndex(m => m.managerName === mgr.managerName) + 1;
 			mgr.playoffRank = sortedByPlayoffs.findIndex(m => m.managerName === mgr.managerName) + 1;
 		});
-		
-		// Debug: Log the enriched stats to see what we're sending
-		console.log('Enriched stats with rankings:', enrichedStats);
 
 		data.performance = enrichedStats;
 		data.rankings = enrichedStats;
@@ -138,31 +132,45 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		data.achievements = achievements;
 
-		// Get detailed season-by-season breakdown
+		// Get detailed season-by-season breakdown. fact_team_performance is per-week,
+		// so aggregate to one row per season (the old query returned per-week rows).
 		if (analysis === 'seasons' || analysis === 'all') {
 			try {
-				const seasonsQuery = `
-					SELECT 
-						tp.season_year,
-						dm.manager_name,
-						tp.wins,
-						tp.losses,
-						tp.ties,
-						tp.win_percentage,
-						tp.points_for,
-						tp.points_against
+				const seasonsResult = await db.execute(sql`
+					SELECT
+						tp.season_year                              AS season_year,
+						SUM(tp.wins)                                AS wins,
+						SUM(tp.losses)                              AS losses,
+						SUM(tp.ties)                                AS ties,
+						CASE WHEN SUM(tp.wins + tp.losses + tp.ties) > 0
+							THEN (SUM(tp.wins) + 0.5 * SUM(tp.ties)) / SUM(tp.wins + tp.losses + tp.ties)
+							ELSE 0 END                              AS win_percentage,
+						SUM(tp.points_for)                          AS points_for,
+						SUM(tp.points_against)                      AS points_against,
+						bool_or(tp.is_playoff_team)                 AS made_playoffs
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
-					WHERE dm.include_in_analysis = true
-					${manager ? `AND dm.manager_name ILIKE '%${manager}%'` : ''}
+					WHERE dm.manager_name = ${manager}
+					GROUP BY tp.season_year
 					ORDER BY tp.season_year DESC
-				`;
-
-				const seasonsResult = await db.execute(sql.raw(seasonsQuery));
+				`);
 				data.seasons = Array.from(seasonsResult);
 			} catch (seasonsError) {
-				console.log('Error getting seasons data, skipping:', seasonsError);
 				data.seasons = [];
+			}
+
+			// Seasons this manager won the championship (for per-season outcome + history).
+			try {
+				const champResult = await db.execute(sql`
+					SELECT DISTINCT fm.season_year AS season_year
+					FROM edw.fact_matchup fm
+					JOIN edw.dim_manager dm ON fm.winner_manager_key = dm.manager_key
+					WHERE fm.is_championship = true AND dm.manager_name = ${manager}
+					ORDER BY fm.season_year DESC
+				`);
+				data.championshipSeasons = Array.from(champResult).map((r: any) => Number(r.seasonYear));
+			} catch {
+				data.championshipSeasons = [];
 			}
 		}
 
@@ -206,7 +214,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				const h2hResult = await db.execute(sql.raw(h2hQuery));
 				data.head_to_head = Array.from(h2hResult);
 			} catch (h2hError) {
-				console.log('H2H mart table not available, skipping');
 				data.head_to_head = [];
 			}
 		}
@@ -215,11 +222,6 @@ export const GET: RequestHandler = async ({ url }) => {
 		data.availableManagers = managerStats
 			.filter((mgr: any) => mgr.manager_name != null || mgr.managerName != null)
 			.map((mgr: any) => mgr.manager_name || mgr.managerName);
-		
-		// Debug: Log available managers and first few records to see field names
-		console.log('Available managers:', data.availableManagers);
-		console.log('First manager record fields:', Object.keys(managerStats[0] || {}));
-		console.log('First manager record:', managerStats[0]);
 
 		// Meta information
 		data.meta = {
