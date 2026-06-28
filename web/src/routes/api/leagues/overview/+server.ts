@@ -55,6 +55,10 @@ export const GET: RequestHandler = async () => {
 			})
 			.from(factTeamPerformance);
 
+		// Draft pick count (fact_draft isn't modeled in Drizzle, so query it directly)
+		const draftPickResult = await db.execute(sql.raw(`SELECT COUNT(*) AS total FROM edw.fact_draft`));
+		const totalDraftPicks = Number(Array.from(draftPickResult)[0]?.total) || 0;
+
 		// Query for all-time leader (Hall of Fame #1)
 		const hallOfFameLeaderResult = await db.execute(sql.raw(`
 			SELECT manager_name
@@ -144,7 +148,7 @@ export const GET: RequestHandler = async () => {
 			totalManagers: managerStats[0]?.totalManagers || 0,
 			totalTeams: teamStats[0]?.totalTeamSeasons || 0,
 			totalTransactions: transactionStats[0]?.totalTransactions || 0,
-			totalDraftPicks: 0, // Would need fact_draft table
+			totalDraftPicks,
 			totalMatchups: matchupStats[0]?.totalMatchups || 0,
 			championshipGames: championshipStats[0]?.championshipGames || 0,
 			dataPoints: (teamStats[0]?.totalTeamSeasons || 0) + 
