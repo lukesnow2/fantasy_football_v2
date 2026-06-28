@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
-	import { Trophy, BarChart3, Calendar, Users, Crown, BookOpen, Target, Settings, LogIn, LogOut, User } from 'lucide-svelte';
+	import { Trophy, BarChart3, Calendar, Users, Crown, BookOpen, Target, Settings, LogIn, LogOut, User, Menu, X } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import type { LayoutData } from './$types';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -20,27 +20,38 @@
 	];
 
 	let showUserMenu = $state(false);
+	let showMobileMenu = $state(false);
 
 	function toggleUserMenu() {
 		showUserMenu = !showUserMenu;
-		console.log('🔍 User menu toggled:', showUserMenu);
-		console.log('🔍 User data:', data.user);
-		console.log('🔍 Authenticated manager:', data.authenticatedManager);
 	}
 
 	function closeUserMenu() {
 		showUserMenu = false;
 	}
 
+	function toggleMobileMenu() {
+		showMobileMenu = !showMobileMenu;
+	}
+
+	function closeMobileMenu() {
+		showMobileMenu = false;
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape' && showMobileMenu) {
+			closeMobileMenu();
+		}
+	}
+
 	const handleLogout: SubmitFunction = ({ formData, cancel }) => {
-		console.log('🚪 Logout form submitted');
 		// Close menu immediately
 		closeUserMenu();
 		// Let SvelteKit handle the redirect naturally
 	};
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900" onkeydown={handleKeydown} role="main">
 	<!-- Header -->
 	<header class="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-md">
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -55,13 +66,14 @@
 				<!-- Navigation -->
 				<nav class="hidden md:flex space-x-8">
 					{#each navigation as item}
+						{@const Icon = item.icon}
 						<a
 							href={item.href}
 							class="flex items-center px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
 							class:bg-slate-800={$page.url.pathname === item.href}
 							class:text-white={$page.url.pathname === item.href}
 						>
-							<svelte:component this={item.icon} class="h-4 w-4 mr-2" />
+							<Icon class="h-4 w-4 mr-2" />
 							{item.name}
 						</a>
 					{/each}
@@ -119,14 +131,93 @@
 
 					<!-- Mobile menu button -->
 					<div class="md:hidden">
-						<button type="button" class="text-slate-300 hover:text-white">
-							<Settings class="h-6 w-6" />
+						<button 
+							type="button" 
+							onclick={toggleMobileMenu}
+							class="text-slate-300 hover:text-white p-2 rounded-md transition-colors"
+							aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+						>
+							{#if showMobileMenu}
+								<X class="h-6 w-6" />
+							{:else}
+								<Menu class="h-6 w-6" />
+							{/if}
 						</button>
 					</div>
 				</div>
 			</div>
 		</div>
 	</header>
+
+	<!-- Mobile Navigation Menu -->
+	{#if showMobileMenu}
+		<div class="md:hidden relative z-50">
+			<!-- Backdrop -->
+			<div 
+				class="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+				onclick={closeMobileMenu}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') closeMobileMenu(); }}
+				role="button"
+				tabindex="-1"
+				aria-label="Close mobile menu"
+			></div>
+			
+			<!-- Mobile Menu Panel -->
+			<div class="fixed top-0 left-0 w-full bg-slate-900 border-b border-slate-700 shadow-xl">
+				<!-- Mobile Navigation Links -->
+				<nav class="px-4 py-6 space-y-2">
+					{#each navigation as item}
+						{@const Icon = item.icon}
+						<a
+							href={item.href}
+							onclick={closeMobileMenu}
+							class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+							class:bg-slate-800={$page.url.pathname === item.href}
+							class:text-white={$page.url.pathname === item.href}
+						>
+							<Icon class="h-5 w-5 mr-3" />
+							{item.name}
+						</a>
+					{/each}
+					
+					<!-- Auth links for mobile -->
+					{#if !data.user || !data.authenticatedManager}
+						<div class="border-t border-slate-700 pt-4 mt-4">
+							<a 
+								href="/login"
+								onclick={closeMobileMenu}
+								class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+							>
+								<LogIn class="h-5 w-5 mr-3" />
+								Sign In
+							</a>
+						</div>
+					{:else}
+						<div class="border-t border-slate-700 pt-4 mt-4">
+							<a 
+								href="/managers/{data.authenticatedManager.managerName}" 
+								onclick={closeMobileMenu}
+								class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+							>
+								<User class="h-5 w-5 mr-3" />
+								Your Profile
+							</a>
+							<form method="post" action="/logout" use:enhance={handleLogout}>
+								<button 
+									type="submit" 
+									onclick={closeMobileMenu}
+									class="w-full text-left flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+								>
+									<LogOut class="h-5 w-5 mr-3" />
+									Sign Out
+								</button>
+							</form>
+						</div>
+					{/if}
+				</nav>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Main content -->
 	<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -137,7 +228,7 @@
 	<footer class="border-t border-slate-700/50 bg-slate-900/50 mt-20">
 		<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 			<div class="text-center text-slate-400">
-				<p>&copy; 2024 The League. Where legends are made and dreams are crushed.</p>
+				<p>&copy; {new Date().getFullYear()} The League. Where legends are made and dreams are crushed.</p>
 			</div>
 		</div>
 	</footer>

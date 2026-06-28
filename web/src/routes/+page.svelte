@@ -11,12 +11,6 @@
 			const response = await fetch('/api/leagues/overview');
 			if (response.ok) {
 				const data = await response.json();
-				console.log('=== CLIENT DEBUG: League Overview API Response ===');
-				console.log('Full API Response:', data);
-				console.log('Overview Object:', data.overview);
-				console.log('All-Time Leader:', data.overview?.allTimeLeader);
-				console.log('Biggest Rivalry:', data.overview?.biggestRivalry);
-				console.log('=== END CLIENT DEBUG ===');
 				leagueOverview = data.overview;
 			}
 			loading = false;

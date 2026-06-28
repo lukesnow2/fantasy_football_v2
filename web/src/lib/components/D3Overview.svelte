@@ -471,25 +471,21 @@
 				<h3 class="font-bold text-white mb-2">Key Insights</h3>
 				<div class="text-sm text-slate-300 space-y-1">
 					{#if selectedMetric === 'scoring'}
-						<div>• League scoring has evolved from ~108 pts (2005) to ~122 pts (2024)</div>
-						<div>• Peak scoring was in 2007 (~134 pts average)</div>
-						<div>• Score volatility has generally decreased over time</div>
+						<div>• Average weekly scoring by season, with high/low and volatility</div>
+						<div>• Hover any point to see that season's average, peak, and floor</div>
 					{:else if selectedMetric === 'competitiveness'}
 						<div>• Win parity scores show how evenly matched teams are</div>
 						<div>• Close games metric indicates competitive balance</div>
 						<div>• Higher scores = more competitive seasons</div>
 					{:else if selectedMetric === 'activity'}
-						<div>• Transaction activity peaked in 2020-2021 (~600+ moves)</div>
-						<div>• Trade volume has decreased in recent years</div>
-						<div>• Early years had fewer total moves but more impactful trades</div>
+						<div>• Total roster moves and trades per season</div>
+						<div>• Compare transaction volume across the league's history</div>
 					{:else if selectedMetric === 'players'}
-						<div>• Player scoring has stabilized around 190-200 pts</div>
-						<div>• Draft positions have gotten more accurate over time</div>
-						<div>• Value picks are easier to identify in modern seasons</div>
+						<div>• Top-player fantasy scoring and draft value by season</div>
+						<div>• Hover a point for that season's figures</div>
 					{:else if selectedMetric === 'spread'}
-						<div>• Highest weekly scores have trended upward</div>
+						<div>• Highest weekly scores and point spread by season</div>
 						<div>• Point spread indicates scoring consistency</div>
-						<div>• Recent seasons show both high ceilings and floors</div>
 					{/if}
 				</div>
 			</div>

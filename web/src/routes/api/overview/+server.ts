@@ -301,7 +301,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			}));
 		}
 
-		console.log(`Overview API returning data for metric: ${metric}`);
 		
 		// Derive coverage from the actual data rather than hardcoding it.
 		const seasonYears = (

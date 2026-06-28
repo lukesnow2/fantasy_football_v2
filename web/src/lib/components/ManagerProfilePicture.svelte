@@ -8,15 +8,6 @@
 	$: profilePicUrl = getManagerProfilePicture(managerName);
 	$: initials = getInitials(managerName);
 
-	// Debug logging
-	$: {
-		console.log('ManagerProfilePicture Debug:', {
-			managerName,
-			profilePicUrl,
-			normalizedName: managerName.toLowerCase().replace(/\s+/g, '-')
-		});
-	}
-
 	// Size classes
 	$: sizeClasses = {
 		small: 'w-12 h-12 text-sm',

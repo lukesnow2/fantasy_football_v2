@@ -270,10 +270,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		`;
 
 		const seasonsResult = await db.execute(sql.raw(seasonsQuery));
-		console.log('Seasons query result:', Array.from(seasonsResult));
-		console.log('First row keys:', Object.keys(Array.from(seasonsResult)[0] || {}));
 		data.availableSeasons = Array.from(seasonsResult).map((row: any) => row.seasonYear || row.season_year);
-		console.log('Available seasons from API:', data.availableSeasons);
 
 		// Meta information
 		data.meta = {

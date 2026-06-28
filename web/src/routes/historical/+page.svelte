@@ -325,7 +325,6 @@
 		{:else}
 			<div class="text-center py-8">
 				<div class="text-slate-400">Click Overview to load comprehensive league analytics</div>
-				<div class="text-xs text-slate-500 mt-2">Debug: loadingOverview={loadingOverview}, overviewData={!!overviewData}</div>
 				<button 
 					class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
 					on:click={loadOverviewData}
