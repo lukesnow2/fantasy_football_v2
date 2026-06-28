@@ -217,6 +217,78 @@ export const GET: RequestHandler = async ({ url }) => {
 				earliestPositionPick: trend.earliestPositionPick || trend.earliest_position_pick,
 				latestPositionPick: trend.latestPositionPick || trend.latest_position_pick
 			}));
+
+			// Draft Value model — value over positional replacement (VOR). For each
+			// season+position the replacement level is the median season_points of
+			// drafted players at that position; a pick's VOR is its points minus that
+			// baseline. This gives real, position-aware value (a late RB who beats the
+			// median RB is a steal) rather than ranking by raw points. Limited to the
+			// well-populated offensive positions; Unknown/IDP and pointless rows excluded.
+			const vorCte = `
+				WITH picks AS (
+					SELECT fd.season_year, fd.overall_pick, fd.round_number,
+						dp.player_name, dp.primary_position AS position,
+						fd.season_points, dm.manager_name
+					FROM edw.fact_draft fd
+					JOIN edw.dim_manager dm ON fd.manager_key = dm.manager_key AND dm.include_in_analysis = true
+					JOIN edw.dim_player dp ON fd.player_key = dp.player_key
+					WHERE fd.season_points > 0
+						AND dp.primary_position IN ('QB','RB','WR','TE','K','DEF')
+						${season !== 'all' ? `AND fd.season_year = ${parseInt(season)}` : ''}
+				),
+				baseline AS (
+					SELECT season_year, position,
+						PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY season_points) AS repl,
+						COUNT(*) AS pos_n
+					FROM picks GROUP BY season_year, position
+				),
+				scored AS (
+					SELECT p.season_year, p.overall_pick, p.round_number, p.player_name,
+						p.position, p.manager_name, p.season_points,
+						ROUND(b.repl::numeric, 1) AS replacement_points,
+						ROUND((p.season_points - b.repl)::numeric, 1) AS vor
+					FROM picks p JOIN baseline b USING (season_year, position)
+					WHERE b.pos_n >= 4
+				)`;
+
+			const valueRows = await db.execute(sql.raw(`
+				${vorCte}
+				(SELECT 'value' AS kind, * FROM scored ORDER BY vor DESC LIMIT 10)
+				UNION ALL
+				(SELECT 'bust' AS kind, * FROM scored WHERE round_number <= 5 ORDER BY vor ASC LIMIT 10)
+			`));
+			const mapVor = (r: any) => ({
+				seasonYear: r.seasonYear ?? r.season_year,
+				overallPick: r.overallPick ?? r.overall_pick,
+				roundNumber: r.roundNumber ?? r.round_number,
+				playerName: r.playerName ?? r.player_name,
+				position: r.position,
+				managerName: r.managerName ?? r.manager_name,
+				seasonPoints: r.seasonPoints ?? r.season_points,
+				replacementPoints: r.replacementPoints ?? r.replacement_points,
+				vor: r.vor
+			});
+			const allValue = Array.from(valueRows) as any[];
+
+			const managerVor = await db.execute(sql.raw(`
+				${vorCte}
+				SELECT manager_name, COUNT(*) AS picks,
+					ROUND(AVG(vor), 1) AS avg_vor, ROUND(SUM(vor), 1) AS total_vor
+				FROM scored GROUP BY manager_name HAVING COUNT(*) >= 20
+				ORDER BY avg_vor DESC
+			`));
+
+			data.draftValue = {
+				bestValue: allValue.filter((r) => r.kind === 'value').map(mapVor),
+				biggestBusts: allValue.filter((r) => r.kind === 'bust').map(mapVor),
+				byManager: Array.from(managerVor).map((r: any) => ({
+					managerName: r.managerName ?? r.manager_name,
+					picks: Number(r.picks),
+					avgVor: r.avgVor ?? r.avg_vor,
+					totalVor: r.totalVor ?? r.total_vor
+				})),
+				methodology: 'Value over replacement: season points minus the median points of drafted players at the same position that season (QB/RB/WR/TE/K/DEF).'
+			};
 		}
 
 		// Draft board recreation data (for specific season)
