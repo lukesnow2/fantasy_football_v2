@@ -303,12 +303,26 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		console.log(`Overview API returning data for metric: ${metric}`);
 		
+		// Derive coverage from the actual data rather than hardcoding it.
+		const seasonYears = (
+			camelCaseData.leagueEvolution ||
+			camelCaseData.scoringPatterns ||
+			camelCaseData.competitiveness ||
+			[]
+		)
+			.map((x: any) => Number(x.seasonYear))
+			.filter((y: number) => Number.isFinite(y));
+		const firstYear = seasonYears.length ? Math.min(...seasonYears) : null;
+		const lastYear = seasonYears.length ? Math.max(...seasonYears) : null;
+
 		return json({
 			data: camelCaseData,
 			meta: {
 				metric,
-				seasonsCovered: '2005-2024',
-				totalSeasons: 20,
+				seasonsCovered: firstYear && lastYear ? `${firstYear}-${lastYear}` : 'Unknown',
+				firstSeason: firstYear,
+				lastSeason: lastYear,
+				totalSeasons: new Set(seasonYears).size,
 				generatedAt: new Date().toISOString()
 			}
 		});

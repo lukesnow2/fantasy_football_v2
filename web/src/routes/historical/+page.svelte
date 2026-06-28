@@ -92,71 +92,6 @@
 		showAllH2H = false; // Reset show all when clearing filters
 	}
 
-	const headToHeadMatrix = [
-		{ manager: "Mike", vs: { Sarah: "12-3", Jake: "8-6", Emma: "9-4", Chris: "11-2", Alex: "10-3" } },
-		{ manager: "Sarah", vs: { Mike: "3-12", Jake: "7-7", Emma: "8-5", Chris: "9-4", Alex: "9-4" } },
-		{ manager: "Jake", vs: { Mike: "6-8", Sarah: "7-7", Emma: "6-8", Chris: "8-5", Alex: "8-5" } },
-		{ manager: "Emma", vs: { Mike: "4-9", Sarah: "5-8", Jake: "8-6", Chris: "7-6", Alex: "7-6" } },
-		{ manager: "Chris", vs: { Mike: "2-11", Sarah: "4-9", Jake: "5-8", Emma: "6-7", Alex: "6-7" } },
-		{ manager: "Alex", vs: { Mike: "3-10", Sarah: "4-9", Jake: "5-8", Emma: "6-7", Chris: "7-6" } },
-	];
-
-	const bestTrades = [
-		{ 
-			season: "2023", 
-			trader: "Mike", 
-			gave: "Dalvin Cook, 2024 2nd", 
-			got: "Jonathan Taylor", 
-			outcome: "+156 pts",
-			grade: "A+"
-		},
-		{ 
-			season: "2022", 
-			trader: "Sarah", 
-			gave: "Brandin Cooks", 
-			got: "Rhamondre Stevenson", 
-			outcome: "+89 pts",
-			grade: "A"
-		},
-		{ 
-			season: "2021", 
-			trader: "Jake", 
-			gave: "2022 1st, Courtland Sutton", 
-			got: "Davante Adams", 
-			outcome: "+134 pts",
-			grade: "A+"
-		},
-	];
-
-	const worstTrades = [
-		{ 
-			season: "2023", 
-			trader: "Chris", 
-			gave: "Josh Jacobs", 
-			got: "Tony Pollard, 2024 3rd", 
-			outcome: "-87 pts",
-			grade: "D-"
-		},
-		{ 
-			season: "2022", 
-			trader: "Alex", 
-			gave: "Cooper Kupp", 
-			got: "DJ Moore, 2023 2nd", 
-			outcome: "-156 pts",
-			grade: "F"
-		},
-	];
-
-	const draftGrades = [
-		{ year: 2024, manager: "Sarah", grade: "A-", hits: 4, misses: 1, notes: "Nailed RB depth" },
-		{ year: 2024, manager: "Mike", grade: "B+", hits: 3, misses: 2, notes: "QB reach hurt" },
-		{ year: 2024, manager: "Jake", grade: "B", hits: 2, misses: 2, notes: "Safe picks" },
-		{ year: 2023, manager: "Mike", grade: "A+", hits: 5, misses: 0, notes: "Perfect draft" },
-		{ year: 2023, manager: "Emma", grade: "A", hits: 4, misses: 1, notes: "RB1 jackpot" },
-	];
-
-
-
 	let selectedTab = 'overview';
 	const tabs = [
 		{ id: 'overview', name: 'Overview', icon: BarChart3 },
@@ -271,6 +206,30 @@
 
 
 
+	// Derived overview values. The /api/overview response nests the real data under
+	// `.data` (camelCase) and coverage under `.meta` — bind to those, not the old
+	// top-level snake_case paths (which silently fell back to mock numbers).
+	$: ov = overviewData?.data ?? {};
+	$: ovMeta = overviewData?.meta ?? {};
+	$: ovSeasons = ovMeta.totalSeasons ?? null;
+	$: ovRange = ovMeta.seasonsCovered ?? '';
+	$: ovAvgScore = ov.scoringPatterns?.length
+		? (
+				ov.scoringPatterns.reduce((s: number, x: any) => s + (parseFloat(x.avgWeeklyScore) || 0), 0) /
+				ov.scoringPatterns.length
+		  ).toFixed(1)
+		: null;
+	$: ovTotalTrades = ov.tradeActivity?.length
+		? ov.tradeActivity.reduce((s: number, x: any) => s + (parseInt(x.totalTrades) || 0), 0)
+		: null;
+	$: ovPeak = ov.leagueEvolution?.length
+		? ov.leagueEvolution.reduce(
+				(best: any, x: any) =>
+					(x.totalTransactions ?? 0) > (best?.totalTransactions ?? -1) ? x : best,
+				null
+		  )
+		: null;
+
 	// Handle tab selection
 	function handleTabSelect(tabId: string) {
 		selectedTab = tabId;
@@ -289,7 +248,7 @@
 	<div class="text-center py-8">
 		<h1 class="text-5xl font-bold text-white mb-4">Historical Deep Dive</h1>
 		<p class="text-xl text-slate-300 max-w-3xl mx-auto">
-			Explore 14+ years of fantasy football history. Trades, head-to-head matchups, 
+			Explore {ovSeasons ?? 20}+ years of fantasy football history. Trades, head-to-head matchups,
 			league evolution, and championship moments analyzed and visualized.
 		</p>
 	</div>
@@ -317,57 +276,37 @@
 				<div class="text-slate-400">Loading comprehensive league analytics...</div>
 			</div>
 		{:else if overviewData}
-			<!-- Debug: showing data keys -->
-			<div class="text-xs text-slate-500 mb-2">Debug: Data loaded with keys: {Object.keys(overviewData.data || overviewData).join(', ')}</div>
 			<div class="space-y-8">
 				<!-- Key Statistics -->
 				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 						<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-						20-Year League Summary
+						{ovSeasons ? `${ovSeasons}-Year League Summary` : 'League Summary'}
 					</h2>
-					
+
 					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 						<div class="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-lg p-4">
 							<h3 class="font-bold text-white mb-2">Total Seasons</h3>
-							<div class="text-3xl font-bold text-blue-400">20</div>
-							<div class="text-slate-300 text-sm">2005 - 2024</div>
+							<div class="text-3xl font-bold text-blue-400">{ovSeasons ?? '—'}</div>
+							<div class="text-slate-300 text-sm">{ovRange || '—'}</div>
 						</div>
-						
+
 						<div class="bg-gradient-to-r from-green-500/10 to-green-600/5 border border-green-500/20 rounded-lg p-4">
-							<h3 class="font-bold text-white mb-2">						Average Score</h3>
-						<div class="text-3xl font-bold text-green-400">
-							{#if overviewData.scoring_patterns}
-								{(overviewData.scoring_patterns.reduce((sum: number, s: any) => sum + parseFloat(s.avg_weekly_score), 0) / overviewData.scoring_patterns.length).toFixed(1)}
-							{:else}
-								125.2
-							{/if}
-							</div>
+							<h3 class="font-bold text-white mb-2">Average Score</h3>
+							<div class="text-3xl font-bold text-green-400">{ovAvgScore ?? '—'}</div>
 							<div class="text-slate-300 text-sm">Points per week</div>
 						</div>
-						
+
 						<div class="bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-lg p-4">
 							<h3 class="font-bold text-white mb-2">Total Trades</h3>
-							<div class="text-3xl font-bold text-amber-400">
-								{#if overviewData.trade_activity}
-									{overviewData.trade_activity.reduce((sum: number, t: any) => sum + (t.total_trades || 0), 0)}
-								{:else}
-									99
-								{/if}
-							</div>
+							<div class="text-3xl font-bold text-amber-400">{ovTotalTrades ?? '—'}</div>
 							<div class="text-slate-300 text-sm">All-time</div>
 						</div>
-						
+
 						<div class="bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-lg p-4">
 							<h3 class="font-bold text-white mb-2">Peak Activity</h3>
-							<div class="text-3xl font-bold text-purple-400">
-								{#if overviewData.league_evolution}
-									{Math.max(...overviewData.league_evolution.map((l: any) => l.total_transactions))}
-								{:else}
-									641
-								{/if}
-							</div>
-							<div class="text-slate-300 text-sm">Transactions (2020)</div>
+							<div class="text-3xl font-bold text-purple-400">{ovPeak ? ovPeak.totalTransactions : '—'}</div>
+							<div class="text-slate-300 text-sm">Transactions {ovPeak ? `(${ovPeak.seasonYear})` : ''}</div>
 						</div>
 					</div>
 				</section>
@@ -376,63 +315,10 @@
 				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
 						<BarChart3 class="w-6 h-6 text-blue-400 mr-3" />
-						League Evolution (2005-2024)
+						League Evolution {ovRange ? `(${ovRange})` : ''}
 					</h2>
-					
-					<ClientOnlyD3Overview data={overviewData} />
-				</section>
 
-				<!-- Era Analysis -->
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<Calendar class="w-6 h-6 text-purple-400 mr-3" />
-						League Eras Analysis
-					</h2>
-					
-					<div class="mb-4 text-sm text-slate-400 italic">
-						Analysis generated from scoring patterns, transaction volumes, league structure, and competitiveness metrics (2005-2024)
-					</div>
-					
-					<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-						<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 border-blue-400">
-							<h3 class="font-bold text-white mb-2">Formation Era (2005-2010)</h3>
-							<div class="text-sm text-slate-300 space-y-1">
-								<div>• Structural instability: 8-10 teams fluctuating</div>
-								<div>• Wild scoring swings: 98.7-133.8 pts</div>
-								<div>• High volatility: 12-16 score variance</div>
-								<div>• Erratic activity: 202-424 transactions</div>
-								<div>• Chaotic competition: Win parity 30-59</div>
-								<div>• Inconsistent close games: 21-40 range</div>
-								<div class="text-xs text-slate-400 mt-2">2007: Lowest close games (21.7), 2010: Peak parity (59.0)</div>
-							</div>
-						</div>
-						
-						<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 border-green-400">
-							<h3 class="font-bold text-white mb-2">Maturation Era (2011-2018)</h3>
-							<div class="text-sm text-slate-300 space-y-1">
-								<div>• League stabilizes: Consistent 10 teams</div>
-								<div>• Scoring convergence: 119-133 range</div>
-								<div>• Volatility decline: 12→9 (peak stability 2016-17)</div>
-								<div>• Transaction growth: 450-600 range</div>
-								<div>• Competition improves: Win parity trending up</div>
-								<div>• Peak close games: 2016-17 (42-43)</div>
-								<div class="text-xs text-slate-400 mt-2">2018: Peak parity (63.6), 2017: Most close games (43.4)</div>
-							</div>
-						</div>
-						
-						<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 border-amber-400">
-							<h3 class="font-bold text-white mb-2">Modern Era (2019-2024)</h3>
-							<div class="text-sm text-slate-300 space-y-1">
-								<div>• High activity plateau: 575+ transactions</div>
-								<div>• Scoring stabilization: 122-132 narrow band</div>
-								<div>• Controlled volatility: 10-12 range</div>
-								<div>• Peak engagement: 2020-21 (641-634 transactions)</div>
-								<div>• Sustained high competition: 55+ avg parity</div>
-								<div>• Consistent close games: 31-37 stable range</div>
-								<div class="text-xs text-slate-400 mt-2">2021: Peak point spread (83.2), most balanced era overall</div>
-							</div>
-						</div>
-					</div>
+					<ClientOnlyD3Overview data={overviewData} />
 				</section>
 
 			</div>
