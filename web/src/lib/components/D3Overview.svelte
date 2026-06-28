@@ -67,7 +67,6 @@
 	const height = 500 - margin.top - margin.bottom;
 
 	function getDataForMetric(metricId: string) {
-		console.log('Getting data for metric:', metricId, 'data keys:', data ? Object.keys(data) : 'no data');
 		if (!data) return [];
 		
 		let rawData = [];
@@ -100,11 +99,6 @@
 			default:
 				return [];
 		}
-		if (rawData.length > 0) {
-			console.log('First raw data object:', rawData[0]);
-			console.log('Keys in first raw data object:', Object.keys(rawData[0]));
-		}
-		
 		// Convert string values to numbers and ensure data integrity
 		const processedData = rawData.map((d: any) => {
 			const processed = { ...d };
@@ -124,18 +118,53 @@
 			
 			return processed;
 		});
-		if (processedData.length > 0) {
-			console.log('First processed data object:', processedData[0]);
-			console.log('Keys in first processed data object:', Object.keys(processedData[0]));
-			console.log('metric.yKey:', metrics.find(m => m.id === metricId)?.yKey);
-			console.log('metric.secondaryKey:', metrics.find(m => m.id === metricId)?.secondaryKey);
-		}
-		console.log('Processed data for', metricId, ':', processedData.slice(0, 3));
 		return processedData;
 	}
 
+	// Insight metadata per metric, for data-derived summaries shown under the chart.
+	const insightMeta: Record<string, { label: string; unit: string; decimals: number }> = {
+		scoring: { label: 'Average weekly scoring', unit: ' pts', decimals: 1 },
+		competitiveness: { label: 'Win-parity score', unit: '', decimals: 1 },
+		activity: { label: 'Total transactions', unit: '', decimals: 0 },
+		players: { label: 'Average fantasy points', unit: ' pts', decimals: 1 },
+		spread: { label: 'Highest weekly score', unit: ' pts', decimals: 1 }
+	};
+
+	// Compute real insights from the selected metric's own per-season series:
+	// first→last change, peak/low season, and the multi-season average.
+	function computeInsights(metricId: string): string[] {
+		const meta = insightMeta[metricId];
+		const yKey = metrics.find((m) => m.id === metricId)?.yKey;
+		if (!meta || !yKey) return [];
+
+		const series = getDataForMetric(metricId)
+			.map((d: any) => ({ year: parseInt(d.seasonYear ?? d.season_year), val: parseFloat(d[yKey]) }))
+			.filter((p: any) => Number.isFinite(p.year) && Number.isFinite(p.val))
+			.sort((a: any, b: any) => a.year - b.year);
+		if (series.length < 2) return [];
+
+		const fmt = (n: number) => n.toFixed(meta.decimals) + meta.unit;
+		const first = series[0];
+		const last = series[series.length - 1];
+		const peak = series.reduce((m: any, p: any) => (p.val > m.val ? p : m), series[0]);
+		const low = series.reduce((m: any, p: any) => (p.val < m.val ? p : m), series[0]);
+		const avg = series.reduce((s: number, p: any) => s + p.val, 0) / series.length;
+
+		const delta = last.val - first.val;
+		const pct = first.val !== 0 ? Math.round((delta / Math.abs(first.val)) * 100) : null;
+		const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+
+		return [
+			`${meta.label}: ${fmt(first.val)} (${first.year}) → ${fmt(last.val)} (${last.year})` +
+				(pct !== null && dir !== 'flat' ? `, ${dir} ${Math.abs(pct)}%` : ''),
+			`Peak: ${fmt(peak.val)} in ${peak.year} · Low: ${fmt(low.val)} in ${low.year}`,
+			`${series.length}-season average: ${fmt(avg)}`
+		];
+	}
+
+	$: insights = data ? computeInsights(selectedMetric) : [];
+
 	function createVisualization() {
-		console.log('Creating visualization:', { container: !!container, data: !!data, d3: !!d3, browser });
 		if (!container || !data || !d3 || !browser) return;
 
 		// Clear previous chart
@@ -145,9 +174,6 @@
 		if (!currentMetric) return;
 
 		const chartData = getDataForMetric(selectedMetric);
-		console.log('Chart data length:', chartData.length);
-		console.log('Sample chart data:', chartData.slice(0, 3));
-		console.log('Y-key values:', chartData.map(d => d[currentMetric.yKey]).slice(0, 5));
 		if (!chartData.length) return;
 
 		// Create SVG
@@ -166,8 +192,6 @@
 			? d3.extent(chartData, (d: any) => getNumeric(d, currentMetric.secondaryKey))
 			: null;
 		
-		console.log('X domain (years):', xDomain);
-		console.log('Y domain (values):', yDomain);
 		
 		const xScale = d3.scaleLinear()
 			.domain(xDomain)
@@ -470,23 +494,11 @@
 			<div class="bg-slate-800/50 rounded-lg p-4">
 				<h3 class="font-bold text-white mb-2">Key Insights</h3>
 				<div class="text-sm text-slate-300 space-y-1">
-					{#if selectedMetric === 'scoring'}
-						<div>• Average weekly scoring by season, with high/low and volatility</div>
-						<div>• Hover any point to see that season's average, peak, and floor</div>
-					{:else if selectedMetric === 'competitiveness'}
-						<div>• Win parity scores show how evenly matched teams are</div>
-						<div>• Close games metric indicates competitive balance</div>
-						<div>• Higher scores = more competitive seasons</div>
-					{:else if selectedMetric === 'activity'}
-						<div>• Total roster moves and trades per season</div>
-						<div>• Compare transaction volume across the league's history</div>
-					{:else if selectedMetric === 'players'}
-						<div>• Top-player fantasy scoring and draft value by season</div>
-						<div>• Hover a point for that season's figures</div>
-					{:else if selectedMetric === 'spread'}
-						<div>• Highest weekly scores and point spread by season</div>
-						<div>• Point spread indicates scoring consistency</div>
-					{/if}
+					{#each insights as insight}
+						<div>• {insight}</div>
+					{:else}
+						<div class="text-slate-400">Insights appear once season data loads.</div>
+					{/each}
 				</div>
 			</div>
 			
