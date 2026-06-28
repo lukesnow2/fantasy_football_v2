@@ -87,6 +87,7 @@
 	$: worstSeasonPoints = seasons.length
 		? Math.min(...seasons.map((x: any) => parseFloat(x.pointsFor) || 0))
 		: null;
+	$: streaks = managerData?.data?.streaks ?? null;
 
 	const tabs = [
 		{ id: 'overview', name: 'Overview', icon: BarChart3 },
@@ -255,6 +256,16 @@
 							<span class="text-slate-400">Worst Season Record</span>
 							<span class="font-bold text-slate-400">{manager.worstSeasonRecord}</span>
 						</div>
+						{#if streaks}
+							<div class="flex justify-between">
+								<span class="text-slate-400">Longest Win Streak</span>
+								<span class="font-bold text-green-400">{streaks.longestWinStreak} games</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-slate-400">Longest Losing Streak</span>
+								<span class="font-bold text-red-400">{streaks.longestLossStreak} games</span>
+							</div>
+						{/if}
 						<div class="flex justify-between">
 							<span class="text-slate-400">Best Season Points</span>
 							<span class="font-bold text-green-400">{bestSeasonPoints != null ? bestSeasonPoints.toFixed(1) : '—'}</span>

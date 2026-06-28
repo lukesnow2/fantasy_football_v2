@@ -172,6 +172,35 @@ export const GET: RequestHandler = async ({ url }) => {
 			} catch {
 				data.championshipSeasons = [];
 			}
+
+			// Longest win/loss streaks from the manager's chronological game results
+			// (one matchup per week; ordered by season then week_number).
+			try {
+				const gamesResult = await db.execute(sql`
+					SELECT
+						CASE WHEN fm.winner_manager_key = dm.manager_key THEN 'W'
+							 WHEN fm.winner_manager_key IS NULL THEN 'T'
+							 ELSE 'L' END AS result
+					FROM edw.fact_matchup fm
+					JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+					JOIN edw.dim_manager dm ON dm.manager_name = ${manager}
+					WHERE fm.manager1_key = dm.manager_key OR fm.manager2_key = dm.manager_key
+					ORDER BY fm.season_year, dw.week_number
+				`);
+				let longestWin = 0, longestLoss = 0, curWin = 0, curLoss = 0;
+				for (const g of Array.from(gamesResult) as any[]) {
+					if (g.result === 'W') { curWin++; curLoss = 0; if (curWin > longestWin) longestWin = curWin; }
+					else if (g.result === 'L') { curLoss++; curWin = 0; if (curLoss > longestLoss) longestLoss = curLoss; }
+					else { curWin = 0; curLoss = 0; }
+				}
+				data.streaks = {
+					longestWinStreak: longestWin,
+					longestLossStreak: longestLoss,
+					totalGames: gamesResult.length
+				};
+			} catch {
+				data.streaks = null;
+			}
 		}
 
 		// Get manager head-to-head dominance (if table exists)
