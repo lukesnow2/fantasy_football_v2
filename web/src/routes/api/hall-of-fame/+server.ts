@@ -35,7 +35,6 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		query += ` ORDER BY hall_of_fame_rank ASC LIMIT ${limit}`;
 
-		console.log('Executing Hall of Fame query:', query);
 		const hallOfFameResult = await db.execute(sql.raw(query));
 		const hallOfFameData = Array.from(hallOfFameResult);
 
@@ -143,7 +142,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			totalLosses: tier.totalLosses || tier.total_losses
 		}));
 
-		console.log(`Returning ${hallOfFameArray.length} Hall of Fame entries with complete column set`);
 
 		return json({
 			hallOfFame: hallOfFameArray,

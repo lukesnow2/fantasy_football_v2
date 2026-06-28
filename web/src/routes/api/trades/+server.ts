@@ -72,8 +72,6 @@ export const GET: RequestHandler = async ({ url }) => {
 		query += ` ORDER BY transaction_date DESC LIMIT ${limit}`;
 
 		const trades = await db.execute(sql.raw(query));
-		if (trades.length > 0) {
-		}
 
 		// Generate analytics based on request type
 		let analytics: any = {};

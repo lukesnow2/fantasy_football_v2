@@ -25,12 +25,32 @@
 		return 'text-red-400';
 	}
 
+	// Data-driven expected points per draft slot (average across all drafts), so a pick's
+	// value is judged against how that slot actually performs historically — not a
+	// fabricated fixed curve. Returns expectedAt(pickNum) -> avg points (0 if unknown).
+	function buildSlotBaseline(drafts: any[]) {
+		const slotTotals: Record<number, { sum: number; n: number }> = {};
+		(drafts || []).forEach((p: any) => {
+			const n = p.overallPick;
+			const pts = parseFloat(p.seasonPoints || 0);
+			if (!slotTotals[n]) slotTotals[n] = { sum: 0, n: 0 };
+			slotTotals[n].sum += pts;
+			slotTotals[n].n++;
+		});
+		return (pickNum: number) =>
+			slotTotals[pickNum] && slotTotals[pickNum].n > 0
+				? slotTotals[pickNum].sum / slotTotals[pickNum].n
+				: 0;
+	}
+
 	// Calculate comprehensive manager analytics
 	function getManagerAnalytics(drafts: any[]) {
 		if (!drafts?.length) return [];
-		
+
+		const expectedAt = buildSlotBaseline(drafts);
+
 		const managerStats: any = {};
-		
+
 		drafts.forEach(pick => {
 			const manager = pick.managerName;
 			const points = parseFloat(pick.seasonPoints || 0);
@@ -54,22 +74,20 @@
 			const avgPoints = manager.totalPoints / manager.totalPicks;
 			const avgPick = manager.picks.reduce((sum: number, p: any) => sum + p.pickNum, 0) / manager.picks.length;
 			
-			// Calculate steals (picks that performed way above expected value)
+			// Steals/busts/hits judged against the slot's historical average.
 			const steals = manager.picks.filter((p: any) => {
-				const expected = Math.max(180 - (p.pickNum * 2), 40);
-				return p.points > expected + 50;
+				const expected = expectedAt(p.pickNum);
+				return expected > 0 && p.points > expected * 1.5;
 			}).length;
-			
-			// Calculate busts (picks that performed way below expected value)
+
 			const busts = manager.picks.filter((p: any) => {
-				const expected = Math.max(180 - (p.pickNum * 2), 40);
-				return p.points < expected - 50;
+				const expected = expectedAt(p.pickNum);
+				return expected > 0 && p.points < expected * 0.5;
 			}).length;
-			
-			// Calculate hit rate (picks that exceeded or met expectations)
+
 			const hits = manager.picks.filter((p: any) => {
-				const expected = Math.max(180 - (p.pickNum * 2), 40);
-				return p.points >= expected - 20;
+				const expected = expectedAt(p.pickNum);
+				return expected > 0 && p.points >= expected * 0.8;
 			}).length;
 			
 			const hitRate = Math.round((hits / manager.totalPicks) * 100);
@@ -130,21 +148,21 @@
 	// Find best value hunter
 	function getBestValueHunter(drafts: any[]) {
 		if (!drafts?.length) return null;
-		
+
+		const expectedAt = buildSlotBaseline(drafts);
 		const managerStats: any = {};
-		
+
 		drafts.forEach(pick => {
 			const manager = pick.managerName;
 			const points = parseFloat(pick.seasonPoints || 0);
-			const pickNum = pick.overallPick;
-			const expected = Math.max(180 - (pickNum * 2), 40);
-			const value = points - expected;
-			
+			const expected = expectedAt(pick.overallPick);
+			const value = expected > 0 ? points - expected : 0;
+
 			if (!managerStats[manager]) {
 				managerStats[manager] = { name: manager, steals: 0, totalValue: 0 };
 			}
-			
-			if (value > 50) managerStats[manager].steals++;
+
+			if (expected > 0 && points > expected * 1.5) managerStats[manager].steals++;
 			managerStats[manager].totalValue += value;
 		});
 		
@@ -161,20 +179,20 @@
 	// Find most consistent drafter
 	function getMostConsistent(drafts: any[]) {
 		if (!drafts?.length) return null;
-		
+
+		const expectedAt = buildSlotBaseline(drafts);
 		const managerStats: any = {};
-		
+
 		drafts.forEach(pick => {
 			const manager = pick.managerName;
 			const points = parseFloat(pick.seasonPoints || 0);
-			const pickNum = pick.overallPick;
-			const expected = Math.max(180 - (pickNum * 2), 40);
-			
+			const expected = expectedAt(pick.overallPick);
+
 			if (!managerStats[manager]) {
 				managerStats[manager] = { name: manager, hits: 0, total: 0 };
 			}
-			
-			if (points >= expected - 20) managerStats[manager].hits++;
+
+			if (expected > 0 && points >= expected * 0.8) managerStats[manager].hits++;
 			managerStats[manager].total++;
 		});
 		
@@ -198,7 +216,6 @@
 			const response = await fetch('/api/draft?analysis=all');
 			if (response.ok) {
 				draftData = await response.json();
-				console.log('Draft data loaded:', draftData);
 			} else {
 				console.error('Failed to fetch draft data:', response.status, response.statusText);
 			}
@@ -221,7 +238,6 @@
 			const response = await fetch(`/api/draft?season=${season}&analysis=all`);
 			if (response.ok) {
 				specificSeasonDraft = await response.json();
-				console.log(`Draft data loaded for ${season}:`, specificSeasonDraft);
 			} else {
 				console.error('Failed to fetch season draft data:', response.status, response.statusText);
 			}
@@ -398,7 +414,7 @@
 					<DraftBoard 
 						draftData={specificSeasonDraft.data.draftBoard}
 						season={selectedSeason}
-						numTeams={specificSeasonDraft.data.draftBoard[0]?.numTeams || 10}
+						numTeams={specificSeasonDraft.data.draftBoard[0]?.numTeams || specificSeasonDraft.data.draftBoard.filter((p: any) => p.roundNumber === 1).length || 10}
 					/>
 					
 					<!-- Draft Analysis -->

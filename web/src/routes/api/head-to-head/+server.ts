@@ -82,7 +82,6 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		query += ` ORDER BY total_matchups DESC`;
 
-		console.log('Executing H2H query:', query);
 		const h2hData = await db.execute(sql.raw(query));
 
 		// Generate analytics based on request type
@@ -329,7 +328,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			}));
 		}
 
-		console.log(`Returning ${h2hArray.length} head-to-head matchups and analytics:`, Object.keys(camelCaseAnalytics));
 
 		return json({
 			headToHead: h2hArray,
