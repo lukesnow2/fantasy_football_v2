@@ -140,18 +140,13 @@
 
 	// Load overview data for D3 visualizations
 	async function loadOverviewData() {
-		console.log('loadOverviewData called, current state:', { overviewData: !!overviewData, loadingOverview });
 		if (overviewData) return; // Already loaded
-		
+
 		loadingOverview = true;
-		console.log('Setting loadingOverview to true');
 		try {
 			const response = await fetch('/api/overview?metric=all');
-			console.log('API response status:', response.status);
 			if (response.ok) {
 				overviewData = await response.json();
-				console.log('Overview data loaded:', overviewData);
-				console.log('Data keys:', Object.keys(overviewData));
 			} else {
 				console.error('Failed to fetch overview data:', response.status, response.statusText);
 			}
@@ -159,7 +154,6 @@
 			console.error('Error fetching overview data:', err);
 		} finally {
 			loadingOverview = false;
-			console.log('Setting loadingOverview to false, overviewData exists:', !!overviewData);
 		}
 	}
 
@@ -229,6 +223,70 @@
 				null
 		  )
 		: null;
+
+	// Era Analysis — split the league's seasons into three contiguous eras and compute
+	// real aggregates for each from the per-season data (no fabricated narrative).
+	$: eras = computeEras(ov);
+	function computeEras(o: any) {
+		const le = o?.leagueEvolution ?? [];
+		if (le.length < 3) return [];
+
+		const tradesByYear = new Map<number, number>();
+		(o.tradeActivity ?? []).forEach((t: any) =>
+			tradesByYear.set(Number(t.seasonYear), parseInt(t.totalTrades) || 0)
+		);
+		const scoreByYear = new Map<number, number>();
+		(o.scoringPatterns ?? []).forEach((s: any) =>
+			scoreByYear.set(Number(s.seasonYear), parseFloat(s.avgWeeklyScore) || 0)
+		);
+
+		const seasons = le
+			.map((x: any) => {
+				const year = Number(x.seasonYear);
+				return {
+					year,
+					champion: x.championManager || null,
+					score: scoreByYear.get(year) ?? (parseFloat(x.averageWeeklyScore) || 0),
+					trades: tradesByYear.get(year) ?? 0,
+					transactions: parseInt(x.totalTransactions) || 0
+				};
+			})
+			.sort((a: any, b: any) => a.year - b.year);
+
+		// Three contiguous buckets, front-loading the remainder so earlier eras absorb it.
+		const n = seasons.length;
+		const base = Math.floor(n / 3);
+		const rem = n % 3;
+		const sizes = [base + (rem > 0 ? 1 : 0), base + (rem > 1 ? 1 : 0), base];
+		const names = ['Early Era', 'Middle Era', 'Modern Era'];
+		const out: any[] = [];
+		let i = 0;
+		for (let e = 0; e < 3; e++) {
+			const slice = seasons.slice(i, i + sizes[e]);
+			i += sizes[e];
+			if (!slice.length) continue;
+
+			const titles = new Map<string, number>();
+			slice.forEach((s: any) => {
+				if (s.champion) titles.set(s.champion, (titles.get(s.champion) || 0) + 1);
+			});
+			const ranked = [...titles.entries()].sort((a, b) => b[1] - a[1]);
+			const top = ranked[0];
+
+			out.push({
+				name: names[e],
+				range: `${slice[0].year}–${slice[slice.length - 1].year}`,
+				seasonCount: slice.length,
+				avgScore: (slice.reduce((s: number, x: any) => s + x.score, 0) / slice.length).toFixed(1),
+				totalTrades: slice.reduce((s: number, x: any) => s + x.trades, 0),
+				totalTransactions: slice.reduce((s: number, x: any) => s + x.transactions, 0),
+				topChampion: top ? top[0] : null,
+				topChampionTitles: top ? top[1] : 0,
+				distinctChampions: titles.size
+			});
+		}
+		return out;
+	}
 
 	// Handle tab selection
 	function handleTabSelect(tabId: string) {
@@ -320,6 +378,63 @@
 
 					<ClientOnlyD3Overview data={overviewData} />
 				</section>
+
+				<!-- Era Analysis -->
+				{#if eras.length}
+					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
+						<h2 class="text-2xl font-bold text-white mb-2 flex items-center">
+							<Calendar class="w-6 h-6 text-amber-400 mr-3" />
+							Era Analysis
+						</h2>
+						<p class="text-slate-400 text-sm mb-6">
+							The league's history split into three equal eras, with real per-era aggregates.
+						</p>
+
+						<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+							{#each eras as era}
+								<div class="bg-slate-900/40 border border-slate-700/50 rounded-lg p-5">
+									<div class="flex items-baseline justify-between mb-4">
+										<h3 class="text-lg font-bold text-white">{era.name}</h3>
+										<span class="text-sm text-slate-400">{era.range}</span>
+									</div>
+									<dl class="space-y-3 text-sm">
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Seasons</dt>
+											<dd class="font-bold text-white">{era.seasonCount}</dd>
+										</div>
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Avg weekly score</dt>
+											<dd class="font-bold text-green-400">{era.avgScore} pts</dd>
+										</div>
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Total trades</dt>
+											<dd class="font-bold text-amber-400">{era.totalTrades}</dd>
+										</div>
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Transactions</dt>
+											<dd class="font-bold text-purple-400">{era.totalTransactions}</dd>
+										</div>
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Most titles</dt>
+											<dd class="font-bold text-white text-right">
+												{#if era.topChampion}
+													{era.topChampion}
+													<span class="text-slate-400 font-normal">({era.topChampionTitles})</span>
+												{:else}
+													—
+												{/if}
+											</dd>
+										</div>
+										<div class="flex justify-between">
+											<dt class="text-slate-400">Distinct champions</dt>
+											<dd class="font-bold text-blue-400">{era.distinctChampions}</dd>
+										</div>
+									</dl>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
 
 			</div>
 		{:else}
