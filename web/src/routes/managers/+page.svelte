@@ -18,7 +18,6 @@
 			const response = await fetch('/api/managers/performance?analysis=all');
 			if (response.ok) {
 				managerData = await response.json();
-				console.log('Manager data loaded:', managerData);
 				// Set authenticated user's manager as default, or first manager if not authenticated
 				if (managerData?.data?.rankings?.length > 0) {
 					const userManager = data.userManagerName;
@@ -44,13 +43,6 @@
 
 	$: managers = (managerData?.data?.rankings || []).filter((m: any) => m.managerName != null);
 	$: currentManager = managers.find((m: any) => m.managerName === selectedManagerName) || managers[0];
-	
-	// Debug: Log what we're getting
-	$: if (managerData?.data?.rankings) {
-		console.log('Raw rankings data:', managerData.data.rankings);
-		console.log('Filtered managers:', managers);
-		console.log('Current manager:', currentManager);
-	}
 
 	function selectManager(managerName: string) {
 		selectedManagerName = managerName;

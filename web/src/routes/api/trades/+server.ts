@@ -10,54 +10,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		const limit = parseInt(url.searchParams.get('limit') || '1000');
 		const analysis = url.searchParams.get('analysis') || 'overview';
 
-		// Test if the view exists and has data
+		// Seasons that actually have trade data, for the season filter dropdown.
+		let availableSeasons: number[] = [];
 		try {
-			const testQuery = `SELECT COUNT(*) as count FROM edw.vw_trade_analysis`;
-			const testResult = await db.execute(sql.raw(testQuery));
-			console.log('Trade analysis view count:', testResult[0]);
-			
-			// DEBUG: Check raw championship data from view
-			const championshipViewQuery = `
-				SELECT 
-					season_year,
-					team_a_manager,
-					team_b_manager,
-					team_a_champion,
-					team_b_champion,
-					trade_winner,
-					production_differential
-				FROM edw.vw_trade_analysis
-				WHERE team_a_champion = 1 OR team_b_champion = 1
-				ORDER BY season_year DESC
-				LIMIT 10
-			`;
-			const championshipViewResult = await db.execute(sql.raw(championshipViewQuery));
-			console.log('=== DATABASE VIEW CHAMPIONSHIP DEBUG ===');
-			console.log('Championship trades in view:', championshipViewResult.length);
-			Array.from(championshipViewResult).forEach((trade: any) => {
-				console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
-				console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
-				console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
-			});
-			console.log('=== END DATABASE VIEW CHAMPIONSHIP DEBUG ===\n');
-			
-			// DEBUG: Check if any trades have champion flags at all
-			const anyChampionQuery = `
-				SELECT 
-					COUNT(*) as total_trades,
-					COUNT(*) FILTER (WHERE team_a_champion IS NOT NULL) as team_a_champion_count,
-					COUNT(*) FILTER (WHERE team_b_champion IS NOT NULL) as team_b_champion_count,
-					COUNT(*) FILTER (WHERE team_a_champion = 1) as team_a_champion_true,
-					COUNT(*) FILTER (WHERE team_b_champion = 1) as team_b_champion_true
-				FROM edw.vw_trade_analysis
-			`;
-			const anyChampionResult = await db.execute(sql.raw(anyChampionQuery));
-			console.log('=== CHAMPION FLAGS SUMMARY ===');
-			console.log('Champion flags summary:', Array.from(anyChampionResult)[0]);
-			console.log('=== END CHAMPION FLAGS SUMMARY ===\n');
-			
-		} catch (error) {
-			console.error('Trade analysis view error:', error);
+			const seasonsResult = await db.execute(sql`
+				SELECT DISTINCT season_year FROM edw.vw_trade_analysis ORDER BY season_year DESC
+			`);
+			availableSeasons = Array.from(seasonsResult).map((r: any) => Number(r.seasonYear));
+		} catch {
+			availableSeasons = [];
 		}
 
 		// Base trade analysis query with proper SQL syntax
@@ -110,12 +71,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		query += ` ORDER BY transaction_date DESC LIMIT ${limit}`;
 
-		console.log('Executing trade query:', query);
 		const trades = await db.execute(sql.raw(query));
-		console.log('Trade query result count:', trades.length);
-		if (trades.length > 0) {
-			console.log('First trade record:', trades[0]);
-		}
 
 		// Generate analytics based on request type
 		let analytics: any = {};
@@ -136,9 +92,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				${season && season !== 'all' ? `WHERE season_year = ${parseInt(season)}` : ''}
 			`;
 
-			console.log('Executing analytics query:', analyticsQuery);
 			const analyticsResult = await db.execute(sql.raw(analyticsQuery));
-			console.log('Analytics result:', Array.from(analyticsResult));
 			analytics = {
 				...analytics,
 				overview: Array.from(analyticsResult)[0]
@@ -201,7 +155,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				ORDER BY win_percentage DESC NULLS LAST, total_trades DESC
 			`;
 
-			console.log('Executing manager query');
 			const managerResult = await db.execute(sql.raw(managerQuery));
 			analytics = {
 				...analytics,
@@ -225,7 +178,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				ORDER BY season_year DESC
 			`;
 
-			console.log('Executing trends query');
 			const trendsResult = await db.execute(sql.raw(trendsQuery));
 			analytics = {
 				...analytics,
@@ -275,127 +227,11 @@ export const GET: RequestHandler = async ({ url }) => {
 				LIMIT 5
 			`;
 
-			console.log('Executing best trades query');
 			const bestTradesResult = await db.execute(sql.raw(bestTradesQuery));
 			const bestTradesArray = Array.from(bestTradesResult);
-			
-			console.log('Executing championship trades query');
+
 			const championshipTradesResult = await db.execute(sql.raw(championshipTradesQuery));
 			const championshipTradesArray = Array.from(championshipTradesResult);
-			
-			// DEBUG: Add comprehensive logging for championship trades
-			console.log('=== CHAMPIONSHIP TRADES DEBUG ===');
-			console.log('Best trades query result count:', bestTradesArray.length);
-			console.log('Championship trades query result count:', championshipTradesArray.length);
-			
-			// Log all championship trades with detailed information
-			console.log('Championship trades found:', championshipTradesArray.length);
-			
-			championshipTradesArray.forEach((trade: any, index: number) => {
-				console.log(`\n--- Championship Trade ${index + 1} ---`);
-				console.log('Season:', trade.season_year);
-				console.log('Team A Manager:', trade.team_a_manager);
-				console.log('Team B Manager:', trade.team_b_manager);
-				console.log('Team A Champion Flag:', trade.team_a_champion);
-				console.log('Team B Champion Flag:', trade.team_b_champion);
-				console.log('Trade Winner:', trade.trade_winner);
-				console.log('Production Differential:', trade.production_differential);
-				console.log('Team A Final Score:', trade.team_a_final_score);
-				console.log('Team B Final Score:', trade.team_b_final_score);
-				console.log('Trade Analysis:', trade.trade_analysis);
-			});
-			
-			// DEBUG: Check raw championship data in fact_matchup
-			try {
-				const championshipDataQuery = `
-					SELECT 
-						fm.season_year,
-						fm.winner_team_key,
-						fm.is_championship,
-						dt.team_name,
-						dt.manager_name
-					FROM edw.fact_matchup fm
-					LEFT JOIN edw.dim_team dt ON fm.winner_team_key = dt.team_key
-					WHERE fm.is_championship = 1
-					ORDER BY fm.season_year DESC
-				`;
-				const championshipData = await db.execute(sql.raw(championshipDataQuery));
-				console.log('\n=== RAW CHAMPIONSHIP DATA ===');
-				console.log('Championship matchups found:', championshipData.length);
-				Array.from(championshipData).forEach((champ: any) => {
-					console.log(`Season ${champ.season_year}: ${champ.manager_name} (${champ.team_name}) - Team Key: ${champ.winner_team_key}`);
-				});
-			} catch (error) {
-				console.error('Error fetching championship data:', error);
-			}
-			
-			// DEBUG: Check team-manager mappings
-			try {
-				// First check the schema of dim_team and dim_manager
-				const schemaQuery = `
-					SELECT 
-						table_name,
-						column_name,
-						data_type
-					FROM information_schema.columns 
-					WHERE table_name IN ('dim_team', 'dim_manager')
-					AND table_schema = 'edw'
-					ORDER BY table_name, ordinal_position
-				`;
-				const schemaData = await db.execute(sql.raw(schemaQuery));
-				console.log('\n=== DATABASE SCHEMA DEBUG ===');
-				console.log('Schema info:', Array.from(schemaData));
-				
-				const teamManagerQuery = `
-					SELECT DISTINCT
-						dt.team_key,
-						dt.team_name,
-						dt.manager_name
-					FROM edw.dim_team dt
-					WHERE dt.manager_name ILIKE '%omar%' OR dt.manager_name ILIKE '%luke%'
-					ORDER BY dt.manager_name
-				`;
-				const teamManagerData = await db.execute(sql.raw(teamManagerQuery));
-				console.log('\n=== TEAM-MANAGER MAPPINGS ===');
-				console.log('Omar/Luke team mappings:', Array.from(teamManagerData));
-			} catch (error) {
-				console.error('Error fetching team-manager mappings:', error);
-			}
-			
-			// DEBUG: Check trade analysis view for Omar's trades
-			try {
-				const omarTradesQuery = `
-					SELECT 
-						season_year,
-						team_a_manager,
-						team_b_manager,
-						team_a_champion,
-						team_b_champion,
-						trade_winner,
-						production_differential
-					FROM edw.vw_trade_analysis
-					WHERE team_a_manager ILIKE '%omar%' OR team_b_manager ILIKE '%omar%'
-					ORDER BY season_year DESC, transaction_date DESC
-				`;
-				const omarTrades = await db.execute(sql.raw(omarTradesQuery));
-				console.log('\n=== OMAR TRADES DEBUG ===');
-				console.log('Omar trades found:', omarTrades.length);
-				Array.from(omarTrades).forEach((trade: any) => {
-					console.log(`Season ${trade.season_year}: ${trade.team_a_manager} vs ${trade.team_b_manager}`);
-					console.log(`  Team A Champion: ${trade.team_a_champion}, Team B Champion: ${trade.team_b_champion}`);
-					console.log(`  Trade Winner: ${trade.trade_winner}, Production Diff: ${trade.production_differential}`);
-				});
-			} catch (error) {
-				console.error('Error fetching Omar trades:', error);
-			}
-			
-			console.log('=== END CHAMPIONSHIP TRADES DEBUG ===\n');
-			
-			console.log('Best trades count:', bestTradesArray.length);
-			console.log('Championship trades count:', championshipTradesArray.length);
-			if (championshipTradesArray.length > 0) {
-				console.log('First championship trade:', championshipTradesArray[0]);
-			}
 
 			analytics = {
 				...analytics,
@@ -534,12 +370,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			});
 		}
 
-		console.log(`Returning ${tradesArray.length} trades and analytics:`, Object.keys(camelCaseAnalytics));
 		
 		// Debug analytics structure
-		console.log('Analytics overview:', camelCaseAnalytics.overview);
-		console.log('Analytics championshipTrades:', camelCaseAnalytics.championshipTrades);
-		console.log('Analytics championshipTrades length:', camelCaseAnalytics.championshipTrades?.length);
 
 		return json({
 			trades: tradesArray,
@@ -549,7 +381,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				manager,
 				limit,
 				analysis,
-				total_returned: tradesArray.length
+				totalReturned: tradesArray.length,
+				availableSeasons
 			}
 		});
 

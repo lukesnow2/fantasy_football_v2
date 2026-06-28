@@ -20,28 +20,6 @@
 			const response = await fetch(`/api/trades?analysis=all&season=${season}`);
 			if (response.ok) {
 				tradeData = await response.json();
-				console.log('Trade data loaded:', tradeData);
-				
-				// Debug analytics data
-				if (tradeData.analytics) {
-					console.log('Analytics overview:', tradeData.analytics.overview);
-					console.log('Best trades count:', tradeData.analytics.bestTrades?.length);
-					console.log('Championship trades count:', tradeData.analytics.championshipTrades?.length);
-					if (tradeData.analytics.bestTrades?.length > 0) {
-						console.log('First best trade:', tradeData.analytics.bestTrades[0]);
-						console.log('Best trade fields:', Object.keys(tradeData.analytics.bestTrades[0]));
-					}
-					
-				}
-				
-				// Debug trades data
-				if (tradeData.trades) {
-					console.log('Trades count:', tradeData.trades.length);
-					if (tradeData.trades.length > 0) {
-						console.log('First trade:', tradeData.trades[0]);
-						console.log('Trade fields:', Object.keys(tradeData.trades[0]));
-					}
-				}
 			} else {
 				console.error('Failed to fetch trade data:', response.status, response.statusText);
 			}
@@ -115,26 +93,9 @@
 						class="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
 					>
 						<option value="all">All Seasons</option>
-						<option value="2024">2024</option>
-						<option value="2023">2023</option>
-						<option value="2022">2022</option>
-						<option value="2021">2021</option>
-						<option value="2020">2020</option>
-						<option value="2019">2019</option>
-						<option value="2018">2018</option>
-						<option value="2017">2017</option>
-						<option value="2016">2016</option>
-						<option value="2015">2015</option>
-						<option value="2014">2014</option>
-						<option value="2013">2013</option>
-						<option value="2012">2012</option>
-						<option value="2011">2011</option>
-						<option value="2010">2010</option>
-						<option value="2009">2009</option>
-						<option value="2008">2008</option>
-						<option value="2007">2007</option>
-						<option value="2006">2006</option>
-						<option value="2005">2005</option>
+						{#each (tradeData?.meta?.availableSeasons || []) as season}
+							<option value={season}>{season}</option>
+						{/each}
 					</select>
 				</div>
 				<div class="text-slate-400 text-sm">
@@ -156,7 +117,7 @@
 							<div class="text-slate-400">Total Trades</div>
 						</div>
 						<div class="text-center">
-							<div class="text-3xl font-bold text-green-400">{tradeData.analytics.overview.avgTradesPerSeason ? parseFloat(tradeData.analytics.overview.avgTradesPerSeason).toFixed(1) : (parseInt(tradeData.analytics.overview.totalTrades) / 20).toFixed(1)}</div>
+							<div class="text-3xl font-bold text-green-400">{tradeData.analytics.overview.avgTradesPerSeason ? parseFloat(tradeData.analytics.overview.avgTradesPerSeason).toFixed(1) : (tradeData.meta?.availableSeasons?.length ? (parseInt(tradeData.analytics.overview.totalTrades) / tradeData.meta.availableSeasons.length).toFixed(1) : '—')}</div>
 							<div class="text-slate-400">Per Season</div>
 						</div>
 						<div class="text-center">
@@ -188,7 +149,6 @@
 						{#each tradeData.analytics.bestTrades as trade, index}
 								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
 								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
-								<!-- Debug trade {index}: {trade.tradeWinner} vs {trade.teamAManager} -->
 								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{trade.tradeWinner}</span>
@@ -273,7 +233,6 @@
 					
 					<div class="space-y-3">
 						{#each tradeData.trades.slice(0, 10) as trade, index}
-							<!-- Debug trade {index}: {trade.tradeWinner} vs {trade.teamAManager} -->
 							<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 
 								{trade.tradeWinner === 'Even Trade' ? 'border-amber-400' :
 								 trade.teamAFinalScore > trade.teamBFinalScore ? 'border-green-400' : 'border-blue-400'}">

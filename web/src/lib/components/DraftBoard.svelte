@@ -67,22 +67,36 @@
 		return { grade: 'F', color: 'text-red-400' };
 	}
 
+	// Average points by round for this draft, so a pick's value is judged against the
+	// round it was taken in rather than a fabricated fixed curve.
+	function computeRoundAvg(picks: any[]): Record<number, number> {
+		const totals: Record<number, { sum: number; n: number }> = {};
+		(picks || []).forEach((p: any) => {
+			const r = p.roundNumber;
+			const pts = parseFloat(p.seasonPoints || 0);
+			if (!totals[r]) totals[r] = { sum: 0, n: 0 };
+			totals[r].sum += pts;
+			totals[r].n++;
+		});
+		const avg: Record<number, number> = {};
+		for (const r in totals) avg[r] = totals[r].sum / totals[r].n;
+		return avg;
+	}
+
 	function getValueIndicator(pick: any): string {
-		const expectedPoints = Math.max(180 - (pick.overallPick * 2), 40);
-		const actualPoints = parseFloat(pick.seasonPoints || 0);
-		const value = actualPoints - expectedPoints;
-		
-		if (value > 50) return '🔥'; // Steal
-		if (value > 20) return '⭐'; // Good value
-		if (value > -20) return '✓'; // Fair
-		if (value > -50) return '⚠️'; // Disappointing
+		const expected = roundAvg[pick.roundNumber] || 0;
+		const actual = parseFloat(pick.seasonPoints || 0);
+		if (expected <= 0) return '✓';
+		const ratio = actual / expected;
+		if (ratio > 1.5) return '🔥'; // Steal
+		if (ratio > 1.15) return '⭐'; // Good value
+		if (ratio > 0.85) return '✓'; // Fair
+		if (ratio > 0.5) return '⚠️'; // Disappointing
 		return '💀'; // Bust
 	}
 
-	$: {
-		console.log('Draft data received:', draftData?.length ? draftData.slice(0, 3) : 'No data');
-		draftBoard = createDraftBoard(draftData);
-	}
+	$: draftBoard = createDraftBoard(draftData);
+	$: roundAvg = computeRoundAvg(draftData);
 </script>
 
 <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">

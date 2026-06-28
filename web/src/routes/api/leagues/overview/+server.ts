@@ -6,7 +6,6 @@ import type { RequestHandler } from './$types';
 import { sql } from 'drizzle-orm';
 
 export const GET: RequestHandler = async () => {
-	console.log('=== API ENDPOINT CALLED ===');
 	try {
 		// Get basic league counts
 		const leagueStats = await db
@@ -69,10 +68,6 @@ export const GET: RequestHandler = async () => {
 		`));
 		
 		// Debug logging for Hall of Fame query
-		console.log('=== DEBUG: Hall of Fame Query ===');
-		console.log('Hall of Fame Result:', Array.from(hallOfFameLeaderResult));
-		console.log('Hall of Fame First Row:', Array.from(hallOfFameLeaderResult)[0]);
-		console.log('Hall of Fame Columns:', Array.from(hallOfFameLeaderResult)[0] ? Object.keys(Array.from(hallOfFameLeaderResult)[0]) : 'No rows');
 		
 		const allTimeLeader = Array.from(hallOfFameLeaderResult)[0]?.managerName || 'TBD';
 
@@ -85,11 +80,6 @@ export const GET: RequestHandler = async () => {
 		`));
 		
 		// Debug logging for Rivalry query
-		console.log('=== DEBUG: Biggest Rivalry Query ===');
-		console.log('Rivalry Result:', Array.from(biggestRivalryResult));
-		console.log('Rivalry First Row:', Array.from(biggestRivalryResult)[0]);
-		console.log('Rivalry Columns:', Array.from(biggestRivalryResult)[0] ? Object.keys(Array.from(biggestRivalryResult)[0]) : 'No rows');
-		console.log('=== END DEBUG ===');
 		
 		const rivalryRow = Array.from(biggestRivalryResult)[0];
 		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';

@@ -74,7 +74,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const data = await request.json();
 		
 		// Debug: Log the received data
-		console.log('Received proposal data:', data);
 		
 		// Handle both old format (from constitution page) and new format (from rule-proposals page)
 		let proposalData;
