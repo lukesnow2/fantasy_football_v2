@@ -9,6 +9,33 @@
 		if (grade.startsWith('D')) return 'text-orange-400';
 		return 'text-red-400';
 	}
+
+	// Grade each manager's draft on the season's own curve. Absolute thresholds make
+	// everyone an "A" (a full-season player naturally scores 100+), so grade by how far
+	// a manager's avg points/pick sits from the season mean (z-score across managers).
+	$: gradeByManager = computeGrades(analytics?.managerPerformance ?? []);
+	function computeGrades(mgrs: any[]): Record<string, string> {
+		const out: Record<string, string> = {};
+		const vals = mgrs
+			.map((m: any) => parseFloat(m.avgPointsPerPick || 0))
+			.filter((v: number) => v > 0);
+		if (!vals.length) return out;
+		const mean = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+		const sd = Math.sqrt(vals.reduce((a: number, b: number) => a + (b - mean) ** 2, 0) / vals.length);
+		const gradeOf = (v: number) => {
+			if (sd === 0) return 'B';
+			const z = (v - mean) / sd;
+			if (z >= 1.0) return 'A';
+			if (z >= 0.3) return 'B';
+			if (z >= -0.3) return 'C';
+			if (z >= -1.0) return 'D';
+			return 'F';
+		};
+		mgrs.forEach((m: any) => {
+			out[m.managerName] = gradeOf(parseFloat(m.avgPointsPerPick || 0));
+		});
+		return out;
+	}
 </script>
 
 {#if analytics}
@@ -64,7 +91,7 @@
 				<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 					{#each analytics.managerPerformance.slice(0, 9) as manager}
 						{@const avgPoints = parseFloat(manager.avgPointsPerPick || 0)}
-						{@const grade = avgPoints >= 100 ? 'A' : avgPoints >= 80 ? 'B' : avgPoints >= 60 ? 'C' : 'D'}
+						{@const grade = gradeByManager[manager.managerName] ?? 'C'}
 						<div class="bg-slate-700/30 rounded-lg p-4">
 							<div class="flex items-center justify-between mb-3">
 								<span class="font-bold text-white">{manager.managerName}</span>
