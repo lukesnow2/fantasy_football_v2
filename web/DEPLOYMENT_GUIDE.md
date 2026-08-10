@@ -11,31 +11,20 @@
 ### Changes Made:
 - ✅ Updated `src/lib/server/db/index.ts` for multi-schema support
 - ✅ Enhanced `src/lib/server/auth.ts` with secure cookie settings
-- ✅ Added migration functionality to debug API endpoint
 - ✅ Created Vercel deployment configuration
 
 ## 🧪 Testing Session Management
 
 ### 1. Run Database Migration
-Visit your local development server and go to:
+Migrations are driven by drizzle-kit, not by an HTTP endpoint:
+```bash
+npm run db:generate   # author a migration from schema.ts changes
+npm run db:migrate    # apply pending migrations
 ```
-http://localhost:5173/api/debug?action=migrate
-```
-
-This will:
-- Ensure `app` schema exists
-- Move session/user tables from `public` to `app` schema
-- Create proper table structures
+`npm run db:push` is for local development only — never run it against production.
 
 ### 2. Test Database Schema
-```
-http://localhost:5173/api/debug?action=test-schemas
-```
-
-This will show:
-- Available schemas
-- Tables in app schema
-- Current session/user counts
+Inspect the database directly with `npm run db:studio`, or with `psql "$DATABASE_URL"`.
 
 ### 3. Test Authentication Flow
 1. Go to `/login`
@@ -104,18 +93,19 @@ vercel --prod
 
 ## 📊 Monitoring & Debugging
 
-### Debug Endpoints (Development Only)
-- `/api/debug` - System status
-- `/api/debug?action=migrate` - Run migration
-- `/api/debug?action=test-schemas` - Test database
-- `/api/debug/session` - Session debugging
-- `/api/debug/sessions` - List active sessions
+### Debug Endpoints
+
+Removed. `/api/debug`, `/api/debug/session`, `/api/debug/sessions`, and `/api/db-test` were
+unauthenticated in production: `/api/debug/session` returned the caller's raw `auth-session`
+token, `/api/debug/sessions` dumped session rows, and `/api/debug?action=migrate` executed DDL.
+
+Use `npm run db:studio`, `psql "$DATABASE_URL"`, and `vercel logs` instead.
 
 ### Common Issues & Solutions
 
 #### 1. "No session found in database"
 **Cause**: Session table in wrong schema
-**Solution**: Run migration via `/api/debug?action=migrate`
+**Solution**: Confirm `search_path` includes `app`, then run `npm run db:migrate`
 
 #### 2. "Form actions expect form-encoded data"
 **Cause**: Missing `action` attribute on forms
