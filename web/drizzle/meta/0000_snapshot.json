@@ -1,5 +1,5 @@
 {
-  "id": "4ebff3bb-53de-4a9d-9fd8-811f152925d4",
+  "id": "081404ba-e487-4334-889a-7b6e1f00ef1b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1624,23 +1624,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "league_member_manager_key_idx": {
-          "name": "league_member_manager_key_idx",
-          "columns": [
-            {
-              "expression": "manager_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "league_member_manager_key_dim_manager_manager_key_fk": {
           "name": "league_member_manager_key_dim_manager_manager_key_fk",
@@ -1658,7 +1642,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "league_member_manager_key_unique": {
+          "name": "league_member_manager_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "manager_key"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -240,9 +240,13 @@ export const session = appSchema.table('session', {
 export const leagueMember = appSchema.table('league_member', {
 	id: text('id').primaryKey(),
 	email: varchar('email', { length: 255 }).notNull(),
-	// Unique: one login per manager, and it makes this a valid FK target.
+	// Unique as a table constraint, not a separate index: every attribution
+	// column in the app FKs to this, and Postgres needs the uniqueness to exist
+	// before the referencing ALTER TABLE runs. A CREATE UNIQUE INDEX emitted
+	// after the FKs is too late.
 	managerKey: integer('manager_key')
 		.notNull()
+		.unique()
 		.references(() => dimManager.managerKey),
 	role: varchar('role', { length: 20 }).notNull().default('member'), // 'member' | 'commissioner'
 	active: boolean('active').notNull().default(true),
@@ -251,13 +255,12 @@ export const leagueMember = appSchema.table('league_member', {
 	firstLoginAt: timestamp('first_login_at', { withTimezone: true, mode: 'date' }),
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
-}, (table) => ({
-	uniqueManagerKey: uniqueIndex('league_member_manager_key_idx').on(table.managerKey)
-	// NOTE: a case-insensitive unique index on lower(email) is also required, and
-	// is hand-appended to the generated migration — drizzle-kit 0.30 cannot
-	// express an expression index. See drizzle/0000_init.sql. Removing it would
-	// let "Bob@x.com" and "bob@x.com" become two members of the same league.
-}));
+});
+// NOTE: a case-insensitive unique index on lower(email) is also required and is
+// hand-appended to the generated migration — drizzle-kit 0.30 cannot express an
+// expression index. See the tail of drizzle/*_init.sql. Without it "Bob@x.com"
+// and "bob@x.com" can both exist, and findMemberByEmail would have two rows to
+// choose between when deciding who gets to log in.
 
 /**
  * Single-use, short-lived magic-link tokens.

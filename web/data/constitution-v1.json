@@ -1,0 +1,611 @@
+{
+	"_comment": "Extracted verbatim from constitution/+page.svelte by scripts/extract-constitution-v1.js. This is version 1 of the constitution; every later version is produced by an amendment passing.",
+	"sections": [
+		{
+			"sectionId": "article1",
+			"title": "Article 1: League Makeup and Construction",
+			"kind": "article",
+			"icon": "Trophy",
+			"sortOrder": 1,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "10 team",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "No divisions",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "League buy-in is $100",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Payout structure:",
+					"children": [
+						{
+							"depth": 1,
+							"body": "60% First Place",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "30% Second Place",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "10% Third Place",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Scoring system",
+					"children": [
+						{
+							"depth": 1,
+							"body": "See Appendix 1",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Roster Spots",
+					"children": [
+						{
+							"depth": 1,
+							"body": "QB, WR, WR, RB, RB, TE, W/R/T, K, DEF, IR, IR",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Adding owners to the league",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Requires a 2/3 approval of new owner, with a minimum of 5 affirmative votes.",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Co-managing is acceptable; however, the co-manager must be approved by 50% of the members before the first pick of the draft.",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "The Snow Rule: In order to reintroduce Israel Flores, charter member, into the 2013 Fantasy Season, the league will implement a relegation policy, where the 10th place team, as determined by the consolation bracket, will have the option to",
+							"children": [
+								{
+									"depth": 2,
+									"body": "Leave the league for one season",
+									"children": []
+								},
+								{
+									"depth": 2,
+									"body": "Or negotiate a co-management with another manager",
+									"children": []
+								},
+								{
+									"depth": 2,
+									"body": "If no managers can reach an agreement with the said 10th place member. The 9th place manager will be forced to co-manager with the 10th",
+									"children": []
+								},
+								{
+									"depth": 2,
+									"body": "This system will be abolished as soon as it becomes no longer necessary.",
+									"children": []
+								}
+							]
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Playoffs go from week 14-16, 6 teams, with the first two seeds getting byes.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article2",
+			"title": "Article 2: Trades",
+			"kind": "article",
+			"icon": "Target",
+			"sortOrder": 2,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "The Rowley Rule: Trades cannot be completed for anything other than other players. Cash money, favors, or anything other than another legal NFL player cannot be accepted.",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Penalties range from a loss of a third-round draft pick to expulsion from the league, at the commissioner's discretion.",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Trade vetoes will be under the commissioner's jurisdiction.",
+					"children": [
+						{
+							"depth": 1,
+							"body": "In any case, a member of the league can appeal an acceptance or rejection of a trade within 24 hours, in the League Lounge, with logical reasoning that refrains from appeals to emotion. The appeal will stand if a majority of the league members agree within 48 hours, with the voting pool excluding the commissioner and the trading parties.",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "The trade deadline starts after week 10.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article3",
+			"title": "Article 3: Waiver wire",
+			"kind": "article",
+			"icon": "Zap",
+			"sortOrder": 3,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "Wavier wires follow a FAAB system with each player starting the year with a $100 budget.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "For tiebreakers, waiver priority is initially set as the opposite of the draft order and will determine who gets a player in the case of a tie in the bid.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Free agent players will go on waivers at their respective game times and will follow normal waiver wire rules.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article4",
+			"title": "Article 4: The Draft",
+			"kind": "article",
+			"icon": "Calendar",
+			"sortOrder": 4,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "The draft will take place the weekend before Labor Day weekend.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The champion of the league will select the draft city from the following list of cities that constitute home cities for the members of the league. As of 2023, this list is as follows: Denver, Portland, Seattle, Boise, and Tahoe.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The draft will be a closed draft, only league members will be admitted. After the draft, there will be an open party with food and drink. There will be no breaks for official meals during the draft.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "15-round snake draft",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The draft order will be selected randomly with an independent third party selecting names out of a bowl. When a manager's name is selected he will then be eligible to select his pick in the draft.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "No trading draft pick order or individual picks",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "90 seconds per pick.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "For drafting a player that has already been drafted, the first offense will be met with a warning. On the second offense, the manager in question will lose one spot in the draft snake.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "If a manager is late to the draft, their draft pick will be skipped over and added to the end of the draft in a supplemental round. This will occur until the manager arrives.",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Exceptions can be made at the commissioner's discretion",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "If a manager presents serious or compelling reason(s) to the commissioner to miss the draft, the commissioner's discretion may be used to accept this application. It is the responsibility of the absent manager to present a proxy to the commissioner and for the commissioner to accept the candidate.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article5",
+			"title": "Article 5: Commissionership",
+			"kind": "article",
+			"icon": "Users",
+			"sortOrder": 5,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "The commissioner will have a two-year term, which will start at the 2012 season. At the end of the two years, there will be an open election, with the winner being selected by a simple majority or a plurality. If the incumbent runs unopposed, they must receive one vote that is not their own.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The commissioner can be impeached by a super-majority with seven votes voting to impeach the commissioner.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article6",
+			"title": "Article 6: Collusion",
+			"kind": "article",
+			"icon": "FileText",
+			"sortOrder": 6,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "Collusion is defined as cooperative action by at least two managers working to undermine the fair competitiveness of the league.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Collusion will not be tolerated.",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Penalties: 2nd round pick to exclusion from the league. Commissioner's discretion.",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "If the commissioner is accused of collusion, the league will vote for the necessary actions. Simple majority for draft pick loss, a super-majority for expulsion.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article7",
+			"title": "Article 7: Line Up rules",
+			"kind": "article",
+			"icon": "FileText",
+			"sortOrder": 7,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "No players listed as out, on a bye, or an empty spot may be legally left in the lineup.",
+					"children": [
+						{
+							"depth": 1,
+							"body": "The player is penalized $20 per infraction with a 24-hour grace period before the game to accommodate for last-minute calls. The infraction will be removed from the winnings if the player placed, or added to the next year's buy-in if they did not. The revenue will be used for need-based draft expense aid.",
+							"children": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"sectionId": "article8",
+			"title": "Article 8: Amendments to the Constitution",
+			"kind": "article",
+			"icon": "FileText",
+			"sortOrder": 8,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "Changing scoring or roster size will be a simple majority",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Any other changes to the constitution will be a super-majority",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Changes to league size require a unanimous vote.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "Removing managers for non-rule violations requires a unanimous vote minus the manager in question.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "article9",
+			"title": "Article 9: Miscellaneous rules",
+			"kind": "article",
+			"icon": "FileText",
+			"sortOrder": 9,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "At the beginning of the draft, all members will take a shot of whiskey, to be paid for by Snow Bowl Loser. The League champion will select the whiskey of choice for the year, the cost of which cannot exceed $80.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The Last Place Trophy will be shipped to the loser at the loser's expense and must be posted to Facebook (and all social media).",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "The League Champion will take a photo with the trophy and submit it to the commissioner to be posted as the League Lounge banner photo.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "All members of the League must help supply the alcohol, bringing their favorite six-pack of beer to the draft and all other officially sanctioned league functions unless otherwise recommended by the commissioner or host.",
+					"children": []
+				},
+				{
+					"depth": 0,
+					"body": "If a kicker sets the record for longest kick, the team with that kicker gets a 50 point bonus.",
+					"children": []
+				}
+			]
+		},
+		{
+			"sectionId": "appendix1",
+			"title": "Appendix 1: Scoring System",
+			"kind": "appendix",
+			"icon": "Target",
+			"sortOrder": 10,
+			"clauses": [
+				{
+					"depth": 0,
+					"body": "Passing",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Passing Yards: 20 yards per point; 1 point at 150 yards; 2 points at 250 yards; 3 points at 350 yards",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Passing Touchdowns: 4",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Interceptions: -2",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Rushing",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Rushing Yards: 10 yards per point; 1 point at 100 yards; 2 points at 200 yards; 3 points at 300 yards",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Rushing Touchdowns: 6",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Receiving",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Receptions: 1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Reception Yards: 10 yards per point; 1 point at 100 yards; 2 points at 200 yards; 3 points at 250 yards",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Reception Touchdowns: 6",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Other Offense",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Return Touchdowns: 6",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "2-Point Conversions: 2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Fumbles Lost: -2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Offensive Fumble Return TD: 6",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Kicking",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Field Goals 0-19 Yards: 3",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals 20-29 Yards: 3",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals 30-39 Yards: 3",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals 40-49 Yards: 3",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals 50+ Yards: 4",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals Missed 0-19 Yards: -2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals Missed 20-29 Yards: -1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals Missed 30-39 Yards: -1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals Missed 40-49 Yards: -1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Field Goals Missed 50+ Yards: 0",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Point After Attempt Made: 1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Point After Attempt Missed: -2",
+							"children": []
+						}
+					]
+				},
+				{
+					"depth": 0,
+					"body": "Defense",
+					"children": [
+						{
+							"depth": 1,
+							"body": "Sack: 1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Interception: 2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Fumble Recovery: 2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Touchdown: 6",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Safety: 4",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Block Kick: 2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Kickoff and Punt Return Touchdowns: 6",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 0 points: 12",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 1-6 points: 9",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 7-13 points: 5",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 14-20 points: 2",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 21-27 points: 0",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 28-34 points: -1",
+							"children": []
+						},
+						{
+							"depth": 1,
+							"body": "Points Allowed 35+ points: -4",
+							"children": []
+						}
+					]
+				}
+			]
+		}
+	]
+}

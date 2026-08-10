@@ -107,7 +107,8 @@ CREATE TABLE "app"."league_member" (
 	"invited_at" timestamp with time zone,
 	"first_login_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "league_member_manager_key_unique" UNIQUE("manager_key")
 );
 --> statement-breakpoint
 CREATE TABLE "app"."login_token" (
@@ -243,8 +244,6 @@ CREATE INDEX "constitution_clause_section_idx" ON "app"."constitution_clause" US
 --> statement-breakpoint
 CREATE UNIQUE INDEX "constitution_section_version_id_idx" ON "app"."constitution_section" USING btree ("version_key","section_id");
 --> statement-breakpoint
-CREATE UNIQUE INDEX "league_member_manager_key_idx" ON "app"."league_member" USING btree ("manager_key");
---> statement-breakpoint
 CREATE INDEX "login_token_email_idx" ON "app"."login_token" USING btree ("email");
 --> statement-breakpoint
 CREATE INDEX "login_token_expires_idx" ON "app"."login_token" USING btree ("expires_at");
@@ -254,9 +253,8 @@ CREATE UNIQUE INDEX "unique_vote_per_manager" ON "app"."rule_vote" USING btree (
 CREATE UNIQUE INDEX "unique_user_manager_key" ON "app"."user" USING btree ("manager_key");
 --> statement-breakpoint
 -- Hand-appended: drizzle-kit 0.30 cannot express an index on an expression.
--- These are not cosmetic. Without them "Bob@x.com" and "bob@x.com" can both
--- exist, and findMemberByEmail's lower(email) lookup would have two rows to
--- choose between — an ambiguity that decides who gets to log in.
--- Keep these in sync if the migration is ever regenerated.
+-- Not cosmetic — without these "Bob@x.com" and "bob@x.com" can both exist, and
+-- findMemberByEmail's lower(email) lookup would have two rows to choose between
+-- when deciding who gets to log in. Re-add if this migration is regenerated.
 CREATE UNIQUE INDEX "league_member_email_lower_idx" ON "app"."league_member" (lower("email"));--> statement-breakpoint
 CREATE UNIQUE INDEX "user_email_lower_idx" ON "app"."user" (lower("email"));
