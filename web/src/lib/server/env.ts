@@ -1,72 +1,65 @@
 import { env } from '$env/dynamic/private';
-import { error } from '@sveltejs/kit';
 
-// Validate required environment variables
+// Application Configuration
+export const NODE_ENV = env.NODE_ENV || 'development';
+export const isDevelopment = NODE_ENV === 'development';
+export const isProduction = NODE_ENV === 'production';
+
+// Email Configuration
+export const EMAIL_PROVIDER = env.EMAIL_PROVIDER || 'console'; // 'resend' | 'sendgrid' | 'console'
+export const RESEND_API_KEY = env.RESEND_API_KEY;
+export const SENDGRID_API_KEY = env.SENDGRID_API_KEY;
+export const EMAIL_FROM = env.EMAIL_FROM;
+export const EMAIL_FROM_NAME = env.EMAIL_FROM_NAME || 'The League';
+
+/**
+ * Fail fast on missing configuration.
+ *
+ * Throws a plain Error rather than SvelteKit's `error()` helper: this runs at
+ * module load, outside any request, where `error()` produces a confusing
+ * "500" object instead of a stack trace pointing at the real problem.
+ */
 function validateEnv() {
-	const required = [
-		'DATABASE_URL',
-		'AUTH_SECRET',
-		'SESSION_SECRET'
-	];
-
-	const missing = required.filter(key => !env[key]);
-	
+	const missing = ['DATABASE_URL'].filter((key) => !env[key]);
 	if (missing.length > 0) {
-		throw error(500, `Missing required environment variables: ${missing.join(', ')}`);
+		throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
 	}
 
-	// Warn about missing optional but recommended variables
-	const recommended = ['SENDGRID_API_KEY', 'EMAIL_FROM'];
-	const missingRecommended = recommended.filter(key => !env[key]);
-	
-	if (missingRecommended.length > 0) {
-		console.warn(`⚠️  Recommended environment variables missing: ${missingRecommended.join(', ')}`);
-		console.warn('   Email functionality will use console mode instead of actual email delivery.');
+	// In production ORIGIN must be set explicitly. Magic-link URLs are built from
+	// it, so a wrong or defaulted value emails everyone a link to localhost.
+	if (isProduction && !env.ORIGIN) {
+		throw new Error('ORIGIN environment variable must be set in production');
+	}
+
+	// A mail provider selected but not configured is worse than no provider: the
+	// service falls back to console mode, sends land in a serverless log, and
+	// nobody can sign in while everything reports success.
+	if (EMAIL_PROVIDER === 'resend' && !RESEND_API_KEY) {
+		console.warn('⚠️  EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — falling back to console mode.');
+	}
+	if (EMAIL_PROVIDER === 'sendgrid' && !SENDGRID_API_KEY) {
+		console.warn('⚠️  EMAIL_PROVIDER=sendgrid but SENDGRID_API_KEY is unset — falling back to console mode.');
+	}
+	if (EMAIL_PROVIDER !== 'console' && !EMAIL_FROM) {
+		console.warn('⚠️  EMAIL_FROM is unset — sign-in emails will be rejected by the provider.');
+	}
+	if (isProduction && EMAIL_PROVIDER === 'console') {
+		console.warn('⚠️  EMAIL_PROVIDER=console in production — nobody can sign in; links go to the log.');
 	}
 }
 
-// Call validation on module load
 validateEnv();
 
 // Database Configuration
 export const DATABASE_URL = env.DATABASE_URL!;
 
-// Authentication Secrets
-export const AUTH_SECRET = env.AUTH_SECRET!;
-export const SESSION_SECRET = env.SESSION_SECRET!;
-
-// Email Configuration
-export const EMAIL_PROVIDER = env.EMAIL_PROVIDER || 'console'; // 'sendgrid', 'ses', 'console'
-export const SENDGRID_API_KEY = env.SENDGRID_API_KEY;
-export const EMAIL_FROM = env.EMAIL_FROM || 'noreply@fantasyleague.com';
-export const EMAIL_FROM_NAME = env.EMAIL_FROM_NAME || 'Fantasy League';
-
-// Application Configuration
-export const NODE_ENV = env.NODE_ENV || 'development';
-// In production ORIGIN must be set explicitly — a wrong/localhost origin silently
-// breaks WebAuthn (passkey) origin validation and CSRF checks.
-if (NODE_ENV === 'production' && !env.ORIGIN) {
-	throw error(500, 'ORIGIN environment variable must be set in production');
-}
 export const ORIGIN = env.ORIGIN || 'http://localhost:5173';
 export const PORT = parseInt(env.PORT || '3000');
-
-// Security Configuration
-export const BCRYPT_ROUNDS = parseInt(env.BCRYPT_ROUNDS || '12');
-export const SESSION_LIFETIME_HOURS = parseInt(env.SESSION_LIFETIME_HOURS || '24');
-
-// Rate Limiting
-export const RATE_LIMIT_REQUESTS_PER_MINUTE = parseInt(env.RATE_LIMIT_REQUESTS_PER_MINUTE || '60');
-export const RATE_LIMIT_WINDOW_MS = parseInt(env.RATE_LIMIT_WINDOW_MS || '60000');
 
 // Optional Features
 export const SENTRY_DSN = env.SENTRY_DSN;
 export const ENABLE_ANALYTICS = env.ENABLE_ANALYTICS === 'true';
 
-// Development helpers
-export const isDevelopment = NODE_ENV === 'development';
-export const isProduction = NODE_ENV === 'production';
-
 console.log(`🌍 Environment: ${NODE_ENV}`);
 console.log(`🔗 Origin: ${ORIGIN}`);
-console.log(`📧 Email Provider: ${EMAIL_PROVIDER}`); 
+console.log(`📧 Email Provider: ${EMAIL_PROVIDER}`);

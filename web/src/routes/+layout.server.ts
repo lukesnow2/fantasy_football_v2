@@ -14,6 +14,10 @@ export const load: LayoutServerLoad = async (event) => {
 			id: user.id,
 			username: user.username
 		} : null,
+		// Exposed so the nav can show commissioner-only links. Authorisation is
+		// enforced server-side in hooks.server.ts and each admin load — this is
+		// only for deciding what to render.
+		member: event.locals.member,
 		authenticatedManager
 	};
 }; 

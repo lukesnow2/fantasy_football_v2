@@ -5,22 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1751941570332,
-      "tag": "0000_vengeful_hex",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1752089986359,
-      "tag": "0001_slimy_clint_barton",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1753933077183,
-      "tag": "0002_handy_stingray",
+      "when": 1786393666244,
+      "tag": "0000_thin_loners",
       "breakpoints": true
     }
   ]

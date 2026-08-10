@@ -1,258 +1,85 @@
-import { hash, verify } from '@node-rs/argon2';
 import { fail, redirect } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
-import * as auth from '$lib/server/auth';
-import { db } from '$lib/server/db';
-import { user as userTable, dimManager } from '$lib/server/db/schema';
-import { getAvailableManagers, getAuthenticatedManagers } from '$lib/server/auth-manager';
+import { ORIGIN } from '$lib/server/env';
+import { emailService, generateMagicLinkEmail } from '$lib/server/email';
+import { issueLoginToken } from '$lib/server/login-token';
+import { findMemberByEmail } from '$lib/server/members';
+import { consumeLoginEmailBudget, consumeLoginIpBudget } from '$lib/server/rate-limit';
+import { safeRedirect } from '$lib/server/redirects';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async (event) => {
-	// If already logged in, redirect to homepage or specified redirect URL
-	if (event.locals.user) {
-		const redirectUrl = event.url.searchParams.get('redirect');
-		return redirect(302, redirectUrl || '/');
+/**
+ * Where every sign-in attempt lands, successful or not.
+ *
+ * The refusal path and the success path must be indistinguishable from outside.
+ * If an address that is not on the roster produced an error, or a different
+ * redirect, anyone could enumerate the league by trying addresses.
+ */
+const CHECK_EMAIL = '/login/check-email';
+
+
+export const load: PageServerLoad = async ({ locals, url }) => {
+	if (locals.user && locals.member?.active) {
+		throw redirect(302, safeRedirect(url.searchParams.get('redirect')) ?? '/');
 	}
 
-	// Check for success messages
-	const message = event.url.searchParams.get('message');
-	let successMessage = null;
-	
-	if (message === 'password-reset-success') {
-		successMessage = 'Your password has been successfully reset. You can now log in with your new password.';
-	} else if (message === 'setup-passkey-required') {
-		successMessage = 'Please set up your passkey to continue with passkey authentication.';
-	}
-
-	// Get authenticated managers for login (active users with manager info)
-	const authenticatedManagers = await getAuthenticatedManagers();
-	
 	return {
-		authenticatedManagers,
-		successMessage
+		// Present so the page can explain why a signed-in user is still here.
+		membershipRevoked: !!locals.user && !locals.member?.active
 	};
 };
 
 export const actions: Actions = {
-	login: async (event) => {
-		const formData = await event.request.formData();
-		const username = formData.get('username');
-		const password = formData.get('password');
+	default: async ({ request, url, getClientAddress }) => {
+		const form = await request.formData();
+		const rawEmail = form.get('email');
 
-		if (!validateUsername(username)) {
-			return fail(400, {
-				message: 'Invalid username (min 3, max 31 characters, alphanumeric only)'
-			});
-		}
-		if (!validatePassword(password)) {
-			return fail(400, { message: 'Invalid password (min 6, max 255 characters)' });
+		if (typeof rawEmail !== 'string' || !rawEmail.trim()) {
+			return fail(400, { error: 'Enter your email address.' });
 		}
 
-		// Get user with manager information
-		const results = await db
-			.select({
-				user: userTable,
-				manager: dimManager
+		const email = rawEmail.toLowerCase().trim();
+		const redirectTo = safeRedirect(url.searchParams.get('redirect'));
+
+		// Everything below this line must reach the same redirect, whatever
+		// happens, so that a caller learns nothing about who is on the roster.
+		//
+		// This equalizes *content*, not *latency*: the success path additionally
+		// awaits a token insert and a Resend call, so a determined attacker timing
+		// responses can still distinguish them. Closing that would mean deferring
+		// the send to a queue we do not have. Judged acceptable for a ten-person
+		// league; noted so nobody mistakes this for constant time.
+		const ip = getClientAddress();
+		const withinIpBudget = consumeLoginIpBudget(ip);
+		const withinEmailBudget = consumeLoginEmailBudget(email);
+		const member = await findMemberByEmail(email);
+
+		if (!withinIpBudget || !withinEmailBudget || !member?.active) {
+			throw redirect(303, CHECK_EMAIL);
+		}
+
+		const { token } = await issueLoginToken({
+			email: member.email,
+			purpose: 'login',
+			redirectTo,
+			ip,
+			userAgent: request.headers.get('user-agent')
+		});
+
+		const link = `${ORIGIN}/login/verify?token=${encodeURIComponent(token)}`;
+		const sent = await emailService.sendEmail(
+			generateMagicLinkEmail(link, member.email, {
+				purpose: 'login',
+				displayName: member.displayName
 			})
-			.from(userTable)
-			.leftJoin(dimManager, eq(userTable.managerKey, dimManager.managerKey))
-			.where(eq(userTable.username, username));
+		);
 
-		const userData = results.at(0);
-		if (!userData?.user) {
-			return fail(400, { message: 'Incorrect username or password' });
+		// Log rather than throw. Turning a provider outage into an error page
+		// would mean provisioned addresses fail loudly while unknown ones redirect
+		// quietly — which reopens exactly the oracle this flow closes.
+		if (!sent) {
+			console.error(`[login] Could not deliver a sign-in link to ${member.email}`);
 		}
 
-		const validPassword = await verify(userData.user.passwordHash, password, {
-			memoryCost: 19456,
-			timeCost: 2,
-			outputLen: 32,
-			parallelism: 1
-		});
-		if (!validPassword) {
-			return fail(400, { message: 'Incorrect username or password' });
-		}
-
-		// Check if user has a linked manager
-		if (!userData.manager) {
-			return fail(400, { 
-				message: 'Your account is not linked to a fantasy manager. Please contact the commissioner.' 
-			});
-		}
-
-		const sessionToken = auth.generateSessionToken();
-		const session = await auth.createSession(sessionToken, userData.user.id);
-		auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
-
-		// Redirect to specified URL or homepage
-		const redirectUrl = event.url.searchParams.get('redirect');
-		return redirect(302, redirectUrl || '/');
-	},
-	
-	register: async (event) => {
-		const formData = await event.request.formData();
-		const username = formData.get('username');
-		const password = formData.get('password');
-		const email = formData.get('email');
-		const managerKey = formData.get('managerKey');
-
-		if (!validateUsername(username)) {
-			return fail(400, { message: 'Invalid username (3-31 characters, alphanumeric only)' });
-		}
-		if (!validatePassword(password)) {
-			return fail(400, { message: 'Invalid password (minimum 6 characters)' });
-		}
-		if (!validateEmail(email)) {
-			return fail(400, { message: 'Please provide a valid email address' });
-		}
-		if (!managerKey) {
-			return fail(400, { message: 'Please select your fantasy manager profile' });
-		}
-
-		// Check if manager is already taken
-		const existingUser = await db
-			.select()
-			.from(userTable)
-			.where(eq(userTable.managerKey, parseInt(managerKey as string)))
-			.limit(1);
-
-		let isClaimingPlaceholder = false;
-		let existingUserId = null;
-
-		if (existingUser.length > 0) {
-			const user = existingUser[0];
-			
-			// Check if this is a placeholder account that can be claimed
-			if (user.accountStatus === 'placeholder') {
-				// This is a placeholder account - allow claiming it
-				isClaimingPlaceholder = true;
-				existingUserId = user.id;
-				console.log(`🎯 Claiming placeholder account for manager key ${managerKey}: ${user.displayName || 'Unknown'}`);
-			} else {
-				// This is an active account - deny registration
-				return fail(400, { 
-					message: 'This manager profile is already registered. Contact the commissioner if this is an error.' 
-				});
-			}
-		}
-
-		// Get manager info for display name
-		const managerInfo = await db
-			.select()
-			.from(dimManager)
-			.where(eq(dimManager.managerKey, parseInt(managerKey as string)))
-			.limit(1);
-
-		if (managerInfo.length === 0) {
-			return fail(400, { message: 'Invalid manager selection' });
-		}
-
-		const passwordHash = await hash(password, {
-			memoryCost: 19456,
-			timeCost: 2,
-			outputLen: 32,
-			parallelism: 1
-		});
-
-		let userId: string;
-
-		try {
-			if (isClaimingPlaceholder && existingUserId) {
-				// Update existing placeholder account
-				userId = existingUserId;
-				await db
-					.update(userTable)
-					.set({
-						username,
-						passwordHash,
-						email,
-						displayName: managerInfo[0].displayName || managerInfo[0].managerName,
-						accountStatus: 'active',
-						notificationPreferences: JSON.stringify({
-							emailOnNewProposal: true,
-							emailOnVoteResults: true,
-							emailOnTradeOffers: false
-						}),
-						profileSettings: JSON.stringify({}),
-						updatedAt: new Date()
-					})
-					.where(eq(userTable.id, existingUserId));
-				
-				console.log(`✅ Successfully claimed placeholder account for ${username}`);
-			} else {
-				// Create new user account
-				userId = generateUserId();
-				await db.insert(userTable).values({ 
-					id: userId, 
-					username, 
-					passwordHash,
-					email,
-					managerKey: parseInt(managerKey as string),
-					displayName: managerInfo[0].displayName || managerInfo[0].managerName,
-					notificationPreferences: JSON.stringify({
-						emailOnNewProposal: true,
-						emailOnVoteResults: true,
-						emailOnTradeOffers: false
-					}),
-					profileSettings: JSON.stringify({})
-				});
-				
-				console.log(`✅ Successfully created new account for ${username}`);
-			}
-
-			// Redirect to passkey setup instead of creating session immediately
-			const redirectUrl = event.url.searchParams.get('redirect');
-			const setupUrl = `/setup-passkey?userId=${userId}&username=${encodeURIComponent(username as string)}&managerKey=${managerKey}`;
-			const finalRedirectUrl = redirectUrl ? `${setupUrl}&redirect=${encodeURIComponent(redirectUrl)}` : setupUrl;
-			return redirect(302, finalRedirectUrl);
-			
-		} catch (error: any) {
-			if (error.code === '23505') {
-				if (error.constraint === 'user_username_unique') {
-					return fail(400, { message: 'Username already taken' });
-				}
-				if (error.constraint === 'user_email_unique') {
-					return fail(400, { message: 'Email already registered' });
-				}
-				if (error.constraint === 'unique_user_manager_key') {
-					return fail(400, { message: 'This manager profile is already registered' });
-				}
-			}
-			
-			const actionType = isClaimingPlaceholder ? 'claiming placeholder account' : 'registration';
-			console.error(`${actionType} error:`, error);
-			return fail(500, { message: `${isClaimingPlaceholder ? 'Account claiming' : 'Registration'} failed. Please try again.` });
-		}
+		throw redirect(303, CHECK_EMAIL);
 	}
 };
-
-function validateUsername(username: unknown): username is string {
-	return (
-		typeof username === 'string' &&
-		username.length >= 3 &&
-		username.length <= 31 &&
-		/^[a-zA-Z0-9_]+$/.test(username)
-	);
-}
-
-function validatePassword(password: unknown): password is string {
-	return typeof password === 'string' && password.length >= 6 && password.length <= 255;
-}
-
-function validateEmail(email: unknown): email is string {
-	return (
-		typeof email === 'string' &&
-		email.length > 0 &&
-		/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-	);
-}
-
-function generateUserId(): string {
-	// Generate a random user ID
-	const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-	let result = '';
-	for (let i = 0; i < 21; i++) {
-		result += chars.charAt(Math.floor(Math.random() * chars.length));
-	}
-	return result;
-} 

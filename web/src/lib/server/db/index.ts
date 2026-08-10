@@ -25,3 +25,15 @@ const client = postgres(env.DATABASE_URL, {
 });
 
 export const db = drizzle(client, { schema });
+
+export type Database = typeof db;
+
+/**
+ * Either the pooled handle or an open transaction.
+ *
+ * Functions that must be able to join a caller's transaction take this instead
+ * of importing `db` directly — consuming a login token and creating the session
+ * it authorises have to commit or roll back together, or a crash between them
+ * burns the token without logging anyone in.
+ */
+export type Tx = Database | Parameters<Parameters<Database['transaction']>[0]>[0];

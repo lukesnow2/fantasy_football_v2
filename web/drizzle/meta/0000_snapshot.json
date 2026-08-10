@@ -1,9 +1,820 @@
 {
-  "id": "39a4e78b-1bde-46e6-9b9c-c336f0d9f617",
+  "id": "4ebff3bb-53de-4a9d-9fd8-811f152925d4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "app.chat_custom_emoji": {
+      "name": "chat_custom_emoji",
+      "schema": "app",
+      "columns": {
+        "emoji_key": {
+          "name": "emoji_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "emoji_id": {
+          "name": "emoji_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'custom'"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "usage_count": {
+          "name": "usage_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "chat_custom_emoji_emoji_id_unique": {
+          "name": "chat_custom_emoji_emoji_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "emoji_id"
+          ]
+        },
+        "chat_custom_emoji_name_unique": {
+          "name": "chat_custom_emoji_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.chat_message": {
+      "name": "chat_message",
+      "schema": "app",
+      "columns": {
+        "message_key": {
+          "name": "message_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_key": {
+          "name": "author_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'general'"
+        },
+        "parent_message_key": {
+          "name": "parent_message_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message_type": {
+          "name": "message_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'message'"
+        },
+        "edited_at": {
+          "name": "edited_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attachments": {
+          "name": "attachments",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mentions": {
+          "name": "mentions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "chat_message_channel_created": {
+          "name": "chat_message_channel_created",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chat_message_thread": {
+          "name": "chat_message_thread",
+          "columns": [
+            {
+              "expression": "parent_message_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chat_message_author_key_league_member_manager_key_fk": {
+          "name": "chat_message_author_key_league_member_manager_key_fk",
+          "tableFrom": "chat_message",
+          "tableTo": "league_member",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "author_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "chat_message_message_id_unique": {
+          "name": "chat_message_message_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "message_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.chat_reaction": {
+      "name": "chat_reaction",
+      "schema": "app",
+      "columns": {
+        "reaction_key": {
+          "name": "reaction_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "message_key": {
+          "name": "message_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_key": {
+          "name": "author_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "emoji": {
+          "name": "emoji",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "emoji_type": {
+          "name": "emoji_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'unicode'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "unique_chat_reaction": {
+          "name": "unique_chat_reaction",
+          "columns": [
+            {
+              "expression": "message_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "author_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "emoji",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.chat_read": {
+      "name": "chat_read",
+      "schema": "app",
+      "columns": {
+        "read_key": {
+          "name": "read_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_read_message_key": {
+          "name": "last_read_message_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_read_at": {
+          "name": "last_read_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "unique_chat_read": {
+          "name": "unique_chat_read",
+          "columns": [
+            {
+              "expression": "manager_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.chat_thread": {
+      "name": "chat_thread",
+      "schema": "app",
+      "columns": {
+        "thread_key": {
+          "name": "thread_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root_message_key": {
+          "name": "root_message_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "channel_id": {
+          "name": "channel_id",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message_count": {
+          "name": "message_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "last_message_at": {
+          "name": "last_message_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_message_key": {
+          "name": "last_message_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_locked": {
+          "name": "is_locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "chat_thread_channel_updated": {
+          "name": "chat_thread_channel_updated",
+          "columns": [
+            {
+              "expression": "channel_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "chat_thread_thread_id_unique": {
+          "name": "chat_thread_thread_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "thread_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.constitution_clause": {
+      "name": "constitution_clause",
+      "schema": "app",
+      "columns": {
+        "clause_key": {
+          "name": "clause_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "section_key": {
+          "name": "section_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_key": {
+          "name": "parent_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "clause_uid": {
+          "name": "clause_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "depth": {
+          "name": "depth",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "constitution_clause_section_uid_idx": {
+          "name": "constitution_clause_section_uid_idx",
+          "columns": [
+            {
+              "expression": "section_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "clause_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "constitution_clause_section_idx": {
+          "name": "constitution_clause_section_idx",
+          "columns": [
+            {
+              "expression": "section_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sort_order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "constitution_clause_section_key_constitution_section_section_key_fk": {
+          "name": "constitution_clause_section_key_constitution_section_section_key_fk",
+          "tableFrom": "constitution_clause",
+          "tableTo": "constitution_section",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "section_key"
+          ],
+          "columnsTo": [
+            "section_key"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.constitution_section": {
+      "name": "constitution_section",
+      "schema": "app",
+      "columns": {
+        "section_key": {
+          "name": "section_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version_key": {
+          "name": "version_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "section_id": {
+          "name": "section_id",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "icon": {
+          "name": "icon",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "constitution_section_version_id_idx": {
+          "name": "constitution_section_version_id_idx",
+          "columns": [
+            {
+              "expression": "version_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "section_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "constitution_section_version_key_constitution_version_version_key_fk": {
+          "name": "constitution_section_version_key_constitution_version_version_key_fk",
+          "tableFrom": "constitution_section",
+          "tableTo": "constitution_version",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "version_key"
+          ],
+          "columnsTo": [
+            "version_key"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.constitution_version": {
+      "name": "constitution_version",
+      "schema": "app",
+      "columns": {
+        "version_key": {
+          "name": "version_key",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "version_no": {
+          "name": "version_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_at": {
+          "name": "effective_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "amendment_key": {
+          "name": "amendment_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "constitution_version_amendment_key_rule_amendment_amendment_key_fk": {
+          "name": "constitution_version_amendment_key_rule_amendment_amendment_key_fk",
+          "tableFrom": "constitution_version",
+          "tableTo": "rule_amendment",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "amendment_key"
+          ],
+          "columnsTo": [
+            "amendment_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "constitution_version_version_no_unique": {
+          "name": "constitution_version_version_no_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "version_no"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "edw.dim_league": {
       "name": "dim_league",
       "schema": "edw",
@@ -744,13 +1555,221 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "app.league_member": {
+      "name": "league_member",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'member'"
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "invited_at": {
+          "name": "invited_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_login_at": {
+          "name": "first_login_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "league_member_manager_key_idx": {
+          "name": "league_member_manager_key_idx",
+          "columns": [
+            {
+              "expression": "manager_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "league_member_manager_key_dim_manager_manager_key_fk": {
+          "name": "league_member_manager_key_dim_manager_manager_key_fk",
+          "tableFrom": "league_member",
+          "tableTo": "dim_manager",
+          "schemaTo": "edw",
+          "columnsFrom": [
+            "manager_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "app.login_token": {
+      "name": "login_token",
+      "schema": "app",
+      "columns": {
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'login'"
+        },
+        "redirect_to": {
+          "name": "redirect_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consumed_at": {
+          "name": "consumed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_ip": {
+          "name": "request_ip",
+          "type": "varchar(45)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "login_token_email_idx": {
+          "name": "login_token_email_idx",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "login_token_expires_idx": {
+          "name": "login_token_expires_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "edw.mart_manager_performance": {
       "name": "mart_manager_performance",
       "schema": "edw",
       "columns": {
-        "manager_key": {
-          "name": "manager_key",
-          "type": "integer",
+        "manager_id": {
+          "name": "manager_id",
+          "type": "varchar(100)",
           "primaryKey": true,
           "notNull": true
         },
@@ -760,8 +1779,26 @@
           "primaryKey": false,
           "notNull": true
         },
+        "first_season": {
+          "name": "first_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_season": {
+          "name": "last_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "total_seasons": {
           "name": "total_seasons",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_leagues": {
+          "name": "total_leagues",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -784,68 +1821,68 @@
           "primaryKey": false,
           "notNull": false
         },
-        "win_percentage": {
-          "name": "win_percentage",
-          "type": "numeric(5, 4)",
+        "career_win_percentage": {
+          "name": "career_win_percentage",
+          "type": "numeric(8, 4)",
           "primaryKey": false,
           "notNull": false
         },
-        "avg_points_for": {
-          "name": "avg_points_for",
-          "type": "numeric(8, 2)",
+        "total_points_scored": {
+          "name": "total_points_scored",
+          "type": "numeric(15, 2)",
           "primaryKey": false,
           "notNull": false
         },
-        "avg_points_against": {
-          "name": "avg_points_against",
-          "type": "numeric(8, 2)",
+        "avg_points_per_game": {
+          "name": "avg_points_per_game",
+          "type": "numeric(10, 2)",
           "primaryKey": false,
           "notNull": false
         },
-        "total_championships": {
-          "name": "total_championships",
+        "avg_points_per_season": {
+          "name": "avg_points_per_season",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "championships_won": {
+          "name": "championships_won",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "total_playoff_appearances": {
-          "name": "total_playoff_appearances",
+        "championship_appearances": {
+          "name": "championship_appearances",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "best_season": {
-          "name": "best_season",
-          "type": "varchar(4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "worst_season": {
-          "name": "worst_season",
-          "type": "varchar(4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_season": {
-          "name": "first_season",
-          "type": "varchar(4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_season": {
-          "name": "last_season",
-          "type": "varchar(4)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "longest_win_streak": {
-          "name": "longest_win_streak",
+        "playoff_appearances": {
+          "name": "playoff_appearances",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "longest_loss_streak": {
-          "name": "longest_loss_streak",
+        "playoff_win_percentage": {
+          "name": "playoff_win_percentage",
+          "type": "numeric(8, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avg_draft_grade": {
+          "name": "avg_draft_grade",
+          "type": "numeric(4, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "best_draft_year": {
+          "name": "best_draft_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_draft_year": {
+          "name": "worst_draft_year",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -858,12 +1895,36 @@
         },
         "avg_transactions_per_season": {
           "name": "avg_transactions_per_season",
-          "type": "numeric(5, 2)",
+          "type": "numeric(8, 2)",
           "primaryKey": false,
           "notNull": false
         },
-        "updated_at": {
-          "name": "updated_at",
+        "faab_efficiency_rating": {
+          "name": "faab_efficiency_rating",
+          "type": "numeric(8, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "season_consistency_score": {
+          "name": "season_consistency_score",
+          "type": "numeric(8, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "best_season_record": {
+          "name": "best_season_record",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "worst_season_record": {
+          "name": "worst_season_record",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_updated": {
+          "name": "last_updated",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false,
@@ -878,13 +1939,13 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "edw.rule_amendment": {
+    "app.rule_amendment": {
       "name": "rule_amendment",
-      "schema": "edw",
+      "schema": "app",
       "columns": {
         "amendment_key": {
           "name": "amendment_key",
-          "type": "integer",
+          "type": "serial",
           "primaryKey": true,
           "notNull": true
         },
@@ -924,8 +1985,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "manager_key": {
-          "name": "manager_key",
+        "approved_by": {
+          "name": "approved_by",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -945,20 +2006,49 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "rule_amendment_proposal_key_rule_proposal_proposal_key_fk": {
+          "name": "rule_amendment_proposal_key_rule_proposal_proposal_key_fk",
+          "tableFrom": "rule_amendment",
+          "tableTo": "rule_proposal",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "proposal_key"
+          ],
+          "columnsTo": [
+            "proposal_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rule_amendment_approved_by_league_member_manager_key_fk": {
+          "name": "rule_amendment_approved_by_league_member_manager_key_fk",
+          "tableFrom": "rule_amendment",
+          "tableTo": "league_member",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "approved_by"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "edw.rule_proposal": {
+    "app.rule_proposal": {
       "name": "rule_proposal",
-      "schema": "edw",
+      "schema": "app",
       "columns": {
         "proposal_key": {
           "name": "proposal_key",
-          "type": "integer",
+          "type": "serial",
           "primaryKey": true,
           "notNull": true
         },
@@ -986,9 +2076,28 @@
           "primaryKey": false,
           "notNull": true
         },
+        "category": {
+          "name": "category",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'general'"
+        },
         "affected_section": {
           "name": "affected_section",
           "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_clause_uid": {
+          "name": "target_clause_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject_manager_key": {
+          "name": "subject_manager_key",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -1016,8 +2125,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "manager_key": {
-          "name": "manager_key",
+        "submitted_by": {
+          "name": "submitted_by",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -1045,36 +2154,59 @@
           "name": "status",
           "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'draft'"
         },
         "required_votes": {
           "name": "required_votes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "default": 7
+          "notNull": true
+        },
+        "eligible_voters": {
+          "name": "eligible_voters",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
         },
         "yes_votes": {
           "name": "yes_votes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 0
         },
         "no_votes": {
           "name": "no_votes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 0
         },
         "abstain_votes": {
           "name": "abstain_votes",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 0
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applied_at": {
+          "name": "applied_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amendment_key": {
+          "name": "amendment_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1092,7 +2224,36 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {},
+      "foreignKeys": {
+        "rule_proposal_subject_manager_key_league_member_manager_key_fk": {
+          "name": "rule_proposal_subject_manager_key_league_member_manager_key_fk",
+          "tableFrom": "rule_proposal",
+          "tableTo": "league_member",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "subject_manager_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rule_proposal_submitted_by_league_member_manager_key_fk": {
+          "name": "rule_proposal_submitted_by_league_member_manager_key_fk",
+          "tableFrom": "rule_proposal",
+          "tableTo": "league_member",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "submitted_by"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "rule_proposal_proposal_id_unique": {
@@ -1107,13 +2268,13 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "edw.rule_vote": {
+    "app.rule_vote": {
       "name": "rule_vote",
-      "schema": "edw",
+      "schema": "app",
       "columns": {
         "vote_key": {
           "name": "vote_key",
-          "type": "integer",
+          "type": "serial",
           "primaryKey": true,
           "notNull": true
         },
@@ -1179,16 +2340,45 @@
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "rule_vote_proposal_key_rule_proposal_proposal_key_fk": {
+          "name": "rule_vote_proposal_key_rule_proposal_proposal_key_fk",
+          "tableFrom": "rule_vote",
+          "tableTo": "rule_proposal",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "proposal_key"
+          ],
+          "columnsTo": [
+            "proposal_key"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "rule_vote_manager_key_league_member_manager_key_fk": {
+          "name": "rule_vote_manager_key_league_member_manager_key_fk",
+          "tableFrom": "rule_vote",
+          "tableTo": "league_member",
+          "schemaTo": "app",
+          "columnsFrom": [
+            "manager_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.session": {
+    "app.session": {
       "name": "session",
-      "schema": "",
+      "schema": "app",
       "columns": {
         "id": {
           "name": "id",
@@ -1207,6 +2397,38 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "varchar(45)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_type": {
+          "name": "device_type",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -1217,9 +2439,9 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.user": {
+    "app.user": {
       "name": "user",
-      "schema": "",
+      "schema": "app",
       "columns": {
         "id": {
           "name": "id",
@@ -1227,27 +2449,97 @@
           "primaryKey": true,
           "notNull": true
         },
-        "age": {
-          "name": "age",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "username": {
           "name": "username",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "password_hash": {
-          "name": "password_hash",
+        "manager_key": {
+          "name": "manager_key",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account_status": {
+          "name": "account_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'active'"
+        },
+        "notification_preferences": {
+          "name": "notification_preferences",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "profile_settings": {
+          "name": "profile_settings",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "unique_user_manager_key": {
+          "name": "unique_user_manager_key",
+          "columns": [
+            {
+              "expression": "manager_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_manager_key_dim_manager_manager_key_fk": {
+          "name": "user_manager_key_dim_manager_manager_key_fk",
+          "tableFrom": "user",
+          "tableTo": "dim_manager",
+          "schemaTo": "edw",
+          "columnsFrom": [
+            "manager_key"
+          ],
+          "columnsTo": [
+            "manager_key"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "user_username_unique": {
@@ -1255,6 +2547,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "username"
+          ]
+        },
+        "user_email_unique": {
+          "name": "user_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
           ]
         }
       },
@@ -1368,6 +2667,7 @@
   },
   "enums": {},
   "schemas": {
+    "app": "app",
     "edw": "edw"
   },
   "sequences": {},

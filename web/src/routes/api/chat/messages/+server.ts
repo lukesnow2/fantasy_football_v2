@@ -2,20 +2,17 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { chatMessage, dimManager } from '$lib/server/db/schema';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
-import { getCurrentManagerKey } from '$lib/server/auth-manager';
 import type { RequestHandler } from './$types';
 import { nanoid } from 'nanoid';
 
-// Resolve the authenticated user's manager key, or null if not authenticated /
-// not linked to a manager. Callers must return 401 on null — never fall back to a
-// hardcoded key (which previously let any unauthenticated user post as manager 1).
-async function resolveManagerKey(locals: App.Locals): Promise<number | null> {
-	if (!locals.user) return null;
-	try {
-		return (await getCurrentManagerKey(locals.user as any)) ?? null;
-	} catch {
-		return null;
-	}
+// Resolve the caller's manager key, or null when signed out / not on the roster.
+// Callers must return 401 on null — never fall back to a hardcoded key (which
+// previously let any unauthenticated user post as manager 1, who is '-- hidden --',
+// a retired manager). Read straight off locals.member, populated once per request
+// by hooks.server.ts.
+function resolveManagerKey(locals: App.Locals): number | null {
+	if (!locals.user || !locals.member?.active) return null;
+	return locals.member.managerKey;
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -77,7 +74,7 @@ export const GET: RequestHandler = async ({ url }) => {
 export const POST: RequestHandler = async ({ request, locals }) => {
 	try {
 		// Require an authenticated, manager-linked user.
-		const managerKey = await resolveManagerKey(locals);
+		const managerKey = resolveManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
@@ -143,7 +140,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 export const PUT: RequestHandler = async ({ request, locals }) => {
 	try {
 		// Require an authenticated, manager-linked user.
-		const managerKey = await resolveManagerKey(locals);
+		const managerKey = resolveManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}
@@ -192,7 +189,7 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 export const DELETE: RequestHandler = async ({ request, locals }) => {
 	try {
 		// Require an authenticated, manager-linked user.
-		const managerKey = await resolveManagerKey(locals);
+		const managerKey = resolveManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'Unauthorized' }, { status: 401 });
 		}

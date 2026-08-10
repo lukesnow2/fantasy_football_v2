@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { chatCustomEmoji, dimManager } from '$lib/server/db/schema';
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { getCurrentManagerKey } from '$lib/server/auth-manager';
+import { requireManagerKey } from '$lib/server/auth-manager';
 import type { RequestHandler } from './$types';
 import { nanoid } from 'nanoid';
 
@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get the authenticated manager key
-		const managerKey = await getCurrentManagerKey(locals.user as any);
+		const managerKey = requireManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'No manager profile linked to your account' }, { status: 400 });
 		}
@@ -143,7 +143,7 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get the authenticated manager key
-		const managerKey = await getCurrentManagerKey(locals.user as any);
+		const managerKey = requireManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'No manager profile linked to your account' }, { status: 400 });
 		}
@@ -217,7 +217,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// Get the authenticated manager key
-		const managerKey = await getCurrentManagerKey(locals.user as any);
+		const managerKey = requireManagerKey(locals);
 		if (!managerKey) {
 			return json({ error: 'No manager profile linked to your account' }, { status: 400 });
 		}
