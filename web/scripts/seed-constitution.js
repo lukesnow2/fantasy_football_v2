@@ -62,9 +62,12 @@ try {
 	let clauseCount = 0;
 
 	await sql.begin(async (tx) => {
+		// Dated to when the document actually last changed, not to when it was
+		// imported. Seeding with now() would make the page claim the constitution
+		// was amended on the day someone ran a script.
 		const [version] = await tx`
 			insert into app.constitution_version (version_no, effective_at, note)
-			values (1, now(), 'Original constitution as of January 2025')
+			values (1, '2025-01-01T00:00:00Z', 'Original constitution as of January 2025')
 			returning version_key`;
 
 		for (const section of sections) {

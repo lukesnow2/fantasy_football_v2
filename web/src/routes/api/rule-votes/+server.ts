@@ -4,6 +4,7 @@ import { ruleVote, ruleProposal } from '$lib/server/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import { requireManagerKey } from '$lib/server/auth-manager';
 import { settleProposal } from '$lib/server/constitution/evaluate';
+import { notifyProposalSettled } from '$lib/server/notify';
 import type { RequestHandler } from './$types';
 
 const VALID_VOTES = ['yes', 'no', 'abstain'] as const;
@@ -116,6 +117,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		if ('error' in result) {
 			return json({ error: result.error }, { status: result.status });
+		}
+
+		// After the transaction commits, never inside it — a mail timeout must not
+		// roll back a recorded vote. Same contract as the form action, so it does
+		// not matter which path a vote arrives through.
+		if (result.outcome && result.outcome.state !== 'open') {
+			await notifyProposalSettled(proposalKey, result.outcome);
 		}
 
 		return json(result);

@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, type Tx } from '$lib/server/db';
 import { leagueMember, user as userTable } from '$lib/server/db/schema';
@@ -135,9 +135,17 @@ export async function getOrCreateUserForMember(
 	return { userId: created.id };
 }
 
+/**
+ * Stamp the first successful sign-in, once.
+ *
+ * The "only if not already set" lives in the WHERE clause rather than in a
+ * coalesce() expression: passing a Date into a raw SQL fragment hands
+ * postgres.js a value it cannot infer a type for, which fails at bind time with
+ * an unhelpful ERR_INVALID_ARG_TYPE.
+ */
 export async function markFirstLogin(tx: Tx, memberId: string, now: Date): Promise<void> {
 	await tx
 		.update(leagueMember)
-		.set({ firstLoginAt: sql`coalesce(${leagueMember.firstLoginAt}, ${now})`, updatedAt: now })
-		.where(eq(leagueMember.id, memberId));
+		.set({ firstLoginAt: now, updatedAt: now })
+		.where(and(eq(leagueMember.id, memberId), isNull(leagueMember.firstLoginAt)));
 }
