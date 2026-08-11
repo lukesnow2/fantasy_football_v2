@@ -176,28 +176,27 @@ export async function getManagerNameByKey(managerKey: number): Promise<string | 
  * still missing from the allowlist" list.
  */
 export async function getUnclaimedManagers() {
-	try {
-		return await db
-			.select({
-				managerKey: dimManager.managerKey,
-				managerName: dimManager.managerName,
-				displayName: dimManager.displayName,
-				profileImageUrl: dimManager.profileImageUrl
-			})
-			.from(dimManager)
-			.leftJoin(leagueMember, eq(dimManager.managerKey, leagueMember.managerKey))
-			.where(
-				and(
-					eq(dimManager.isCurrent, true),
-					eq(dimManager.isActive, true),
-					isNull(leagueMember.managerKey)
-				)
+	// Deliberately unguarded. Returning [] on a query error tells the
+	// commissioner every manager is on the allowlist — the exact opposite of the
+	// truth, on the one screen that exists to surface who is missing. Let it
+	// throw; the surrounding load renders an error page.
+	return db
+		.select({
+			managerKey: dimManager.managerKey,
+			managerName: dimManager.managerName,
+			displayName: dimManager.displayName,
+			profileImageUrl: dimManager.profileImageUrl
+		})
+		.from(dimManager)
+		.leftJoin(leagueMember, eq(dimManager.managerKey, leagueMember.managerKey))
+		.where(
+			and(
+				eq(dimManager.isCurrent, true),
+				eq(dimManager.isActive, true),
+				isNull(leagueMember.managerKey)
 			)
-			.orderBy(dimManager.managerName);
-	} catch (err) {
-		console.error('Error getting unclaimed managers:', err);
-		return [];
-	}
+		)
+		.orderBy(dimManager.managerName);
 }
 
 export async function updateNotificationPreferences(

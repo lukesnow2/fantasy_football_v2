@@ -14,7 +14,7 @@ const VOTING_WINDOW_DAYS = 7;
 
 const PROPOSAL_TYPES = ['edit_clause', 'add_clause', 'delete_clause'] as const;
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, locals }) => {
 	try {
 		if (url.searchParams.get('type') === 'amendments') {
 			const amendments = await db
@@ -75,7 +75,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			.leftJoin(dimManager, eq(ruleProposal.submittedBy, dimManager.managerKey))
 			.orderBy(desc(ruleProposal.createdAt));
 
-		return json({ proposals });
+		// Drafts are private to their author until opened for voting — the same
+		// rule the constitution page load applies. This endpoint previously
+		// returned every draft to any signed-in member.
+		const managerKey = locals.member?.active ? locals.member.managerKey : null;
+		const visible = proposals.filter(
+			(p) => p.status !== 'draft' || p.submittedBy === managerKey
+		);
+
+		return json({ proposals: visible });
 	} catch (error) {
 		console.error('Error fetching rule proposals:', error);
 		return json({ error: 'Failed to fetch rule proposals' }, { status: 500 });

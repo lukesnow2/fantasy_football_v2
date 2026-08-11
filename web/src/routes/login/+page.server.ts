@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { requireOrigin } from '$lib/server/env';
 import { emailService, generateMagicLinkEmail } from '$lib/server/email';
-import { issueLoginToken } from '$lib/server/login-token';
+import { issueLoginToken, purgeExpiredLoginTokens } from '$lib/server/login-token';
 import { findMemberByEmail } from '$lib/server/members';
 import { consumeLoginEmailBudget, consumeLoginIpBudget } from '$lib/server/rate-limit';
 import { safeRedirect } from '$lib/server/redirects';
@@ -56,6 +56,12 @@ export const actions: Actions = {
 		if (!withinIpBudget || !withinEmailBudget || !member?.active) {
 			throw redirect(303, CHECK_EMAIL);
 		}
+
+		// Opportunistic cleanup on the send path — the table had no reaper at all,
+		// so it grew without bound. Failure here must not block a sign-in.
+		purgeExpiredLoginTokens().catch((error) =>
+			console.error('[login] Could not purge expired tokens:', error)
+		);
 
 		const { token } = await issueLoginToken({
 			email: member.email,

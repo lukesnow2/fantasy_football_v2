@@ -15,11 +15,19 @@ type Bucket = { count: number; resetAt: number };
 
 const MAX_TRACKED_KEYS = 5_000;
 
-function createLimiter(limit: number, windowMs: number) {
+/**
+ * Exported, with an injectable clock, so the window-reset branch can be tested.
+ *
+ * The capping direction is the obvious one to check; the reset is the dangerous
+ * one. A regression that never advances resetAt locks every manager out of
+ * sign-in permanently after their fifth attempt — a total outage for a league
+ * where this is the only way in — and a cap-only test still passes.
+ */
+export function createLimiter(limit: number, windowMs: number, clock: () => number = Date.now) {
 	const buckets = new Map<string, Bucket>();
 
 	return function consume(key: string): boolean {
-		const now = Date.now();
+		const now = clock();
 
 		// Drop expired buckets, and if the map is still oversized (a key-rotating
 		// flood) clear it wholesale rather than letting it grow without bound.

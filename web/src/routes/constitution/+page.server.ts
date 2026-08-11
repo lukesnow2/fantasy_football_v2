@@ -187,6 +187,30 @@ export const actions: Actions = {
 			return fail(400, { error: 'Pick the season this takes effect.' });
 		}
 
+		// Validate the section against the live document. Without this a proposal
+		// carrying an empty or unknown affectedSection is *guaranteed* to
+		// pass-then-supersede: applyChange cannot resolve the section, returns
+		// false, and the league is told a vote it held changed nothing.
+		const version = await getCurrentVersion(db);
+		const sections = version ? await loadVersionTree(db, version.versionKey) : [];
+		const section = sections.find((s) => s.sectionId === affectedSection);
+		if (!section) {
+			return fail(400, { error: 'That article no longer exists in the current constitution.' });
+		}
+
+		// Same for the clause, and it must live in the section being amended —
+		// a parent from another section would file the new clause under the wrong
+		// article and renumber the wrong sibling group.
+		if (targetClauseUid) {
+			const inSection = (nodes: typeof section.clauses): boolean =>
+				nodes.some((c) => c.clauseUid === targetClauseUid || inSection(c.children));
+			if (!inSection(section.clauses)) {
+				return fail(400, {
+					error: 'That clause is no longer part of this article. Reload and try again.'
+				});
+			}
+		}
+
 		const subjectManagerKey =
 			category === 'manager_removal' && subjectRaw ? Number(subjectRaw) : null;
 		if (category === 'manager_removal' && subjectManagerKey == null) {

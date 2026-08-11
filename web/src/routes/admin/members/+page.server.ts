@@ -69,11 +69,6 @@ export const actions: Actions = {
 			})
 		);
 
-		await db
-			.update(leagueMember)
-			.set({ invitedAt: new Date(), updatedAt: new Date() })
-			.where(eq(leagueMember.id, memberId));
-
 		// Reported honestly to the commissioner. Unlike the login form there is no
 		// oracle to protect here — they already know who is on the roster — and
 		// silently "succeeding" on a failed send is how ten people end up unable to
@@ -83,6 +78,13 @@ export const actions: Actions = {
 				error: `The invite to ${member.email} was not accepted by the mail provider. Check the Resend domain is verified.`
 			});
 		}
+
+		// Stamped only after a confirmed send. Recording the invite first made the
+		// roster show a manager as invited when the mail never left.
+		await db
+			.update(leagueMember)
+			.set({ invitedAt: new Date(), updatedAt: new Date() })
+			.where(eq(leagueMember.id, memberId));
 
 		return { success: `Invite sent to ${member.email}.` };
 	},
@@ -147,15 +149,28 @@ export const actions: Actions = {
 
 		if (!email || !email.includes('@')) return fail(400, { error: 'Enter a valid email address.' });
 
+		let updated;
 		try {
-			await db
+			[updated] = await db
 				.update(leagueMember)
 				.set({ email, updatedAt: new Date() })
-				.where(eq(leagueMember.id, memberId));
-		} catch {
-			// The lower(email) unique index is what surfaces here.
-			return fail(409, { error: 'Another manager already uses that address.' });
+				.where(eq(leagueMember.id, memberId))
+				.returning({ id: leagueMember.id });
+		} catch (error) {
+			// Only 23505 is a duplicate address. A bare catch reported connection
+			// loss, timeouts and constraint violations all as "already in use",
+			// and logged none of them.
+			const code = (error as { code?: string })?.code;
+			if (code === '23505') {
+				return fail(409, { error: 'Another manager already uses that address.' });
+			}
+			console.error('[admin] Failed to update member email:', error);
+			return fail(500, { error: "Couldn't update that address. Check the logs." });
 		}
+
+		// A zero-row update is not a success. Without this, a stale memberId
+		// reported "Address updated" having changed nothing.
+		if (!updated) return fail(404, { error: 'Member not found.' });
 
 		return { success: `Address updated to ${email}.` };
 	}
