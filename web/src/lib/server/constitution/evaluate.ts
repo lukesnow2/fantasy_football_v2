@@ -106,25 +106,52 @@ export async function settleProposal(
 		return outcome;
 	}
 
+	// Everything below settles the proposal, so the transition must be claimed
+	// atomically.
+	//
+	// The SELECT above takes no row lock, and settleDueProposals() runs from a
+	// *page load* — so two managers opening /constitution in the same second
+	// past a deadline both read status 'active', both settle, and both fan out
+	// to the whole league. The `status = 'active'` predicate is the claim: under
+	// READ COMMITTED the loser blocks on the row, re-evaluates the predicate
+	// once the winner commits, matches zero rows, and returns null so its caller
+	// skips the notification. Same atomic-claim shape as consumeLoginToken().
+	const stillActive = and(
+		eq(ruleProposal.proposalKey, proposalKey),
+		eq(ruleProposal.status, 'active')
+	);
+
 	if (outcome.state === 'rejected') {
-		await tx
+		const [claimedRejection] = await tx
 			.update(ruleProposal)
 			.set({ ...counters, status: 'rejected', settledAt: now })
-			.where(eq(ruleProposal.proposalKey, proposalKey));
-		return outcome;
+			.where(stillActive)
+			.returning({ proposalKey: ruleProposal.proposalKey });
+
+		return claimedRejection ? outcome : null;
 	}
 
-	// Passed. Import lazily to keep a cycle from forming: apply.ts needs the
-	// tally shape from here, and this needs the applier.
+	// Passed. Claimed BEFORE the amendment is applied, so the text change is
+	// written by the one transaction that owns the transition, not by every racer.
+	const [claimedPassage] = await tx
+		.update(ruleProposal)
+		.set({ ...counters, status: 'passed', settledAt: now })
+		.where(stillActive)
+		.returning({ proposalKey: ruleProposal.proposalKey });
+
+	if (!claimedPassage) return null;
+
+	// Import lazily to keep a cycle from forming: apply.ts needs the tally shape
+	// from here, and this needs the applier.
 	const { applyPassedProposal } = await import('./apply');
 	const applied = await applyPassedProposal(tx, proposalKey, tally, now);
 
+	// Unconditional: the claim above already established that this transaction
+	// owns the row, and status is no longer 'active' for the guard to match.
 	await tx
 		.update(ruleProposal)
 		.set({
-			...counters,
 			status: applied.status,
-			settledAt: now,
 			appliedAt: applied.status === 'passed' ? now : null,
 			amendmentKey: applied.amendmentKey
 		})
@@ -161,7 +188,9 @@ export async function settleDueProposals(now: Date = new Date()): Promise<number
 		let outcome: Outcome | null = null;
 		try {
 			outcome = await db.transaction(async (tx) => settleProposal(tx, proposalKey, now));
-			settled += 1;
+			// A null outcome means another request claimed the transition first —
+			// it settled the proposal, not this sweep, and it owns the notification.
+			if (outcome) settled += 1;
 		} catch (error) {
 			console.error(`[constitution] Failed to settle proposal ${proposalKey}:`, error);
 			continue;
