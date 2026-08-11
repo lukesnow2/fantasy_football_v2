@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { ORIGIN } from '$lib/server/env';
+import { requireOrigin } from '$lib/server/env';
 import { emailService, generateMagicLinkEmail } from '$lib/server/email';
 import { issueLoginToken } from '$lib/server/login-token';
 import { findMemberByEmail } from '$lib/server/members';
@@ -65,7 +65,7 @@ export const actions: Actions = {
 			userAgent: request.headers.get('user-agent')
 		});
 
-		const link = `${ORIGIN}/login/verify?token=${encodeURIComponent(token)}`;
+		const link = `${requireOrigin()}/login/verify?token=${encodeURIComponent(token)}`;
 		const sent = await emailService.sendEmail(
 			generateMagicLinkEmail(link, member.email, {
 				purpose: 'login',

@@ -2,7 +2,8 @@
   "framework": "sveltekit",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
+  "_installCommandNote": "--include=dev is load-bearing. NODE_ENV=production in the project's environment variables makes npm omit devDependencies, and vite and svelte-kit are devDependencies — the build then fails with 'vite: command not found' (exit 127). This flag makes the install correct regardless of how NODE_ENV is set.",
+  "installCommand": "npm install --include=dev",
   "outputDirectory": "build",
   "headers": [
     {

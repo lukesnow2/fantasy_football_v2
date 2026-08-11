@@ -5,7 +5,7 @@ import { leagueMember, user as userTable } from '$lib/server/db/schema';
 import { invalidateUserSessions } from '$lib/server/auth';
 import { requireCommissioner, getUnclaimedManagers } from '$lib/server/auth-manager';
 import { emailService, generateMagicLinkEmail } from '$lib/server/email';
-import { ORIGIN } from '$lib/server/env';
+import { requireOrigin } from '$lib/server/env';
 import { issueLoginToken } from '$lib/server/login-token';
 import { consumeLoginEmailBudget } from '$lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
@@ -63,7 +63,7 @@ export const actions: Actions = {
 		});
 
 		const sent = await emailService.sendEmail(
-			generateMagicLinkEmail(`${ORIGIN}/login/verify?token=${encodeURIComponent(token)}`, member.email, {
+			generateMagicLinkEmail(`${requireOrigin()}/login/verify?token=${encodeURIComponent(token)}`, member.email, {
 				purpose: 'invite',
 				displayName: member.displayName
 			})
