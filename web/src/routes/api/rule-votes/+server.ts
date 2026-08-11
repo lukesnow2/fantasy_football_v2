@@ -1,31 +1,42 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { ruleVote, ruleProposal } from '$lib/server/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
-import { getCurrentManagerKey } from '$lib/server/auth-manager';
+import { and, desc, eq } from 'drizzle-orm';
+import { requireManagerKey } from '$lib/server/auth-manager';
+import { settleProposal } from '$lib/server/constitution/evaluate';
+import { notifyProposalSettled } from '$lib/server/notify';
 import type { RequestHandler } from './$types';
 
+const VALID_VOTES = ['yes', 'no', 'abstain'] as const;
+
+/**
+ * Ballots are league-internal. hooks.server.ts gates this route, including GET —
+ * who voted which way, and their comments, are not public even though the
+ * constitution text is.
+ */
 export const GET: RequestHandler = async ({ url }) => {
 	try {
-		const proposalKey = url.searchParams.get('proposalKey');
-		const managerKey = url.searchParams.get('managerKey');
-		
-		let whereConditions = [];
-		
-		if (proposalKey) {
-			whereConditions.push(eq(ruleVote.proposalKey, parseInt(proposalKey)));
+		const proposalKeyParam = url.searchParams.get('proposalKey');
+		const managerKeyParam = url.searchParams.get('managerKey');
+
+		const conditions = [];
+		if (proposalKeyParam) {
+			const key = Number.parseInt(proposalKeyParam, 10);
+			if (Number.isNaN(key)) return json({ error: 'Invalid proposalKey' }, { status: 400 });
+			conditions.push(eq(ruleVote.proposalKey, key));
 		}
-		
-		if (managerKey) {
-			whereConditions.push(eq(ruleVote.managerKey, parseInt(managerKey)));
+		if (managerKeyParam) {
+			const key = Number.parseInt(managerKeyParam, 10);
+			if (Number.isNaN(key)) return json({ error: 'Invalid managerKey' }, { status: 400 });
+			conditions.push(eq(ruleVote.managerKey, key));
 		}
-		
+
 		const votes = await db
 			.select()
 			.from(ruleVote)
-			.where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+			.where(conditions.length ? and(...conditions) : undefined)
 			.orderBy(desc(ruleVote.votedAt));
-		
+
 		return json({ votes });
 	} catch (error) {
 		console.error('Error fetching rule votes:', error);
@@ -34,103 +45,90 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
+	// Throws 401/403 rather than returning null. The voter is always the session
+	// holder; a manager key in the request body is ignored if present.
+	const managerKey = requireManagerKey(locals);
+
 	try {
-		// Check if user is authenticated
-		if (!locals.user) {
-			return json({ error: 'Authentication required to vote on proposals' }, { status: 401 });
-		}
+		const { proposalKey, vote, comment } = await request.json();
 
-		// Get the authenticated manager key
-		const managerKey = await getCurrentManagerKey(locals.user);
-		if (!managerKey) {
-			return json({ error: 'No manager profile linked to your account' }, { status: 400 });
-		}
-
-		const body = await request.json();
-		const { proposalKey, vote, comment } = body;
-		
-		// Validate required fields
-		if (!proposalKey || !vote) {
+		if (typeof proposalKey !== 'number' || !vote) {
 			return json({ error: 'Missing required fields' }, { status: 400 });
 		}
-		
-		// Validate vote value
-		if (!['yes', 'no', 'abstain'].includes(vote)) {
+		if (!VALID_VOTES.includes(vote)) {
 			return json({ error: 'Invalid vote value' }, { status: 400 });
 		}
-		
-		// Check if vote already exists for this authenticated manager
-		const existingVote = await db
-			.select()
-			.from(ruleVote)
-			.where(and(
-				eq(ruleVote.proposalKey, proposalKey),
-				eq(ruleVote.managerKey, managerKey)
-			))
-			.limit(1);
-		
-		if (existingVote.length > 0) {
-			// Update existing vote
-			const [updatedVote] = await db
-				.update(ruleVote)
-				.set({ vote, comment, votedAt: new Date() })
-				.where(eq(ruleVote.voteKey, existingVote[0].voteKey))
-				.returning();
-			
-			// Update the proposal vote counts
-			await updateProposalVoteCounts(proposalKey);
-			
-			return json({ vote: updatedVote });
-		} else {
-			// Create new vote
-			const [newVote] = await db
+		if (typeof comment === 'string' && comment.length > 2000) {
+			return json({ error: 'Comment is too long' }, { status: 400 });
+		}
+
+		const now = new Date();
+
+		const result = await db.transaction(async (tx) => {
+			const [proposal] = await tx
+				.select({
+					status: ruleProposal.status,
+					category: ruleProposal.category,
+					subjectManagerKey: ruleProposal.subjectManagerKey,
+					votingEndDate: ruleProposal.votingEndDate
+				})
+				.from(ruleProposal)
+				.where(eq(ruleProposal.proposalKey, proposalKey))
+				.limit(1);
+
+			if (!proposal) return { error: 'Proposal not found', status: 404 };
+
+			// Voting is only open in the `active` state. Without this, a settled
+			// proposal could be reopened by a late vote arriving after passage.
+			if (proposal.status !== 'active') {
+				return { error: `This proposal is ${proposal.status} — voting is closed.`, status: 409 };
+			}
+			if (proposal.votingEndDate && now >= proposal.votingEndDate) {
+				return { error: 'Voting on this proposal has closed.', status: 409 };
+			}
+
+			// Article 8 IV: the manager whose removal is being voted on does not vote
+			// on it. They are already out of the denominator; this keeps them out of
+			// the numerator too.
+			if (proposal.subjectManagerKey === managerKey) {
+				return { error: 'You cannot vote on a proposal to remove you.', status: 403 };
+			}
+
+			// Upsert on the (proposal, manager) unique index. Doing it as one
+			// statement rather than select-then-insert closes the race where two
+			// concurrent submissions both see "no existing vote".
+			const [saved] = await tx
 				.insert(ruleVote)
-				.values({
-					proposalKey,
-					managerKey, // Use authenticated manager key
-					vote,
-					comment
+				.values({ proposalKey, managerKey, vote, comment: comment || null, votedAt: now })
+				.onConflictDoUpdate({
+					target: [ruleVote.proposalKey, ruleVote.managerKey],
+					set: { vote, comment: comment || null, votedAt: now }
 				})
 				.returning();
-			
-			// Update the proposal vote counts
-			await updateProposalVoteCounts(proposalKey);
-			
-			return json({ vote: newVote });
+
+			// Settle in the same transaction as the vote. If this vote is the one
+			// that carries the proposal over the line, the passage, the amendment
+			// record and the new constitution version all commit with it or not
+			// at all.
+			const outcome = await settleProposal(tx, proposalKey, now);
+
+			return { vote: saved, outcome };
+		});
+
+		if ('error' in result) {
+			return json({ error: result.error }, { status: result.status });
 		}
+
+		// After the transaction commits, never inside it — a mail timeout must not
+		// roll back a recorded vote. Same contract as the form action, so it does
+		// not matter which path a vote arrives through.
+		if (result.outcome && result.outcome.state !== 'open') {
+			await notifyProposalSettled(proposalKey, result.outcome);
+		}
+
+		return json(result);
 	} catch (error) {
 		console.error('Error creating/updating rule vote:', error);
 		return json({ error: 'Failed to process vote' }, { status: 500 });
 	}
 };
-
-/**
- * Update the vote counts on a proposal after a vote is cast/changed
- */
-async function updateProposalVoteCounts(proposalKey: number) {
-	try {
-		// Get all votes for this proposal
-		const votes = await db
-			.select()
-			.from(ruleVote)
-			.where(eq(ruleVote.proposalKey, proposalKey));
-		
-		// Count votes by type
-		const yesVotes = votes.filter(v => v.vote === 'yes').length;
-		const noVotes = votes.filter(v => v.vote === 'no').length;
-		const abstainVotes = votes.filter(v => v.vote === 'abstain').length;
-		
-		// Update the proposal with new counts
-		await db
-			.update(ruleProposal)
-			.set({
-				yesVotes,
-				noVotes,
-				abstainVotes
-			})
-			.where(eq(ruleProposal.proposalKey, proposalKey));
-			
-	} catch (error) {
-		console.error('Error updating proposal vote counts:', error);
-	}
-} 

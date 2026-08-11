@@ -11,31 +11,38 @@
 ### Changes Made:
 - ✅ Updated `src/lib/server/db/index.ts` for multi-schema support
 - ✅ Enhanced `src/lib/server/auth.ts` with secure cookie settings
-- ✅ Added migration functionality to debug API endpoint
 - ✅ Created Vercel deployment configuration
+
+
+## Why `installCommand` is `npm install --include=dev`
+
+`vercel.json` pins the install command with `--include=dev`, and that flag is
+load-bearing. This project sets `NODE_ENV=production` as a Vercel environment
+variable, which makes `npm install` omit devDependencies. `vite` and
+`svelte-kit` are devDependencies, so the build runs with no build tool and dies
+with `vite: command not found` (exit 127) after installing only ~114 packages.
+
+The flag makes the install correct however `NODE_ENV` is set. Removing the
+manually-set `NODE_ENV=production` variable is also worth doing — Vercel sets it
+in the function runtime on its own — but the flag is the durable fix.
+
+Note that `vercel.json` is validated against a strict schema and rejects unknown
+top-level keys, so this explanation lives here rather than as a comment in the
+file. A stray `_note` key fails the deployment before the build even starts,
+with only a link to the project-configuration docs to go on.
 
 ## 🧪 Testing Session Management
 
 ### 1. Run Database Migration
-Visit your local development server and go to:
+Migrations are driven by drizzle-kit, not by an HTTP endpoint:
+```bash
+npm run db:generate   # author a migration from schema.ts changes
+npm run db:migrate    # apply pending migrations
 ```
-http://localhost:5173/api/debug?action=migrate
-```
-
-This will:
-- Ensure `app` schema exists
-- Move session/user tables from `public` to `app` schema
-- Create proper table structures
+`npm run db:push` is for local development only — never run it against production.
 
 ### 2. Test Database Schema
-```
-http://localhost:5173/api/debug?action=test-schemas
-```
-
-This will show:
-- Available schemas
-- Tables in app schema
-- Current session/user counts
+Inspect the database directly with `npm run db:studio`, or with `psql "$DATABASE_URL"`.
 
 ### 3. Test Authentication Flow
 1. Go to `/login`
@@ -104,18 +111,19 @@ vercel --prod
 
 ## 📊 Monitoring & Debugging
 
-### Debug Endpoints (Development Only)
-- `/api/debug` - System status
-- `/api/debug?action=migrate` - Run migration
-- `/api/debug?action=test-schemas` - Test database
-- `/api/debug/session` - Session debugging
-- `/api/debug/sessions` - List active sessions
+### Debug Endpoints
+
+Removed. `/api/debug`, `/api/debug/session`, `/api/debug/sessions`, and `/api/db-test` were
+unauthenticated in production: `/api/debug/session` returned the caller's raw `auth-session`
+token, `/api/debug/sessions` dumped session rows, and `/api/debug?action=migrate` executed DDL.
+
+Use `npm run db:studio`, `psql "$DATABASE_URL"`, and `vercel logs` instead.
 
 ### Common Issues & Solutions
 
 #### 1. "No session found in database"
 **Cause**: Session table in wrong schema
-**Solution**: Run migration via `/api/debug?action=migrate`
+**Solution**: Confirm `search_path` includes `app`, then run `npm run db:migrate`
 
 #### 2. "Form actions expect form-encoded data"
 **Cause**: Missing `action` attribute on forms

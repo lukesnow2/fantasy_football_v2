@@ -35,8 +35,10 @@ DB="postgresql://<user>@localhost:5432/the_league"
   --data-file data/current/yahoo_fantasy_nfl_private_20250610_124031.json --database-url "$DB"
 # 2. build edw.* (schema + ETL + views). --force-rebuild = clean bulk reload.
 .venv/bin/python scripts/deploy_complete_edw.py --database-url "$DB" --force-rebuild
-# 3. app.* schema (auth/chat/rules) — scoped to the app schema only
-cd web && DATABASE_URL="$DB" npx drizzle-kit push   # config has schemaFilter: ['app']
+# 3. app.* schema (auth/chat/rules) — from the committed migration, not push
+cd web && DATABASE_URL="$DB" npm run db:migrate
+DATABASE_URL="$DB" npm run seed:constitution   # constitution v1, idempotent
+DATABASE_URL="$DB" npm run seed:members        # league allowlist, idempotent
 # 4. meta_data.* (data dictionary)
 psql "$DB" -f src/edw_schema/meta_data_schema.sql
 psql "$DB" -f src/edw_schema/populate_metric_definitions.sql
@@ -60,6 +62,67 @@ psql "$NEON" -c "ALTER TABLE app.\"user\" ADD CONSTRAINT user_manager_key_dim_ma
 Then load the raw `public.*` on Neon too (step 1 above with `--database-url "$NEON"`) so weekly
 incremental updates have their landing tables.
 
+
+## Authentication & the league roster
+Sign-in is an emailed magic link. There is no password and no registration: a link
+is only ever issued to an address already in `app.league_member`, which is the
+allowlist and the only access control. Everything else (rate limiting, the
+identical-response behaviour of the login form) is a second layer.
+
+```bash
+# Add or correct an address, then re-seed. Keyed on managerKey, so re-running
+# updates in place. Blank emails are skipped — that manager just cannot sign in yet.
+$EDITOR web/data/league-members.json
+cd web && DATABASE_URL="$DB" npm run seed:members
+```
+
+The commissioner can send invites, correct addresses and deactivate managers at
+`/admin/members`. Deactivating both blocks future sign-ins and kills any live
+session.
+
+**Resend**: the sending domain must be verified before any mail leaves. Sends
+log rather than throw on failure — deliberately, so that a mail outage cannot
+turn the login form into a roster-enumeration oracle — which also means an
+unverified domain fails *silently*. Send yourself a link before inviting anyone.
+
+Verification scripts (need a running dev server with `EMAIL_PROVIDER=console`):
+```bash
+cd web
+ORIGIN=http://localhost:5175 DATABASE_URL="$DB" ./scripts/verify-login-flow.sh
+ORIGIN=http://localhost:5175 DATABASE_URL="$DB" ./scripts/verify-voting-flow.sh
+DATABASE_URL="$DB" node scripts/verify-attribution.js
+```
+Note `verify-voting-flow.sh` rewrites `app.*` test data — never point it at production.
+
+## Constitution & amendments
+The constitution is data, in `app.constitution_version/_section/_clause`. It is
+versioned copy-on-write: a passing proposal clones the whole document into a new
+version and edits the clone, so history is queryable and "Last Updated" is real.
+Proposals target a clause by its stable `clause_uid`, which survives the clone.
+
+Vote thresholds come from Article 8 and are chosen explicitly on the proposal
+form (`src/lib/server/constitution/thresholds.ts`). The denominator is the count
+of active `league_member` rows — never `edw.dim_manager`, or an ETL run could
+silently change what counts as a super-majority. Abstaining and not voting both
+count against passage.
+
+Proposals settle on every vote and on every page load, so there is no cron to
+depend on. `computeOutcome` in `constitution/outcome.ts` is pure and unit-tested;
+it is the single source of truth for passage.
+
+## Migrations
+`db:push` is local-dev only. Production uses committed migrations:
+```bash
+cd web
+npm run db:generate   # drizzle-kit generate, then scripts/filter-migration.js
+npm run db:migrate
+```
+The filter step is not optional. `schemaFilter: ['app']` in `drizzle.config.ts`
+only constrains `push` and `introspect` — `generate` renders every table in
+`schema.ts`, including the `edw.*` read models, and will happily emit
+`CREATE TABLE "edw"."dim_manager"`. The filter strips anything whose target is a
+pipeline-owned schema and aborts if any survives.
+
 ## Weekly in-season updates (Phase 6 — GitHub Action)
 `.github/workflows/weekly-data-extraction.yml` runs Sundays in-season: extract current week →
 load → ETL. Requires repo secrets `DATABASE_URL` (Neon), `YAHOO_CLIENT_ID/SECRET`,
@@ -73,4 +136,7 @@ load → ETL. Requires repo secrets `DATABASE_URL` (Neon), `YAHOO_CLIENT_ID/SECR
 
 ## Owner / config
 - Manager canonical names + aliases: `edw_etl_processor.consolidate_manager_name` and `get_manager_name_by_team_id`.
-- Vercel env: `DATABASE_URL`, `AUTH_SECRET`, `SESSION_SECRET`, `ORIGIN` (prod URL, no trailing slash), `NODE_ENV=production`.
+- Vercel env: `DATABASE_URL`, `ORIGIN` (prod URL, no trailing slash), `NODE_ENV=production`,
+  `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`.
+  (`AUTH_SECRET`/`SESSION_SECRET` are no longer read by anything — sessions are random
+  tokens stored as their sha256, so there is nothing to sign.)

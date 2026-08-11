@@ -8,8 +8,11 @@ import {
 	text,
 	date,
 	pgSchema,
+	type AnyPgColumn,
+	index,
 	uniqueIndex,
 	serial,
+	smallint,
 	bigint
 } from 'drizzle-orm/pg-core';
 
@@ -197,9 +200,7 @@ export const vwCurrentSeasonDashboard = edwSchema.table('vw_current_season_dashb
 // Application Schema Tables (User management, UI features, etc.)
 export const user = appSchema.table('user', {
 	id: text('id').primaryKey(),
-	age: integer('age'),
 	username: text('username').notNull().unique(),
-	passwordHash: text('password_hash').notNull(),
 	// Manager linking (references EDW schema)
 	managerKey: integer('manager_key').references(() => dimManager.managerKey),
 	// User profile
@@ -210,9 +211,6 @@ export const user = appSchema.table('user', {
 	// User preferences stored as JSON
 	notificationPreferences: text('notification_preferences'),
 	profileSettings: text('profile_settings'),
-	// Passkey authentication fields
-	passkeyEnabled: boolean('passkey_enabled').default(false),
-	passkeyRegisteredAt: timestamp('passkey_registered_at'),
 	// Timestamps
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
@@ -231,50 +229,60 @@ export const session = appSchema.table('session', {
 	deviceType: varchar('device_type', { length: 50 })
 });
 
-export const passwordResetToken = appSchema.table('password_reset_token', {
+/**
+ * The league roster allowlist — the sole gate on who may sign in.
+ *
+ * Deliberately NOT edw.dim_manager: that table is written by the Python ETL and
+ * holds every manager across 20 years, including departed and Yahoo-private
+ * ones. This table holds exactly the people who may log in today, so it is also
+ * the correct FK target for anything attributing an action to a manager, and the
+ * correct denominator for a constitutional vote threshold.
+ */
+export const leagueMember = appSchema.table('league_member', {
 	id: text('id').primaryKey(),
-	userId: text('user_id').notNull(),
-	email: text('email').notNull(),
+	email: varchar('email', { length: 255 }).notNull(),
+	// Unique as a table constraint, not a separate index: every attribution
+	// column in the app FKs to this, and Postgres needs the uniqueness to exist
+	// before the referencing ALTER TABLE runs. A CREATE UNIQUE INDEX emitted
+	// after the FKs is too late.
+	managerKey: integer('manager_key')
+		.notNull()
+		.unique()
+		.references(() => dimManager.managerKey),
+	role: varchar('role', { length: 20 }).notNull().default('member'), // 'member' | 'commissioner'
+	active: boolean('active').notNull().default(true),
+	displayName: varchar('display_name', { length: 255 }),
+	invitedAt: timestamp('invited_at', { withTimezone: true, mode: 'date' }),
+	firstLoginAt: timestamp('first_login_at', { withTimezone: true, mode: 'date' }),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+});
+// NOTE: a case-insensitive unique index on lower(email) is also required and is
+// hand-appended to the generated migration — drizzle-kit 0.30 cannot express an
+// expression index. See the tail of drizzle/*_init.sql. Without it "Bob@x.com"
+// and "bob@x.com" can both exist, and findMemberByEmail would have two rows to
+// choose between when deciding who gets to log in.
+
+/**
+ * Single-use, short-lived magic-link tokens.
+ *
+ * Mirrors the session primitive in auth.ts: the raw token goes in the emailed
+ * URL and only its sha256 is stored, so a database leak yields nothing usable.
+ */
+export const loginToken = appSchema.table('login_token', {
+	tokenHash: text('token_hash').primaryKey(),
+	email: varchar('email', { length: 255 }).notNull(), // always stored lowercased
+	purpose: varchar('purpose', { length: 20 }).notNull().default('login'), // 'login' | 'invite'
+	redirectTo: text('redirect_to'), // validated same-origin path, or null
 	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow().notNull()
-});
-
-// WebAuthn Tables for Biometric Passkeys
-export const webauthnCredentials = appSchema.table('webauthn_credentials', {
-	id: text('id').primaryKey(),
-	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-	credentialId: text('credential_id').notNull().unique(),
-	publicKey: text('public_key').notNull(),
-	signCount: bigint('sign_count', { mode: 'number' }).notNull().default(0),
-	transports: text('transports').array(), // ['usb', 'nfc', 'ble', 'internal']
-	backupEligible: boolean('backup_eligible').notNull().default(false),
-	backupState: boolean('backup_state').notNull().default(false),
-	createdAt: timestamp('created_at').defaultNow(),
-	lastUsedAt: timestamp('last_used_at'),
-	deviceType: varchar('device_type', { length: 50 }), // 'phone', 'laptop', 'desktop', 'tablet'
-	authenticatorType: varchar('authenticator_type', { length: 50 }) // 'platform', 'cross-platform'
-});
-
-export const webauthnChallenges = appSchema.table('webauthn_challenges', {
-	id: text('id').primaryKey(),
-	challenge: text('challenge').notNull(),
-	userId: text('user_id').references(() => user.id),
-	type: varchar('type', { length: 20 }).notNull(), // 'registration', 'authentication', 'csrf'
-	expiresAt: timestamp('expires_at').notNull(),
-	createdAt: timestamp('created_at').defaultNow(),
-	usedAt: timestamp('used_at'), // When the challenge was used
-	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
-	userAgent: text('user_agent')
-});
-
-export const backupCodes = appSchema.table('backup_codes', {
-	id: text('id').primaryKey(),
-	userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
-	codeHash: text('code_hash').notNull(),
-	used: boolean('used').default(false),
-	usedAt: timestamp('used_at'),
-	createdAt: timestamp('created_at').defaultNow()
-});
+	consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'date' }),
+	requestIp: varchar('request_ip', { length: 45 }), // IPv6 compatible
+	userAgent: text('user_agent'),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+}, (table) => ({
+	emailIdx: index('login_token_email_idx').on(table.email),
+	expiresIdx: index('login_token_expires_idx').on(table.expiresAt)
+}));
 
 // Rule Proposal and Voting System Tables (Application features)
 export const ruleProposal = appSchema.table('rule_proposal', {
@@ -282,30 +290,57 @@ export const ruleProposal = appSchema.table('rule_proposal', {
 	proposalId: varchar('proposal_id', { length: 50 }).notNull().unique(),
 	title: varchar('title', { length: 255 }).notNull(),
 	description: text('description').notNull(),
-	proposalType: varchar('proposal_type', { length: 50 }).notNull(), // 'add_clause', 'edit_language', 'tweak_rule'
-	affectedSection: varchar('affected_section', { length: 100 }), // Which article/section this affects
-	ruleIndex: integer('rule_index'), // Which specific rule within the section (0-based index)
-	currentLanguage: text('current_language'), // Current rule text (for edits)
-	proposedLanguage: text('proposed_language').notNull(), // New rule text
+	proposalType: varchar('proposal_type', { length: 50 }).notNull(), // 'edit_clause' | 'add_clause' | 'delete_clause'
+	/** Which Article 8 rule sets the bar. Chosen on the form, never inferred from the text. */
+	category: varchar('category', { length: 40 }).notNull().default('general'),
+	affectedSection: varchar('affected_section', { length: 100 }), // 'article1'…'appendix1'
+	/**
+	 * The clause this targets, by its stable uid rather than its position.
+	 * A positional index breaks the moment any clause is inserted above it.
+	 */
+	targetClauseUid: text('target_clause_uid'),
+	/** Only set for category 'manager_removal' — excluded from the denominator and barred from voting. */
+	subjectManagerKey: integer('subject_manager_key').references(() => leagueMember.managerKey),
+	currentLanguage: text('current_language'), // Clause text as it stood when proposed
+	proposedLanguage: text('proposed_language').notNull(), // New clause text
 	rationale: text('rationale').notNull(), // Why this change is needed
 	effectiveSeason: integer('effective_season').notNull(), // Which season this takes effect
-	submittedBy: integer('manager_key').notNull(), // Who submitted the proposal
+	/**
+	 * FK to league_member, NOT to edw.dim_manager: dim_manager holds every manager
+	 * across 20 years including retired and Yahoo-private ones, so it would happily
+	 * accept manager_key 1 ('-- hidden --'). Pointing at the allowlist makes an
+	 * unattributable proposal a constraint violation at insert time rather than a
+	 * silently wrong row.
+	 */
+	submittedBy: integer('submitted_by')
+		.notNull()
+		.references(() => leagueMember.managerKey),
 	submittedAt: timestamp('submitted_at').defaultNow(),
 	votingStartDate: timestamp('voting_start_date'),
 	votingEndDate: timestamp('voting_end_date'),
-	status: varchar('status', { length: 20 }).default('draft'), // draft, active, passed, rejected, archived
-	requiredVotes: integer('required_votes').default(7), // Super-majority default
-	yesVotes: integer('yes_votes').default(0),
-	noVotes: integer('no_votes').default(0),
-	abstainVotes: integer('abstain_votes').default(0),
+	status: varchar('status', { length: 20 }).notNull().default('draft'), // draft | active | passed | rejected | withdrawn | superseded
+	requiredVotes: integer('required_votes').notNull(),
+	eligibleVoters: integer('eligible_voters').notNull(),
+	yesVotes: integer('yes_votes').notNull().default(0),
+	noVotes: integer('no_votes').notNull().default(0),
+	abstainVotes: integer('abstain_votes').notNull().default(0),
+	/** Set once the proposal reaches a terminal state, by evaluate.ts and nothing else. */
+	settledAt: timestamp('settled_at', { withTimezone: true, mode: 'date' }),
+	appliedAt: timestamp('applied_at', { withTimezone: true, mode: 'date' }),
+	amendmentKey: integer('amendment_key'),
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
 });
 
 export const ruleVote = appSchema.table('rule_vote', {
 	voteKey: serial('vote_key').primaryKey(),
-	proposalKey: integer('proposal_key').notNull(),
-	managerKey: integer('manager_key').notNull(),
+	proposalKey: integer('proposal_key')
+		.notNull()
+		.references(() => ruleProposal.proposalKey, { onDelete: 'cascade' }),
+	/** The voter. FK to the allowlist for the same reason as rule_proposal.submitted_by. */
+	managerKey: integer('manager_key')
+		.notNull()
+		.references(() => leagueMember.managerKey),
 	vote: varchar('vote', { length: 10 }).notNull(), // 'yes', 'no', 'abstain'
 	comment: text('comment'), // Optional comment on vote
 	votedAt: timestamp('voted_at').defaultNow(),
@@ -317,23 +352,109 @@ export const ruleVote = appSchema.table('rule_vote', {
 
 export const ruleAmendment = appSchema.table('rule_amendment', {
 	amendmentKey: serial('amendment_key').primaryKey(),
-	proposalKey: integer('proposal_key').notNull(),
+	proposalKey: integer('proposal_key')
+		.notNull()
+		.references(() => ruleProposal.proposalKey),
 	amendmentYear: integer('amendment_year').notNull(),
 	amendmentTitle: varchar('amendment_title', { length: 255 }).notNull(),
 	amendmentDescription: text('amendment_description').notNull(),
 	effectiveSeason: integer('effective_season').notNull(),
 	voteResults: text('vote_results'), // JSON string of final vote counts
-	approvedBy: integer('manager_key'), // Who approved the final amendment
+	/** The proposal's author. Null only for amendments recorded outside the vote flow. */
+	approvedBy: integer('approved_by').references(() => leagueMember.managerKey),
 	approvedAt: timestamp('approved_at'),
 	createdAt: timestamp('created_at').defaultNow()
 });
+
+// ---------------------------------------------------------------------------
+// Constitution (copy-on-write versioned document)
+// ---------------------------------------------------------------------------
+//
+// Every passed amendment clones the whole document into a new version rather
+// than mutating rows in place. At ~10 sections and ~70 clauses that costs
+// nothing, and it buys real history: "the constitution as of 2019" is one
+// WHERE clause, diffing two versions is a join, and "Last Updated" stops being
+// a hardcoded string.
+
+export const constitutionVersion = appSchema.table('constitution_version', {
+	versionKey: serial('version_key').primaryKey(),
+	versionNo: integer('version_no').notNull().unique(),
+	/**
+	 * When this version takes effect. Resolving "current" as the newest row with
+	 * effective_at <= now() means a proposal passed today with effect from 2027
+	 * simply is not current yet — no is_current flag to keep in sync.
+	 */
+	effectiveAt: timestamp('effective_at', { withTimezone: true, mode: 'date' })
+		.notNull()
+		.defaultNow(),
+	amendmentKey: integer('amendment_key').references(() => ruleAmendment.amendmentKey), // null for v1
+	note: text('note'),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+});
+
+export const constitutionSection = appSchema.table('constitution_section', {
+	sectionKey: serial('section_key').primaryKey(),
+	versionKey: integer('version_key')
+		.notNull()
+		.references(() => constitutionVersion.versionKey, { onDelete: 'cascade' }),
+	sectionId: varchar('section_id', { length: 50 }).notNull(), // 'article1'…'article9', 'appendix1'
+	title: varchar('title', { length: 255 }).notNull(),
+	kind: varchar('kind', { length: 20 }).notNull(), // 'article' | 'appendix'
+	icon: varchar('icon', { length: 50 }), // lucide icon name, resolved client-side
+	sortOrder: integer('sort_order').notNull()
+}, (table) => ({
+	uniqueSection: uniqueIndex('constitution_section_version_id_idx').on(
+		table.versionKey,
+		table.sectionId
+	)
+}));
+
+export const constitutionClause = appSchema.table('constitution_clause', {
+	clauseKey: serial('clause_key').primaryKey(),
+	sectionKey: integer('section_key')
+		.notNull()
+		.references(() => constitutionSection.sectionKey, { onDelete: 'cascade' }),
+	/**
+	 * ON DELETE CASCADE is load-bearing, not decoration. apply.ts deletes a
+	 * clause and relies on its children going with it; without the constraint
+	 * they survive with a dangling parent_key, vanish from the rendered tree
+	 * (loadVersionTree can neither attach nor root them), and then reappear as
+	 * top-level clauses on the next amendment when cloneVersion remaps the
+	 * missing parent to null.
+	 */
+	parentKey: integer('parent_key').references((): AnyPgColumn => constitutionClause.clauseKey, {
+		onDelete: 'cascade'
+	}),
+	/**
+	 * Stable across versions — this is what a proposal targets.
+	 *
+	 * clause_key changes on every clone, so it cannot identify "the clause this
+	 * proposal edits" across an intervening amendment. clause_uid is copied
+	 * verbatim by the clone and is the only durable handle.
+	 */
+	clauseUid: text('clause_uid').notNull(),
+	depth: smallint('depth').notNull(), // 0 = I./II.  1 = a./b.  2 = i./ii.
+	sortOrder: integer('sort_order').notNull(),
+	label: varchar('label', { length: 16 }).notNull(), // 'I', 'a', 'iii' — regenerated on insert/delete
+	body: text('body').notNull(),
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+}, (table) => ({
+	uniqueClause: uniqueIndex('constitution_clause_section_uid_idx').on(
+		table.sectionKey,
+		table.clauseUid
+	),
+	sectionOrderIdx: index('constitution_clause_section_idx').on(table.sectionKey, table.sortOrder)
+}));
 
 // Chat System Tables
 export const chatMessage = appSchema.table('chat_message', {
 	messageKey: serial('message_key').primaryKey(),
 	messageId: varchar('message_id', { length: 100 }).notNull().unique(),
 	content: text('content').notNull(),
-	authorKey: integer('author_key').notNull(), // References dim_manager
+	// FK to the allowlist, not dim_manager — see rule_proposal.submitted_by.
+	authorKey: integer('author_key')
+		.notNull()
+		.references(() => leagueMember.managerKey),
 	channelId: varchar('channel_id', { length: 100 }).notNull().default('general'), // Channel identifier
 	parentMessageKey: integer('parent_message_key'), // For threaded replies
 	messageType: varchar('message_type', { length: 20 }).default('message'), // 'message', 'system', 'join', 'leave'
@@ -344,10 +465,11 @@ export const chatMessage = appSchema.table('chat_message', {
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
 }, (table) => ({
-	// Index for efficient channel queries
-	channelIndex: uniqueIndex('chat_message_channel_created').on(table.channelId, table.createdAt),
-	// Index for thread queries
-	threadIndex: uniqueIndex('chat_message_thread').on(table.parentMessageKey, table.createdAt)
+	// Plain indexes, not unique: these exist to make channel and thread queries
+	// fast. Declared UNIQUE they would also forbid two messages in the same
+	// channel sharing a created_at, which two quick sends collide on.
+	channelIndex: index('chat_message_channel_created').on(table.channelId, table.createdAt),
+	threadIndex: index('chat_message_thread').on(table.parentMessageKey, table.createdAt)
 }));
 
 export const chatThread = appSchema.table('chat_thread', {
@@ -363,8 +485,8 @@ export const chatThread = appSchema.table('chat_thread', {
 	createdAt: timestamp('created_at').defaultNow(),
 	updatedAt: timestamp('updated_at').defaultNow()
 }, (table) => ({
-	// Index for efficient channel thread queries
-	channelThreadIndex: uniqueIndex('chat_thread_channel_updated').on(table.channelId, table.updatedAt)
+	// Plain index — see the note on chat_message above.
+	channelThreadIndex: index('chat_thread_channel_updated').on(table.channelId, table.updatedAt)
 }));
 
 export const chatReaction = appSchema.table('chat_reaction', {
@@ -404,29 +526,6 @@ export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	updatedAt: timestamp('updated_at').defaultNow()
 });
 
-// WebAuthn Audit Log Table
-export const webauthnAuditLog = appSchema.table('webauthn_audit_log', {
-	id: varchar('id', { length: 100 }).primaryKey(),
-	eventType: varchar('event_type', { length: 50 }).notNull(),
-	severity: varchar('severity', { length: 20 }).notNull(),
-	userId: varchar('user_id', { length: 100 }),
-	sessionId: varchar('session_id', { length: 100 }),
-	ipAddress: varchar('ip_address', { length: 45 }), // IPv6 compatible
-	userAgent: text('user_agent'),
-	deviceType: varchar('device_type', { length: 50 }),
-	details: text('details'), // JSON string
-	timestamp: timestamp('timestamp').defaultNow(),
-	requestId: varchar('request_id', { length: 100 }),
-	errorCode: varchar('error_code', { length: 50 }),
-	errorMessage: text('error_message')
-}, (table) => ({
-	// Indexes for efficient querying
-	userIdIndex: uniqueIndex('webauthn_audit_user_id').on(table.userId, table.timestamp),
-	eventTypeIndex: uniqueIndex('webauthn_audit_event_type').on(table.eventType, table.timestamp),
-	severityIndex: uniqueIndex('webauthn_audit_severity').on(table.severity, table.timestamp),
-	timestampIndex: uniqueIndex('webauthn_audit_timestamp').on(table.timestamp)
-}));
-
 // Type exports
 export type DimLeague = typeof dimLeague.$inferSelect;
 export type DimTeam = typeof dimTeam.$inferSelect;
@@ -441,8 +540,12 @@ export type RuleProposal = typeof ruleProposal.$inferSelect;
 export type RuleVote = typeof ruleVote.$inferSelect;
 export type RuleAmendment = typeof ruleAmendment.$inferSelect;
 export type Session = typeof session.$inferSelect;
-export type PasswordResetToken = typeof passwordResetToken.$inferSelect;
 export type User = typeof user.$inferSelect;
+export type LeagueMember = typeof leagueMember.$inferSelect;
+export type LoginToken = typeof loginToken.$inferSelect;
+export type ConstitutionVersion = typeof constitutionVersion.$inferSelect;
+export type ConstitutionSection = typeof constitutionSection.$inferSelect;
+export type ConstitutionClause = typeof constitutionClause.$inferSelect;
 
 // Chat System Types
 export type ChatMessage = typeof chatMessage.$inferSelect;
@@ -451,5 +554,3 @@ export type ChatReaction = typeof chatReaction.$inferSelect;
 export type ChatRead = typeof chatRead.$inferSelect;
 export type ChatCustomEmoji = typeof chatCustomEmoji.$inferSelect;
 
-// WebAuthn Types
-export type WebAuthnAuditLog = typeof webauthnAuditLog.$inferSelect;

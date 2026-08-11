@@ -1,201 +1,125 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
-	import { Fingerprint, Shield, AlertTriangle, CheckCircle, Trash2, Plus, ArrowRight } from 'lucide-svelte';
-	import PasskeyRegistration from '$lib/components/webauthn/PasskeyRegistration.svelte';
-	import CredentialManager from '$lib/components/webauthn/CredentialManager.svelte';
+	import { enhance } from '$app/forms';
+	import { Bell, Mail, Shield, User } from 'lucide-svelte';
+	import type { ActionData, PageData } from './$types';
 
-	export let data;
+	export let data: PageData;
+	export let form: ActionData;
 
-	let user = data.user;
-	let isLoading = false;
-	let showPasskeySetup = false;
-	let showCredentialManager = false;
-
-	onMount(() => {
-		console.log('🔧 Settings page loaded for user:', user);
-	});
-
-	function togglePasskeySetup() {
-		showPasskeySetup = !showPasskeySetup;
-	}
-
-	function toggleCredentialManager() {
-		showCredentialManager = !showCredentialManager;
-	}
-
-	function handlePasskeySuccess() {
-		showPasskeySetup = false;
-		// Refresh user data
-		window.location.reload();
-	}
+	$: prefs = data.manager?.notificationPreferences;
 </script>
 
 <svelte:head>
-	<title>Account Settings - The League</title>
+	<title>Settings | The League</title>
 </svelte:head>
 
-<div class="min-h-screen bg-slate-900 text-white">
-	<div class="container mx-auto px-4 py-8">
-		<div class="max-w-4xl mx-auto">
-			<!-- Header -->
-			<div class="mb-8">
-				<h1 class="text-3xl font-bold text-white mb-2">Account Settings</h1>
-				<p class="text-slate-400">Manage your account and authentication preferences</p>
-			</div>
+<div class="mx-auto max-w-2xl space-y-6 px-4 py-8">
+	<h1 class="text-2xl font-bold text-white">Settings</h1>
 
-			<!-- User Info -->
-			<div class="bg-slate-800 rounded-lg p-6 mb-6">
-				<h2 class="text-xl font-semibold text-white mb-4">Account Information</h2>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-1">Username</label>
-						<p class="text-white font-medium">{user?.username}</p>
-					</div>
-					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-1">Manager</label>
-						<p class="text-white font-medium">{user?.displayName || 'Unknown'}</p>
-					</div>
-					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-1">Email</label>
-						<p class="text-white">{user?.email || 'Not provided'}</p>
-					</div>
-					<div>
-						<label class="block text-sm font-medium text-slate-300 mb-1">Account Status</label>
-						<p class="text-white">{user?.accountStatus || 'active'}</p>
-					</div>
+	{#if data.manager}
+		<section class="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+			<h2 class="mb-4 flex items-center space-x-2 text-lg font-semibold text-white">
+				<User class="h-5 w-5 text-amber-400" />
+				<span>Profile</span>
+			</h2>
+			<dl class="space-y-3 text-sm">
+				<div class="flex justify-between">
+					<dt class="text-slate-400">Manager</dt>
+					<dd class="text-white">{data.manager.displayName}</dd>
 				</div>
-			</div>
-
-			<!-- Authentication Settings -->
-			<div class="bg-slate-800 rounded-lg p-6 mb-6">
-				<h2 class="text-xl font-semibold text-white mb-4">Authentication</h2>
-				
-				<!-- Password Authentication -->
-				<div class="mb-6">
-					<div class="flex items-center justify-between">
-						<div class="flex items-center space-x-3">
-							<Shield class="h-5 w-5 text-blue-400" />
-							<div>
-								<h3 class="text-white font-medium">Password Authentication</h3>
-								<p class="text-slate-400 text-sm">Sign in with your username and password</p>
-							</div>
-						</div>
-						<div class="flex items-center space-x-2">
-							<CheckCircle class="h-4 w-4 text-green-400" />
-							<span class="text-green-400 text-sm font-medium">Enabled</span>
-						</div>
-					</div>
+				<div class="flex justify-between">
+					<dt class="text-slate-400">Email</dt>
+					<dd class="text-white">{data.manager.email}</dd>
 				</div>
-
-				<!-- Passkey Authentication -->
-				<div class="mb-6">
-					<div class="flex items-center justify-between">
-						<div class="flex items-center space-x-3">
-							<Fingerprint class="h-5 w-5 text-purple-400" />
-							<div>
-								<h3 class="text-white font-medium">Passkey Authentication</h3>
-								<p class="text-slate-400 text-sm">
-									{#if user?.passkeyEnabled}
-										Sign in with biometric authentication
-									{:else}
-										Enable biometric authentication for faster, more secure sign-in
-									{/if}
-								</p>
-							</div>
-						</div>
-						<div class="flex items-center space-x-2">
-							{#if user?.passkeyEnabled}
-								<CheckCircle class="h-4 w-4 text-green-400" />
-								<span class="text-green-400 text-sm font-medium">Enabled</span>
-							{:else}
-								<AlertTriangle class="h-4 w-4 text-yellow-400" />
-								<span class="text-yellow-400 text-sm font-medium">Not Set Up</span>
-							{/if}
-						</div>
-					</div>
-
-					{#if user?.passkeyEnabled}
-						<div class="mt-4 flex space-x-3">
-							<button
-								on:click={toggleCredentialManager}
-								class="flex items-center space-x-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-							>
-								<Trash2 class="h-4 w-4" />
-								<span>Manage Passkeys</span>
-							</button>
-							<button
-								on:click={togglePasskeySetup}
-								class="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
-							>
-								<Plus class="h-4 w-4" />
-								<span>Add New Passkey</span>
-							</button>
-						</div>
-					{:else}
-						<div class="mt-4">
-							<button
-								on:click={togglePasskeySetup}
-								class="flex items-center space-x-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
-							>
-								<Fingerprint class="h-4 w-4" />
-								<span>Set Up Passkey</span>
-								<ArrowRight class="h-4 w-4" />
-							</button>
-						</div>
-					{/if}
+				<div class="flex justify-between">
+					<dt class="text-slate-400">Role</dt>
+					<dd class="text-white capitalize">{data.role}</dd>
 				</div>
+			</dl>
+			<p class="mt-4 text-xs text-slate-500">
+				Your email is how you sign in. Ask the commissioner to change it.
+			</p>
+		</section>
 
-				<!-- Passkey Setup Modal -->
-				{#if showPasskeySetup}
-					<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-						<div class="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
-							<h3 class="text-xl font-semibold text-white mb-4">Set Up Passkey</h3>
-							<PasskeyRegistration 
-								userId={user?.id}
-								username={user?.username}
-								on:registrationSuccess={handlePasskeySuccess}
-							/>
-							<button
-								on:click={togglePasskeySetup}
-								class="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-							>
-								Cancel
-							</button>
-						</div>
-					</div>
+		<section class="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+			<h2 class="mb-4 flex items-center space-x-2 text-lg font-semibold text-white">
+				<Bell class="h-5 w-5 text-amber-400" />
+				<span>Email notifications</span>
+			</h2>
+
+			<form method="POST" action="?/notifications" use:enhance class="space-y-4">
+				<label class="flex items-start space-x-3">
+					<input
+						type="checkbox"
+						name="emailOnNewProposal"
+						checked={prefs?.emailOnNewProposal}
+						class="mt-1 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500"
+					/>
+					<span class="text-sm">
+						<span class="block text-white">New rule proposals</span>
+						<span class="block text-slate-400">
+							When someone opens a constitutional amendment for voting.
+						</span>
+					</span>
+				</label>
+
+				<label class="flex items-start space-x-3">
+					<input
+						type="checkbox"
+						name="emailOnVoteResults"
+						checked={prefs?.emailOnVoteResults}
+						class="mt-1 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500"
+					/>
+					<span class="text-sm">
+						<span class="block text-white">Vote results</span>
+						<span class="block text-slate-400">When a proposal passes or fails.</span>
+					</span>
+				</label>
+
+				<label class="flex items-start space-x-3">
+					<input
+						type="checkbox"
+						name="emailOnTradeOffers"
+						checked={prefs?.emailOnTradeOffers}
+						class="mt-1 rounded border-slate-600 bg-slate-900 text-amber-500 focus:ring-amber-500"
+					/>
+					<span class="text-sm">
+						<span class="block text-white">Trade offers</span>
+						<span class="block text-slate-400">When another manager sends you an offer.</span>
+					</span>
+				</label>
+
+				{#if form?.success}
+					<p class="text-sm text-green-400">Saved.</p>
+				{:else if form?.error}
+					<p class="text-sm text-red-400">{form.error}</p>
 				{/if}
 
-				<!-- Credential Manager Modal -->
-				{#if showCredentialManager}
-					<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-						<div class="bg-slate-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-							<h3 class="text-xl font-semibold text-white mb-4">Manage Passkeys</h3>
-							<CredentialManager userId={user?.id} />
-							<button
-								on:click={toggleCredentialManager}
-								class="mt-4 w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
-							>
-								Close
-							</button>
-						</div>
-					</div>
-				{/if}
-			</div>
+				<button
+					type="submit"
+					class="rounded-lg bg-amber-500 px-4 py-2 font-semibold text-slate-900 transition-colors hover:bg-amber-400"
+				>
+					Save preferences
+				</button>
+			</form>
+		</section>
 
-			<!-- Security Notice -->
-			<div class="bg-blue-900/20 border border-blue-600/30 rounded-lg p-4">
-				<div class="flex items-start space-x-3">
-					<Shield class="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
-					<div>
-						<h4 class="text-blue-300 font-medium">Enhanced Security</h4>
-						<p class="text-blue-200 text-sm mt-1">
-							Passkeys provide stronger security than passwords and are resistant to phishing attacks. 
-							You can use both password and passkey authentication simultaneously.
-						</p>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-</div> 
+		<section class="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
+			<h2 class="mb-3 flex items-center space-x-2 text-lg font-semibold text-white">
+				<Shield class="h-5 w-5 text-amber-400" />
+				<span>Signing in</span>
+			</h2>
+			<p class="flex items-start space-x-2 text-sm text-slate-400">
+				<Mail class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+				<span>
+					The League uses emailed sign-in links. There's no password to manage, and links expire
+					after 15 minutes.
+				</span>
+			</p>
+		</section>
+	{:else}
+		<p class="text-slate-400">
+			Your account isn't linked to a manager profile. Ask the commissioner to check the roster.
+		</p>
+	{/if}
+</div>

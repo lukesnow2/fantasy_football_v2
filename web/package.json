@@ -19,7 +19,10 @@
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"storybook": "storybook dev -p 6006",
-		"build-storybook": "storybook build"
+		"build-storybook": "storybook build",
+		"db:generate": "drizzle-kit generate && node scripts/filter-migration.js",
+		"seed:members": "node scripts/seed-league-members.js",
+		"seed:constitution": "node scripts/seed-constitution.js"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^4.0.1",
@@ -64,11 +67,8 @@
 	},
 	"dependencies": {
 		"@inlang/paraglide-js": "^2.0.0",
-		"@node-rs/argon2": "^2.0.2",
 		"@oslojs/crypto": "^1.0.1",
 		"@oslojs/encoding": "^1.1.0",
-		"@simplewebauthn/browser": "^13.1.2",
-		"@simplewebauthn/server": "^13.1.2",
 		"d3": "^7.9.0",
 		"dotenv": "^17.2.1",
 		"drizzle-orm": "^0.40.0",

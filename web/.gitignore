@@ -28,3 +28,7 @@ src/lib/paraglide
 
 *storybook.log
 storybook-static
+
+# curl cookie jars — these hold live session tokens
+cookies.txt
+*.cookies

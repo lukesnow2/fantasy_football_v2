@@ -1,0 +1,73 @@
+{
+	"_comment": [
+		"The league roster allowlist \u2014 the only people who can sign in.",
+		"Fill in emails as you collect them and re-run: npm run seed:members",
+		"The script is keyed on managerKey, so re-running updates rows in place",
+		"rather than creating duplicates, and skips entries with a blank email.",
+		"managerKey values are verified against edw.dim_manager on every run; the",
+		"script aborts if a name no longer matches, which is the tripwire for the",
+		"Python ETL renumbering a key underneath us."
+	],
+	"members": [
+		{
+			"managerKey": 14,
+			"managerName": "Luke S",
+			"email": "lukesnow2@gmail.com",
+			"role": "commissioner"
+		},
+		{
+			"managerKey": 5,
+			"managerName": "Craig",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 6,
+			"managerName": "Erik Snow",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 8,
+			"managerName": "Gabe Flores",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 9,
+			"managerName": "Gabe the Younger",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 10,
+			"managerName": "Israel",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 15,
+			"managerName": "Nick",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 16,
+			"managerName": "Omar",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 18,
+			"managerName": "Trevor",
+			"email": "",
+			"role": "member"
+		},
+		{
+			"managerKey": 19,
+			"managerName": "Troy Colvin",
+			"email": "",
+			"role": "member"
+		}
+	]
+}

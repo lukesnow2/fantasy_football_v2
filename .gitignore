@@ -10,6 +10,15 @@ temp_oauth.json
 *secret*
 *token*
 
+# ...but never let those globs swallow source code. `*token*` matched
+# web/src/lib/server/login-token.ts and silently kept the entire magic-link
+# implementation out of the repository — three tracked files import it, so a
+# clean checkout could not build, while everything worked locally.
+!**/*.ts
+!**/*.svelte
+!**/*.js
+!**/*.sh
+
 # Configuration files with secrets - NEVER COMMIT THESE
 config.json
 **/config.json
