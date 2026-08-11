@@ -100,7 +100,8 @@ export async function settleProposal(
 		updatedAt: now
 	};
 
-	if (outcome.state === 'open' || row.status === 'passed' || row.status === 'rejected') {
+	const TERMINAL = ['passed', 'rejected', 'withdrawn', 'superseded'];
+	if (outcome.state === 'open' || TERMINAL.includes(row.status)) {
 		await tx.update(ruleProposal).set(counters).where(eq(ruleProposal.proposalKey, proposalKey));
 		return outcome;
 	}
@@ -129,7 +130,12 @@ export async function settleProposal(
 		})
 		.where(eq(ruleProposal.proposalKey, proposalKey));
 
-	return outcome;
+	// Report what actually happened, not what the tally implied. If the text
+	// change could not be applied, callers must not tell the league the
+	// constitution was updated.
+	return applied.status === 'superseded'
+		? { state: 'superseded', threshold, tally }
+		: outcome;
 }
 
 /**
@@ -152,13 +158,22 @@ export async function settleDueProposals(now: Date = new Date()): Promise<number
 	for (const { proposalKey } of due) {
 		// One transaction per proposal: a failure applying one amendment must not
 		// roll back the others settled in the same sweep.
+		let outcome: Outcome | null = null;
 		try {
-			await db.transaction(async (tx) => {
-				await settleProposal(tx, proposalKey, now);
-			});
+			outcome = await db.transaction(async (tx) => settleProposal(tx, proposalKey, now));
 			settled += 1;
 		} catch (error) {
 			console.error(`[constitution] Failed to settle proposal ${proposalKey}:`, error);
+			continue;
+		}
+
+		// Notify after the commit, exactly as the vote paths do. Running out the
+		// clock is the *normal* way a proposal ends — abstentions and non-votes
+		// both count against passage — so skipping notification here left the
+		// common case silent while the crossed-the-line case emailed everyone.
+		if (outcome && outcome.state !== 'open') {
+			const { notifyProposalSettled } = await import('$lib/server/notify');
+			await notifyProposalSettled(proposalKey, outcome);
 		}
 	}
 

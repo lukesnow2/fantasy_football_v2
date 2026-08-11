@@ -29,13 +29,26 @@ function check(name, passed, detail = '') {
 	if (!passed) failures++;
 }
 
-async function rejects(label, fn) {
+/**
+ * Assert an insert is rejected by a SPECIFIC named constraint.
+ *
+ * Matching the generic phrase "violates foreign key constraint" is not enough:
+ * an earlier version of this script inserted a rule_vote with proposal_key
+ * 999999, which trips the proposal FK regardless of whether the manager_key FK
+ * exists. It therefore printed a green check for a constraint it never tested —
+ * false assurance for exactly the bug this file was written to catch.
+ */
+async function rejectsWith(label, constraintName, fn) {
 	try {
 		await fn();
 		check(label, false, 'the insert was ACCEPTED');
 	} catch (error) {
-		const isFk = /violates foreign key constraint/i.test(error.message);
-		check(label, isFk, isFk ? '' : `rejected for the wrong reason: ${error.message}`);
+		const hit = new RegExp(constraintName, 'i').test(error.message);
+		check(
+			label,
+			hit,
+			hit ? '' : `rejected, but by something else: ${error.message.split('\n')[0]}`
+		);
 	}
 }
 
@@ -52,12 +65,37 @@ try {
 
 	console.log('\nThe database must refuse every one of these:');
 
-	await rejects('rule_vote attributed to manager_key 1', async () => {
-		await sql`insert into app.rule_vote (proposal_key, manager_key, vote)
-		          values (999999, 1, 'yes')`;
-	});
+	// A real proposal, owned by a real member, so the ONLY thing that can reject
+	// the vote below is the manager_key constraint under test.
+	const [anyMember] = await sql`select manager_key from app.league_member limit 1`;
+	let probeKey = null;
 
-	await rejects('rule_proposal submitted_by manager_key 1', async () => {
+	if (anyMember) {
+		const [probe] = await sql`
+			insert into app.rule_proposal
+				(proposal_id, title, description, proposal_type, category, proposed_language,
+				 rationale, effective_season, submitted_by, required_votes, eligible_voters)
+			values ('verify-attribution-probe', 'probe', 'd', 'edit_clause', 'general', 'x', 'y',
+			        2099, ${anyMember.manager_key}, 6, 10)
+			on conflict (proposal_id) do update set title = 'probe'
+			returning proposal_key`;
+		probeKey = probe.proposal_key;
+
+		await rejectsWith(
+			'rule_vote attributed to manager_key 1',
+			'rule_vote_manager_key_league_member_manager_key_fk',
+			async () => {
+				await sql`insert into app.rule_vote (proposal_key, manager_key, vote)
+				          values (${probeKey}, 1, 'yes')`;
+			}
+		);
+	} else {
+		check('rule_vote attributed to manager_key 1', false,
+			'SKIPPED — no league_member rows, so the vote FK cannot be isolated');
+	}
+
+	await rejectsWith('rule_proposal submitted_by manager_key 1',
+		'rule_proposal_submitted_by_league_member_manager_key_fk', async () => {
 		await sql`insert into app.rule_proposal
 			(proposal_id, title, description, proposal_type, category, proposed_language,
 			 rationale, effective_season, submitted_by, required_votes, eligible_voters)
@@ -65,7 +103,8 @@ try {
 			        2027, 1, 6, 10)`;
 	});
 
-	await rejects('chat_message authored by manager_key 1', async () => {
+	await rejectsWith('chat_message authored by manager_key 1',
+		'chat_message_author_key_league_member_manager_key_fk', async () => {
 		await sql`insert into app.chat_message (message_id, content, author_key)
 		          values ('verify-attribution', 'hello', 1)`;
 	});
@@ -91,6 +130,9 @@ try {
 		expected.every((t) => fks.some((fk) => fk.table_name === t)),
 		`expected ${[...new Set(expected)].join(', ')}`
 	);
+	if (probeKey != null) {
+		await sql`delete from app.rule_proposal where proposal_key = ${probeKey}`;
+	}
 } finally {
 	await sql.end();
 }

@@ -37,10 +37,34 @@ export interface SectionView {
  * from the 2027 season simply is not current yet.
  */
 export async function getCurrentVersion(tx: Tx = db, now: Date = new Date()) {
+	// Ordered by effective date first, version number only as a tiebreak.
+	// Ordering by versionNo alone diverges from effective order the moment one
+	// amendment is dated further out than another, and the later-numbered but
+	// earlier-dated version would win.
 	const [version] = await tx
 		.select()
 		.from(constitutionVersion)
 		.where(lte(constitutionVersion.effectiveAt, now))
+		.orderBy(desc(constitutionVersion.effectiveAt), desc(constitutionVersion.versionNo))
+		.limit(1);
+
+	return version ?? null;
+}
+
+/**
+ * The newest version in the chain, in force or not.
+ *
+ * This is what an amendment must be built on. Cloning from the *currently
+ * effective* version instead loses every amendment queued ahead of it: with the
+ * form defaulting effectiveSeason to next year, two proposals passing in the
+ * same season both clone v1, and whichever lands second silently drops the
+ * first one's edit while still recording an amendment row and mailing the
+ * league that it passed.
+ */
+export async function getLatestVersion(tx: Tx = db) {
+	const [version] = await tx
+		.select()
+		.from(constitutionVersion)
 		.orderBy(desc(constitutionVersion.versionNo))
 		.limit(1);
 

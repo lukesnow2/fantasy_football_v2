@@ -16,6 +16,12 @@ export type Outcome =
 			closesAt: Date | null;
 	  }
 	| { state: 'passed'; threshold: Threshold; tally: Tally }
+	/**
+	 * The vote carried, but the clause it targeted no longer exists, so no text
+	 * changed. Distinct from 'passed' on purpose: reporting this as passed mails
+	 * the league "the constitution has been updated" when it was not.
+	 */
+	| { state: 'superseded'; threshold: Threshold; tally: Tally }
 	| {
 			state: 'rejected';
 			threshold: Threshold;
@@ -46,7 +52,8 @@ export function computeOutcome(args: {
 
 	// Terminal states are reported back as-is; settling is not re-litigated.
 	if (status === 'passed') return { state: 'passed', threshold, tally };
-	if (status === 'rejected') {
+	if (status === 'superseded') return { state: 'superseded', threshold, tally };
+	if (status === 'rejected' || status === 'withdrawn') {
 		return { state: 'rejected', threshold, tally, reason: 'deadline' };
 	}
 

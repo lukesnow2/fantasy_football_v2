@@ -20,21 +20,48 @@ import path from 'node:path';
 const MIGRATIONS_DIR = new URL('../drizzle/', import.meta.url);
 const BREAKPOINT = '--> statement-breakpoint';
 
-/**
- * Statements whose *target* is a pipeline-owned schema.
- *
- * Anchored on what the statement acts upon, not on any mention of the schema:
- * `ALTER TABLE "app"."league_member" ... REFERENCES "edw"."dim_manager"` is a
- * foreign key we want and must survive, while `CREATE TABLE "edw"."dim_manager"`
- * must not.
- */
-const FOREIGN_TARGET =
-	/^\s*(?:CREATE|ALTER|DROP)\s+(?:TABLE|INDEX|VIEW|MATERIALIZED\s+VIEW)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?"(edw|public|meta_data)"/i;
+const FOREIGN_SCHEMAS = String.raw`edw|public|meta_data`;
 
-const FOREIGN_SCHEMA_DDL = /^\s*(?:CREATE|DROP)\s+SCHEMA\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?"(edw|public|meta_data)"/i;
+/**
+ * The schema a statement acts *on*.
+ *
+ * Anchoring on the object type alone is not enough: drizzle emits the index
+ * name before the table, so `CREATE INDEX "foo" ON "edw"."dim_manager"` has its
+ * target after the ON, not after the object type. An earlier version of this
+ * check missed exactly that, and — worse — the post-filter assertion reused the
+ * same predicate, so a statement it could not see was also a statement it could
+ * not catch. The verifier below is deliberately independent of this one.
+ */
+const TARGET_PATTERNS = [
+	// CREATE/DROP SCHEMA "edw"
+	new RegExp(String.raw`^\s*(?:CREATE|DROP)\s+SCHEMA\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?"(${FOREIGN_SCHEMAS})"`, 'i'),
+	// CREATE/ALTER/DROP TABLE|VIEW|MATERIALIZED VIEW|TYPE|SEQUENCE "edw"."x"
+	new RegExp(String.raw`^\s*(?:CREATE|ALTER|DROP)\s+(?:TABLE|VIEW|MATERIALIZED\s+VIEW|TYPE|SEQUENCE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?"(${FOREIGN_SCHEMAS})"`, 'i'),
+	// CREATE [UNIQUE] INDEX "name" ON "edw"."x" — target follows ON
+	new RegExp(String.raw`^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+[^;]*?\bON\s+"(${FOREIGN_SCHEMAS})"`, 'i'),
+	// COMMENT ON ... "edw"."x"
+	new RegExp(String.raw`^\s*COMMENT\s+ON\s+[^;]*?"(${FOREIGN_SCHEMAS})"`, 'i')
+];
 
 function targetsForeignSchema(statement) {
-	return FOREIGN_TARGET.test(statement) || FOREIGN_SCHEMA_DDL.test(statement);
+	return TARGET_PATTERNS.some((re) => re.test(statement));
+}
+
+/**
+ * Independent verifier — deliberately NOT the filter's own predicate.
+ *
+ * A foreign schema may legitimately appear in exactly one place in a kept
+ * statement: the REFERENCES clause of a foreign key declared on an app table
+ * (app.user.manager_key -> edw.dim_manager). Anything else mentioning a
+ * pipeline-owned schema is treated as suspect, whether or not the filter above
+ * recognised its shape. This catches statement forms nobody anticipated.
+ */
+function mentionsForeignSchemaOutsideReferences(statement) {
+	const withoutReferences = statement.replace(
+		new RegExp(String.raw`REFERENCES\s+"(?:${FOREIGN_SCHEMAS})"\."[^"]+"\s*\([^)]*\)`, 'gi'),
+		''
+	);
+	return new RegExp(String.raw`"(?:${FOREIGN_SCHEMAS})"`).test(withoutReferences);
 }
 
 const target = process.argv[2]
@@ -77,8 +104,10 @@ const filtered = kept.join(`\n${BREAKPOINT}\n`) + '\n';
 // Belt and braces: if anything pipeline-owned survived the filter, fail loudly
 // rather than write a migration that could touch edw.
 for (const statement of kept) {
-	if (targetsForeignSchema(statement)) {
-		console.error('A pipeline-owned statement survived filtering. Refusing to write.');
+	if (mentionsForeignSchemaOutsideReferences(statement)) {
+		console.error('A pipeline-owned schema survived filtering, outside a REFERENCES clause:');
+		console.error(`  ${statement.split('\n')[0]}`);
+		console.error('Refusing to write. Widen TARGET_PATTERNS to cover this statement shape.');
 		process.exit(1);
 	}
 }

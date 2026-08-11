@@ -46,6 +46,16 @@ const handleAuth: Handle = async ({ event, resolve }) => {
  *
  * Deny-by-default: a new route is private until it is named here.
  */
+/**
+ * Public for every method, not just reads.
+ *
+ * The sign-in flow is the one place an unauthenticated POST is the entire
+ * point: `/login` is the form that mails the link, and requiring a session to
+ * reach it means nobody can ever obtain one. Kept as its own list so the
+ * write-gating rule below can stay strict everywhere else.
+ */
+const PUBLIC_WRITE_PREFIXES = ['/login', '/logout'];
+
 const PUBLIC_PREFIXES = [
 	'/login',
 	'/logout',
@@ -90,20 +100,47 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
 	return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+/**
+ * Does this request require a signed-in, active member?
+ *
+ * Exported so it can be unit-tested without a server — this predicate is the
+ * whole of the access-control policy for routes, and the deny-by-default claim
+ * above is only worth anything if something pins it.
+ *
+ * Genuinely deny-by-default in every direction:
+ *  - a route not named in PUBLIC_PREFIXES is private, API or page
+ *  - a write is private unless the whole prefix is public AND it is a read
+ * An earlier version only applied the public-list check to page routes, so an
+ * unlisted `GET /api/anything` fell through every clause and was served to
+ * anyone — the exact class of hole this file exists to close.
+ */
+export function requiresAuth(pathname: string, method: string): boolean {
+	const isRead = method === 'GET' || method === 'HEAD';
+
+	// Explicitly private, whatever the method — ballots are not public reads.
+	if (matchesPrefix(pathname, PRIVATE_API_PREFIXES)) return true;
+
+	// Anything not on the public list is private.
+	if (!isPublicPath(pathname)) return true;
+
+	// The sign-in flow accepts unauthenticated writes; nothing else does.
+	if (matchesPrefix(pathname, PUBLIC_WRITE_PREFIXES)) return false;
+
+	// Public prefixes are otherwise public to *read* only. A form action posting
+	// to a public page (e.g. POST /constitution?/vote) still needs a session.
+	return !isRead;
+}
+
 const handleProtect: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
 	const isApi = pathname.startsWith('/api/');
-	const isRead = event.request.method === 'GET' || event.request.method === 'HEAD';
 
 	// A signed-in user whose membership was revoked is treated as signed out for
 	// authorisation purposes. `locals.user` stays populated so the UI can tell
 	// them why rather than silently bouncing them to a login form.
 	const authorized = !!event.locals.user && !!event.locals.member?.active;
 
-	const needsAuth =
-		matchesPrefix(pathname, PRIVATE_API_PREFIXES) ||
-		(isApi && !isRead) ||
-		(!isApi && !isPublicPath(pathname));
+	const needsAuth = requiresAuth(pathname, event.request.method);
 
 	if (needsAuth && !authorized) {
 		if (isApi) {

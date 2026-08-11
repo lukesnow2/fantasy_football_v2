@@ -8,6 +8,7 @@ import {
 	text,
 	date,
 	pgSchema,
+	type AnyPgColumn,
 	index,
 	uniqueIndex,
 	serial,
@@ -413,7 +414,17 @@ export const constitutionClause = appSchema.table('constitution_clause', {
 	sectionKey: integer('section_key')
 		.notNull()
 		.references(() => constitutionSection.sectionKey, { onDelete: 'cascade' }),
-	parentKey: integer('parent_key'),
+	/**
+	 * ON DELETE CASCADE is load-bearing, not decoration. apply.ts deletes a
+	 * clause and relies on its children going with it; without the constraint
+	 * they survive with a dangling parent_key, vanish from the rendered tree
+	 * (loadVersionTree can neither attach nor root them), and then reappear as
+	 * top-level clauses on the next amendment when cloneVersion remaps the
+	 * missing parent to null.
+	 */
+	parentKey: integer('parent_key').references((): AnyPgColumn => constitutionClause.clauseKey, {
+		onDelete: 'cascade'
+	}),
 	/**
 	 * Stable across versions — this is what a proposal targets.
 	 *

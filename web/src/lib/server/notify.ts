@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { dimManager, leagueMember, ruleProposal, user as userTable } from '$lib/server/db/schema';
 import { emailService, type EmailOptions } from '$lib/server/email';
-import { ORIGIN } from '$lib/server/env';
+import { requireOrigin } from '$lib/server/env';
 import { parsePreferences, type NotificationPreferences } from '$lib/server/auth-manager';
 import type { Outcome } from '$lib/server/constitution/outcome';
 
@@ -16,6 +16,23 @@ import type { Outcome } from '$lib/server/constitution/outcome';
  * 2. Log, never throw. A failed send is not a reason to turn a successful vote
  *    into a 500 for the manager who cast it.
  */
+
+/**
+ * Escape text before it goes into an HTML email body.
+ *
+ * Proposal titles and rationales are free text written by one manager and mailed
+ * to the other nine inside a message that genuinely is from the league. Without
+ * this, a rationale containing an anchor tag is a phishing link wearing the
+ * league's own branding.
+ */
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
 
 interface Recipient {
 	email: string;
@@ -71,7 +88,7 @@ function layout(heading: string, body: string, cta: string): string {
 				<p style="color: #94a3b8; margin: 0 0 24px 0; font-size: 14px;">${heading}</p>
 				${body}
 				<div style="text-align: center; margin: 28px 0 0 0;">
-					<a href="${ORIGIN}/constitution" style="background-color: #f59e0b; color: #0f172a; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">${cta}</a>
+					<a href="${requireOrigin()}/constitution" style="background-color: #f59e0b; color: #0f172a; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">${cta}</a>
 				</div>
 			</div>
 		</div>
@@ -116,16 +133,16 @@ export async function notifyNewProposal(proposalKey: number): Promise<void> {
 			subject: `New rule proposal: ${proposal.title}`,
 			html: layout(
 				'A proposal is open for voting',
-				`<p style="color: #e2e8f0;">${to.displayName ? `Hi ${to.displayName},` : 'Hi,'}</p>
-				 <p style="color: #e2e8f0;"><strong>${proposal.authorName ?? 'A manager'}</strong> has proposed <strong>${proposal.title}</strong>.</p>
-				 <p style="color: #cbd5e1; border-left: 3px solid #f59e0b; padding-left: 12px; margin: 20px 0;">${proposal.rationale}</p>
+				`<p style="color: #e2e8f0;">${to.displayName ? `Hi ${escapeHtml(to.displayName)},` : 'Hi,'}</p>
+				 <p style="color: #e2e8f0;"><strong>${escapeHtml(proposal.authorName ?? 'A manager')}</strong> has proposed <strong>${escapeHtml(proposal.title)}</strong>.</p>
+				 <p style="color: #cbd5e1; border-left: 3px solid #f59e0b; padding-left: 12px; margin: 20px 0;">${escapeHtml(proposal.rationale)}</p>
 				 <p style="color: #94a3b8; font-size: 14px;">
 					It needs ${proposal.requiredVotes} of ${proposal.eligibleVoters} votes to pass, would take effect in ${proposal.effectiveSeason}, and voting closes ${closes}.
 					Not voting counts the same as voting no.
 				 </p>`,
 				'Cast your vote'
 			),
-			text: `${proposal.authorName ?? 'A manager'} has proposed "${proposal.title}".\n\n${proposal.rationale}\n\nNeeds ${proposal.requiredVotes} of ${proposal.eligibleVoters} votes. Voting closes ${closes}. Not voting counts the same as voting no.\n\n${ORIGIN}/constitution`
+			text: `${proposal.authorName ?? 'A manager'} has proposed "${proposal.title}".\n\n${proposal.rationale}\n\nNeeds ${proposal.requiredVotes} of ${proposal.eligibleVoters} votes. Voting closes ${closes}. Not voting counts the same as voting no.\n\n${requireOrigin()}/constitution`
 		}));
 	} catch (error) {
 		console.error('[notify] Failed to announce new proposal:', error);
@@ -155,27 +172,31 @@ export async function notifyProposalSettled(
 		if (list.length === 0) return;
 
 		const passed = outcome.state === 'passed';
+		const superseded = outcome.state === 'superseded';
 		const { yes, no, abstain } = outcome.tally;
+		const verb = passed ? 'passed' : superseded ? 'passed, but could not be applied' : 'did not pass';
 
 		const reason = passed
 			? `It takes effect in ${proposal.effectiveSeason} and the constitution has been updated.`
-			: outcome.reason === 'unreachable'
-				? 'It could no longer reach the threshold, so voting closed early.'
-				: 'Voting closed before it reached the threshold.';
+			: superseded
+				? 'The clause it changed no longer exists, so the constitution is unchanged. The commissioner will need to re-propose it against the current text.'
+				: outcome.state === 'rejected' && outcome.reason === 'unreachable'
+					? 'It could no longer reach the threshold, so voting closed early.'
+					: 'Voting closed before it reached the threshold.';
 
 		await fanOut(list, (to) => ({
 			to: to.email,
-			subject: `${passed ? 'Passed' : 'Did not pass'}: ${proposal.title}`,
+			subject: `${passed ? 'Passed' : superseded ? 'Passed but not applied' : 'Did not pass'}: ${proposal.title}`,
 			html: layout(
-				passed ? 'A rule change passed' : 'A rule change did not pass',
-				`<p style="color: #e2e8f0;">${to.displayName ? `Hi ${to.displayName},` : 'Hi,'}</p>
-				 <p style="color: #e2e8f0;"><strong>${proposal.title}</strong> ${passed ? 'passed' : 'did not pass'}.</p>
+				passed ? 'A rule change passed' : superseded ? 'A rule change passed but could not be applied' : 'A rule change did not pass',
+				`<p style="color: #e2e8f0;">${to.displayName ? `Hi ${escapeHtml(to.displayName)},` : 'Hi,'}</p>
+				 <p style="color: #e2e8f0;"><strong>${escapeHtml(proposal.title)}</strong> ${verb}.</p>
 				 <p style="color: #94a3b8; font-size: 14px;">
 					Final vote: ${yes} yes, ${no} no, ${abstain} abstain — needed ${outcome.threshold.requiredYes} of ${outcome.threshold.eligibleVoters}.<br>${reason}
 				 </p>`,
 				passed ? 'Read the new wording' : 'See the record'
 			),
-			text: `"${proposal.title}" ${passed ? 'passed' : 'did not pass'}.\n\nFinal vote: ${yes} yes, ${no} no, ${abstain} abstain — needed ${outcome.threshold.requiredYes} of ${outcome.threshold.eligibleVoters}.\n${reason}\n\n${ORIGIN}/constitution`
+			text: `"${proposal.title}" ${verb}.\n\nFinal vote: ${yes} yes, ${no} no, ${abstain} abstain — needed ${outcome.threshold.requiredYes} of ${outcome.threshold.eligibleVoters}.\n${reason}\n\n${requireOrigin()}/constitution`
 		}));
 	} catch (error) {
 		console.error('[notify] Failed to announce settled proposal:', error);

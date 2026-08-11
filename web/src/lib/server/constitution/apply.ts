@@ -2,7 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { Tx } from '$lib/server/db';
 import { constitutionClause, constitutionSection, ruleAmendment, ruleProposal } from '$lib/server/db/schema';
 import type { Tally } from './outcome';
-import { cloneVersion, getCurrentVersion, newClauseUid, resequenceSiblings } from './versions';
+import { cloneVersion, getLatestVersion, newClauseUid, resequenceSiblings } from './versions';
 
 export interface ApplyResult {
 	/** 'passed' when the text change landed, 'superseded' when its target is gone. */
@@ -63,7 +63,9 @@ export async function applyPassedProposal(
 		})
 		.returning();
 
-	const current = await getCurrentVersion(tx, now);
+	// The latest version in the chain, not the one currently in force — an
+	// amendment must build on any amendment already queued ahead of it.
+	const current = await getLatestVersion(tx);
 	if (!current) {
 		// No seeded constitution to amend. The vote still stands and is recorded;
 		// there is simply no document to rewrite yet.

@@ -90,10 +90,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 			abstain: p.abstainVotes
 		};
 		const category = isProposalCategory(p.category) ? p.category : 'general';
+		// Rebuild the label from the STORED numbers. Recomputing it from
+		// resolveThreshold subtracts the removal subject a second time — the stored
+		// eligibleVoters already excludes them — so a removal card showed
+		// "Unanimous (8 of 8)" above a "yes/9" counter.
 		const base = resolveThreshold(category, p.eligibleVoters, {
 			hasSubject: p.subjectManagerKey != null
 		});
-		const threshold = { ...base, requiredYes: p.requiredVotes, eligibleVoters: p.eligibleVoters };
+		const threshold = {
+			...base,
+			requiredYes: p.requiredVotes,
+			eligibleVoters: p.eligibleVoters,
+			label: `${base.label.split(' (')[0]} (${p.requiredVotes} of ${p.eligibleVoters})`
+		};
 
 		return {
 			...p,
