@@ -13,6 +13,24 @@
 - ✅ Enhanced `src/lib/server/auth.ts` with secure cookie settings
 - ✅ Created Vercel deployment configuration
 
+
+## Why `installCommand` is `npm install --include=dev`
+
+`vercel.json` pins the install command with `--include=dev`, and that flag is
+load-bearing. This project sets `NODE_ENV=production` as a Vercel environment
+variable, which makes `npm install` omit devDependencies. `vite` and
+`svelte-kit` are devDependencies, so the build runs with no build tool and dies
+with `vite: command not found` (exit 127) after installing only ~114 packages.
+
+The flag makes the install correct however `NODE_ENV` is set. Removing the
+manually-set `NODE_ENV=production` variable is also worth doing — Vercel sets it
+in the function runtime on its own — but the flag is the durable fix.
+
+Note that `vercel.json` is validated against a strict schema and rejects unknown
+top-level keys, so this explanation lives here rather than as a comment in the
+file. A stray `_note` key fails the deployment before the build even starts,
+with only a link to the project-configuration docs to go on.
+
 ## 🧪 Testing Session Management
 
 ### 1. Run Database Migration
