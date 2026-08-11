@@ -30,6 +30,23 @@
 		</p>
 	</header>
 
+	{#if !data.mailConfig.ok}
+		<section class="rounded-xl border border-red-600/40 bg-red-900/20 p-4">
+			<h2 class="flex items-center gap-2 text-sm font-semibold text-red-300">
+				<AlertTriangle class="h-4 w-4" /> Sign-in email is not configured
+			</h2>
+			<p class="mt-1 text-sm text-red-200/80">
+				Invites and sign-in links will not reach anyone until this is fixed. Set these in the
+				deployment's environment variables.
+			</p>
+			<ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-red-200/80">
+				{#each data.mailConfig.problems as problem}
+					<li>{problem}</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
 	{#if form?.error}
 		<p class="rounded-lg border border-red-600/40 bg-red-900/20 p-3 text-sm text-red-300">
 			{form.error}

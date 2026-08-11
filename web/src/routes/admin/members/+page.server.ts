@@ -5,7 +5,7 @@ import { leagueMember, user as userTable } from '$lib/server/db/schema';
 import { invalidateUserSessions } from '$lib/server/auth';
 import { requireCommissioner, getUnclaimedManagers } from '$lib/server/auth-manager';
 import { emailService, generateMagicLinkEmail } from '$lib/server/email';
-import { requireOrigin } from '$lib/server/env';
+import { describeMailConfig, requireOrigin } from '$lib/server/env';
 import { issueLoginToken } from '$lib/server/login-token';
 import { consumeLoginEmailBudget } from '$lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
@@ -33,7 +33,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 		members,
 		// Current managers with no allowlist row yet — the "who is still missing"
 		// list, so an unseeded manager is visible rather than silently absent.
-		unclaimed: await getUnclaimedManagers()
+		unclaimed: await getUnclaimedManagers(),
+		// Every mail misconfiguration is otherwise invisible: a missing key falls
+		// back to console mode and a missing EMAIL_FROM is refused by the
+		// provider, both reported only to a serverless log nobody reads. The
+		// commissioner is the one person who looks at this page and can fix it.
+		mailConfig: describeMailConfig()
 	};
 };
 
@@ -73,9 +78,14 @@ export const actions: Actions = {
 		// oracle to protect here — they already know who is on the roster — and
 		// silently "succeeding" on a failed send is how ten people end up unable to
 		// log in with nobody knowing why.
+		// Says "could not be confirmed", not "was not accepted". With an 8s timeout
+		// on the send, a failure here can mean the provider accepted the message
+		// and we stopped waiting — so the mail may well arrive. invitedAt stays
+		// unstamped in that case, which is the safe direction: re-inviting issues
+		// a fresh token and both links work.
 		if (!sent) {
 			return fail(502, {
-				error: `The invite to ${member.email} was not accepted by the mail provider. Check the Resend domain is verified.`
+				error: `The invite to ${member.email} could not be confirmed — the mail provider did not accept it, or did not answer in time. Check that the Resend domain is verified, then try again.`
 			});
 		}
 

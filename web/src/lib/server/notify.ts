@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { dimManager, leagueMember, ruleProposal, user as userTable } from '$lib/server/db/schema';
 import { emailService, type EmailOptions } from '$lib/server/email';
 import { requireOrigin } from '$lib/server/env';
+import { escapeHtml } from '$lib/server/html';
 import { parsePreferences, type NotificationPreferences } from '$lib/server/auth-manager';
 import type { Outcome } from '$lib/server/constitution/outcome';
 
@@ -16,23 +17,6 @@ import type { Outcome } from '$lib/server/constitution/outcome';
  * 2. Log, never throw. A failed send is not a reason to turn a successful vote
  *    into a 500 for the manager who cast it.
  */
-
-/**
- * Escape text before it goes into an HTML email body.
- *
- * Proposal titles and rationales are free text written by one manager and mailed
- * to the other nine inside a message that genuinely is from the league. Without
- * this, a rationale containing an anchor tag is a phishing link wearing the
- * league's own branding.
- */
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
-}
 
 interface Recipient {
 	email: string;
@@ -70,13 +54,27 @@ async function recipients(
 }
 
 async function fanOut(list: Recipient[], build: (to: Recipient) => EmailOptions): Promise<void> {
-	const results = await Promise.allSettled(
-		list.map((to) => emailService.sendEmail(build(to)))
-	);
+	if (list.length === 0) return;
 
-	const failed = results.filter((r) => r.status === 'rejected' || r.value === false).length;
+	// One batched request rather than one request per manager. The previous
+	// Promise.allSettled fired nine simultaneous requests at a provider whose
+	// published limit is ten per second — no headroom, shared with the login
+	// path across every API key — and reported the result as a single aggregate
+	// count, so a rate-limited fan-out and a healthy one looked identical.
+	//
+	// The tradeoff taken knowingly: batching couples the sends, so one 500 loses
+	// all nine where independent requests might have landed a few. Given the
+	// previous behaviour was silent partial failure, and given the retry and
+	// idempotency key behind this call, that is the better trade.
+	const { sent, succeeded, failed } = await emailService.sendBatch(list.map(build));
+
 	if (failed > 0) {
-		console.error(`[notify] ${failed} of ${list.length} notification emails failed to send.`);
+		// Naming the addresses is the point. A bare count tells nobody which
+		// manager never heard about the vote.
+		const missed = list.filter((_, i) => !sent[i]).map((r) => r.email);
+		console.error(
+			`[notify] ${failed} of ${list.length} notification emails failed (${succeeded} delivered): ${missed.join(', ')}`
+		);
 	}
 }
 
