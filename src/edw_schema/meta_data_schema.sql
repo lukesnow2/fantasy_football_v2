@@ -25,6 +25,7 @@ CREATE TABLE meta_data.metric_definitions (
     calculation_formula TEXT,
     example_calculation TEXT,
     interpretation_guide TEXT,
+    limitations TEXT, -- What the metric does not capture and where it misleads
     data_type VARCHAR(20) NOT NULL, -- 'percentage', 'decimal', 'integer', 'rating', 'score'
     unit_of_measure VARCHAR(50), -- 'points', 'games', 'percentage', 'dollars', etc.
     typical_range VARCHAR(100), -- '0-100', '0.000-1.000', 'varies', etc.
@@ -226,6 +227,7 @@ SELECT
     md.calculation_formula,
     md.example_calculation,
     md.interpretation_guide,
+    md.limitations,
     md.data_type,
     md.unit_of_measure,
     md.typical_range,

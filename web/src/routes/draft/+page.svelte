@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import DraftBoard from '$lib/components/DraftBoard.svelte';
 	import DraftAnalysis from '$lib/components/DraftAnalysis.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	
 	let draftData: any = null;
 	let specificSeasonDraft: any = null;
@@ -260,14 +261,10 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<!-- Page Header -->
-	<div class="text-center py-8">
-		<Trophy class="h-16 w-16 text-amber-400 mx-auto mb-4" />
-		<h1 class="text-4xl font-bold text-white mb-4">Draft Central</h1>
-		<p class="text-xl text-slate-300 max-w-3xl mx-auto">
-			Complete draft history and analysis. Explore draft boards, manager performance, and value picks across all seasons.
-		</p>
-	</div>
+	<PageHeader icon={Trophy} title="Draft Central" accent="amber">
+		Complete draft history and analysis. Explore draft boards, manager performance, and value picks
+		across all seasons.
+	</PageHeader>
 
 	<!-- Draft Content -->
 	<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { TrendingUp, TrendingDown, Minus, Trophy, Info } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import type { PowerRankingRow } from '../api/power-rankings/+server';
 
 	let loading = $state(true);
@@ -156,45 +157,39 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-		<div>
-			<h1 class="text-4xl font-bold text-white mb-2">Power Rankings</h1>
-			<p class="text-slate-400">
-				Ranked by power score, which blends record, scoring and recent form —
-				not by standings alone.
-			</p>
+	<PageHeader icon={TrendingUp} title="Power Rankings">
+		Ranked by power score, which blends record, scoring and recent form, not by standings alone.
+	</PageHeader>
+
+	{#if seasons.length > 0}
+		<div class="flex flex-wrap items-center gap-4 bg-slate-800/30 rounded-lg p-4">
+			<label class="text-slate-300 font-medium">
+				Season
+				<select
+					class="ml-2 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
+					value={season}
+					onchange={onSeasonChange}
+				>
+					{#each seasons as s}
+						<option value={s}>{s}</option>
+					{/each}
+				</select>
+			</label>
+
+			<label class="text-slate-300 font-medium">
+				Week <span class="text-slate-500 font-normal">(regular season)</span>
+				<select
+					class="ml-2 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
+					value={week}
+					onchange={onWeekChange}
+				>
+					{#each weeks as w}
+						<option value={w}>Week {w}</option>
+					{/each}
+				</select>
+			</label>
 		</div>
-
-		{#if seasons.length > 0}
-			<div class="flex items-end gap-3">
-				<label class="flex flex-col text-xs font-medium text-slate-400">
-					Season
-					<select
-						class="mt-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-amber-500 focus:outline-none"
-						value={season}
-						onchange={onSeasonChange}
-					>
-						{#each seasons as s}
-							<option value={s}>{s}</option>
-						{/each}
-					</select>
-				</label>
-
-				<label class="flex flex-col text-xs font-medium text-slate-400">
-					Week <span class="text-slate-500">(regular season)</span>
-					<select
-						class="mt-1 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white focus:border-amber-500 focus:outline-none"
-						value={week}
-						onchange={onWeekChange}
-					>
-						{#each weeks as w}
-							<option value={w}>Week {w}</option>
-						{/each}
-					</select>
-				</label>
-			</div>
-		{/if}
-	</div>
+	{/if}
 
 	{#if loading}
 		<div class="space-y-3">

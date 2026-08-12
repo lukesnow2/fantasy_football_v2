@@ -14,6 +14,7 @@
 	import { BookOpen, ChevronDown } from 'lucide-svelte';
 	import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 
 	let categories: any[] = [];
 	let searchTerm = '';
@@ -160,26 +161,17 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<!-- Hero -->
-	<section class="text-center py-8">
-		<div class="max-w-4xl mx-auto">
-			<BookOpen class="h-16 w-16 text-blue-400 mx-auto mb-4" />
-			<h1 class="text-4xl font-bold text-white mb-4">
-				Data <span class="text-blue-400">Dictionary</span>
-			</h1>
-			<p class="text-xl text-slate-300 leading-relaxed">
-				Every metric in this app: what it measures, the formula behind it, and where it misleads.
-				Expand any metric for the full definition.
-			</p>
-		</div>
-	</section>
+	<PageHeader icon={BookOpen} title="Data Dictionary">
+		Every metric in this app: what it measures, the formula behind it, and where it misleads. Expand
+		any metric for the full definition.
+	</PageHeader>
 
 	<!-- Tooltip demo -->
-	<section class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5">
-		<h2 class="font-semibold text-blue-200 mb-2">💡 Metrics are explained everywhere</h2>
+	<section class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5">
+		<h2 class="font-semibold text-amber-200 mb-2">💡 Metrics are explained everywhere</h2>
 		<p class="text-slate-300 mb-1">
 			Throughout the app you'll see metrics with help icons like this:
-			<MetricHelp metricId="hall_of_fame_index" position="right" theme="dark" className="text-blue-300"
+			<MetricHelp metricId="hall_of_fame_index" position="right" theme="dark" className="text-amber-300"
 				>Hall of Fame Index</MetricHelp
 			>
 		</p>
@@ -201,7 +193,7 @@
 					type="text"
 					bind:value={searchTerm}
 					placeholder="Search by name, description or category..."
-					class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-400"
+					class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400"
 				/>
 			</div>
 
@@ -212,7 +204,7 @@
 				<select
 					id="category"
 					bind:value={selectedCategory}
-					class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-400"
+					class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-400"
 				>
 					<option value="all">All Categories</option>
 					{#each categories as category}

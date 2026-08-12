@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Calendar, Trophy, TrendingUp, ExternalLink, Users, Target } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
@@ -143,29 +144,34 @@
 </script>
 
 <div class="space-y-8">
-	<!-- Page Header -->
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-4xl font-bold text-white mb-2">This Season</h1>
-			<p class="text-slate-400">
-				Week {currentWeek} • 
-				{currentWeek >= 17 ? 'Season Complete' : 
-				 currentWeek >= 14 ? 'Playoffs are heating up' : 
-				 currentWeek >= 10 ? 'Trade deadline passed' : 
-				 'Regular season in progress'}
-			</p>
+	<PageHeader icon={Calendar} title="This Season">
+		Live standings, matchups and the playoff picture as the season plays out.
+	</PageHeader>
+
+	<!-- Status bar: the Trade Center's filter-bar treatment, which is where
+	     page-level context and controls live. -->
+	<div class="flex flex-wrap items-center justify-between gap-3 bg-slate-800/30 rounded-lg p-4">
+		<div class="text-slate-300 font-medium">
+			Week {currentWeek} <span class="text-slate-500">•</span>
+			<span class="text-slate-400">
+				{currentWeek >= 17
+					? 'Season Complete'
+					: currentWeek >= 14
+						? 'Playoffs are heating up'
+						: currentWeek >= 10
+							? 'Trade deadline passed'
+							: 'Regular season in progress'}
+			</span>
 		</div>
-		<div class="flex items-center space-x-4">
-			<a
-				href={YAHOO_LEAGUE_URL}
-				target="_blank"
-				rel="noopener noreferrer"
-				class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center"
-			>
-				<ExternalLink class="w-4 h-4 mr-2" />
-				Yahoo League
-			</a>
-		</div>
+		<a
+			href={YAHOO_LEAGUE_URL}
+			target="_blank"
+			rel="noopener noreferrer"
+			class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center"
+		>
+			<ExternalLink class="w-4 h-4 mr-2" />
+			Yahoo League
+		</a>
 	</div>
 
 	<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">

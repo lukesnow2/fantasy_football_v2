@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { BarChart3, TrendingUp, Trophy, Users, Target, Calendar, Zap } from 'lucide-svelte';
+	import { BarChart3, TrendingUp, Trophy, Users, Target, Calendar, Zap, History } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { onMount } from 'svelte';
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
@@ -302,14 +303,10 @@
 </script>
 
 <div class="space-y-8">
-	<!-- Page Header -->
-	<div class="text-center py-8">
-		<h1 class="text-5xl font-bold text-white mb-4">Historical Deep Dive</h1>
-		<p class="text-xl text-slate-300 max-w-3xl mx-auto">
-			Explore {ovSeasons ?? 20}+ years of fantasy football history. Trades, head-to-head matchups,
-			league evolution, and championship moments analyzed and visualized.
-		</p>
-	</div>
+	<PageHeader icon={History} title="Historical Deep Dive" accent="amber">
+		Explore {ovSeasons ?? 20}+ years of fantasy football history. Trades, head-to-head matchups,
+		league evolution, and championship moments analyzed and visualized.
+	</PageHeader>
 
 	<!-- Tab Navigation -->
 	<div class="flex flex-wrap justify-center gap-2 bg-slate-800/30 p-2 rounded-xl">

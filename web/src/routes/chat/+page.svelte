@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { MessageSquare } from 'lucide-svelte';
 	import ChatPanel from '$lib/components/chat/ChatPanel.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 </script>
 
 <svelte:head>
@@ -10,16 +12,13 @@
      /chat is not in PUBLIC_PREFIXES, so a signed-out visitor is redirected to
      /login before this ever renders. The panel's signed-out state exists for the
      preview embedded on the public /this-season page. -->
-<div class="space-y-4">
-	<div>
-		<h1 class="text-3xl font-bold text-white">League Chat</h1>
-		<p class="mt-1 text-sm text-slate-400">
-			Trash talk, trade offers and grievances. Reply in a thread to keep an argument
-			in one place.
-		</p>
-	</div>
+<div class="space-y-8">
+	<PageHeader icon={MessageSquare} title="League Chat">
+		Trash talk, trade offers and grievances. Reply in a thread to keep an argument in one place.
+	</PageHeader>
 
 	<!-- dvh, not vh: on mobile Safari the toolbar makes vh taller than the visible
-	     viewport, which pushes the composer off the bottom of the screen. -->
-	<ChatPanel heightClass="h-[calc(100dvh-16rem)] min-h-[24rem]" title="#general" />
+	     viewport, which pushes the composer off the bottom of the screen.
+	     The subtracted height grew with the taller shared page header. -->
+	<ChatPanel heightClass="h-[calc(100dvh-26rem)] min-h-[24rem]" title="#general" />
 </div>

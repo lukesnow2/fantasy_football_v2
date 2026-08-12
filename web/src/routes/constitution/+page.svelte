@@ -13,6 +13,7 @@
 		Vote,
 		Zap
 	} from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ClauseView from '$lib/components/constitution/ClauseView.svelte';
 	import ProposalCard from '$lib/components/constitution/ProposalCard.svelte';
 	import ProposalForm from '$lib/components/constitution/ProposalForm.svelte';
@@ -66,11 +67,17 @@
 	<title>Constitution | The League</title>
 </svelte:head>
 
-<div class="mx-auto max-w-4xl space-y-8 px-4 py-8">
+<!-- No inner container: the root layout already supplies the page gutter and max
+     width, so wrapping again double-padded this page relative to every other. -->
+<div class="space-y-8">
+	<PageHeader icon={BookOpen} title="League Constitution" accent="amber">
+		The rules this league runs on. Every clause is versioned, and changes go to a vote.
+	</PageHeader>
+
+	<!-- Body keeps a reading width; the header spans the page like everywhere else. -->
+	<div class="mx-auto max-w-4xl space-y-8">
 	<header class="text-center">
-		<BookOpen class="mx-auto mb-3 h-10 w-10 text-amber-400" />
-		<h1 class="text-3xl font-bold text-white">League Constitution</h1>
-		<div class="mt-4 flex flex-wrap items-center justify-center gap-4 text-sm">
+		<div class="flex flex-wrap items-center justify-center gap-4 text-sm">
 			<span class="flex items-center gap-2 text-slate-400">
 				<FileText class="h-4 w-4" />
 				{#if data.version}
@@ -108,7 +115,7 @@
 	{/if}
 
 	{#if myDrafts.length > 0}
-		<section class="space-y-3 rounded-xl border border-slate-600 bg-slate-800/30 p-5">
+		<section class="space-y-3 rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
 			<h2 class="flex items-center gap-2 font-semibold text-slate-300">
 				<FileText class="h-5 w-5" /> Your drafts ({myDrafts.length})
 			</h2>
@@ -218,7 +225,7 @@
 	{/if}
 
 	{#if settled.length > 0}
-		<section class="rounded-xl border border-slate-700 bg-slate-800/30 p-5">
+		<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
 			<h2 class="mb-3 font-semibold text-slate-400">Past proposals</h2>
 			<div class="space-y-3">
 				{#each settled as proposal (proposal.proposalKey)}
@@ -227,6 +234,7 @@
 			</div>
 		</section>
 	{/if}
+	</div>
 </div>
 
 {#if draft}
