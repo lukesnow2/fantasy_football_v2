@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Trophy, Target, TrendingUp, Award, User, Crown, BarChart3, Calendar, Users } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import { getTierColor, getWinPercentageColor, getChampionshipBadge, getInitials } from '$lib/utils/managerUtils';
@@ -56,10 +57,24 @@
 	}
 </script>
 
-<div class="min-h-screen bg-slate-900 flex">
+<svelte:head>
+	<title>Managers - The League</title>
+</svelte:head>
+
+<div class="space-y-8">
+	<PageHeader icon={Users} title="Managers">
+		Career records, championships and season-by-season history for every manager in the league.
+	</PageHeader>
+
+	<!-- The selector/profile split is this page's own layout, but it now sits in
+	     the same panel treatment every other page uses instead of bleeding to the
+	     window edges. -->
+	<div
+		class="flex bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden min-h-[32rem]"
+	>
 	{#if loading}
-		<div class="flex items-center justify-center w-full h-screen">
-			<div class="text-2xl text-slate-400">Loading manager profiles...</div>
+		<div class="flex items-center justify-center w-full h-64">
+			<div class="text-slate-400">Loading manager profiles...</div>
 		</div>
 	{:else if currentManager}
 		<!-- Left Sidebar - Manager Selector (desktop) -->
@@ -362,8 +377,9 @@
 			</div>
 		</div>
 	{:else}
-		<div class="flex items-center justify-center w-full h-screen">
-			<div class="text-2xl text-slate-400">No manager data available</div>
+		<div class="flex items-center justify-center w-full h-64">
+			<div class="text-slate-400">No manager data available</div>
 		</div>
 	{/if}
+	</div>
 </div>

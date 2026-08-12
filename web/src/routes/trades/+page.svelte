@@ -2,6 +2,7 @@
 	import { TrendingUp, Trophy, Calendar, BarChart3, Target } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	
 	let tradeData: any = null;
 	let loading = true;
@@ -65,15 +66,10 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<!-- Page Header -->
-	<div class="text-center py-8">
-		<Target class="h-16 w-16 text-amber-400 mx-auto mb-4" />
-		<h1 class="text-4xl font-bold text-white mb-4">Trade Center</h1>
-		<p class="text-xl text-slate-300 max-w-3xl mx-auto">
-			Complete trade analysis and history. Explore deal winners, championship impact trades, 
-			and comprehensive transaction analytics across all seasons.
-		</p>
-	</div>
+	<PageHeader icon={Target} title="Trade Center" accent="amber">
+		Complete trade analysis and history. Explore deal winners, championship impact trades, and
+		comprehensive transaction analytics across all seasons.
+	</PageHeader>
 
 	<!-- Trade Analysis Content -->
 	{#if loadingTrades}
