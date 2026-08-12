@@ -34,9 +34,15 @@
 	async function fetchMetricDefinition() {
 		if (!metricId) return;
 		
-		// Check cache first
+		// Check cache first.
+		//
+		// A page can pre-cache definitions it already has in hand (the data
+		// dictionary caches all 21 on load) without their related metrics. Such an
+		// entry has no `related_metrics` key at all, and serving it to a tooltip
+		// that wants them would silently drop the Related Metrics section, so treat
+		// it as a miss and fetch the full record.
 		const cached = metricDefinitionsStore.getMetric(metricId);
-		if (cached) {
+		if (cached && (!includeRelated || cached.related_metrics)) {
 			metricDefinition = cached.metric;
 			relatedMetrics = cached.related_metrics || [];
 			return;

@@ -187,8 +187,12 @@ export const metricDefinitionsStore = {
                 throw new Error(data.error);
             }
 
-            // Cache the result
-            this.setMetric(metricId, data);
+            // Cache the result. An entry carries `related_metrics` only when they
+            // were actually requested — consumers use the key's presence to tell a
+            // complete record from a definition-only one, so writing the API's
+            // empty array here would make a related-less fetch masquerade as
+            // complete and starve the next caller that does want them.
+            this.setMetric(metricId, includeRelated ? data : { metric: data.metric });
 
             return {
                 metric: data.metric,
