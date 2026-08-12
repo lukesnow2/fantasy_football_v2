@@ -42,6 +42,10 @@ DATABASE_URL="$DB" npm run seed:members        # league allowlist, idempotent
 # 4. meta_data.* (data dictionary)
 psql "$DB" -f src/edw_schema/meta_data_schema.sql
 psql "$DB" -f src/edw_schema/populate_metric_definitions.sql
+# Adds the limitations column, corrects the definitions whose stored range or
+# thresholds contradicted the ETL, and rebuilds vw_active_metrics. Must run
+# after populate; idempotent, so re-running is safe.
+psql "$DB" -f src/edw_schema/add_metric_limitations.sql
 ```
 Expected counts (verification): fact_matchup 1499, fact_transaction 9691, fact_draft 3192,
 fact_player_statistics 40715, fact_team_performance 2998.

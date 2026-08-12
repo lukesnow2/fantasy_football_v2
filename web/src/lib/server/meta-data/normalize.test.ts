@@ -16,6 +16,7 @@ function row(overrides: Partial<MetricRow> = {}): MetricRow {
 		calculationFormula: '(championships * 40) + (win_pct * 60)',
 		exampleCalculation: '2 titles, .580 win rate -> 114.8',
 		interpretationGuide: 'Above 100 is a first-ballot career',
+		limitations: 'Only managers with three or more seasons are ranked',
 		dataType: 'decimal',
 		unitOfMeasure: 'points',
 		typicalRange: '0 - 150',
@@ -42,6 +43,18 @@ describe('toMetric', () => {
 		expect(metric.unitOfMeasure).toBe('points');
 		expect(metric.typicalRange).toBe('0 - 150');
 		expect(metric.displayFormat).toBe('decimal_1');
+	});
+
+	it('carries the long-form fields the dictionary page expands into', () => {
+		// These live in the DB but were never surfaced anywhere except the hover
+		// tooltip, which is why the page read as a list of vague one-liners.
+		const metric = toMetric(row());
+
+		expect(metric.detailedDescription).toBe('Weighted blend of titles, win rate and longevity');
+		expect(metric.calculationFormula).toBe('(championships * 40) + (win_pct * 60)');
+		expect(metric.exampleCalculation).toBe('2 titles, .580 win rate -> 114.8');
+		expect(metric.interpretationGuide).toBe('Above 100 is a first-ballot career');
+		expect(metric.limitations).toBe('Only managers with three or more seasons are ranked');
 	});
 
 	it('leaves no field undefined', () => {
