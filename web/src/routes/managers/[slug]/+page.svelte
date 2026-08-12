@@ -100,13 +100,15 @@
 <div class="space-y-8">
 	<!-- Back Button -->
 	<div>
-		<button 
-			on:click={() => window.history.back()}
+		<!-- A real link, not history.back(): this page is deep-linkable from the nav
+		     and from a shared URL, and going "back" from those left the app. -->
+		<a
+			href="/managers"
 			class="flex items-center text-slate-300 hover:text-white transition-colors"
 		>
 			<ArrowLeft class="w-4 h-4 mr-2" />
 			Back to Manager Profiles
-		</button>
+		</a>
 	</div>
 
 	{#if loading}
@@ -160,7 +162,11 @@
 							</div>
 						</div>
 						<div class="text-center">
-							<div class="text-2xl font-bold text-green-400">{manager.avgPointsFor?.toFixed(1)}</div>
+							<!-- avgPointsPerGame, not avgPointsFor: the latter is points per
+							     season (~1800), which does not belong under a per-game label. -->
+							<div class="text-2xl font-bold text-green-400">
+								{manager.avgPointsPerGame != null ? manager.avgPointsPerGame.toFixed(1) : '—'}
+							</div>
 							<div class="text-sm text-slate-400">
 								<MetricHelp metricId="avgPointsPerGame" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
 									Avg Points

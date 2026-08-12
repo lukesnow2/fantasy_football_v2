@@ -350,12 +350,14 @@
 
 				<!-- View Full Profile Button -->
 				<div class="text-center mt-8">
-					<button 
-						class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg"
-						on:click={() => window.location.href = `/managers/${encodeURIComponent(currentManager.managerName)}`}
+					<!-- An anchor rather than window.location.href: the latter forced a
+					     full page reload in the middle of an SPA, which reads as a stall. -->
+					<a
+						href="/managers/{encodeURIComponent(currentManager.managerName)}"
+						class="inline-block bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all transform hover:scale-105 shadow-lg"
 					>
 						View Detailed Profile & History
-					</button>
+					</a>
 				</div>
 			</div>
 		</div>

@@ -30,13 +30,8 @@ export function getManagerProfilePicture(managerName: string): string | null {
 		// Add more managers as their photos are added
 	};
 
-	console.log('getManagerProfilePicture Debug:', {
-		managerName,
-		normalizedName,
-		availableProfiles,
-		result: availableProfiles[normalizedName]
-	});
-
+	// No debug logging here. This runs once per avatar per render, and the chat
+	// panel renders a lot of avatars.
 	return availableProfiles[normalizedName] || null;
 }
 

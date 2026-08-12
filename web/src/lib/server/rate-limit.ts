@@ -71,3 +71,30 @@ export function consumeLoginIpBudget(ip: string): boolean {
 // counter there both ineffective and misleading. The form action runs in the
 // Node serverless function, where a module-level map at least survives warm
 // invocations.
+
+// Chat write budgets, keyed on manager_key rather than IP. Every chat write
+// already requires a session, so the manager key is the strongest identifier
+// available, and two managers behind one household NAT don't share a budget.
+//
+// Same honesty caveat as the login limiters: these counters live in one
+// serverless instance's memory. They exist to stop a runaway client — or a bored
+// manager with a for-loop — from filling the table, not to resist an adversary
+// who can spread requests across instances.
+//
+// Note there is no budget on the chat GET. That endpoint is polled by design;
+// limiting it would break the feature it exists to serve.
+const chatPostLimiter = createLimiter(20, 60 * 1000);
+const chatEditLimiter = createLimiter(40, 60 * 1000);
+const chatReactionLimiter = createLimiter(60, 60 * 1000);
+
+export function consumeChatPostBudget(managerKey: number): boolean {
+	return chatPostLimiter(`post:${managerKey}`);
+}
+
+export function consumeChatEditBudget(managerKey: number): boolean {
+	return chatEditLimiter(`edit:${managerKey}`);
+}
+
+export function consumeChatReactionBudget(managerKey: number): boolean {
+	return chatReactionLimiter(`react:${managerKey}`);
+}

@@ -456,58 +456,64 @@ export const chatMessage = appSchema.table('chat_message', {
 		.notNull()
 		.references(() => leagueMember.managerKey),
 	channelId: varchar('channel_id', { length: 100 }).notNull().default('general'), // Channel identifier
-	parentMessageKey: integer('parent_message_key'), // For threaded replies
+	// Self-referencing: a reply points at its root. One level only — the insert
+	// path rejects a parent that is itself a reply.
+	parentMessageKey: integer('parent_message_key').references((): AnyPgColumn => chatMessage.messageKey, {
+		onDelete: 'cascade'
+	}),
 	messageType: varchar('message_type', { length: 20 }).default('message'), // 'message', 'system', 'join', 'leave'
-	editedAt: timestamp('edited_at'),
-	deletedAt: timestamp('deleted_at'),
+	// timestamptz throughout. As plain `timestamp` these were parsed in whatever
+	// zone the server process happened to be in — right on Vercel, hours wrong in
+	// local dev, with nothing to indicate which.
+	editedAt: timestamp('edited_at', { withTimezone: true, mode: 'date' }),
+	deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
 	attachments: text('attachments'), // JSON array of file attachments
-	mentions: text('mentions'), // JSON array of mentioned user keys
-	createdAt: timestamp('created_at').defaultNow(),
-	updatedAt: timestamp('updated_at').defaultNow()
+	mentions: text('mentions'), // JSON array of mentioned manager keys, written server-side
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
 }, (table) => ({
 	// Plain indexes, not unique: these exist to make channel and thread queries
 	// fast. Declared UNIQUE they would also forbid two messages in the same
 	// channel sharing a created_at, which two quick sends collide on.
 	channelIndex: index('chat_message_channel_created').on(table.channelId, table.createdAt),
-	threadIndex: index('chat_message_thread').on(table.parentMessageKey, table.createdAt)
+	threadIndex: index('chat_message_thread').on(table.parentMessageKey, table.createdAt),
+	// The root list pages on message_key DESC; the created_at index can't serve it.
+	channelKeyIndex: index('idx_chat_message_channel_key').on(table.channelId, table.messageKey),
+	// The delta poll's edit/tombstone arm.
+	channelUpdatedIndex: index('idx_chat_message_channel_updated').on(table.channelId, table.updatedAt)
 }));
 
-export const chatThread = appSchema.table('chat_thread', {
-	threadKey: serial('thread_key').primaryKey(),
-	threadId: varchar('thread_id', { length: 100 }).notNull().unique(),
-	rootMessageKey: integer('root_message_key').notNull(), // Original message that started the thread
-	channelId: varchar('channel_id', { length: 100 }).notNull(),
-	title: varchar('title', { length: 255 }), // Optional thread title
-	messageCount: integer('message_count').default(0),
-	lastMessageAt: timestamp('last_message_at'),
-	lastMessageKey: integer('last_message_key'),
-	isLocked: boolean('is_locked').default(false),
-	createdAt: timestamp('created_at').defaultNow(),
-	updatedAt: timestamp('updated_at').defaultNow()
-}, (table) => ({
-	// Plain index — see the note on chat_message above.
-	channelThreadIndex: index('chat_thread_channel_updated').on(table.channelId, table.updatedAt)
-}));
+// NOTE: `chat_thread` used to be declared here. Nothing ever read or wrote it,
+// and its message_count / last_message_at columns duplicate what
+// parent_message_key already tells us. Dropped in 0002_chat_hardening.sql.
 
 export const chatReaction = appSchema.table('chat_reaction', {
 	reactionKey: serial('reaction_key').primaryKey(),
-	messageKey: integer('message_key').notNull(),
-	authorKey: integer('author_key').notNull(), // Who reacted
+	messageKey: integer('message_key')
+		.notNull()
+		.references(() => chatMessage.messageKey, { onDelete: 'cascade' }),
+	// Who reacted. FK to the allowlist, matching chat_message.author_key.
+	authorKey: integer('author_key')
+		.notNull()
+		.references(() => leagueMember.managerKey),
 	emoji: varchar('emoji', { length: 100 }).notNull(), // Unicode emoji or custom emoji name
 	emojiType: varchar('emoji_type', { length: 20 }).default('unicode'), // 'unicode' or 'custom'
-	createdAt: timestamp('created_at').defaultNow()
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
 }, (table) => ({
-	// Ensure one reaction per user per message per emoji
+	// One reaction per user per message per emoji. Also what makes the per-message
+	// lateral lookup in the message query an index scan.
 	uniqueReaction: uniqueIndex('unique_chat_reaction').on(table.messageKey, table.authorKey, table.emoji)
 }));
 
 export const chatRead = appSchema.table('chat_read', {
 	readKey: serial('read_key').primaryKey(),
-	managerKey: integer('manager_key').notNull(),
+	managerKey: integer('manager_key')
+		.notNull()
+		.references(() => leagueMember.managerKey, { onDelete: 'cascade' }),
 	channelId: varchar('channel_id', { length: 100 }).notNull(),
 	lastReadMessageKey: integer('last_read_message_key'),
-	lastReadAt: timestamp('last_read_at').defaultNow(),
-	updatedAt: timestamp('updated_at').defaultNow()
+	lastReadAt: timestamp('last_read_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
 }, (table) => ({
 	// Ensure one read record per user per channel
 	uniqueRead: uniqueIndex('unique_chat_read').on(table.managerKey, table.channelId)
@@ -522,8 +528,8 @@ export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	category: varchar('category', { length: 50 }).default('custom'), // 'team', 'manager', 'general', etc.
 	isActive: boolean('is_active').default(true),
 	usageCount: integer('usage_count').default(0),
-	createdAt: timestamp('created_at').defaultNow(),
-	updatedAt: timestamp('updated_at').defaultNow()
+	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
 });
 
 // Type exports
@@ -549,7 +555,6 @@ export type ConstitutionClause = typeof constitutionClause.$inferSelect;
 
 // Chat System Types
 export type ChatMessage = typeof chatMessage.$inferSelect;
-export type ChatThread = typeof chatThread.$inferSelect;
 export type ChatReaction = typeof chatReaction.$inferSelect;
 export type ChatRead = typeof chatRead.$inferSelect;
 export type ChatCustomEmoji = typeof chatCustomEmoji.$inferSelect;

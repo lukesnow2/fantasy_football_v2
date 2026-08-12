@@ -23,6 +23,8 @@ describe('requiresAuth', () => {
 		expect(requiresAuth('/constitution', 'GET')).toBe(false);
 		expect(requiresAuth('/api/standings', 'GET')).toBe(false);
 		expect(requiresAuth('/api/record-book', 'GET')).toBe(false);
+		expect(requiresAuth('/power-rankings', 'GET')).toBe(false);
+		expect(requiresAuth('/api/power-rankings', 'GET')).toBe(false);
 	});
 
 	it('gates every write, including form actions on public pages', () => {
@@ -44,6 +46,10 @@ describe('requiresAuth', () => {
 	it('gates member-only surfaces', () => {
 		expect(requiresAuth('/settings', 'GET')).toBe(true);
 		expect(requiresAuth('/admin/members', 'GET')).toBe(true);
+		// Chat is league-internal: the page is gated, not just the API behind it.
+		// /this-season is public and embeds a chat preview, which is why the
+		// preview must render a signed-out state rather than fetch and 401.
+		expect(requiresAuth('/chat', 'GET')).toBe(true);
 	});
 
 	it('leaves the sign-in flow reachable, including its POST', () => {
