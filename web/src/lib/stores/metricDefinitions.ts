@@ -7,33 +7,32 @@
 
 import { writable } from 'svelte/store';
 
+// camelCase throughout, matching what /api/meta-data serves. These interfaces
+// used to be snake_case and described a shape that never existed at runtime.
 interface MetricDefinition {
-    metric_id: string;
-    metric_name: string;
-    metric_category: string;
-    category_name?: string;
-    short_description: string;
-    detailed_description?: string;
-    calculation_formula?: string;
-    example_calculation?: string;
-    interpretation_guide?: string;
-    data_type: string;
-    unit_of_measure?: string;
-    typical_range?: string;
-    good_value_threshold?: number;
-    excellent_value_threshold?: number;
-    display_format: string;
-    sort_order: number;
-    category_order?: number;
-    category_icon?: string;
-    category_color?: string;
+    metricId: string;
+    metricName: string;
+    metricCategory: string;
+    categoryName?: string | null;
+    shortDescription: string;
+    detailedDescription?: string | null;
+    calculationFormula?: string | null;
+    exampleCalculation?: string | null;
+    interpretationGuide?: string | null;
+    dataType: string;
+    unitOfMeasure?: string | null;
+    typicalRange?: string | null;
+    goodValueThreshold?: number | null;
+    excellentValueThreshold?: number | null;
+    displayFormat: string;
+    sortOrder?: number | null;
 }
 
 interface RelatedMetric {
-    related_metric_id: string;
-    related_metric_name: string;
-    relationship_type: string;
-    relationship_description?: string;
+    relatedMetricId: string;
+    relatedMetricName: string;
+    relationshipType: string;
+    relationshipDescription?: string;
     strength: number;
 }
 
@@ -44,13 +43,15 @@ interface MetricData {
 }
 
 interface MetricCategory {
-    category_id: string;
-    category_name: string;
-    category_description?: string;
-    display_order: number;
-    icon_name?: string;
-    color_scheme?: string;
-    metric_count?: number;
+    categoryId: string;
+    categoryName: string;
+    categoryDescription?: string | null;
+    displayOrder?: number;
+    iconName?: string | null;
+    colorScheme?: string | null;
+    metricCount?: number;
+    // Present on the grouped default response, absent on ?include_categories=true.
+    metrics?: MetricDefinition[];
 }
 
 interface MetricDefinitionsState {
@@ -254,7 +255,7 @@ export const metricDefinitionsStore = {
 
             // Cache individual metrics
             data.metrics?.forEach((metric: MetricDefinition) => {
-                this.setMetric(metric.metric_id, { metric });
+                this.setMetric(metric.metricId, { metric });
             });
 
             return data.metrics || [];

@@ -208,11 +208,11 @@
 					<!-- Header -->
 					<div class="border-b {theme === 'dark' ? 'border-slate-600' : 'border-gray-200'} pb-2">
 						<h3 class="font-semibold text-lg {theme === 'dark' ? 'text-white' : 'text-gray-900'}">
-							{metricDefinition.metricName || metricDefinition.metric_name}
+							{metricDefinition.metricName}
 						</h3>
-						{#if metricDefinition.categoryName || metricDefinition.category_name}
+						{#if metricDefinition.categoryName}
 							<span class="inline-block {theme === 'dark' ? 'bg-blue-900/50 text-blue-200' : 'bg-blue-100 text-blue-800'} text-xs px-2 py-1 rounded-full mt-1">
-								{metricDefinition.categoryName || metricDefinition.category_name}
+								{metricDefinition.categoryName}
 							</span>
 						{/if}
 					</div>
@@ -220,70 +220,70 @@
 					<!-- Short description -->
 					<div>
 						<p class="text-sm {theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}">
-							{metricDefinition.shortDescription || metricDefinition.short_description}
+							{metricDefinition.shortDescription}
 						</p>
 					</div>
-					
+
 					<!-- Detailed description (if available) -->
-					{#if metricDefinition.detailedDescription || metricDefinition.detailed_description}
+					{#if metricDefinition.detailedDescription}
 						<div class="border-t {theme === 'dark' ? 'border-slate-600' : 'border-gray-200'} pt-2">
 							<p class="text-xs {theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}">
-								{metricDefinition.detailedDescription || metricDefinition.detailed_description}
+								{metricDefinition.detailedDescription}
 							</p>
 						</div>
 					{/if}
 					
 					<!-- Calculation formula (if available) -->
-					{#if metricDefinition.calculationFormula || metricDefinition.calculation_formula}
+					{#if metricDefinition.calculationFormula}
 						<div class="{theme === 'dark' ? 'bg-slate-800' : 'bg-gray-50'} rounded p-2">
 							<h4 class="text-xs font-medium {theme === 'dark' ? 'text-slate-300' : 'text-gray-700'} mb-1">
 								Calculation:
 							</h4>
 							<code class="text-xs {theme === 'dark' ? 'text-slate-300' : 'text-gray-600'} font-mono">
-								{metricDefinition.calculationFormula || metricDefinition.calculation_formula}
+								{metricDefinition.calculationFormula}
 							</code>
 						</div>
 					{/if}
 					
 					<!-- Example calculation (if available) -->
-					{#if metricDefinition.exampleCalculation || metricDefinition.example_calculation}
+					{#if metricDefinition.exampleCalculation}
 						<div class="{theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-50'} rounded p-2">
 							<h4 class="text-xs font-medium {theme === 'dark' ? 'text-blue-300' : 'text-blue-700'} mb-1">
 								Example:
 							</h4>
 							<p class="text-xs {theme === 'dark' ? 'text-blue-200' : 'text-blue-600'}">
-								{metricDefinition.exampleCalculation || metricDefinition.example_calculation}
+								{metricDefinition.exampleCalculation}
 							</p>
 						</div>
 					{/if}
 					
 					<!-- Interpretation guide (if available) -->
-					{#if metricDefinition.interpretationGuide || metricDefinition.interpretation_guide}
+					{#if metricDefinition.interpretationGuide}
 						<div class="{theme === 'dark' ? 'bg-green-900/30' : 'bg-green-50'} rounded p-2">
 							<h4 class="text-xs font-medium {theme === 'dark' ? 'text-green-300' : 'text-green-700'} mb-1">
 								How to interpret:
 							</h4>
 							<p class="text-xs {theme === 'dark' ? 'text-green-200' : 'text-green-600'}">
-								{metricDefinition.interpretationGuide || metricDefinition.interpretation_guide}
+								{metricDefinition.interpretationGuide}
 							</p>
 						</div>
 					{/if}
 					
 					<!-- Value ranges and thresholds -->
-					{#if (metricDefinition.typicalRange || metricDefinition.typical_range) || (metricDefinition.goodValueThreshold || metricDefinition.good_value_threshold) || (metricDefinition.excellentValueThreshold || metricDefinition.excellent_value_threshold)}
+					{#if metricDefinition.typicalRange || metricDefinition.goodValueThreshold || metricDefinition.excellentValueThreshold}
 						<div class="border-t {theme === 'dark' ? 'border-slate-600' : 'border-gray-200'} pt-2">
 							<h4 class="text-xs font-medium {theme === 'dark' ? 'text-slate-300' : 'text-gray-700'} mb-1">
 								Value Ranges:
 							</h4>
 							<div class="text-xs {theme === 'dark' ? 'text-slate-400' : 'text-gray-600'} space-y-1">
-								{#if metricDefinition.typicalRange || metricDefinition.typical_range}
-									<div>Typical: {metricDefinition.typicalRange || metricDefinition.typical_range}</div>
+								{#if metricDefinition.typicalRange}
+									<div>Typical: {metricDefinition.typicalRange}</div>
 								{/if}
-								{#if metricDefinition.goodValueThreshold || metricDefinition.good_value_threshold}
-									<div>Good: {formatValue(metricDefinition.goodValueThreshold || metricDefinition.good_value_threshold, metricDefinition.displayFormat || metricDefinition.display_format)}+</div>
+								{#if metricDefinition.goodValueThreshold}
+									<div>Good: {formatValue(metricDefinition.goodValueThreshold, metricDefinition.displayFormat)}+</div>
 								{/if}
-								{#if metricDefinition.excellentValueThreshold || metricDefinition.excellent_value_threshold}
-									<div>Excellent: {formatValue(metricDefinition.excellentValueThreshold || metricDefinition.excellent_value_threshold, metricDefinition.displayFormat || metricDefinition.display_format)}+</div>
+								{#if metricDefinition.excellentValueThreshold}
+									<div>Excellent: {formatValue(metricDefinition.excellentValueThreshold, metricDefinition.displayFormat)}+</div>
 								{/if}
 							</div>
 						</div>
@@ -298,10 +298,10 @@
 							<div class="space-y-1">
 								{#each relatedMetrics.slice(0, 3) as related}
 									<div class="flex items-center space-x-2 text-xs {theme === 'dark' ? 'text-slate-400' : 'text-gray-600'}">
-										<span class="text-sm">{getRelationshipIcon(related.relationshipType || related.relationship_type)}</span>
-										<span class="font-medium">{related.relatedMetricName || related.related_metric_name}</span>
-										{#if related.relationshipDescription || related.relationship_description}
-											<span class="{theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}">- {related.relationshipDescription || related.relationship_description}</span>
+										<span class="text-sm">{getRelationshipIcon(related.relationshipType)}</span>
+										<span class="font-medium">{related.relatedMetricName}</span>
+										{#if related.relationshipDescription}
+											<span class="{theme === 'dark' ? 'text-slate-500' : 'text-gray-500'}">- {related.relationshipDescription}</span>
 										{/if}
 									</div>
 								{/each}

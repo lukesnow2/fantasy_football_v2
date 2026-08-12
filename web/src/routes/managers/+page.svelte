@@ -201,7 +201,7 @@
 								<div class="text-center">
 									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avgPointsPerGame || 0).toFixed(1)}</div>
 									<div class="text-slate-400 text-sm">
-										<MetricHelp metricId="avg_points_per_game" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+										<MetricHelp metricId="points_per_week" position="top" theme="dark" className="text-slate-400" showIcon={false}>
 											Avg Points/Game
 										</MetricHelp>
 									</div>
@@ -278,7 +278,7 @@
 							<div class="space-y-4">
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">
-										<MetricHelp metricId="draft_value_index" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+										<MetricHelp metricId="draft_value_score" position="left" theme="dark" className="text-slate-400" showIcon={false}>
 											Draft Grade
 										</MetricHelp>
 									</span>
@@ -286,7 +286,7 @@
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">
-										<MetricHelp metricId="faab_efficiency" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+										<MetricHelp metricId="faab_efficiency_rating" position="left" theme="dark" className="text-slate-400" showIcon={false}>
 											FAAB Efficiency
 										</MetricHelp>
 									</span>

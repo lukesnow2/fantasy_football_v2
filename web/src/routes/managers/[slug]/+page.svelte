@@ -156,7 +156,7 @@
 								{(manager.winPercentage * 100).toFixed(1)}%
 							</div>
 							<div class="text-sm text-slate-400">
-								<MetricHelp metricId="careerWinPercentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+								<MetricHelp metricId="career_win_percentage" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
 									Win Rate
 								</MetricHelp>
 							</div>
@@ -168,7 +168,7 @@
 								{manager.avgPointsPerGame != null ? manager.avgPointsPerGame.toFixed(1) : '—'}
 							</div>
 							<div class="text-sm text-slate-400">
-								<MetricHelp metricId="avgPointsPerGame" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
+								<MetricHelp metricId="points_per_week" position="bottom" theme="dark" className="text-slate-400" showIcon={false}>
 									Avg Points
 								</MetricHelp>
 							</div>

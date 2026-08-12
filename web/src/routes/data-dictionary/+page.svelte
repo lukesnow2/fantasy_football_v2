@@ -20,21 +20,27 @@
 	
 	// Reactive filtering
 	$: filteredCategories = categories.filter((category: any) => {
-		if (selectedCategory !== 'all' && category.category_id !== selectedCategory) {
+		if (selectedCategory !== 'all' && category.categoryId !== selectedCategory) {
 			return false;
 		}
-		
+
 		if (searchTerm) {
 			const searchLower = searchTerm.toLowerCase();
-			return category.metrics.some((metric: any) => 
-				metric.metric_name.toLowerCase().includes(searchLower) ||
-				metric.short_description.toLowerCase().includes(searchLower) ||
-				metric.metric_category.toLowerCase().includes(searchLower)
-			);
+			return (category.metrics ?? []).some((metric: any) => matchesSearch(metric, searchLower));
 		}
-		
+
 		return true;
 	});
+
+	// `?? ''` rather than a bare `.toLowerCase()`: a metric missing a field should
+	// drop out of the results, not throw on the first keystroke.
+	function matchesSearch(metric: any, searchLower: string) {
+		return (
+			(metric.metricName ?? '').toLowerCase().includes(searchLower) ||
+			(metric.shortDescription ?? '').toLowerCase().includes(searchLower) ||
+			(metric.metricCategory ?? '').toLowerCase().includes(searchLower)
+		);
+	}
 	
 	onMount(async () => {
 		try {
@@ -52,15 +58,15 @@
 			}
 			
 			categories = data.categories || [];
-			
+
 			// Also cache in store for tooltip usage
+			metricDefinitionsStore.setCategories(categories);
 			categories.forEach((category: any) => {
-				metricDefinitionsStore.setCategories(categories);
 				category.metrics?.forEach((metric: any) => {
-					metricDefinitionsStore.setMetric(metric.metric_id, { metric });
+					metricDefinitionsStore.setMetric(metric.metricId, { metric });
 				});
 			});
-			
+
 		} catch (err: any) {
 			console.error('Error loading data dictionary:', err);
 			error = err.message;
@@ -71,12 +77,9 @@
 	
 	function getFilteredMetrics(categoryMetrics: any[]) {
 		if (!searchTerm) return categoryMetrics;
-		
+
 		const searchLower = searchTerm.toLowerCase();
-		return categoryMetrics.filter((metric: any) => 
-			metric.metric_name.toLowerCase().includes(searchLower) ||
-			metric.short_description.toLowerCase().includes(searchLower)
-		);
+		return categoryMetrics.filter((metric: any) => matchesSearch(metric, searchLower));
 	}
 	
 	function getCategoryIcon(iconName: string) {
@@ -177,8 +180,8 @@
 				>
 					<option value="all">All Categories</option>
 					{#each categories as category}
-						<option value={category.category_id}>
-							{getCategoryIcon(category.icon_name)} {category.category_name}
+						<option value={category.categoryId}>
+							{getCategoryIcon(category.iconName)} {category.categoryName}
 						</option>
 					{/each}
 				</select>
@@ -230,11 +233,11 @@
 						<!-- Category Header -->
 						<div class="px-6 py-4 border-b border-gray-200">
 							<div class="flex items-center space-x-3">
-								<span class="text-2xl">{getCategoryIcon(category.icon_name)}</span>
+								<span class="text-2xl">{getCategoryIcon(category.iconName)}</span>
 								<div>
-									<h2 class="text-xl font-bold text-gray-900">{category.category_name}</h2>
-									{#if category.category_description}
-										<p class="text-sm text-gray-600">{category.category_description}</p>
+									<h2 class="text-xl font-bold text-gray-900">{category.categoryName}</h2>
+									{#if category.categoryDescription}
+										<p class="text-sm text-gray-600">{category.categoryDescription}</p>
 									{/if}
 								</div>
 								<div class="ml-auto">
@@ -253,51 +256,51 @@
 										<div class="flex-1">
 											<!-- Metric Name with Tooltip -->
 											<div class="flex items-center space-x-2 mb-2">
-												<MetricTooltip metricId={metric.metric_id} position="right" maxWidth="500px">
+												<MetricTooltip metricId={metric.metricId} position="right" maxWidth="500px">
 													<h3 class="text-lg font-semibold text-gray-900 cursor-help hover:text-blue-600 transition-colors">
-														{metric.metric_name}
+														{metric.metricName}
 													</h3>
 												</MetricTooltip>
 											</div>
 											
 											<!-- Short Description -->
-											<p class="text-gray-700 mb-3">{metric.short_description}</p>
+											<p class="text-gray-700 mb-3">{metric.shortDescription}</p>
 											
 											<!-- Metadata -->
 											<div class="flex flex-wrap gap-4 text-sm text-gray-600">
 												<div class="flex items-center space-x-1">
 													<span class="font-medium">Type:</span>
-													<span class="capitalize">{metric.data_type}</span>
+													<span class="capitalize">{metric.dataType}</span>
 												</div>
-												
-												{#if metric.unit_of_measure}
+
+												{#if metric.unitOfMeasure}
 													<div class="flex items-center space-x-1">
 														<span class="font-medium">Unit:</span>
-														<span class="capitalize">{metric.unit_of_measure}</span>
+														<span class="capitalize">{metric.unitOfMeasure}</span>
 													</div>
 												{/if}
-												
-												{#if metric.typical_range}
+
+												{#if metric.typicalRange}
 													<div class="flex items-center space-x-1">
 														<span class="font-medium">Range:</span>
-														<span>{metric.typical_range}</span>
+														<span>{metric.typicalRange}</span>
 													</div>
 												{/if}
-												
-												{#if metric.good_value_threshold}
+
+												{#if metric.goodValueThreshold}
 													<div class="flex items-center space-x-1">
 														<span class="font-medium">Good:</span>
 														<span class="text-green-600">
-															{formatValue(metric.good_value_threshold, metric.display_format)}+
+															{formatValue(metric.goodValueThreshold, metric.displayFormat)}+
 														</span>
 													</div>
 												{/if}
-												
-												{#if metric.excellent_value_threshold}
+
+												{#if metric.excellentValueThreshold}
 													<div class="flex items-center space-x-1">
 														<span class="font-medium">Excellent:</span>
 														<span class="text-blue-600">
-															{formatValue(metric.excellent_value_threshold, metric.display_format)}+
+															{formatValue(metric.excellentValueThreshold, metric.displayFormat)}+
 														</span>
 													</div>
 												{/if}
@@ -307,7 +310,7 @@
 										<!-- Metric ID for developers -->
 										<div class="ml-4 text-right">
 											<code class="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500">
-												{metric.metric_id}
+												{metric.metricId}
 											</code>
 										</div>
 									</div>

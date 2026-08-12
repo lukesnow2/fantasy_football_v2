@@ -127,7 +127,7 @@
 						<div class="text-center">
 							<div class="text-3xl font-bold text-purple-400">{parseFloat(tradeData.analytics.overview.avgProductionImpact || 0).toFixed(1)}</div>
 							<div class="text-slate-400">
-								<MetricHelp metricId="trade_production_differential" position="top" theme="dark" className="text-slate-400" showIcon={false}>
+								<MetricHelp metricId="production_differential" position="top" theme="dark" className="text-slate-400" showIcon={false}>
 									Avg Impact
 								</MetricHelp>
 							</div>
