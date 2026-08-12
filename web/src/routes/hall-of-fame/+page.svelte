@@ -3,6 +3,7 @@
 	import { Crown, Trophy, Target, TrendingUp, Award, BarChart3, Users, Medal } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	
 	let hallOfFameData: any = null;
 	let loading = true;
@@ -82,18 +83,10 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<!-- Hero Section -->
-	<section class="text-center py-8">
-		<div class="max-w-4xl mx-auto">
-			<Crown class="h-16 w-16 text-amber-400 mx-auto mb-4" />
-			<h1 class="text-4xl font-bold text-white mb-4">
-				The League <span class="text-amber-400">Hall of Fame</span>
-			</h1>
-			<p class="text-xl text-slate-300 leading-relaxed">
-				Celebrating the greatest managers in league history. Based on championships, consistency, and overall excellence.
-			</p>
-		</div>
-	</section>
+	<PageHeader icon={Crown} title="Hall of Fame" accent="amber">
+		Celebrating the greatest managers in league history. Based on championships, consistency, and
+		overall excellence.
+	</PageHeader>
 
 	{#if loading}
 		<div class="flex items-center justify-center h-64">

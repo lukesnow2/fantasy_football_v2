@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { Bell, Mail, Shield, User } from 'lucide-svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	export let data: PageData;
@@ -13,8 +14,12 @@
 	<title>Settings | The League</title>
 </svelte:head>
 
-<div class="mx-auto max-w-2xl space-y-6 px-4 py-8">
-	<h1 class="text-2xl font-bold text-white">Settings</h1>
+<div class="space-y-8">
+	<PageHeader icon={User} title="Settings" accent="amber">
+		Your profile and how the league gets in touch with you.
+	</PageHeader>
+
+	<div class="mx-auto max-w-2xl space-y-6">
 
 	{#if data.manager}
 		<section class="rounded-xl border border-slate-700 bg-slate-800/50 p-6">
@@ -122,4 +127,5 @@
 			Your account isn't linked to a manager profile. Ask the commissioner to check the roster.
 		</p>
 	{/if}
+	</div>
 </div>
