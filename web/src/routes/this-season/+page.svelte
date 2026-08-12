@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { Calendar, Trophy, TrendingUp, MessageSquare, ExternalLink, Users, Target, Send } from 'lucide-svelte';
+	import { Calendar, Trophy, TrendingUp, ExternalLink, Users, Target } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
-	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
+	import ChatPreview from '$lib/components/chat/ChatPreview.svelte';
+	import { YAHOO_LEAGUE_URL } from '$lib/config/league';
 	
 	// Real data from API
 	let standings: any[] = [];
@@ -16,18 +16,14 @@
 	let isSeasonComplete = false;
 	let lastPlaceGameLoser: any = null;
 	let leagueOverview: any = {};
+	// Power rankings are their own mart, not a reordering of the standings — the
+	// preview used to render `standings.slice(0, 4)` under a "Power Rankings" heading.
+	let powerRankings: any[] = [];
+	let powerRankingsWeek: number | null = null;
 	
 	// Get user from page data
 	$: user = $page.data.user;
 	$: authenticatedManager = $page.data.authenticatedManager;
-	
-	// Chat state
-	let messages: any[] = [];
-	// The logged-in manager's key (null when not authenticated).
-	$: currentUserKey = authenticatedManager?.managerKey ?? null;
-	let newMessage = '';
-	let loadingMessages = false;
-	let sendingMessage = false;
 	
 	// Computed playoff picture data
 	$: playoffPicture = calculatePlayoffPicture(standings, currentWeek);
@@ -119,15 +115,22 @@
 				console.error('Standings API failed:', standingsResponse.status, standingsResponse.statusText);
 			}
 
+			// Fetch the latest ranked week's power rankings for the preview panel.
+			const powerResponse = await fetch('/api/power-rankings');
+			if (powerResponse.ok) {
+				const powerData = await powerResponse.json();
+				powerRankings = powerData.rankings ?? [];
+				powerRankingsWeek = powerData.week ?? null;
+			} else {
+				console.error('Power rankings API failed:', powerResponse.status);
+			}
+
 			// Fetch recent transactions
 			const transactionsResponse = await fetch('/api/transactions?limit=10');
 			if (transactionsResponse.ok) {
 				const transactionsData = await transactionsResponse.json();
 				recentTransactions = transactionsData.transactions;
 			}
-
-			// Load chat messages
-			await loadMessages();
 
 			loading = false;
 		} catch (err) {
@@ -137,240 +140,6 @@
 		}
 	});
 
-	// Load chat messages
-	async function loadMessages() {
-		try {
-			loadingMessages = true;
-			const response = await fetch('/api/chat/messages?channelId=general&limit=20');
-			if (response.ok) {
-				const data = await response.json();
-				// Ensure each message has a reactions array
-				messages = data.messages.map((msg: any) => ({
-					...msg,
-					reactions: msg.reactions || []
-				}));
-			}
-		} catch (err) {
-			console.error('Error loading messages:', err);
-		} finally {
-			loadingMessages = false;
-		}
-	}
-
-	// Send message
-	async function sendMessage() {
-		// Check if user is authenticated
-		if (!user) {
-			// Redirect to login page with return URL
-			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
-			return;
-		}
-		
-		if (!newMessage.trim() || sendingMessage) return;
-		
-		try {
-			sendingMessage = true;
-			const response = await fetch('/api/chat/messages', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					content: newMessage.trim(),
-					channelId: 'general'
-				})
-			});
-			
-			if (response.ok) {
-				const data = await response.json();
-				// Ensure new message has reactions array
-				const newMsg = {
-					...data.message,
-					reactions: data.message.reactions || []
-				};
-				messages = [...messages, newMsg];
-				newMessage = '';
-				
-				// Scroll to bottom
-				setTimeout(() => {
-					const messagesContainer = document.querySelector('.messages-container');
-					if (messagesContainer) {
-						messagesContainer.scrollTop = messagesContainer.scrollHeight;
-					}
-				}, 100);
-			}
-		} catch (err) {
-			console.error('Error sending message:', err);
-		} finally {
-			sendingMessage = false;
-		}
-	}
-
-	// Handle message edit
-	async function handleMessageEdit(event: CustomEvent) {
-		// Check if user is authenticated
-		if (!user) {
-			// Redirect to login page with return URL
-			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
-			return;
-		}
-		
-		const { messageId, content } = event.detail;
-		
-		try {
-			const response = await fetch('/api/chat/messages', {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					messageId,
-					content
-				})
-			});
-			
-			if (response.ok) {
-				const data = await response.json();
-				messages = messages.map(msg => 
-					msg.messageId === messageId ? { ...msg, content, editedAt: new Date() } : msg
-				);
-			}
-		} catch (err) {
-			console.error('Error editing message:', err);
-		}
-	}
-
-	// Handle message delete
-	async function handleMessageDelete(event: CustomEvent) {
-		// Check if user is authenticated
-		if (!user) {
-			// Redirect to login page with return URL
-			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
-			return;
-		}
-		
-		const { messageId } = event.detail;
-		
-		try {
-			const response = await fetch('/api/chat/messages', {
-				method: 'DELETE',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({
-					messageId
-				})
-			});
-			
-			if (response.ok) {
-				messages = messages.filter(msg => msg.messageId !== messageId);
-			}
-		} catch (err) {
-			console.error('Error deleting message:', err);
-		}
-	}
-
-	// Handle message reply
-	async function handleMessageReply(event: CustomEvent) {
-		// Check if user is authenticated
-		if (!user) {
-			// Redirect to login page with return URL
-			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
-			return;
-		}
-		
-		const { messageId, messageKey } = event.detail;
-		
-		// For now, let's just log the reply action and focus the input
-		console.log('Reply to message:', messageId, messageKey);
-		
-		// You could implement thread functionality here
-		// For now, we'll just add a mention or focus the input
-		const input = document.querySelector('input[placeholder*="trash talk"]') as HTMLInputElement;
-		if (input) {
-			// Find the message author to create a mention
-			const replyMessage = messages.find(msg => msg.messageId === messageId);
-			if (replyMessage) {
-				newMessage = `@${replyMessage.authorDisplayName || replyMessage.authorName} `;
-			}
-			input.focus();
-		}
-	}
-
-	// Handle reaction
-	async function handleReaction(event: CustomEvent) {
-		// Check if user is authenticated
-		if (!user) {
-			// Redirect to login page with return URL
-			goto(`/login?redirect=${encodeURIComponent('/this-season')}`);
-			return;
-		}
-		
-		const { messageId, emoji, emojiType, action } = event.detail;
-		
-		try {
-			if (action === 'add') {
-				const response = await fetch('/api/chat/reactions', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify({
-						messageId,
-						emoji,
-						emojiType
-					})
-				});
-				
-				if (response.ok) {
-					// Reload reactions for this message
-					await loadReactions(messageId);
-				}
-			} else if (action === 'remove') {
-				const response = await fetch('/api/chat/reactions', {
-					method: 'DELETE',
-					headers: {
-						'Content-Type': 'application/json'
-					},
-					body: JSON.stringify({
-						messageId,
-						emoji
-					})
-				});
-				
-				if (response.ok) {
-					// Reload reactions for this message
-					await loadReactions(messageId);
-				}
-			}
-		} catch (err) {
-			console.error('Error handling reaction:', err);
-		}
-	}
-
-	// Load reactions for a message
-	async function loadReactions(messageId: string) {
-		try {
-			const response = await fetch(`/api/chat/reactions?messageId=${messageId}`);
-			if (response.ok) {
-				const data = await response.json();
-				// Update the message with reactions
-				messages = messages.map(msg => 
-					msg.messageId === messageId ? { ...msg, reactions: data.reactions } : msg
-				);
-			}
-		} catch (err) {
-			console.error('Error loading reactions:', err);
-		}
-	}
-
-	// Handle keyboard shortcuts
-	function handleKeydown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault();
-			sendMessage();
-		}
-	}
 </script>
 
 <div class="space-y-8">
@@ -387,9 +156,10 @@
 			</p>
 		</div>
 		<div class="flex items-center space-x-4">
-			<a 
-				href="https://yahoo.com" 
+			<a
+				href={YAHOO_LEAGUE_URL}
 				target="_blank"
+				rel="noopener noreferrer"
 				class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium flex items-center"
 			>
 				<ExternalLink class="w-4 h-4 mr-2" />
@@ -624,63 +394,7 @@
 
 		<!-- Right Column: Message Board & Quick Stats -->
 		<div class="space-y-8">
-			<!-- Message Board -->
-			<section class="bg-gradient-to-br from-slate-800/60 to-slate-900/40 rounded-2xl p-8 border border-slate-700/30 backdrop-blur-sm shadow-2xl">
-				<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-					<div class="p-2 bg-green-500 rounded-lg mr-3">
-						<MessageSquare class="w-6 h-6 text-white" />
-					</div>
-					League Chat
-				</h2>
-				
-				<div class="space-y-3 max-h-96 overflow-y-auto bg-slate-800 rounded-lg p-4 border border-slate-700">
-					{#if loadingMessages}
-						<div class="flex items-center justify-center h-32 text-slate-400">
-							<div class="flex flex-col items-center gap-3">
-								<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-400"></div>
-								<span class="text-sm">Loading messages...</span>
-							</div>
-						</div>
-					{:else}
-						{#each messages as msg}
-							<ChatMessage 
-								message={msg}
-								{currentUserKey}
-								on:edit={handleMessageEdit}
-								on:delete={handleMessageDelete}
-								on:reaction={handleReaction}
-								on:reply={handleMessageReply}
-							/>
-						{/each}
-					{/if}
-				</div>
-				
-				<div class="mt-6 pt-4 border-t border-slate-700">
-					<div class="flex gap-3">
-						<input 
-							type="text" 
-							placeholder="Drop some trash talk..." 
-							class="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
-							bind:value={newMessage}
-							on:keydown={handleKeydown}
-						/>
-						<button 
-							on:click={sendMessage}
-							disabled={sendingMessage}
-							class="bg-amber-500 hover:bg-amber-600 text-black px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-						>
-							{#if sendingMessage}
-								<svg class="animate-spin h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-								</svg>
-							{:else}
-								<Send class="w-4 h-4" />
-							{/if}
-						</button>
-					</div>
-				</div>
-			</section>
+			<ChatPreview />
 
 			<!-- Power Rankings Preview -->
 			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
@@ -689,26 +403,42 @@
 					Power Rankings
 				</h2>
 				
-				<div class="space-y-3">
-					{#each standings.slice(0, 4) as team, i}
-						<div class="flex items-center justify-between">
-							<div class="flex items-center space-x-3">
-								<span class="text-lg font-bold text-slate-400">#{i + 1}</span>
-								<span class="text-white">{team.team}</span>
+				{#if powerRankings.length > 0}
+					<div class="space-y-3">
+						{#each powerRankings.slice(0, 5) as team (team.teamKey)}
+							<div class="flex items-center justify-between">
+								<div class="flex items-center space-x-3 min-w-0">
+									<span class="text-lg font-bold text-slate-400 tabular-nums">#{team.powerRank}</span>
+									<span class="min-w-0">
+										<span class="block truncate text-white">{team.teamName}</span>
+										{#if team.managerName}
+											<span class="block text-xs text-slate-400">{team.managerName}</span>
+										{/if}
+									</span>
+								</div>
+								<!-- Real week-over-week movement. This used to be a hardcoded
+								     ↑2 on row one and ↓1 on row two, regardless of the data. -->
+								<div class="flex items-center space-x-2 shrink-0">
+									{#if team.rankChange == null}
+										<span class="text-slate-500 text-sm">–</span>
+									{:else if team.rankChange > 0}
+										<span class="text-green-400 text-sm tabular-nums">↑{team.rankChange}</span>
+									{:else if team.rankChange < 0}
+										<span class="text-red-400 text-sm tabular-nums">↓{Math.abs(team.rankChange)}</span>
+									{:else}
+										<span class="text-slate-500 text-sm">–</span>
+									{/if}
+								</div>
 							</div>
-							<div class="flex items-center space-x-2">
-								{#if i === 0}
-									<span class="text-green-400 text-sm">↑2</span>
-								{:else if i === 1}
-									<span class="text-red-400 text-sm">↓1</span>
-								{:else}
-									<span class="text-slate-500 text-sm">-</span>
-								{/if}
-							</div>
-						</div>
-					{/each}
-				</div>
-				
+						{/each}
+					</div>
+					{#if powerRankingsWeek}
+						<p class="mt-3 text-xs text-slate-500">Through week {powerRankingsWeek}</p>
+					{/if}
+				{:else}
+					<p class="text-sm text-slate-500">Power rankings aren't available for this season yet.</p>
+				{/if}
+
 				<a href="/power-rankings" class="mt-4 inline-flex items-center text-purple-400 hover:text-purple-300 font-medium text-sm">
 					View Full Rankings →
 				</a>
@@ -819,30 +549,3 @@
 	</div>
 </div>
 
-<style>
-	.custom-scrollbar::-webkit-scrollbar {
-		width: 8px;
-	}
-
-	.custom-scrollbar::-webkit-scrollbar-track {
-		background: rgba(51, 65, 85, 0.1);
-		border-radius: 4px;
-	}
-
-	.custom-scrollbar::-webkit-scrollbar-thumb {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.6), rgba(245, 158, 11, 0.8));
-		border-radius: 4px;
-		border: 1px solid rgba(71, 85, 105, 0.3);
-	}
-
-	.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(245, 158, 11, 1));
-		box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
-	}
-
-	/* Firefox scrollbar */
-	.custom-scrollbar {
-		scrollbar-width: thin;
-		scrollbar-color: rgba(245, 158, 11, 0.6) rgba(51, 65, 85, 0.1);
-	}
-</style> 

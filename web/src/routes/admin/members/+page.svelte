@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { AlertTriangle, Check, Mail, Shield, UserX } from 'lucide-svelte';
+	import { AlertTriangle, Check, Mail, Shield, UserPlus, UserX } from 'lucide-svelte';
 	import type { ActionData, PageData } from './$types';
 
 	export let data: PageData;
@@ -64,10 +64,47 @@
 				{data.unclaimed.length} manager{data.unclaimed.length === 1 ? '' : 's'} not on the allowlist
 			</h2>
 			<p class="mt-1 text-sm text-amber-200/80">
-				{data.unclaimed.map((m) => m.managerName).join(', ')} — they can't sign in. Add an email to
-				<code class="text-amber-300">data/league-members.json</code> and run
-				<code class="text-amber-300">npm run seed:members</code>.
+				They can't sign in until they have an address here. Adding one takes effect
+				immediately — no seed script, no redeploy.
 			</p>
+
+			<ul class="mt-3 space-y-2">
+				{#each data.unclaimed as manager (manager.managerKey)}
+					<li>
+						<form
+							method="POST"
+							action="?/addMember"
+							use:enhance
+							class="flex flex-wrap items-center gap-2"
+						>
+							<input type="hidden" name="managerKey" value={manager.managerKey} />
+							<span class="w-40 shrink-0 text-sm font-medium text-white">
+								{manager.managerName}
+							</span>
+							<input
+								name="email"
+								type="email"
+								required
+								placeholder="email@example.com"
+								class="w-56 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white placeholder-slate-500"
+							/>
+							<select
+								name="role"
+								class="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+							>
+								<option value="member">member</option>
+								<option value="commissioner">commissioner</option>
+							</select>
+							<button
+								class="flex items-center gap-1 rounded border border-amber-600/50 bg-amber-900/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-900/50"
+							>
+								<UserPlus class="h-3 w-3" />
+								Add
+							</button>
+						</form>
+					</li>
+				{/each}
+			</ul>
 		</section>
 	{/if}
 
@@ -77,6 +114,7 @@
 				<tr>
 					<th class="px-4 py-3">Manager</th>
 					<th class="px-4 py-3">Email</th>
+					<th class="px-4 py-3">Role</th>
 					<th class="px-4 py-3">Invited</th>
 					<th class="px-4 py-3">First login</th>
 					<th class="px-4 py-3 text-right">Actions</th>
@@ -105,6 +143,22 @@
 									class="w-52 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
 								/>
 								<button class="rounded px-2 text-xs text-slate-400 hover:text-amber-400" title="Save">
+									<Check class="h-3.5 w-3.5" />
+								</button>
+							</form>
+						</td>
+						<td class="px-4 py-3">
+							<form method="POST" action="?/setRole" use:enhance class="flex gap-1">
+								<input type="hidden" name="memberId" value={member.id} />
+								<select
+									name="role"
+									value={member.role}
+									class="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+								>
+									<option value="member">member</option>
+									<option value="commissioner">commissioner</option>
+								</select>
+								<button class="rounded px-2 text-xs text-slate-400 hover:text-amber-400" title="Save role">
 									<Check class="h-3.5 w-3.5" />
 								</button>
 							</form>
@@ -140,10 +194,8 @@
 
 				{#if data.members.length === 0}
 					<tr>
-						<td colspan="5" class="px-4 py-8 text-center text-slate-400">
-							No members seeded yet. Fill in emails in
-							<code class="text-amber-400">data/league-members.json</code> and run
-							<code class="text-amber-400">npm run seed:members</code>.
+						<td colspan="6" class="px-4 py-8 text-center text-slate-400">
+							Nobody on the allowlist yet. Add managers from the panel above.
 						</td>
 					</tr>
 				{/if}

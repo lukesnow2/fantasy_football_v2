@@ -1,7 +1,8 @@
 import { error, fail } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { db } from '$lib/server/db';
-import { leagueMember, user as userTable } from '$lib/server/db/schema';
+import { dimManager, leagueMember, user as userTable } from '$lib/server/db/schema';
 import { invalidateUserSessions } from '$lib/server/auth';
 import { requireCommissioner, getUnclaimedManagers } from '$lib/server/auth-manager';
 import { emailService, generateMagicLinkEmail } from '$lib/server/email';
@@ -42,7 +43,132 @@ export const load: PageServerLoad = async ({ locals }) => {
 	};
 };
 
+/**
+ * Emails are unique case-insensitively (see the lower(email) index in the
+ * migration), so 23505 on any of these writes means "someone already has that
+ * address" and nothing else. Anything else is a real failure and must not be
+ * reported as a duplicate.
+ */
+function isDuplicateEmail(err: unknown): boolean {
+	return (err as { code?: string })?.code === '23505';
+}
+
+function normalizeEmail(raw: FormDataEntryValue | null): string {
+	return String(raw ?? '')
+		.toLowerCase()
+		.trim();
+}
+
+function looksLikeEmail(value: string): boolean {
+	// Deliberately loose. The authoritative test is whether the sign-in link
+	// arrives; a strict regex here only rejects addresses that actually work.
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export const actions: Actions = {
+	/**
+	 * Put a manager on the allowlist.
+	 *
+	 * Nine of the ten managers had no league_member row at all, because the seed
+	 * script skips entries with a blank email and nine of them were blank. That
+	 * left the commissioner with a banner naming who was missing and no way to do
+	 * anything about it short of editing JSON and re-running a script.
+	 */
+	addMember: async ({ request, locals }) => {
+		requireCommissioner(locals);
+		const form = await request.formData();
+		const managerKey = Number(form.get('managerKey'));
+		const email = normalizeEmail(form.get('email'));
+		const role = form.get('role') === 'commissioner' ? 'commissioner' : 'member';
+
+		if (!Number.isInteger(managerKey)) return fail(400, { error: 'Pick a manager.' });
+		if (!looksLikeEmail(email)) return fail(400, { error: 'Enter a valid email address.' });
+
+		const [manager] = await db
+			.select({ managerKey: dimManager.managerKey, managerName: dimManager.managerName })
+			.from(dimManager)
+			.where(eq(dimManager.managerKey, managerKey))
+			.limit(1);
+
+		if (!manager) return fail(404, { error: 'That manager is not in the warehouse.' });
+
+		// manager_key is unique on league_member, so this is also enforced by the
+		// database. Checked here so the commissioner gets a sentence rather than a
+		// constraint violation.
+		const [existing] = await db
+			.select({ id: leagueMember.id })
+			.from(leagueMember)
+			.where(eq(leagueMember.managerKey, managerKey))
+			.limit(1);
+
+		if (existing) return fail(409, { error: `${manager.managerName} is already on the allowlist.` });
+
+		try {
+			await db.insert(leagueMember).values({
+				id: nanoid(),
+				email,
+				managerKey,
+				role,
+				active: true,
+				displayName: manager.managerName
+			});
+		} catch (err) {
+			if (isDuplicateEmail(err)) {
+				return fail(409, { error: 'Another manager already uses that address.' });
+			}
+			console.error('[admin] Failed to add member:', err);
+			return fail(500, { error: "Couldn't add that manager. Check the logs." });
+		}
+
+		// Deliberately not auto-inviting. The invite action reports send failures
+		// honestly and stamps invitedAt only on a confirmed send; folding it in here
+		// would make one button either lie about the mail or fail the whole add
+		// because the mail bounced.
+		return {
+			success: `${manager.managerName} added as ${role}. Send them an invite when you're ready.`
+		};
+	},
+
+	/**
+	 * Promote or demote. Guarded by the same last-commissioner rule as setActive —
+	 * a league with no commissioner has no way back into this page.
+	 */
+	setRole: async ({ request, locals }) => {
+		requireCommissioner(locals);
+		const form = await request.formData();
+		const memberId = String(form.get('memberId') ?? '');
+		const role = form.get('role') === 'commissioner' ? 'commissioner' : 'member';
+
+		const [member] = await db
+			.select()
+			.from(leagueMember)
+			.where(eq(leagueMember.id, memberId))
+			.limit(1);
+
+		if (!member) return fail(404, { error: 'Member not found.' });
+		if (member.role === role) return { success: `${member.displayName} is already a ${role}.` };
+
+		if (role === 'member' && member.role === 'commissioner') {
+			const commissioners = await db
+				.select({ id: leagueMember.id })
+				.from(leagueMember)
+				.where(eq(leagueMember.role, 'commissioner'));
+
+			if (commissioners.filter((c) => c.id !== memberId).length === 0) {
+				return fail(409, {
+					error: 'That would leave the league with no commissioner. Promote someone else first.'
+				});
+			}
+		}
+
+		await db
+			.update(leagueMember)
+			.set({ role, updatedAt: new Date() })
+			.where(eq(leagueMember.id, memberId));
+
+		return { success: `${member.displayName ?? member.email} is now a ${role}.` };
+	},
+
 	invite: async ({ request, locals }) => {
 		requireCommissioner(locals);
 		const memberId = String((await request.formData()).get('memberId') ?? '');
@@ -155,9 +281,9 @@ export const actions: Actions = {
 		requireCommissioner(locals);
 		const form = await request.formData();
 		const memberId = String(form.get('memberId') ?? '');
-		const email = String(form.get('email') ?? '').toLowerCase().trim();
+		const email = normalizeEmail(form.get('email'));
 
-		if (!email || !email.includes('@')) return fail(400, { error: 'Enter a valid email address.' });
+		if (!looksLikeEmail(email)) return fail(400, { error: 'Enter a valid email address.' });
 
 		let updated;
 		try {
@@ -170,8 +296,7 @@ export const actions: Actions = {
 			// Only 23505 is a duplicate address. A bare catch reported connection
 			// loss, timeouts and constraint violations all as "already in use",
 			// and logged none of them.
-			const code = (error as { code?: string })?.code;
-			if (code === '23505') {
+			if (isDuplicateEmail(error)) {
 				return fail(409, { error: 'Another manager already uses that address.' });
 			}
 			console.error('[admin] Failed to update member email:', error);

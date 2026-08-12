@@ -1,9 +1,13 @@
 {
 	"_comment": [
-		"The league roster allowlist \u2014 the only people who can sign in.",
-		"Fill in emails as you collect them and re-run: npm run seed:members",
-		"The script is keyed on managerKey, so re-running updates rows in place",
-		"rather than creating duplicates, and skips entries with a blank email.",
+		"Bootstrap seed for the roster allowlist \u2014 the only people who can sign in.",
+		"NOT the source of truth. Email and role are edited from /admin/members,",
+		"so this file will drift, and that is fine. The seed script inserts only",
+		"and never updates an existing manager_key, precisely so re-running it",
+		"cannot revert a change the commissioner made in the browser.",
+		"Run it with: npm run seed:members",
+		"Entries with a blank email are skipped \u2014 add those managers from",
+		"/admin/members instead.",
 		"managerKey values are verified against edw.dim_manager on every run; the",
 		"script aborts if a name no longer matches, which is the tripwire for the",
 		"Python ETL renumbering a key underneath us."

@@ -1,0 +1,25 @@
+<script lang="ts">
+	import ChatPanel from '$lib/components/chat/ChatPanel.svelte';
+</script>
+
+<svelte:head>
+	<title>League Chat · The League</title>
+</svelte:head>
+
+<!-- Route-level auth comes from hooks.server.ts, which is deny-by-default:
+     /chat is not in PUBLIC_PREFIXES, so a signed-out visitor is redirected to
+     /login before this ever renders. The panel's signed-out state exists for the
+     preview embedded on the public /this-season page. -->
+<div class="space-y-4">
+	<div>
+		<h1 class="text-3xl font-bold text-white">League Chat</h1>
+		<p class="mt-1 text-sm text-slate-400">
+			Trash talk, trade offers and grievances. Reply in a thread to keep an argument
+			in one place.
+		</p>
+	</div>
+
+	<!-- dvh, not vh: on mobile Safari the toolbar makes vh taller than the visible
+	     viewport, which pushes the composer off the bottom of the screen. -->
+	<ChatPanel heightClass="h-[calc(100dvh-16rem)] min-h-[24rem]" title="#general" />
+</div>

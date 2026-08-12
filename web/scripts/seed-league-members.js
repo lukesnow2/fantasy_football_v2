@@ -61,18 +61,27 @@ try {
 	const withEmail = members.filter((m) => m.email?.trim());
 	const withoutEmail = members.filter((m) => !m.email?.trim());
 
+	// Inserts only, never updates.
+	//
+	// Email and role are now editable from /admin/members, so this file stopped
+	// being the source of truth for them the moment that page shipped. The old
+	// `do update set email = excluded.email` meant any re-run of this script
+	// silently reverted every change a commissioner had made in the browser.
+	// Bootstrapping stays useful; overwriting does not.
 	for (const member of withEmail) {
 		const email = member.email.toLowerCase().trim();
-		await sql`
+		const rows = await sql`
 			insert into app.league_member (id, email, manager_key, role, active, display_name)
 			values (${slugify(member.managerName)}, ${email}, ${member.managerKey},
 			        ${member.role ?? 'member'}, true, ${member.managerName})
-			on conflict (manager_key) do update set
-				email = excluded.email,
-				role = excluded.role,
-				display_name = excluded.display_name,
-				updated_at = now()`;
-		console.log(`  ✓ ${member.managerName} <${email}> (${member.role ?? 'member'})`);
+			on conflict (manager_key) do nothing
+			returning manager_key`;
+
+		if (rows.length > 0) {
+			console.log(`  ✓ ${member.managerName} <${email}> (${member.role ?? 'member'})`);
+		} else {
+			console.log(`  · ${member.managerName} already on the allowlist — left as-is`);
+		}
 	}
 
 	if (withoutEmail.length > 0) {
