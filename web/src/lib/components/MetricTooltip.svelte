@@ -274,6 +274,18 @@
 							</p>
 						</div>
 					{/if}
+
+					<!-- Limitations (if available) -->
+					{#if metricDefinition.limitations}
+						<div class="{theme === 'dark' ? 'bg-amber-900/30' : 'bg-amber-50'} rounded p-2">
+							<h4 class="text-xs font-medium {theme === 'dark' ? 'text-amber-300' : 'text-amber-700'} mb-1">
+								Limitations:
+							</h4>
+							<p class="text-xs {theme === 'dark' ? 'text-amber-200' : 'text-amber-700'}">
+								{metricDefinition.limitations}
+							</p>
+						</div>
+					{/if}
 					
 					<!-- Value ranges and thresholds -->
 					{#if metricDefinition.typicalRange || metricDefinition.goodValueThreshold || metricDefinition.excellentValueThreshold}

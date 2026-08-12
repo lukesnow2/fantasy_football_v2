@@ -19,6 +19,7 @@ interface MetricDefinition {
     calculationFormula?: string | null;
     exampleCalculation?: string | null;
     interpretationGuide?: string | null;
+    limitations?: string | null;
     dataType: string;
     unitOfMeasure?: string | null;
     typicalRange?: string | null;

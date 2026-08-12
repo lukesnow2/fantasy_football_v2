@@ -24,6 +24,7 @@ export interface MetricRow {
 	calculationFormula?: string | null;
 	exampleCalculation?: string | null;
 	interpretationGuide?: string | null;
+	limitations?: string | null;
 	dataType: string;
 	unitOfMeasure?: string | null;
 	typicalRange?: string | null;
@@ -47,6 +48,7 @@ export interface Metric {
 	calculationFormula: string | null;
 	exampleCalculation: string | null;
 	interpretationGuide: string | null;
+	limitations: string | null;
 	dataType: string;
 	unitOfMeasure: string | null;
 	typicalRange: string | null;
@@ -92,6 +94,7 @@ export function toMetric(row: MetricRow): Metric {
 		calculationFormula: orNull(row.calculationFormula),
 		exampleCalculation: orNull(row.exampleCalculation),
 		interpretationGuide: orNull(row.interpretationGuide),
+		limitations: orNull(row.limitations),
 		dataType: row.dataType,
 		unitOfMeasure: orNull(row.unitOfMeasure),
 		typicalRange: orNull(row.typicalRange),
