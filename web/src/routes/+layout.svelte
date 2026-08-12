@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
-	import { Trophy, BarChart3, Calendar, Users, Crown, BookOpen, Target, TrendingUp, MessageSquare, Database, Shield, ChevronDown, Settings, LogIn, LogOut, User, Menu, X } from 'lucide-svelte';
+	import { Trophy, BarChart3, Calendar, Users, Crown, BookOpen, Target, TrendingUp, MessageSquare, Database, Shield, ArrowLeftRight, ChevronDown, Settings, LogIn, LogOut, User, Menu, X } from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import NavDropdown, { type NavItem } from '$lib/components/NavDropdown.svelte';
 	import type { LayoutData } from './$types';
@@ -20,7 +20,11 @@
 	 */
 	const directLinks = [
 		{ name: 'This Season', href: '/this-season', icon: Calendar },
-		{ name: 'Chat', href: '/chat', icon: MessageSquare }
+		{ name: 'Chat', href: '/chat', icon: MessageSquare },
+		// A direct link rather than a one-item dropdown: Trade Center and Draft
+		// Central moved out to Activity, where they read as league movement rather
+		// than as something belonging to a manager.
+		{ name: 'Managers', href: '/managers', icon: Users }
 	];
 
 	const navGroups: { label: string; icon: typeof Calendar; items: NavItem[] }[] = [
@@ -49,15 +53,9 @@
 			]
 		},
 		{
-			label: 'Managers',
-			icon: Users,
+			label: 'Activity',
+			icon: ArrowLeftRight,
 			items: [
-				{
-					name: 'Manager Profiles',
-					href: '/managers',
-					icon: User,
-					blurb: 'Career stats and head-to-head'
-				},
 				{
 					name: 'Trade Center',
 					href: '/trades',
