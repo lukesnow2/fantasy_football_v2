@@ -81,7 +81,18 @@ function normalizeOrigin(value: string): string {
 	return value.trim().replace(/\/+$/, '').toLowerCase();
 }
 
-export const ORIGIN = env.ORIGIN || 'http://localhost:5173';
+/**
+ * Normalised at the point of definition, not just checked.
+ *
+ * `echo value | vercel env add` appends a newline, and every link built from the
+ * raw value then carries it: "https://host\n/login/verify?token=…", which no
+ * mail client will open. describeMailConfig() reports the dirty value so the
+ * operator fixes the variable, but detection alone would leave the whole league
+ * unable to sign in until somebody read the banner. A trailing slash is stripped
+ * for the same reason the comparison ignores it — links concatenate a path onto
+ * this and would otherwise emit a doubled slash.
+ */
+export const ORIGIN = (env.ORIGIN || 'http://localhost:5173').trim().replace(/\/+$/, '');
 export const PORT = parseInt(env.PORT || '3000');
 
 /**

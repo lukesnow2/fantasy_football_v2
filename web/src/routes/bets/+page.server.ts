@@ -34,13 +34,22 @@ const LATEST_SEASON = () => new Date().getFullYear() + 1;
 export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) throw redirect(302, '/login?redirect=/bets');
 
-	const wagers = await listWagers();
+	const managerKey = locals.member?.active ? locals.member.managerKey : null;
+
+	// A declined offer is between the two people involved. Filtering it in the
+	// component is not enough — load's return value is serialised into the page,
+	// so every member could read every declined bet out of view-source while the
+	// UI pretended otherwise.
+	const wagers = (await listWagers()).filter(
+		(w) =>
+			w.status !== 'declined' || w.proposedBy === managerKey || w.counterpartyKey === managerKey
+	);
 
 	return {
 		wagers,
 		ledger: computeLedger(wagers),
 		members: await listBettableManagers(),
-		myManagerKey: locals.member?.active ? locals.member.managerKey : null,
+		myManagerKey: managerKey,
 		isCommissioner: locals.member?.role === 'commissioner'
 	};
 };

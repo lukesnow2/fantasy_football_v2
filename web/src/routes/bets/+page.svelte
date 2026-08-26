@@ -23,12 +23,9 @@
 	const settledCount = $derived(data.wagers.filter((w) => w.status === 'settled').length);
 	// Declined offers were fetched and then rendered nowhere, so a bet someone
 	// passed on simply disappeared and the proposer could not tell that from one
-	// still sitting unanswered.
-	const passed = $derived(
-		data.wagers.filter(
-			(w) => w.status === 'declined' && (w.proposedBy === me || w.counterpartyKey === me)
-		)
-	);
+	// still sitting unanswered. load only sends the ones this member is party to,
+	// so there is nothing to filter by manager here.
+	const passed = $derived(data.wagers.filter((w) => w.status === 'declined'));
 
 	/** Can I take this one? Open props are anyone's; a head-to-head is only its target's. */
 	function canAccept(w: PageData['wagers'][number]): boolean {

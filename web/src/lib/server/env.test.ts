@@ -80,6 +80,27 @@ describe('describeMailConfig', () => {
 		expect(report.originOk).toBe(true);
 	});
 
+	it('strips whitespace and a trailing slash from the origin itself', async () => {
+		// Detection is not enough: requireOrigin() feeds this straight into every
+		// sign-in link, so a newline left by `echo value | vercel env add` would
+		// break the link for the whole league until somebody read the banner.
+		const { ORIGIN, requireOrigin } = await loadEnv({
+			...CONFIGURED,
+			ORIGIN: '  https://oakdalepark.xyz/\n'
+		});
+
+		expect(ORIGIN).toBe('https://oakdalepark.xyz');
+		expect(`${requireOrigin()}/login/verify`).toBe('https://oakdalepark.xyz/login/verify');
+	});
+
+	it('still reports the dirty value so the variable gets fixed', async () => {
+		const { describeMailConfig } = await loadEnv({
+			...CONFIGURED,
+			ORIGIN: 'https://oakdalepark.xyz\n'
+		});
+		expect(describeMailConfig().problems.join()).toContain('whitespace');
+	});
+
 	it('reports originOk false when production points elsewhere', async () => {
 		const { describeMailConfig } = await loadEnv({
 			...CONFIGURED,
