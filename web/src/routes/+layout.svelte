@@ -2,7 +2,28 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
-	import { Trophy, BarChart3, Calendar, Users, Crown, BookOpen, Target, TrendingUp, MessageSquare, Database, Shield, ArrowLeftRight, ChevronDown, Settings, LogIn, LogOut, User, Menu, X } from 'lucide-svelte';
+	import {
+		Trophy,
+		BarChart3,
+		Calendar,
+		Users,
+		Crown,
+		BookOpen,
+		Target,
+		TrendingUp,
+		MessageSquare,
+		Database,
+		Shield,
+		ArrowLeftRight,
+		ChevronDown,
+		Settings,
+		LogIn,
+		LogOut,
+		User,
+		Menu,
+		X,
+		Handshake
+	} from 'lucide-svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import NavDropdown, { type NavItem } from '$lib/components/NavDropdown.svelte';
 	import type { LayoutData } from './$types';
@@ -67,6 +88,12 @@
 					href: '/draft',
 					icon: Trophy,
 					blurb: 'Draft boards and grades'
+				},
+				{
+					name: 'Bet Board',
+					href: '/bets',
+					icon: Handshake,
+					blurb: 'Side bets, props, and who owes who'
 				}
 			]
 		},
@@ -141,7 +168,11 @@
 	};
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900" onkeydown={handleKeydown} role="main">
+<div
+	class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900"
+	onkeydown={handleKeydown}
+	role="main"
+>
 	<!-- Header -->
 	<header class="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-md">
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -155,16 +186,16 @@
 
 				<!-- Navigation. `lg` rather than `md`: at 768px even the old seven-item
 				     bar overflowed into the user menu. -->
-				<nav class="hidden lg:flex items-center space-x-1">
+				<nav class="hidden items-center space-x-1 lg:flex">
 					{#each directLinks as item (item.href)}
 						{@const Icon = item.icon}
 						<a
 							href={item.href}
-							class="flex items-center px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors whitespace-nowrap"
+							class="flex items-center rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							class:bg-slate-800={$page.url.pathname === item.href}
 							class:text-white={$page.url.pathname === item.href}
 						>
-							<Icon class="h-4 w-4 mr-2" />
+							<Icon class="mr-2 h-4 w-4" />
 							{item.name}
 						</a>
 					{/each}
@@ -190,14 +221,16 @@
 								onclick={toggleUserMenu}
 								aria-expanded={showUserMenu}
 								aria-haspopup="true"
-								class="flex items-center space-x-3 text-sm rounded-full bg-slate-800 p-2 text-white hover:bg-slate-700 transition-colors"
+								class="flex items-center space-x-3 rounded-full bg-slate-800 p-2 text-sm text-white transition-colors hover:bg-slate-700"
 							>
-								<ManagerProfilePicture 
+								<ManagerProfilePicture
 									managerName={data.authenticatedManager.managerName}
 									size="small"
 									className="ring-2 ring-slate-600"
 								/>
-								<span class="hidden sm:block font-medium">{data.authenticatedManager.displayName}</span>
+								<span class="hidden font-medium sm:block"
+									>{data.authenticatedManager.displayName}</span
+								>
 								<!-- A chevron, not a cog. The cog that used to sit here read as a
 								     link to /settings and wasn't one. -->
 								<ChevronDown class="h-4 w-4" />
@@ -205,28 +238,47 @@
 
 							{#if showUserMenu}
 								<!-- User dropdown menu - Dark theme styling -->
-								<div class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md bg-slate-800 py-1 shadow-lg ring-1 ring-slate-700 border border-slate-600">
-									<div class="px-4 py-3 border-b border-slate-700">
+								<div
+									class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-slate-600 bg-slate-800 py-1 shadow-lg ring-1 ring-slate-700"
+								>
+									<div class="border-b border-slate-700 px-4 py-3">
 										<p class="text-sm text-slate-300">Signed in as</p>
-										<p class="text-sm font-medium text-white truncate">{data.authenticatedManager.displayName}</p>
+										<p class="truncate text-sm font-medium text-white">
+											{data.authenticatedManager.displayName}
+										</p>
 									</div>
-									<a href={profileHref} onclick={closeUserMenu} class="flex items-center px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
-										<User class="h-4 w-4 mr-2" />
+									<a
+										href={profileHref}
+										onclick={closeUserMenu}
+										class="flex items-center px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+									>
+										<User class="mr-2 h-4 w-4" />
 										Your Profile
 									</a>
-									<a href="/settings" onclick={closeUserMenu} class="flex items-center px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
-										<Settings class="h-4 w-4 mr-2" />
+									<a
+										href="/settings"
+										onclick={closeUserMenu}
+										class="flex items-center px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+									>
+										<Settings class="mr-2 h-4 w-4" />
 										Settings
 									</a>
 									{#if isCommissioner}
-										<a href="/admin/members" onclick={closeUserMenu} class="flex items-center px-4 py-2 text-sm text-amber-300 hover:text-amber-200 hover:bg-slate-700 transition-colors">
-											<Shield class="h-4 w-4 mr-2" />
+										<a
+											href="/admin/members"
+											onclick={closeUserMenu}
+											class="flex items-center px-4 py-2 text-sm text-amber-300 transition-colors hover:bg-slate-700 hover:text-amber-200"
+										>
+											<Shield class="mr-2 h-4 w-4" />
 											Commissioner
 										</a>
 									{/if}
 									<form method="post" action="/logout" use:enhance={handleLogout}>
-										<button type="submit" class="w-full text-left flex items-center px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700 transition-colors">
-											<LogOut class="h-4 w-4 mr-2" />
+										<button
+											type="submit"
+											class="flex w-full items-center px-4 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
+										>
+											<LogOut class="mr-2 h-4 w-4" />
 											Sign Out
 										</button>
 									</form>
@@ -235,21 +287,21 @@
 						</div>
 					{:else}
 						<!-- Not authenticated -->
-						<a 
+						<a
 							href="/login"
-							class="flex items-center px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+							class="flex items-center rounded-md px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 						>
-							<LogIn class="h-4 w-4 mr-2" />
+							<LogIn class="mr-2 h-4 w-4" />
 							Sign In
 						</a>
 					{/if}
 
 					<!-- Mobile menu button -->
 					<div class="lg:hidden">
-						<button 
-							type="button" 
+						<button
+							type="button"
 							onclick={toggleMobileMenu}
-							class="text-slate-300 hover:text-white p-2 rounded-md transition-colors"
+							class="rounded-md p-2 text-slate-300 transition-colors hover:text-white"
 							aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
 						>
 							{#if showMobileMenu}
@@ -266,21 +318,23 @@
 
 	<!-- Mobile Navigation Menu -->
 	{#if showMobileMenu}
-		<div class="lg:hidden relative z-50">
+		<div class="relative z-50 lg:hidden">
 			<!-- Backdrop -->
-			<div 
-				class="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+			<div
+				class="fixed inset-0 bg-black/50 backdrop-blur-sm"
 				onclick={closeMobileMenu}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') closeMobileMenu(); }}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') closeMobileMenu();
+				}}
 				role="button"
 				tabindex="-1"
 				aria-label="Close mobile menu"
 			></div>
-			
+
 			<!-- Mobile Menu Panel -->
-			<div class="fixed top-0 left-0 w-full bg-slate-900 border-b border-slate-700 shadow-xl">
+			<div class="fixed top-0 left-0 w-full border-b border-slate-700 bg-slate-900 shadow-xl">
 				<!-- Mobile Navigation Links -->
-				<nav class="max-h-screen overflow-y-auto px-4 py-6 space-y-2">
+				<nav class="max-h-screen space-y-2 overflow-y-auto px-4 py-6">
 					<!-- The drawer has the vertical room the bar doesn't, so the groups
 					     open flat under their headings rather than as nested menus. -->
 					{#each directLinks as item (item.href)}
@@ -288,18 +342,18 @@
 						<a
 							href={item.href}
 							onclick={closeMobileMenu}
-							class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+							class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							class:bg-slate-800={$page.url.pathname === item.href}
 							class:text-white={$page.url.pathname === item.href}
 						>
-							<Icon class="h-5 w-5 mr-3" />
+							<Icon class="mr-3 h-5 w-5" />
 							{item.name}
 						</a>
 					{/each}
 
 					{#each navGroups as group (group.label)}
 						<div class="pt-3">
-							<p class="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+							<p class="px-4 pb-1 text-xs font-semibold tracking-wide text-slate-500 uppercase">
 								{group.label}
 							</p>
 							{#each group.items as item (item.href)}
@@ -307,11 +361,11 @@
 								<a
 									href={item.href}
 									onclick={closeMobileMenu}
-									class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+									class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 									class:bg-slate-800={$page.url.pathname === item.href}
 									class:text-white={$page.url.pathname === item.href}
 								>
-									<Icon class="h-5 w-5 mr-3" />
+									<Icon class="mr-3 h-5 w-5" />
 									{item.name}
 								</a>
 							{/each}
@@ -320,51 +374,51 @@
 
 					<!-- Auth links for mobile -->
 					{#if !data.user || !data.authenticatedManager}
-						<div class="border-t border-slate-700 pt-4 mt-4">
-							<a 
+						<div class="mt-4 border-t border-slate-700 pt-4">
+							<a
 								href="/login"
 								onclick={closeMobileMenu}
-								class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<LogIn class="h-5 w-5 mr-3" />
+								<LogIn class="mr-3 h-5 w-5" />
 								Sign In
 							</a>
 						</div>
 					{:else}
-						<div class="border-t border-slate-700 pt-4 mt-4">
+						<div class="mt-4 border-t border-slate-700 pt-4">
 							<a
 								href={profileHref}
 								onclick={closeMobileMenu}
-								class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<User class="h-5 w-5 mr-3" />
+								<User class="mr-3 h-5 w-5" />
 								Your Profile
 							</a>
 							<a
 								href="/settings"
 								onclick={closeMobileMenu}
-								class="flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<Settings class="h-5 w-5 mr-3" />
+								<Settings class="mr-3 h-5 w-5" />
 								Settings
 							</a>
 							{#if isCommissioner}
 								<a
 									href="/admin/members"
 									onclick={closeMobileMenu}
-									class="flex items-center px-4 py-3 text-base font-medium text-amber-300 hover:text-amber-200 hover:bg-slate-800 rounded-md transition-colors"
+									class="flex items-center rounded-md px-4 py-3 text-base font-medium text-amber-300 transition-colors hover:bg-slate-800 hover:text-amber-200"
 								>
-									<Shield class="h-5 w-5 mr-3" />
+									<Shield class="mr-3 h-5 w-5" />
 									Commissioner
 								</a>
 							{/if}
 							<form method="post" action="/logout" use:enhance={handleLogout}>
-								<button 
-									type="submit" 
+								<button
+									type="submit"
 									onclick={closeMobileMenu}
-									class="w-full text-left flex items-center px-4 py-3 text-base font-medium text-slate-300 hover:text-white hover:bg-slate-800 rounded-md transition-colors"
+									class="flex w-full items-center rounded-md px-4 py-3 text-left text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 								>
-									<LogOut class="h-5 w-5 mr-3" />
+									<LogOut class="mr-3 h-5 w-5" />
 									Sign Out
 								</button>
 							</form>
@@ -381,10 +435,12 @@
 	</main>
 
 	<!-- Footer -->
-	<footer class="border-t border-slate-700/50 bg-slate-900/50 mt-20">
+	<footer class="mt-20 border-t border-slate-700/50 bg-slate-900/50">
 		<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 			<div class="text-center text-slate-400">
-				<p>&copy; {new Date().getFullYear()} The League. Where legends are made and dreams are crushed.</p>
+				<p>
+					&copy; {new Date().getFullYear()} The League. Where legends are made and dreams are crushed.
+				</p>
 			</div>
 		</div>
 	</footer>

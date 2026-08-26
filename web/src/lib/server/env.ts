@@ -39,16 +39,22 @@ function validateEnv() {
 	// service falls back to console mode, sends land in a serverless log, and
 	// nobody can sign in while everything reports success.
 	if (EMAIL_PROVIDER === 'resend' && !RESEND_API_KEY) {
-		console.warn('⚠️  EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — falling back to console mode.');
+		console.warn(
+			'⚠️  EMAIL_PROVIDER=resend but RESEND_API_KEY is unset — falling back to console mode.'
+		);
 	}
 	if (EMAIL_PROVIDER === 'sendgrid' && !SENDGRID_API_KEY) {
-		console.warn('⚠️  EMAIL_PROVIDER=sendgrid but SENDGRID_API_KEY is unset — falling back to console mode.');
+		console.warn(
+			'⚠️  EMAIL_PROVIDER=sendgrid but SENDGRID_API_KEY is unset — falling back to console mode.'
+		);
 	}
 	if (EMAIL_PROVIDER !== 'console' && !EMAIL_FROM) {
 		console.warn('⚠️  EMAIL_FROM is unset — sign-in emails will be rejected by the provider.');
 	}
 	if (isProduction && EMAIL_PROVIDER === 'console') {
-		console.warn('⚠️  EMAIL_PROVIDER=console in production — nobody can sign in; links go to the log.');
+		console.warn(
+			'⚠️  EMAIL_PROVIDER=console in production — nobody can sign in; links go to the log.'
+		);
 	}
 }
 
@@ -56,6 +62,24 @@ validateEnv();
 
 // Database Configuration
 export const DATABASE_URL = env.DATABASE_URL!;
+
+/**
+ * The domain every sign-in link is supposed to be on.
+ *
+ * Compared against, never substituted for ORIGIN — the operator keeps control of
+ * the value. It exists because ORIGIN can be stored write-only in a hosting
+ * dashboard, and a write-only value that drifts is invisible from every side:
+ * the dashboard will not reveal it, `vercel env pull` will not return it, and
+ * the only symptom is that sign-in links quietly start pointing at a preview
+ * deployment. Every manager then signs in on the wrong host and gets a session
+ * cookie scoped to it. Surfaced on /admin/members via describeMailConfig().
+ */
+export const CANONICAL_ORIGIN = 'https://oakdalepark.xyz';
+
+/** Trailing slashes and case are not a difference worth warning about. */
+function normalizeOrigin(value: string): string {
+	return value.trim().replace(/\/+$/, '').toLowerCase();
+}
 
 export const ORIGIN = env.ORIGIN || 'http://localhost:5173';
 export const PORT = parseInt(env.PORT || '3000');
@@ -113,7 +137,24 @@ export function requireEmailFrom(): string {
  * commissioner is the one person who both looks at that page and can set the
  * variable.
  */
-export function describeMailConfig(): { ok: boolean; problems: string[] } {
+export interface MailConfigReport {
+	ok: boolean;
+	problems: string[];
+	/** The origin sign-in links are actually being built from, as deployed. */
+	origin: string;
+	canonicalOrigin: string;
+	/**
+	 * Whether `origin` is the one this deployment should be using.
+	 *
+	 * Computed here rather than by comparing the two strings in the template:
+	 * that comparison has no idea about normalization or about NODE_ENV, so it
+	 * warned on every dev machine that localhost was not the production domain.
+	 * A banner that is always lit is a banner nobody reads.
+	 */
+	originOk: boolean;
+}
+
+export function describeMailConfig(): MailConfigReport {
 	const problems: string[] = [];
 
 	if (EMAIL_PROVIDER === 'console') {
@@ -142,9 +183,37 @@ export function describeMailConfig(): { ok: boolean; problems: string[] } {
 
 	if (isProduction && !env.ORIGIN) {
 		problems.push('ORIGIN is not set, so sign-in links cannot be built.');
+	} else if (env.ORIGIN) {
+		// Surrounding whitespace survives a `echo value | vercel env add`, and the
+		// result is a link like "https://host\n/login/verify" that no client opens.
+		if (env.ORIGIN !== env.ORIGIN.trim()) {
+			problems.push(
+				'ORIGIN has leading or trailing whitespace, which ends up inside every sign-in link and breaks it.'
+			);
+		}
+
+		// The check this file exists for. A *wrong* ORIGIN is not a missing one:
+		// nothing throws, mail sends, the log looks clean, and the only tell is the
+		// domain in a link nobody inspects.
+		if (isProduction && normalizeOrigin(env.ORIGIN) !== normalizeOrigin(CANONICAL_ORIGIN)) {
+			problems.push(
+				`ORIGIN is "${env.ORIGIN.trim()}", so sign-in links point there rather than at ${CANONICAL_ORIGIN}. ` +
+					'Anyone who clicks one lands on that host and their session cookie is scoped to it.'
+			);
+		}
 	}
 
-	return { ok: problems.length === 0, problems };
+	return {
+		ok: problems.length === 0,
+		problems,
+		origin: ORIGIN,
+		canonicalOrigin: CANONICAL_ORIGIN,
+		// localhost is the *correct* origin in development, so only production is
+		// held to the canonical host.
+		originOk:
+			!isProduction ||
+			(!!env.ORIGIN && normalizeOrigin(env.ORIGIN) === normalizeOrigin(CANONICAL_ORIGIN))
+	};
 }
 
 // Optional Features
