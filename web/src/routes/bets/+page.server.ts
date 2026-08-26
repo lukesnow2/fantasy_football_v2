@@ -5,13 +5,23 @@ import { db } from '$lib/server/db';
 import { wager } from '$lib/server/db/schema';
 import { requireCommissioner, requireManagerKey } from '$lib/server/auth-manager';
 import { listActiveMembers } from '$lib/server/members';
-import { computeLedger, isWagerOutcome, listWagers } from '$lib/server/wagers';
+import {
+	computeLedger,
+	isWagerOutcome,
+	listBettableManagers,
+	listWagers
+} from '$lib/server/wagers';
 import type { Actions, PageServerLoad } from './$types';
 
 const MAX_TITLE = 200;
 const MAX_STAKE = 200;
 const MAX_TERMS = 2000;
 const MAX_NOTE = 1000;
+
+/** The league's first season; nothing can be bet on anything earlier. */
+const FIRST_SEASON = 2005;
+/** Next season is biddable during the preseason, so the ceiling moves with the clock. */
+const LATEST_SEASON = () => new Date().getFullYear() + 1;
 
 /**
  * The bet board is members-only.
@@ -25,15 +35,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!locals.user) throw redirect(302, '/login?redirect=/bets');
 
 	const wagers = await listWagers();
-	const members = await listActiveMembers();
 
 	return {
 		wagers,
 		ledger: computeLedger(wagers),
-		members: members.map((m) => ({
-			managerKey: m.managerKey,
-			displayName: m.displayName ?? `Manager ${m.managerKey}`
-		})),
+		members: await listBettableManagers(),
 		myManagerKey: locals.member?.active ? locals.member.managerKey : null,
 		isCommissioner: locals.member?.role === 'commissioner'
 	};
@@ -54,9 +60,15 @@ export const actions: Actions = {
 		if (!terms) return fail(400, { error: 'Spell out what has to happen for you to win.' });
 		if (!stake) return fail(400, { error: "Say what's at stake — $20, wings, bragging rights." });
 
+		// Bounded, not just parsed. season_year is int4, so an unbounded parseInt
+		// lets "99999999999" through to Postgres, which raises 22003 and turns a
+		// bad form field into a 500.
 		const seasonYear = seasonRaw ? Number.parseInt(seasonRaw, 10) : null;
-		if (seasonRaw && Number.isNaN(seasonYear)) {
-			return fail(400, { error: "That season doesn't look like a year." });
+		if (
+			seasonYear !== null &&
+			(Number.isNaN(seasonYear) || seasonYear < FIRST_SEASON || seasonYear > LATEST_SEASON())
+		) {
+			return fail(400, { error: `Pick a season between ${FIRST_SEASON} and ${LATEST_SEASON()}.` });
 		}
 
 		let counterpartyKey: number | null = null;
@@ -257,7 +269,11 @@ export const actions: Actions = {
 					? existing.acceptedBy
 					: null;
 
-		await db
+		// Conditional on the status, like every other action here. The read above
+		// is not a guard: two stale tabs, or a double-click on a button with no
+		// disabled state, both pass it and both write, and the second silently
+		// overwrites a ruling that has already been recorded.
+		const ruled = await db
 			.update(wager)
 			.set({
 				outcome,
@@ -268,7 +284,14 @@ export const actions: Actions = {
 				status: outcome === 'void' ? 'void' : 'settled',
 				updatedAt: new Date()
 			})
-			.where(eq(wager.wagerKey, wagerKey));
+			.where(
+				and(eq(wager.wagerKey, wagerKey), inArray(wager.status, ['accepted', 'pending_resolution']))
+			)
+			.returning({ wagerKey: wager.wagerKey });
+
+		if (ruled.length === 0) {
+			return fail(409, { error: 'That bet has already been ruled on.' });
+		}
 
 		return { success: true };
 	}

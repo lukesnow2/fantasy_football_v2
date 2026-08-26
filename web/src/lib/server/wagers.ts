@@ -1,7 +1,7 @@
 import { alias } from 'drizzle-orm/pg-core';
 import { desc, eq } from 'drizzle-orm';
 import { db } from './db';
-import { dimManager, wager } from './db/schema';
+import { dimManager, leagueMember, wager } from './db/schema';
 
 /**
  * Side bets — an informal ledger, not a book.
@@ -102,6 +102,29 @@ export async function listWagers(): Promise<WagerRow[]> {
 		.leftJoin(taker, eq(wager.acceptedBy, taker.managerKey))
 		.leftJoin(winner, eq(wager.winnerKey, winner.managerKey))
 		.orderBy(desc(wager.createdAt));
+}
+
+export interface BettableManager {
+	managerKey: number;
+	name: string;
+}
+
+/**
+ * Active members, named the way the rest of the app names them.
+ *
+ * Names come from `edw.dim_manager`, not `league_member.display_name`, so the
+ * opponent picker and the bet cards cannot disagree about what to call someone —
+ * listWagers() resolves every name the same way. display_name is nullable and
+ * only ever a copy, so sourcing it here meant a manager could appear as
+ * "Manager 5" in the dropdown and "Craig" three lines below it.
+ */
+export async function listBettableManagers(): Promise<BettableManager[]> {
+	return db
+		.select({ managerKey: leagueMember.managerKey, name: dimManager.managerName })
+		.from(leagueMember)
+		.innerJoin(dimManager, eq(leagueMember.managerKey, dimManager.managerKey))
+		.where(eq(leagueMember.active, true))
+		.orderBy(dimManager.managerName);
 }
 
 export interface LedgerEntry {

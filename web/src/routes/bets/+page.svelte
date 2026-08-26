@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Gavel, Handshake, ScrollText, Swords, Trophy } from 'lucide-svelte';
+	import { Gavel, Handshake, ScrollText, Swords, Trophy, XCircle } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import type { ActionData, PageData } from './$types';
 
@@ -17,6 +17,17 @@
 	const awaitingRuling = $derived(data.wagers.filter((w) => w.status === 'pending_resolution'));
 	const settled = $derived(
 		data.wagers.filter((w) => w.status === 'settled' || w.status === 'void')
+	);
+	// Voided bets share the Settled section — they have a ruling — but they are
+	// explicitly not settled, so the counter must not claim they are.
+	const settledCount = $derived(data.wagers.filter((w) => w.status === 'settled').length);
+	// Declined offers were fetched and then rendered nowhere, so a bet someone
+	// passed on simply disappeared and the proposer could not tell that from one
+	// still sitting unanswered.
+	const passed = $derived(
+		data.wagers.filter(
+			(w) => w.status === 'declined' && (w.proposedBy === me || w.counterpartyKey === me)
+		)
 	);
 
 	/** Can I take this one? Open props are anyone's; a head-to-head is only its target's. */
@@ -73,7 +84,7 @@
 	<div class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-800/30 p-4">
 		<div class="text-sm text-slate-400">
 			{onBoard.length} on the board • {live.length} live • {awaitingRuling.length} awaiting a ruling
-			• {settled.length} settled
+			• {settledCount} settled
 		</div>
 		<button
 			onclick={() => (showForm = !showForm)}
@@ -160,7 +171,7 @@
 						>
 							<option value="">Open to anyone</option>
 							{#each data.members.filter((m) => m.managerKey !== me) as member (member.managerKey)}
-								<option value={member.managerKey}>{member.displayName}</option>
+								<option value={member.managerKey}>{member.name}</option>
 							{/each}
 						</select>
 					</div>
@@ -251,6 +262,41 @@
 			</ul>
 		{/if}
 	</section>
+
+	<!-- Passed on -->
+	{#if passed.length > 0}
+		<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
+			<h2 class="mb-6 flex items-center text-2xl font-bold text-white">
+				<XCircle class="mr-3 h-6 w-6 text-slate-400" />
+				Passed on
+			</h2>
+			<ul class="space-y-3">
+				{#each passed as w (w.wagerKey)}
+					<li class="rounded-lg border border-slate-700/50 bg-slate-900/40 p-4">
+						<div class="flex flex-wrap items-start justify-between gap-3">
+							<div class="min-w-0">
+								<h3 class="font-semibold text-slate-300">{w.title}</h3>
+								<p class="mt-1 text-sm text-slate-400">
+									<span class="font-medium text-amber-400/70">{w.stake}</span>
+									• {w.counterpartyName ?? 'They'} passed
+								</p>
+							</div>
+							{#if w.proposedBy === me}
+								<form method="POST" action="?/withdraw" use:enhance>
+									<input type="hidden" name="wagerKey" value={w.wagerKey} />
+									<button
+										class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-600"
+									>
+										Clear it
+									</button>
+								</form>
+							{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	<!-- Live -->
 	<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
