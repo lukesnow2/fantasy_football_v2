@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { AlertTriangle, Check, Mail, Shield, UserPlus, UserX } from 'lucide-svelte';
+	import { AlertTriangle, Check, Link2, Mail, Shield, UserPlus, UserX } from 'lucide-svelte';
 	import type { ActionData, PageData } from './$types';
 
 	export let data: PageData;
@@ -47,6 +47,27 @@
 		</section>
 	{/if}
 
+	<!--
+		Always rendered, not only on failure. ORIGIN is the one setting whose wrong
+		value is completely silent — mail sends, nothing throws, and a hosting
+		dashboard that stores it write-only will not read it back. Showing it here
+		is the only place anyone can see what domain the links actually carry.
+	-->
+	<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-4">
+		<h2 class="flex items-center gap-2 text-sm font-semibold text-slate-300">
+			<Link2 class="h-4 w-4" /> Sign-in links point at
+		</h2>
+		<p class="mt-1 font-mono text-sm break-all text-white">
+			{data.mailConfig.origin}/login/verify
+		</p>
+		{#if !data.mailConfig.originOk}
+			<p class="mt-2 text-sm text-amber-300/90">
+				Expected {data.mailConfig.canonicalOrigin}. Change ORIGIN in the deployment's environment
+				variables, then redeploy — env values are baked in per deployment.
+			</p>
+		{/if}
+	</section>
+
 	{#if form?.error}
 		<p class="rounded-lg border border-red-600/40 bg-red-900/20 p-3 text-sm text-red-300">
 			{form.error}
@@ -64,8 +85,8 @@
 				{data.unclaimed.length} manager{data.unclaimed.length === 1 ? '' : 's'} not on the allowlist
 			</h2>
 			<p class="mt-1 text-sm text-amber-200/80">
-				They can't sign in until they have an address here. Adding one takes effect
-				immediately — no seed script, no redeploy.
+				They can't sign in until they have an address here. Adding one takes effect immediately — no
+				seed script, no redeploy.
 			</p>
 
 			<ul class="mt-3 space-y-2">
@@ -110,7 +131,7 @@
 
 	<div class="overflow-hidden rounded-xl border border-slate-700">
 		<table class="w-full text-sm">
-			<thead class="bg-slate-800 text-left text-xs uppercase tracking-wide text-slate-400">
+			<thead class="bg-slate-800 text-left text-xs tracking-wide text-slate-400 uppercase">
 				<tr>
 					<th class="px-4 py-3">Manager</th>
 					<th class="px-4 py-3">Email</th>
@@ -142,7 +163,10 @@
 									value={member.email}
 									class="w-52 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
 								/>
-								<button class="rounded px-2 text-xs text-slate-400 hover:text-amber-400" title="Save">
+								<button
+									class="rounded px-2 text-xs text-slate-400 hover:text-amber-400"
+									title="Save"
+								>
 									<Check class="h-3.5 w-3.5" />
 								</button>
 							</form>
@@ -158,7 +182,10 @@
 									<option value="member">member</option>
 									<option value="commissioner">commissioner</option>
 								</select>
-								<button class="rounded px-2 text-xs text-slate-400 hover:text-amber-400" title="Save role">
+								<button
+									class="rounded px-2 text-xs text-slate-400 hover:text-amber-400"
+									title="Save role"
+								>
 									<Check class="h-3.5 w-3.5" />
 								</button>
 							</form>

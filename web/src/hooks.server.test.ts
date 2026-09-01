@@ -50,6 +50,10 @@ describe('requiresAuth', () => {
 		// /this-season is public and embeds a chat preview, which is why the
 		// preview must render a signed-out state rather than fetch and 401.
 		expect(requiresAuth('/chat', 'GET')).toBe(true);
+		// The bet board is a ledger of what managers owe each other. It stays off
+		// the public archive, so it must never be added to PUBLIC_PREFIXES.
+		expect(requiresAuth('/bets', 'GET')).toBe(true);
+		expect(requiresAuth('/bets', 'POST')).toBe(true);
 	});
 
 	it('leaves the sign-in flow reachable, including its POST', () => {

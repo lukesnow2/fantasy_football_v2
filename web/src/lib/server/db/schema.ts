@@ -1,10 +1,10 @@
-import { 
-	pgTable, 
-	varchar, 
-	integer, 
-	decimal, 
-	boolean, 
-	timestamp, 
+import {
+	pgTable,
+	varchar,
+	integer,
+	decimal,
+	boolean,
+	timestamp,
 	text,
 	date,
 	pgSchema,
@@ -198,25 +198,29 @@ export const vwCurrentSeasonDashboard = edwSchema.table('vw_current_season_dashb
 });
 
 // Application Schema Tables (User management, UI features, etc.)
-export const user = appSchema.table('user', {
-	id: text('id').primaryKey(),
-	username: text('username').notNull().unique(),
-	// Manager linking (references EDW schema)
-	managerKey: integer('manager_key').references(() => dimManager.managerKey),
-	// User profile
-	email: varchar('email', { length: 255 }).unique(),
-	displayName: varchar('display_name', { length: 255 }),
-	// Account status for claiming placeholders
-	accountStatus: varchar('account_status', { length: 20 }).default('active'),
-	// User preferences stored as JSON
-	notificationPreferences: text('notification_preferences'),
-	profileSettings: text('profile_settings'),
-	// Timestamps
-	createdAt: timestamp('created_at').defaultNow(),
-	updatedAt: timestamp('updated_at').defaultNow()
-}, (table) => ({
-	uniqueManagerKey: uniqueIndex('unique_user_manager_key').on(table.managerKey)
-}));
+export const user = appSchema.table(
+	'user',
+	{
+		id: text('id').primaryKey(),
+		username: text('username').notNull().unique(),
+		// Manager linking (references EDW schema)
+		managerKey: integer('manager_key').references(() => dimManager.managerKey),
+		// User profile
+		email: varchar('email', { length: 255 }).unique(),
+		displayName: varchar('display_name', { length: 255 }),
+		// Account status for claiming placeholders
+		accountStatus: varchar('account_status', { length: 20 }).default('active'),
+		// User preferences stored as JSON
+		notificationPreferences: text('notification_preferences'),
+		profileSettings: text('profile_settings'),
+		// Timestamps
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at').defaultNow()
+	},
+	(table) => ({
+		uniqueManagerKey: uniqueIndex('unique_user_manager_key').on(table.managerKey)
+	})
+);
 
 export const session = appSchema.table('session', {
 	id: text('id').primaryKey(),
@@ -269,20 +273,24 @@ export const leagueMember = appSchema.table('league_member', {
  * Mirrors the session primitive in auth.ts: the raw token goes in the emailed
  * URL and only its sha256 is stored, so a database leak yields nothing usable.
  */
-export const loginToken = appSchema.table('login_token', {
-	tokenHash: text('token_hash').primaryKey(),
-	email: varchar('email', { length: 255 }).notNull(), // always stored lowercased
-	purpose: varchar('purpose', { length: 20 }).notNull().default('login'), // 'login' | 'invite'
-	redirectTo: text('redirect_to'), // validated same-origin path, or null
-	expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
-	consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'date' }),
-	requestIp: varchar('request_ip', { length: 45 }), // IPv6 compatible
-	userAgent: text('user_agent'),
-	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
-}, (table) => ({
-	emailIdx: index('login_token_email_idx').on(table.email),
-	expiresIdx: index('login_token_expires_idx').on(table.expiresAt)
-}));
+export const loginToken = appSchema.table(
+	'login_token',
+	{
+		tokenHash: text('token_hash').primaryKey(),
+		email: varchar('email', { length: 255 }).notNull(), // always stored lowercased
+		purpose: varchar('purpose', { length: 20 }).notNull().default('login'), // 'login' | 'invite'
+		redirectTo: text('redirect_to'), // validated same-origin path, or null
+		expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+		consumedAt: timestamp('consumed_at', { withTimezone: true, mode: 'date' }),
+		requestIp: varchar('request_ip', { length: 45 }), // IPv6 compatible
+		userAgent: text('user_agent'),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+	},
+	(table) => ({
+		emailIdx: index('login_token_email_idx').on(table.email),
+		expiresIdx: index('login_token_expires_idx').on(table.expiresAt)
+	})
+);
 
 // Rule Proposal and Voting System Tables (Application features)
 export const ruleProposal = appSchema.table('rule_proposal', {
@@ -332,23 +340,27 @@ export const ruleProposal = appSchema.table('rule_proposal', {
 	updatedAt: timestamp('updated_at').defaultNow()
 });
 
-export const ruleVote = appSchema.table('rule_vote', {
-	voteKey: serial('vote_key').primaryKey(),
-	proposalKey: integer('proposal_key')
-		.notNull()
-		.references(() => ruleProposal.proposalKey, { onDelete: 'cascade' }),
-	/** The voter. FK to the allowlist for the same reason as rule_proposal.submitted_by. */
-	managerKey: integer('manager_key')
-		.notNull()
-		.references(() => leagueMember.managerKey),
-	vote: varchar('vote', { length: 10 }).notNull(), // 'yes', 'no', 'abstain'
-	comment: text('comment'), // Optional comment on vote
-	votedAt: timestamp('voted_at').defaultNow(),
-	createdAt: timestamp('created_at').defaultNow()
-}, (table) => ({
-	// Ensure one vote per manager per proposal
-	uniqueVote: uniqueIndex('unique_vote_per_manager').on(table.proposalKey, table.managerKey)
-}));
+export const ruleVote = appSchema.table(
+	'rule_vote',
+	{
+		voteKey: serial('vote_key').primaryKey(),
+		proposalKey: integer('proposal_key')
+			.notNull()
+			.references(() => ruleProposal.proposalKey, { onDelete: 'cascade' }),
+		/** The voter. FK to the allowlist for the same reason as rule_proposal.submitted_by. */
+		managerKey: integer('manager_key')
+			.notNull()
+			.references(() => leagueMember.managerKey),
+		vote: varchar('vote', { length: 10 }).notNull(), // 'yes', 'no', 'abstain'
+		comment: text('comment'), // Optional comment on vote
+		votedAt: timestamp('voted_at').defaultNow(),
+		createdAt: timestamp('created_at').defaultNow()
+	},
+	(table) => ({
+		// Ensure one vote per manager per proposal
+		uniqueVote: uniqueIndex('unique_vote_per_manager').on(table.proposalKey, table.managerKey)
+	})
+);
 
 export const ruleAmendment = appSchema.table('rule_amendment', {
 	amendmentKey: serial('amendment_key').primaryKey(),
@@ -392,132 +404,162 @@ export const constitutionVersion = appSchema.table('constitution_version', {
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
 });
 
-export const constitutionSection = appSchema.table('constitution_section', {
-	sectionKey: serial('section_key').primaryKey(),
-	versionKey: integer('version_key')
-		.notNull()
-		.references(() => constitutionVersion.versionKey, { onDelete: 'cascade' }),
-	sectionId: varchar('section_id', { length: 50 }).notNull(), // 'article1'…'article9', 'appendix1'
-	title: varchar('title', { length: 255 }).notNull(),
-	kind: varchar('kind', { length: 20 }).notNull(), // 'article' | 'appendix'
-	icon: varchar('icon', { length: 50 }), // lucide icon name, resolved client-side
-	sortOrder: integer('sort_order').notNull()
-}, (table) => ({
-	uniqueSection: uniqueIndex('constitution_section_version_id_idx').on(
-		table.versionKey,
-		table.sectionId
-	)
-}));
+export const constitutionSection = appSchema.table(
+	'constitution_section',
+	{
+		sectionKey: serial('section_key').primaryKey(),
+		versionKey: integer('version_key')
+			.notNull()
+			.references(() => constitutionVersion.versionKey, { onDelete: 'cascade' }),
+		sectionId: varchar('section_id', { length: 50 }).notNull(), // 'article1'…'article9', 'appendix1'
+		title: varchar('title', { length: 255 }).notNull(),
+		kind: varchar('kind', { length: 20 }).notNull(), // 'article' | 'appendix'
+		icon: varchar('icon', { length: 50 }), // lucide icon name, resolved client-side
+		sortOrder: integer('sort_order').notNull()
+	},
+	(table) => ({
+		uniqueSection: uniqueIndex('constitution_section_version_id_idx').on(
+			table.versionKey,
+			table.sectionId
+		)
+	})
+);
 
-export const constitutionClause = appSchema.table('constitution_clause', {
-	clauseKey: serial('clause_key').primaryKey(),
-	sectionKey: integer('section_key')
-		.notNull()
-		.references(() => constitutionSection.sectionKey, { onDelete: 'cascade' }),
-	/**
-	 * ON DELETE CASCADE is load-bearing, not decoration. apply.ts deletes a
-	 * clause and relies on its children going with it; without the constraint
-	 * they survive with a dangling parent_key, vanish from the rendered tree
-	 * (loadVersionTree can neither attach nor root them), and then reappear as
-	 * top-level clauses on the next amendment when cloneVersion remaps the
-	 * missing parent to null.
-	 */
-	parentKey: integer('parent_key').references((): AnyPgColumn => constitutionClause.clauseKey, {
-		onDelete: 'cascade'
-	}),
-	/**
-	 * Stable across versions — this is what a proposal targets.
-	 *
-	 * clause_key changes on every clone, so it cannot identify "the clause this
-	 * proposal edits" across an intervening amendment. clause_uid is copied
-	 * verbatim by the clone and is the only durable handle.
-	 */
-	clauseUid: text('clause_uid').notNull(),
-	depth: smallint('depth').notNull(), // 0 = I./II.  1 = a./b.  2 = i./ii.
-	sortOrder: integer('sort_order').notNull(),
-	label: varchar('label', { length: 16 }).notNull(), // 'I', 'a', 'iii' — regenerated on insert/delete
-	body: text('body').notNull(),
-	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
-}, (table) => ({
-	uniqueClause: uniqueIndex('constitution_clause_section_uid_idx').on(
-		table.sectionKey,
-		table.clauseUid
-	),
-	sectionOrderIdx: index('constitution_clause_section_idx').on(table.sectionKey, table.sortOrder)
-}));
+export const constitutionClause = appSchema.table(
+	'constitution_clause',
+	{
+		clauseKey: serial('clause_key').primaryKey(),
+		sectionKey: integer('section_key')
+			.notNull()
+			.references(() => constitutionSection.sectionKey, { onDelete: 'cascade' }),
+		/**
+		 * ON DELETE CASCADE is load-bearing, not decoration. apply.ts deletes a
+		 * clause and relies on its children going with it; without the constraint
+		 * they survive with a dangling parent_key, vanish from the rendered tree
+		 * (loadVersionTree can neither attach nor root them), and then reappear as
+		 * top-level clauses on the next amendment when cloneVersion remaps the
+		 * missing parent to null.
+		 */
+		parentKey: integer('parent_key').references((): AnyPgColumn => constitutionClause.clauseKey, {
+			onDelete: 'cascade'
+		}),
+		/**
+		 * Stable across versions — this is what a proposal targets.
+		 *
+		 * clause_key changes on every clone, so it cannot identify "the clause this
+		 * proposal edits" across an intervening amendment. clause_uid is copied
+		 * verbatim by the clone and is the only durable handle.
+		 */
+		clauseUid: text('clause_uid').notNull(),
+		depth: smallint('depth').notNull(), // 0 = I./II.  1 = a./b.  2 = i./ii.
+		sortOrder: integer('sort_order').notNull(),
+		label: varchar('label', { length: 16 }).notNull(), // 'I', 'a', 'iii' — regenerated on insert/delete
+		body: text('body').notNull(),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+	},
+	(table) => ({
+		uniqueClause: uniqueIndex('constitution_clause_section_uid_idx').on(
+			table.sectionKey,
+			table.clauseUid
+		),
+		sectionOrderIdx: index('constitution_clause_section_idx').on(table.sectionKey, table.sortOrder)
+	})
+);
 
 // Chat System Tables
-export const chatMessage = appSchema.table('chat_message', {
-	messageKey: serial('message_key').primaryKey(),
-	messageId: varchar('message_id', { length: 100 }).notNull().unique(),
-	content: text('content').notNull(),
-	// FK to the allowlist, not dim_manager — see rule_proposal.submitted_by.
-	authorKey: integer('author_key')
-		.notNull()
-		.references(() => leagueMember.managerKey),
-	channelId: varchar('channel_id', { length: 100 }).notNull().default('general'), // Channel identifier
-	// Self-referencing: a reply points at its root. One level only — the insert
-	// path rejects a parent that is itself a reply.
-	parentMessageKey: integer('parent_message_key').references((): AnyPgColumn => chatMessage.messageKey, {
-		onDelete: 'cascade'
-	}),
-	messageType: varchar('message_type', { length: 20 }).default('message'), // 'message', 'system', 'join', 'leave'
-	// timestamptz throughout. As plain `timestamp` these were parsed in whatever
-	// zone the server process happened to be in — right on Vercel, hours wrong in
-	// local dev, with nothing to indicate which.
-	editedAt: timestamp('edited_at', { withTimezone: true, mode: 'date' }),
-	deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
-	attachments: text('attachments'), // JSON array of file attachments
-	mentions: text('mentions'), // JSON array of mentioned manager keys, written server-side
-	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
-}, (table) => ({
-	// Plain indexes, not unique: these exist to make channel and thread queries
-	// fast. Declared UNIQUE they would also forbid two messages in the same
-	// channel sharing a created_at, which two quick sends collide on.
-	channelIndex: index('chat_message_channel_created').on(table.channelId, table.createdAt),
-	threadIndex: index('chat_message_thread').on(table.parentMessageKey, table.createdAt),
-	// The root list pages on message_key DESC; the created_at index can't serve it.
-	channelKeyIndex: index('idx_chat_message_channel_key').on(table.channelId, table.messageKey),
-	// The delta poll's edit/tombstone arm.
-	channelUpdatedIndex: index('idx_chat_message_channel_updated').on(table.channelId, table.updatedAt)
-}));
+export const chatMessage = appSchema.table(
+	'chat_message',
+	{
+		messageKey: serial('message_key').primaryKey(),
+		messageId: varchar('message_id', { length: 100 }).notNull().unique(),
+		content: text('content').notNull(),
+		// FK to the allowlist, not dim_manager — see rule_proposal.submitted_by.
+		authorKey: integer('author_key')
+			.notNull()
+			.references(() => leagueMember.managerKey),
+		channelId: varchar('channel_id', { length: 100 }).notNull().default('general'), // Channel identifier
+		// Self-referencing: a reply points at its root. One level only — the insert
+		// path rejects a parent that is itself a reply.
+		parentMessageKey: integer('parent_message_key').references(
+			(): AnyPgColumn => chatMessage.messageKey,
+			{
+				onDelete: 'cascade'
+			}
+		),
+		messageType: varchar('message_type', { length: 20 }).default('message'), // 'message', 'system', 'join', 'leave'
+		// timestamptz throughout. As plain `timestamp` these were parsed in whatever
+		// zone the server process happened to be in — right on Vercel, hours wrong in
+		// local dev, with nothing to indicate which.
+		editedAt: timestamp('edited_at', { withTimezone: true, mode: 'date' }),
+		deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
+		attachments: text('attachments'), // JSON array of file attachments
+		mentions: text('mentions'), // JSON array of mentioned manager keys, written server-side
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
+	},
+	(table) => ({
+		// Plain indexes, not unique: these exist to make channel and thread queries
+		// fast. Declared UNIQUE they would also forbid two messages in the same
+		// channel sharing a created_at, which two quick sends collide on.
+		channelIndex: index('chat_message_channel_created').on(table.channelId, table.createdAt),
+		threadIndex: index('chat_message_thread').on(table.parentMessageKey, table.createdAt),
+		// The root list pages on message_key DESC; the created_at index can't serve it.
+		channelKeyIndex: index('idx_chat_message_channel_key').on(table.channelId, table.messageKey),
+		// The delta poll's edit/tombstone arm.
+		channelUpdatedIndex: index('idx_chat_message_channel_updated').on(
+			table.channelId,
+			table.updatedAt
+		)
+	})
+);
 
 // NOTE: `chat_thread` used to be declared here. Nothing ever read or wrote it,
 // and its message_count / last_message_at columns duplicate what
 // parent_message_key already tells us. Dropped in 0002_chat_hardening.sql.
 
-export const chatReaction = appSchema.table('chat_reaction', {
-	reactionKey: serial('reaction_key').primaryKey(),
-	messageKey: integer('message_key')
-		.notNull()
-		.references(() => chatMessage.messageKey, { onDelete: 'cascade' }),
-	// Who reacted. FK to the allowlist, matching chat_message.author_key.
-	authorKey: integer('author_key')
-		.notNull()
-		.references(() => leagueMember.managerKey),
-	emoji: varchar('emoji', { length: 100 }).notNull(), // Unicode emoji or custom emoji name
-	emojiType: varchar('emoji_type', { length: 20 }).default('unicode'), // 'unicode' or 'custom'
-	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
-}, (table) => ({
-	// One reaction per user per message per emoji. Also what makes the per-message
-	// lateral lookup in the message query an index scan.
-	uniqueReaction: uniqueIndex('unique_chat_reaction').on(table.messageKey, table.authorKey, table.emoji)
-}));
+export const chatReaction = appSchema.table(
+	'chat_reaction',
+	{
+		reactionKey: serial('reaction_key').primaryKey(),
+		messageKey: integer('message_key')
+			.notNull()
+			.references(() => chatMessage.messageKey, { onDelete: 'cascade' }),
+		// Who reacted. FK to the allowlist, matching chat_message.author_key.
+		authorKey: integer('author_key')
+			.notNull()
+			.references(() => leagueMember.managerKey),
+		emoji: varchar('emoji', { length: 100 }).notNull(), // Unicode emoji or custom emoji name
+		emojiType: varchar('emoji_type', { length: 20 }).default('unicode'), // 'unicode' or 'custom'
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow()
+	},
+	(table) => ({
+		// One reaction per user per message per emoji. Also what makes the per-message
+		// lateral lookup in the message query an index scan.
+		uniqueReaction: uniqueIndex('unique_chat_reaction').on(
+			table.messageKey,
+			table.authorKey,
+			table.emoji
+		)
+	})
+);
 
-export const chatRead = appSchema.table('chat_read', {
-	readKey: serial('read_key').primaryKey(),
-	managerKey: integer('manager_key')
-		.notNull()
-		.references(() => leagueMember.managerKey, { onDelete: 'cascade' }),
-	channelId: varchar('channel_id', { length: 100 }).notNull(),
-	lastReadMessageKey: integer('last_read_message_key'),
-	lastReadAt: timestamp('last_read_at', { withTimezone: true, mode: 'date' }).defaultNow(),
-	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
-}, (table) => ({
-	// Ensure one read record per user per channel
-	uniqueRead: uniqueIndex('unique_chat_read').on(table.managerKey, table.channelId)
-}));
+export const chatRead = appSchema.table(
+	'chat_read',
+	{
+		readKey: serial('read_key').primaryKey(),
+		managerKey: integer('manager_key')
+			.notNull()
+			.references(() => leagueMember.managerKey, { onDelete: 'cascade' }),
+		channelId: varchar('channel_id', { length: 100 }).notNull(),
+		lastReadMessageKey: integer('last_read_message_key'),
+		lastReadAt: timestamp('last_read_at', { withTimezone: true, mode: 'date' }).defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
+	},
+	(table) => ({
+		// Ensure one read record per user per channel
+		uniqueRead: uniqueIndex('unique_chat_read').on(table.managerKey, table.channelId)
+	})
+);
 
 export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	emojiKey: serial('emoji_key').primaryKey(),
@@ -531,6 +573,76 @@ export const chatCustomEmoji = appSchema.table('chat_custom_emoji', {
 	createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).defaultNow(),
 	updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).defaultNow()
 });
+
+// ---------------------------------------------------------------------------
+// Side bets
+// ---------------------------------------------------------------------------
+//
+// A record of what managers agreed to, not a book. Nothing here moves money and
+// nothing here is enforceable — the site's only job is to remember the terms
+// after everyone has forgotten them, and to hold the commissioner's ruling.
+
+/**
+ * One side bet between two managers.
+ *
+ * Two shapes in one table, distinguished by `counterpartyKey`:
+ *  - null  → an open prop; any member other than the proposer may take it
+ *  - set   → head-to-head; only that manager may accept
+ *
+ * Lifecycle: open → accepted → pending_resolution → settled | void, with
+ * `declined` and `withdrawn` as dead ends before anyone agreed to anything.
+ */
+export const wager = appSchema.table(
+	'wager',
+	{
+		wagerKey: serial('wager_key').primaryKey(),
+		wagerId: varchar('wager_id', { length: 50 }).notNull().unique(),
+		title: varchar('title', { length: 200 }).notNull(),
+		/** What has to happen for the proposer to win. Free prose — this is the agreement of record. */
+		terms: text('terms').notNull(),
+		/** Free text on purpose: "$20", "loser buys wings", "2:1 on $50". No dollar ledger. */
+		stake: varchar('stake', { length: 200 }).notNull(),
+		seasonYear: integer('season_year'),
+		/**
+		 * FK to league_member, NOT edw.dim_manager — same reason as rule_proposal.submitted_by:
+		 * dim_manager holds every manager across 20 years including manager_key 1,
+		 * '-- hidden --'. Pointing at the allowlist makes an unattributable bet a
+		 * constraint violation at insert time rather than a silently wrong row.
+		 */
+		proposedBy: integer('proposed_by')
+			.notNull()
+			.references(() => leagueMember.managerKey),
+		/** Null = open prop any member may take. Set = head-to-head, only this manager may accept. */
+		counterpartyKey: integer('counterparty_key').references(() => leagueMember.managerKey),
+		/** Who actually took the other side. Equals counterpartyKey for a head-to-head. */
+		acceptedBy: integer('accepted_by').references(() => leagueMember.managerKey),
+		acceptedAt: timestamp('accepted_at', { withTimezone: true, mode: 'date' }),
+		status: varchar('status', { length: 20 }).notNull().default('open'),
+		// open | accepted | declined | withdrawn | pending_resolution | settled | void
+		resolutionRequestedBy: integer('resolution_requested_by').references(
+			() => leagueMember.managerKey
+		),
+		resolutionRequestedAt: timestamp('resolution_requested_at', {
+			withTimezone: true,
+			mode: 'date'
+		}),
+		/** What the flagging party says happened. Context for the commissioner, kept on the record. */
+		resolutionNote: text('resolution_note'),
+		outcome: varchar('outcome', { length: 20 }), // proposer | taker | push | void
+		/** Denormalised from outcome so the W-L ledger is one pass. Null on a push or a void. */
+		winnerKey: integer('winner_key').references(() => leagueMember.managerKey),
+		rulingNote: text('ruling_note'),
+		/** The commissioner who ruled. Nothing else writes this column. */
+		resolvedBy: integer('resolved_by').references(() => leagueMember.managerKey),
+		resolvedAt: timestamp('resolved_at', { withTimezone: true, mode: 'date' }),
+		createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow()
+	},
+	(table) => ({
+		statusIdx: index('wager_status_idx').on(table.status),
+		proposedByIdx: index('wager_proposed_by_idx').on(table.proposedBy)
+	})
+);
 
 // Type exports
 export type DimLeague = typeof dimLeague.$inferSelect;
@@ -559,3 +671,5 @@ export type ChatReaction = typeof chatReaction.$inferSelect;
 export type ChatRead = typeof chatRead.$inferSelect;
 export type ChatCustomEmoji = typeof chatCustomEmoji.$inferSelect;
 
+// Side Bet Types
+export type Wager = typeof wager.$inferSelect;
