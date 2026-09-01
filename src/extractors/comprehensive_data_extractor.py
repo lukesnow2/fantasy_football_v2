@@ -13,8 +13,12 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
 from yahoo_oauth import OAuth2
 import yahoo_fantasy_api as yfa
-import requests
 from dotenv import load_dotenv
+
+try:
+    from .yahoo_http import ReliableYHandler, RequestPacer, YahooApiError
+except ImportError:  # script-style execution from src/extractors
+    from yahoo_http import ReliableYHandler, RequestPacer, YahooApiError
 
 # Database support (optional import)
 try:
@@ -37,6 +41,28 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# yahoo_oauth logs at DEBUG unconditionally, which once wrote the full
+# authorize URL (including the client ID) into a committed log file.
+logging.getLogger('yahoo_oauth').setLevel(logging.INFO)
+
+
+def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
+    """Weeks whose play is complete, per the league's own signals.
+
+    current_week == end_week both while the final week is in progress AND
+    after the season ends, so the pair alone cannot decide the final week -
+    is_finished (from the league settings metadata) breaks the tie. The
+    historical expression min(current_week, end_week + 1) as a range stop
+    silently dropped every season's final (championship) week - verified
+    missing from all 21 seasons in production.
+    """
+    finished = str(is_finished) in ('1', 'True', 'true')
+    if finished:
+        last_complete = end_week
+    else:
+        last_complete = min(current_week - 1, end_week)
+    return list(range(1, last_complete + 1))
 
 @dataclass
 class ExtractedLeague:
@@ -327,113 +353,27 @@ class YahooFantasyExtractor:
             }
     
     def _rate_limited_request(self, func, *args, **kwargs):
-        """Execute a function with adaptive rate limiting and automatic token refresh"""
-        # Check rate limits before making request
-        self._check_rate_limits()
-        
-        # Get current adaptive settings
-        settings = self._get_adaptive_settings()
-        min_interval = settings['min_request_interval']
-        
-        # Ensure minimum time between requests (adaptive)
-        current_time = time.time()
-        time_since_last = current_time - self.last_request_time
-        if time_since_last < min_interval:
-            sleep_time = min_interval - time_since_last
-            time.sleep(sleep_time)
-        
-        # Make the request with automatic token refresh retry
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                result = func(*args, **kwargs)
-                self.hourly_request_count += 1
-                self.daily_request_count += 1
-                self.last_request_time = time.time()
-                
-                # Log progress more frequently for better monitoring
-                if self.hourly_request_count % 25 == 0:
-                    logger.info(f"📊 API Progress - Hour: {self.hourly_request_count}/{self.MAX_REQUESTS_PER_HOUR}, Day: {self.daily_request_count}/{self.MAX_REQUESTS_PER_DAY}")
-                
-                return result
-                
-            except Exception as e:
-                error_str = str(e)
-                
-                # Check for Yahoo API timeouts (504 Gateway Timeout)
-                if ('504' in error_str or 
-                    'Activity Timeout' in error_str or 
-                    'Gateway Timeout' in error_str or
-                    'Will be right back' in error_str or
-                    '<!DOCTYPE html>' in error_str):
-                    
-                    logger.warning(f"⏰ Yahoo API timeout (504) detected: {e}")
-                    if attempt < max_retries - 1:
-                        logger.info(f"🔄 Retrying in 60 seconds (attempt {attempt + 1}/{max_retries})...")
-                        time.sleep(60)  # Wait 1 minute for Yahoo servers to recover
-                        continue
-                    else:
-                        logger.error(f"❌ Yahoo API timeout persists after {max_retries} attempts - skipping")
-                        # Count the failed request and re-raise as a specific timeout error
-                        self.hourly_request_count += 1
-                        self.daily_request_count += 1
-                        self.last_request_time = time.time()
-                        raise Exception("YAHOO_TIMEOUT")
-                
-                # Check if this is a token expiration error
-                if ('token_expired' in error_str or 
-                    'token_rejected' in error_str or 
-                    'Please provide valid credentials' in error_str):
-                    
-                    if attempt < max_retries - 1:  # Not the last attempt
-                        logger.warning(f"🔄 OAuth token expired, attempting refresh (attempt {attempt + 1}/{max_retries})...")
-                        try:
-                            # Refresh the token
-                            if self.oauth and hasattr(self.oauth, 'refresh_access_token'):
-                                self.oauth.refresh_access_token()
-                                logger.info("✅ OAuth token refreshed successfully!")
-                                
-                                # Longer delay before retry to ensure token propagation
-                                time.sleep(3)  # Increased from 1 to 3 seconds
-                                
-                                # Also reset the game object to ensure new token is used
-                                try:
-                                    import yahoo_fantasy_api as yfa
-                                    self.game = yfa.Game(self.oauth, 'nfl')
-                                    logger.info("🔄 Game object refreshed with new token")
-                                except Exception as refresh_game_error:
-                                    logger.warning(f"⚠️ Could not refresh game object: {refresh_game_error}")
-                                
-                                continue  # Retry the request
-                            else:
-                                logger.error("❌ OAuth refresh not available")
-                                break
-                                
-                        except Exception as refresh_error:
-                            logger.error(f"❌ Failed to refresh OAuth token: {refresh_error}")
-                            break
-                    else:
-                        logger.error(f"❌ Max token refresh retries ({max_retries}) exceeded")
-                
-                # Check for Yahoo rate limiting specifically
-                if 'Request denied' in error_str or 'request_denied' in error_str.lower():
-                    logger.warning(f"🚫 Yahoo rate limit hit: {e}")
-                    logger.info("⏰ Waiting 30 seconds before continuing due to rate limit...")
-                    time.sleep(30)  # Wait 30 seconds on rate limit
-                    
-                    # Count this against our limits and update timing
-                    self.hourly_request_count += 1
-                    self.daily_request_count += 1
-                    self.last_request_time = time.time()
-                    raise
-                
-                # For non-token errors or final retry, log and raise
-                logger.error(f"Rate limited request failed: {e}")
-                # Still count failed requests toward rate limit
-                self.hourly_request_count += 1
-                self.daily_request_count += 1
-                self.last_request_time = time.time()
-                raise
+        """Execute one logical API call.
+
+        Pacing, timeouts, status-aware retries, rate-limit cooldowns, and
+        token refresh all live in ReliableYHandler at the HTTP layer, where
+        every REAL request (including library fan-out) is seen. This wrapper
+        only tracks logical call counts for progress logging.
+
+        Errors propagate. A YahooApiError here means the HTTP layer already
+        exhausted its retries - nothing is swallowed and nothing returns
+        None to be mistaken for "no data".
+        """
+        result = func(*args, **kwargs)
+        self.hourly_request_count += 1
+        self.daily_request_count += 1
+        self.last_request_time = time.time()
+
+        if self.hourly_request_count % 25 == 0:
+            http_count = self.pacer.request_count if getattr(self, 'pacer', None) else '?'
+            logger.info(f"📊 Progress - logical calls: {self.hourly_request_count}, real HTTP requests: {http_count}")
+
+        return result
         
     def is_league_of_record(self, league_id: str, season_year: int) -> bool:
         """
@@ -477,12 +417,23 @@ class YahooFantasyExtractor:
                     break
             
             if oauth_file:
-                # Use existing oauth file
-                self.oauth = OAuth2(None, None, from_file=oauth_file)
-                
-                if not self.oauth.token_is_valid():
-                    logger.info("🔑 Token invalid, refreshing...")
-                    self.oauth.refresh_access_token()
+                # Use existing oauth file. yahoo_oauth's constructor
+                # refreshes an expired token BEFORE building its session
+                # and persists it back to the file - the supported
+                # non-interactive path. A revoked refresh token surfaces
+                # from the library as a bare KeyError('access_token');
+                # translate it into something actionable.
+                try:
+                    self.oauth = OAuth2(None, None, from_file=oauth_file)
+                except KeyError as e:
+                    if 'access_token' in str(e):
+                        raise RuntimeError(
+                            "Yahoo rejected the refresh token in "
+                            f"{oauth_file} - it was likely revoked. "
+                            "Re-authenticate interactively to mint a new "
+                            "one, then update the stored credentials."
+                        ) from e
+                    raise
             else:
                 # No oauth file found - create one from environment variables
                 logger.info("🔑 No OAuth file found, creating from environment variables...")
@@ -510,9 +461,14 @@ class YahooFantasyExtractor:
                 # Initialize OAuth with new file
                 self.oauth = OAuth2(None, None, from_file=oauth_file)
             
-            # Create Game object for NFL
+            # Create Game object for NFL, with the reliable HTTP handler
+            # injected at the library's extension point: every request gets
+            # a timeout, status-aware retries, denial cooldowns, and real
+            # per-HTTP-request pacing (library fan-out included).
             self.game = yfa.Game(self.oauth, 'nfl')
-            
+            self.pacer = RequestPacer(min_interval=self.MIN_REQUEST_INTERVAL)
+            self.game.inject_yhandler(ReliableYHandler(self.oauth, pacer=self.pacer))
+
             # Test the connection
             game_id = self.game.game_id()
             logger.info(f"✅ Authentication successful! Game ID: {game_id}")
@@ -644,9 +600,9 @@ class YahooFantasyExtractor:
             logger.info(f"💡 Total API calls saved: ~{len(all_league_ids)} (used bulk discovery instead of year-by-year)")
             return all_leagues
             
-        except Exception as e:
-            logger.error(f"Error getting leagues: {e}")
-            return []
+        except Exception:
+            logger.error("League discovery failed")
+            raise
     
     def extract_league_data(self, league_info: Dict[str, Any]) -> ExtractedLeague:
         """Extract and structure league data"""
@@ -801,9 +757,9 @@ class YahooFantasyExtractor:
             logger.info(f"  📊 Found {len(teams)} teams in league {league_id}")
             return teams
             
-        except Exception as e:
-            logger.error(f"Error extracting teams for league {league_id}: {e}")
-            return []
+        except Exception:
+            logger.error(f"Team extraction failed for league {league_id}")
+            raise
     
     def extract_rosters_for_league(self, league_id: str, weeks_to_extract: Optional[List[int]] = None) -> List[ExtractedRoster]:
         """OPTIMIZED: Extract roster data using Yahoo API best practices with minimal calls
@@ -946,9 +902,9 @@ class YahooFantasyExtractor:
             logger.info(f"  ✅ OPTIMIZED ROSTERS: Found {len(rosters)} total roster entries")
             return rosters
             
-        except Exception as e:
-            logger.error(f"Error extracting rosters for league {league_id}: {e}")
-            return []
+        except Exception:
+            logger.error(f"Roster extraction failed for league {league_id}")
+            raise
     
     def _extract_roster_player_data(self, player_data: Dict, league_id: str, team_id: str, week: int) -> Optional[ExtractedRoster]:
         """Helper method to extract roster player data consistently"""
@@ -1011,8 +967,15 @@ class YahooFantasyExtractor:
             logger.warning(f"Player data structure: {player_data}")
             return None
     
-    def extract_matchups_for_league(self, league_id: str) -> List[Dict[str, Any]]:
-        """BULK OPTIMIZED: Extract matchup data efficiently with sport-specific week logic"""
+    def extract_matchups_for_league(self, league_id: str,
+                                    weeks: Optional[List[int]] = None) -> List[Dict[str, Any]]:
+        """BULK OPTIMIZED: Extract matchup data efficiently with sport-specific week logic
+
+        Args:
+            league_id: League to extract.
+            weeks: Explicit weeks to fetch. If None, fetches the full
+                completed-week range (historical/backfill behavior).
+        """
         matchups = []
         
         try:
@@ -1063,11 +1026,15 @@ class YahooFantasyExtractor:
             
             current_week = int(settings.get('current_week', max_week))
             end_week = min(current_week, max_week)
-            
-            logger.info(f"📦 BULK: Getting matchups for weeks {start_week} to {end_week}")
-            
-            # Get matchups for completed weeks only
-            for week in range(start_week, end_week + 1):
+
+            if weeks is not None:
+                fetch_weeks = [w for w in weeks if start_week <= w <= max_week]
+                logger.info(f"📦 Getting matchups for explicit weeks {fetch_weeks}")
+            else:
+                fetch_weeks = list(range(start_week, end_week + 1))
+                logger.info(f"📦 BULK: Getting matchups for weeks {start_week} to {end_week}")
+
+            for week in fetch_weeks:
                 try:
                     week_matchups = self._rate_limited_request(
                         lambda: league.matchups(week)
@@ -1083,15 +1050,18 @@ class YahooFantasyExtractor:
                         })
                         
                 except Exception as e:
-                    logger.warning(f"Failed to get matchups for week {week}: {e}")
-                    continue
-            
+                    # A failed week must fail the extraction - the HTTP
+                    # layer already retried; skipping here creates an
+                    # invisible hole in the season.
+                    logger.error(f"Matchup fetch failed for week {week} after HTTP-layer retries: {e}")
+                    raise
+
             logger.info(f"✅ BULK MATCHUPS SUCCESS: Extracted {len(matchups)} week records for {sport_code}")
             return matchups
-            
-        except Exception as e:
-            logger.error(f"Failed to extract matchups for league {league_id}: {e}")
-            return matchups
+
+        except Exception:
+            logger.error(f"Failed to extract matchups for league {league_id}")
+            raise
     
     def extract_transactions_for_league(self, league_id: str) -> List[ExtractedTransaction]:
         """Extract transaction data for a league"""
@@ -1102,14 +1072,30 @@ class YahooFantasyExtractor:
             league = self.game.to_league(league_id)
             
             # Get different types of transactions using the correct format
-            transaction_types = ['add,drop', 'trade']
-            
+            transaction_types = ['add,drop', 'trade', 'commish']
+            TRANSACTION_FETCH_CAP = 500
+            parse_errors = 0
+
             for trans_type in transaction_types:
                 try:
                     league_transactions = self._rate_limited_request(
-                        lambda tt=trans_type: league.transactions(tt, 500)
+                        lambda tt=trans_type: league.transactions(tt, TRANSACTION_FETCH_CAP)
                     )
-                    
+
+                    # The Yahoo API has no pagination for transactions - the
+                    # count parameter is a hard ceiling. A full page means we
+                    # cannot distinguish "exactly cap" from "truncated", so
+                    # silent data loss is possible. That is a hard failure,
+                    # not a warning (busiest league to date: 379).
+                    if league_transactions and len(league_transactions) >= TRANSACTION_FETCH_CAP:
+                        raise RuntimeError(
+                            f"Transaction fetch for {league_id} ({trans_type}) "
+                            f"returned {len(league_transactions)} rows, at the "
+                            f"API ceiling of {TRANSACTION_FETCH_CAP} - possible "
+                            "truncation. Pagination work is now required; "
+                            "refusing to continue with potentially incomplete data."
+                        )
+
                     for trans_data in league_transactions:
                         try:
                             transaction_id = trans_data.get('transaction_key', '')
@@ -1117,11 +1103,14 @@ class YahooFantasyExtractor:
                             timestamp_str = trans_data.get('timestamp', '')
                             status = trans_data.get('status', '')
                             
-                            # Convert timestamp
-                            try:
-                                timestamp = datetime.fromtimestamp(int(timestamp_str)) if timestamp_str else datetime.now()
-                            except (ValueError, TypeError):
-                                timestamp = datetime.now()
+                            # Convert timestamp. An unparseable timestamp is
+                            # an error, not "now": defaulting to now() made
+                            # old transactions look new to any time-based
+                            # filtering downstream.
+                            if not timestamp_str:
+                                raise ValueError(
+                                    f"Transaction {transaction_id} in {league_id} has no timestamp")
+                            timestamp = datetime.fromtimestamp(int(timestamp_str))
                             
                             # Extract players involved (corrected structure)
                             players_section = trans_data.get('players', {})
@@ -1191,21 +1180,32 @@ class YahooFantasyExtractor:
                                             
                                     except Exception as e:
                                         logger.warning(f"Error processing player {key} in transaction {transaction_id}: {e}")
+                                        parse_errors += 1
                                         continue
-                                    
+
                         except Exception as e:
                             logger.warning(f"Error processing transaction: {e}")
+                            parse_errors += 1
                             continue
-                            
-                except Exception as e:
-                    logger.warning(f"Error getting transactions for league {league_id} type {trans_type}: {e}")
-            
+
+                except Exception:
+                    # A failed fetch (or the cap guard) must fail the
+                    # extraction - logging-and-continuing here is how
+                    # transaction loss becomes invisible.
+                    raise
+
+            if parse_errors:
+                raise RuntimeError(
+                    f"{parse_errors} transaction record(s) in {league_id} "
+                    "failed to parse (see warnings above) - refusing to "
+                    "return a silently incomplete set")
+
             logger.info(f"  💰 Found {len(transactions)} transactions in league {league_id}")
             return transactions
-            
-        except Exception as e:
-            logger.error(f"Error extracting transactions for league {league_id}: {e}")
-            return []
+
+        except Exception:
+            logger.error(f"Transaction extraction failed for league {league_id}")
+            raise
     
     def extract_draft_for_league(self, league_id: str) -> List[ExtractedDraftPick]:
         """Extract draft data for a specific league"""
@@ -1306,9 +1306,9 @@ class YahooFantasyExtractor:
             logger.info(f"  🎯 Found {len(draft_picks)} draft picks in league {league_id}")
             return draft_picks
             
-        except Exception as e:
-            logger.error(f"Error extracting draft data for league {league_id}: {e}")
-            return []
+        except Exception:
+            logger.error(f"Draft extraction failed for league {league_id}")
+            raise
 
     def extract_all_data(self, initial_batch_size: int = 10, initial_batch_delay: int = 10, sport_filter: str = 'nfl', private_only: bool = True, extract_leagues: bool = True, extract_teams: bool = True, extract_rosters: bool = False, extract_matchups: bool = True, extract_transactions: bool = True, extract_drafts: bool = True, extract_statistics: bool = True, roster_weeks: Optional[List[int]] = None, statistics_weeks: Optional[List[int]] = None) -> Dict[str, List[Any]]:
         """Extract all data from NFL private leagues using TRUE BULK OPTIMIZATIONS + adaptive rate limiting"""
@@ -1520,28 +1520,40 @@ class YahooFantasyExtractor:
         return self.extracted_data
     
     def save_to_json(self, filename: str = 'yahoo_fantasy_data.json'):
-        """Save extracted data to JSON file"""
+        """Save extracted data to JSON file, atomically.
+
+        Writes to a temp file in the destination directory and renames into
+        place, so a crash or full disk can never leave a truncated file at
+        the destination. Write errors raise - the old log-and-continue here
+        let runs report success with nothing on disk.
+        """
+        import tempfile
+
+        # Convert datetime objects to strings for JSON serialization
+        json_data = {}
+        for key, value in self.extracted_data.items():
+            json_data[key] = []
+            for item in value:
+                json_item = {}
+                for k, v in item.items():
+                    if isinstance(v, datetime):
+                        json_item[k] = v.isoformat()
+                    else:
+                        json_item[k] = v
+                json_data[key].append(json_item)
+
+        dst_dir = os.path.dirname(os.path.abspath(filename)) or '.'
+        fd, tmp = tempfile.mkstemp(dir=dst_dir, suffix='.tmp')
         try:
-            # Convert datetime objects to strings for JSON serialization
-            json_data = {}
-            for key, value in self.extracted_data.items():
-                json_data[key] = []
-                for item in value:
-                    json_item = {}
-                    for k, v in item.items():
-                        if isinstance(v, datetime):
-                            json_item[k] = v.isoformat()
-                        else:
-                            json_item[k] = v
-                    json_data[key].append(json_item)
-            
-            with open(filename, 'w') as f:
+            with os.fdopen(fd, 'w') as f:
                 json.dump(json_data, f, indent=2, default=str)
-            
-            logger.info(f"💾 Data saved to {filename}")
-            
-        except Exception as e:
-            logger.error(f"Error saving data to JSON: {e}")
+            os.replace(tmp, filename)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+
+        logger.info(f"💾 Data saved to {filename}")
 
     def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None) -> List[ExtractedPlayerStatistics]:
         """Extract weekly player fantasy points using optimized bulk season loading
@@ -1581,10 +1593,11 @@ class YahooFantasyExtractor:
             
             logger.info(f"    🏈 BULK SEASON EXTRACTION: {league_name} ({season_year} season)")
             
-            # Determine which weeks to extract
+            # Determine which weeks to extract (see completed_weeks for the
+            # final-week semantics and the historical off-by-one).
             if weeks is None:
-                # Extract all completed weeks (current week - 1 to avoid incomplete data)
-                extract_weeks = list(range(1, min(current_week, end_week + 1)))
+                extract_weeks = completed_weeks(
+                    current_week, end_week, settings.get('is_finished', ''))
             else:
                 extract_weeks = [w for w in weeks if w <= end_week]
             
@@ -1674,8 +1687,13 @@ class YahooFantasyExtractor:
                     logger.info(f"            🚀 Processed {week_stats_processed} records in 1 bulk API call")
                 
                 except Exception as e:
-                    logger.warning(f"        ❌ Error extracting week {week_num} for league {league_id}: {e}")
-                    continue
+                    # Never skip a week silently: the HTTP layer has already
+                    # exhausted its retries by the time an error reaches
+                    # here, and a missing week that logs-and-continues is
+                    # how 117 rate-limit denials historically produced
+                    # invisible statistics holes. Fail the league loudly.
+                    logger.error(f"        ❌ Week {week_num} failed for league {league_id} after HTTP-layer retries: {e}")
+                    raise
             
             # Log final extraction results with efficiency summary
             if statistics:
