@@ -47,6 +47,50 @@ class PublishVerificationError(RuntimeError):
     """The refreshed EDW failed the verification gate."""
 
 
+# fantasy_edw_schema.sql declares these as SERIAL PRIMARY KEY, but the
+# live tables lost their defaults somewhere along the way (a to_sql
+# 'replace' recreates a table bare). Incremental inserts that omit the
+# key column then hit NOT NULL violations. This repair is idempotent.
+EDW_SERIAL_KEYS = [
+    ('dim_season', 'season_key'), ('dim_week', 'week_key'),
+    ('dim_league', 'league_key'), ('dim_team', 'team_key'),
+    ('dim_player', 'player_key'), ('dim_manager', 'manager_key'),
+    ('fact_matchup', 'matchup_key'), ('fact_roster', 'roster_key'),
+    ('fact_transaction', 'transaction_key'), ('fact_draft', 'draft_key'),
+    ('fact_player_statistics', 'stat_key'),
+    ('fact_team_performance', 'performance_key'),
+    ('mart_manager_h2h', 'h2h_key'),
+]
+
+
+def ensure_edw_serial_defaults(engine):
+    """Restore missing SERIAL defaults on EDW surrogate keys, idempotently."""
+    with engine.begin() as conn:
+        for table, col in EDW_SERIAL_KEYS:
+            exists = conn.execute(text(
+                "SELECT 1 FROM information_schema.tables "
+                "WHERE table_schema='edw' AND table_name=:t"), {'t': table}).scalar()
+            if not exists:
+                continue
+            has_default = conn.execute(text(
+                "SELECT column_default IS NOT NULL FROM information_schema.columns "
+                "WHERE table_schema='edw' AND table_name=:t AND column_name=:c"),
+                {'t': table, 'c': col}).scalar()
+            if has_default:
+                continue
+            seq = f'edw.{table}_{col}_seq'
+            conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
+            conn.execute(text(
+                f'ALTER TABLE edw."{table}" ALTER COLUMN "{col}" '
+                f"SET DEFAULT nextval('{seq}')"))
+            conn.execute(text(
+                f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
+                f'FROM edw."{table}"), 0) + 1, false)'))
+            conn.execute(text(
+                f'ALTER SEQUENCE {seq} OWNED BY edw."{table}"."{col}"'))
+            logger.info("Restored SERIAL default on edw.%s.%s", table, col)
+
+
 def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
     """Clone src's tables (data + constraints) and views into dst.
 

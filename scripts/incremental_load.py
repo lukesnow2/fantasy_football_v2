@@ -177,10 +177,21 @@ def write_run_snapshot(data, league_id, season):
 
 def make_edw_refresh(database_url, changed_tables):
     """The real EDW refresh callable: DB-mode (data_file=None) so the
-    processor reads public.*, never a run-scoped JSON."""
+    processor reads public.*, never a run-scoped JSON. The processor
+    requires explicit connect() and load_data() before processing
+    (load_data with no data_file takes the from-database path)."""
     def refresh():
         from src.edw_schema.edw_etl_processor import EdwEtlProcessor
-        processor = EdwEtlProcessor(database_url, None)
+        processor = EdwEtlProcessor(database_url=database_url, data_file=None)
+        if not processor.connect():
+            return False
+        if not processor.load_data():
+            return False
+        # The fact transforms resolve dimension surrogate keys through an
+        # in-memory cache that only run_etl/load_dimensions builds; without
+        # it every fact row is skipped and the processor reports success
+        # with zero rows. Build it explicitly for the incremental path.
+        processor.cache_dimension_mappings()
         return processor.process_incremental_edw(set(changed_tables))
     return refresh
 
@@ -216,6 +227,7 @@ def _run_locked(args, state) -> int:
     state.ensure_schema()
     with state.engine.begin() as conn:
         raw_loader.ensure_constraints(conn)
+    pub.ensure_edw_serial_defaults(state.engine)
 
     # 1. Repair publication BEFORE anything else: raw-complete periods the
     #    site cannot see yet need EDW work only - no Yahoo calls.
