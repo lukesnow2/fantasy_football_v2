@@ -1,0 +1,283 @@
+"""Phase 2B tests: scoped raw loading, idempotency, constraints, rollback,
+and playoff-flag computation (2- and 3-round brackets).
+
+The cross-season isolation test is the gate: the predecessor loader's
+unscoped DELETE WHERE week = N would have destroyed week N of every
+season back to 2005 on its first successful run. That bug class must be
+provably dead before this loader runs against any real database.
+"""
+import subprocess
+from datetime import datetime
+
+import pytest
+from sqlalchemy import text
+
+from src.pipeline import raw_loader
+from src.pipeline.state import PipelineState
+
+TEST_DB = 'raw_loader_test'
+TEST_URL = f'postgresql://localhost:5432/{TEST_DB}'
+
+RAW_DDL = """
+CREATE TABLE public.leagues (league_id text, name text, season text,
+  game_code text, game_id text, num_teams bigint, current_week text,
+  start_week text, end_week text, league_type text, draft_status text,
+  is_pro_league boolean, is_cash_league boolean, url text, logo_url text,
+  extracted_at timestamp);
+CREATE TABLE public.teams (team_id text, league_id text, name text,
+  manager_name text, wins bigint, losses bigint, ties bigint,
+  points_for double precision, points_against double precision,
+  playoff_seed double precision, waiver_priority double precision,
+  faab_balance double precision, team_logo_url text, extracted_at timestamp);
+CREATE TABLE public.matchups (matchup_id text, league_id text, week bigint,
+  is_playoffs boolean, is_championship boolean, is_semifinal boolean,
+  is_quarterfinal boolean, is_last_place_game boolean, is_consolation boolean,
+  winner_team_id text, team1_id text, team2_id text,
+  team1_score double precision, team2_score double precision,
+  extracted_at timestamp);
+CREATE TABLE public.rosters (roster_id text, league_id text, team_id text,
+  week bigint, player_id text, player_name text, position text, status text,
+  is_starter boolean, projected_points text, actual_points text,
+  extracted_at timestamp);
+CREATE TABLE public.statistics (stat_id text, league_id text, player_id text,
+  player_name text, position_type text, season_year bigint, week_number bigint,
+  weekly_fantasy_points double precision, game_code text, extracted_at timestamp);
+CREATE TABLE public.transactions (transaction_id text, league_id text,
+  type text, timestamp timestamp, player_id text, player_name text,
+  source_team_id text, destination_team_id text, faab_bid double precision,
+  status text, extracted_at timestamp);
+CREATE TABLE public.draft_picks (draft_pick_id text, league_id text,
+  pick_number bigint, round_number bigint, team_id text, player_id text,
+  player_name text, position text, cost double precision, is_keeper boolean,
+  is_auction_draft boolean, extracted_at timestamp);
+"""
+
+OLD_L, NEW_L, SEASON = '153.l.old', '461.l.new', 2026
+NOW = datetime(2026, 8, 20, 12, 0, 0)
+
+
+@pytest.fixture(scope='session')
+def test_db():
+    subprocess.run(['psql', 'postgres', '-qc', f'DROP DATABASE IF EXISTS {TEST_DB}'],
+                   check=True)
+    subprocess.run(['psql', 'postgres', '-qc', f'CREATE DATABASE {TEST_DB}'],
+                   check=True)
+    yield TEST_URL
+    subprocess.run(['psql', 'postgres', '-qc',
+                    f'DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)'], check=True)
+
+
+@pytest.fixture
+def state(test_db):
+    st = PipelineState(test_db)
+    with st.engine.begin() as conn:
+        conn.execute(text(
+            "DROP TABLE IF EXISTS public.leagues, public.teams, public.matchups, "
+            "public.rosters, public.statistics, public.transactions, "
+            "public.draft_picks, public.pipeline_periods, public.pipeline_runs CASCADE"))
+        for stmt in RAW_DDL.split(';'):
+            if stmt.strip():
+                conn.execute(text(stmt))
+        raw_loader.ensure_constraints(conn)
+    st.ensure_schema()
+    yield st
+    st.close()
+
+
+def roster_row(league, week, player, team='t.1'):
+    return {'roster_id': f'{league}_{team}_{week}_{player}', 'league_id': league,
+            'team_id': f'{league}.{team}', 'week': week, 'player_id': player,
+            'player_name': f'P{player}', 'position': 'RB', 'status': 'active',
+            'is_starter': True, 'projected_points': '', 'actual_points': '',
+            'extracted_at': NOW}
+
+
+def stat_row(league, week, player):
+    return {'stat_id': f'{league}_{player}_{SEASON}_w{week}', 'league_id': league,
+            'player_id': player, 'player_name': f'P{player}',
+            'position_type': 'O', 'season_year': SEASON, 'week_number': week,
+            'weekly_fantasy_points': 10.0, 'game_code': 'nfl',
+            'extracted_at': NOW}
+
+
+def matchup_blob(league, week, games):
+    """Build a raw Yahoo scoreboard blob: games = [(t1, t2, s1, s2, mtype)]."""
+    matchups = {'count': len(games)}
+    for i, (t1, t2, s1, s2, mtype) in enumerate(games):
+        def team(key, total):
+            return {'team': [[{'team_key': key}], {'team_points': {'total': str(total)}}]}
+        matchups[str(i)] = {'matchup': {
+            'matchup_type': mtype,
+            'is_playoffs': '1' if mtype in ('playoffs', 'championship') else '0',
+            'is_consolation': '1' if mtype == 'consolation' else '0',
+            'winner_team_key': t1 if s1 > s2 else t2,
+            '0': {'teams': {'count': 2, '0': team(t1, s1), '1': team(t2, s2)}},
+        }}
+    return {'league_id': league, 'week': week, 'sport_code': 'nfl',
+            'extracted_at': NOW.isoformat(),
+            'matchups': {'fantasy_content': {'league': [
+                {'league_key': league}, {'scoreboard': {'0': {'matchups': matchups}}}]}}}
+
+
+def week_delta(league, week, players=('1', '2')):
+    return {
+        'leagues': [], 'teams': [], 'transactions': [], 'draft_picks': [],
+        'matchups': [matchup_blob(league, week,
+                                  [(f'{league}.t.1', f'{league}.t.2', 100, 90, 'regular')])],
+        'rosters': [roster_row(league, week, p) for p in players],
+        'statistics': [stat_row(league, week, p) for p in players],
+    }
+
+
+def table_snapshot(state, table, league):
+    with state.engine.connect() as conn:
+        return conn.execute(text(
+            f'SELECT * FROM public.{table} WHERE league_id = :l '
+            f'ORDER BY 1, 2, 3'), {'l': league}).fetchall()
+
+
+def load(state, league, week, delta=None):
+    with state.engine.begin() as conn:
+        return raw_loader.load_delta(conn, state, league, SEASON, [week],
+                                     delta or week_delta(league, week))
+
+
+# ------------------------------------------------------- the critical gate
+
+def test_cross_season_isolation(state):
+    """Loading 2026 week 7 must leave the old league's week 7 untouched."""
+    load(state, OLD_L, 7)
+    before = {t: table_snapshot(state, t, OLD_L)
+              for t in ('matchups', 'rosters', 'statistics')}
+    assert before['rosters'], 'seed must exist'
+
+    load(state, NEW_L, 7)
+
+    after = {t: table_snapshot(state, t, OLD_L)
+             for t in ('matchups', 'rosters', 'statistics')}
+    assert after == before, 'old league week-7 rows were modified!'
+
+
+def test_idempotency_same_week_twice(state):
+    load(state, NEW_L, 3)
+    first = {t: table_snapshot(state, t, NEW_L)
+             for t in ('matchups', 'rosters', 'statistics')}
+    load(state, NEW_L, 3)
+    second = {t: table_snapshot(state, t, NEW_L)
+              for t in ('matchups', 'rosters', 'statistics')}
+    assert first == second
+
+
+def test_unique_constraints_enforced(state):
+    load(state, NEW_L, 1)
+    with pytest.raises(Exception) as ei:
+        with state.engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO public.rosters (roster_id, league_id, team_id, week, player_id) "
+                "SELECT roster_id, league_id, team_id, week, player_id FROM public.rosters LIMIT 1"))
+    assert 'ux_rosters_key' in str(ei.value)
+
+
+def test_rollback_leaves_prior_state_intact(state):
+    load(state, NEW_L, 1)
+    before = table_snapshot(state, 'rosters', NEW_L)
+
+    bad = week_delta(NEW_L, 2)
+    # Duplicate stat_ids violate ux_statistics_stat_id mid-batch.
+    bad['statistics'] = [stat_row(NEW_L, 2, '1'), stat_row(NEW_L, 2, '1')]
+    with pytest.raises(Exception):
+        load(state, NEW_L, 2, delta=bad)
+
+    assert table_snapshot(state, 'rosters', NEW_L) == before
+    # And the period was never marked raw-complete (same transaction).
+    assert state.raw_complete_weeks(NEW_L, SEASON) == {1}
+
+
+def test_transactions_append_only_dedupe(state):
+    delta = week_delta(NEW_L, 1)
+    delta['transactions'] = [{
+        'transaction_id': 'tx1', 'league_id': NEW_L, 'type': 'add',
+        'timestamp': NOW, 'player_id': 'p9', 'player_name': 'P9',
+        'source_team_id': None, 'destination_team_id': f'{NEW_L}.t.1',
+        'faab_bid': None, 'status': 'successful', 'extracted_at': NOW}]
+    load(state, NEW_L, 1, delta=delta)
+    load(state, NEW_L, 1, delta=delta)  # replay: must not duplicate
+    with state.engine.connect() as conn:
+        n = conn.execute(text(
+            "SELECT count(*) FROM public.transactions WHERE league_id = :l"),
+            {'l': NEW_L}).scalar()
+    assert n == 1
+
+
+# ------------------------------------------------------- playoff brackets
+
+def seed_bracket(state, league, rounds):
+    """Load a synthetic season: regular weeks then a playoff bracket.
+
+    rounds=3: weeks 14 (quarters, 2 games), 15 (semis: winners + placement),
+              16 (championship + 3rd place).
+    rounds=2: weeks 15 (semis, 2 games), 16 (championship + 3rd place).
+    """
+    t = [f'{league}.t.{i}' for i in range(1, 9)]
+    with state.engine.begin() as conn:
+        if rounds == 3:
+            # Seeds 1-2 on byes; quarters 3v6 and 4v5; semis 1vQW, 2vQW.
+            blobs = [
+                matchup_blob(league, 14, [(t[2], t[5], 100, 90, 'playoffs'),
+                                          (t[3], t[4], 95, 85, 'playoffs'),
+                                          (t[6], t[7], 80, 70, 'consolation')]),
+                matchup_blob(league, 15, [(t[0], t[2], 110, 100, 'playoffs'),
+                                          (t[1], t[3], 90, 80, 'playoffs'),
+                                          (t[6], t[7], 60, 50, 'consolation')]),
+                matchup_blob(league, 16, [(t[0], t[1], 120, 110, 'championship'),
+                                          (t[2], t[3], 70, 60, 'playoffs'),
+                                          (t[6], t[7], 40, 30, 'consolation')]),
+            ]
+            weeks = [14, 15, 16]
+        else:
+            blobs = [
+                matchup_blob(league, 15, [(t[0], t[1], 100, 90, 'playoffs'),
+                                          (t[2], t[3], 95, 85, 'playoffs'),
+                                          (t[4], t[5], 60, 50, 'consolation')]),
+                matchup_blob(league, 16, [(t[0], t[2], 120, 110, 'championship'),
+                                          (t[1], t[3], 70, 60, 'playoffs'),
+                                          (t[4], t[5], 40, 30, 'consolation')]),
+            ]
+            weeks = [15, 16]
+        delta = {'leagues': [], 'teams': [], 'transactions': [],
+                 'draft_picks': [], 'matchups': blobs,
+                 'rosters': [], 'statistics': []}
+        raw_loader.load_delta(conn, state, league, SEASON, weeks, delta)
+
+
+def flags(state, league):
+    with state.engine.connect() as conn:
+        return conn.execute(text(
+            "SELECT week, is_championship, is_semifinal, is_quarterfinal "
+            "FROM public.matchups WHERE league_id = :l AND is_playoffs "
+            "AND NOT is_consolation ORDER BY week, matchup_id"),
+            {'l': league}).fetchall()
+
+
+def test_three_round_bracket_flags(state):
+    seed_bracket(state, NEW_L, rounds=3)
+    rows = flags(state, NEW_L)
+    champs = [r for r in rows if r[1]]
+    semis = [r for r in rows if r[2]]
+    quarters = [r for r in rows if r[3]]
+    assert len(champs) == 1 and champs[0][0] == 16
+    assert len(semis) == 2 and all(r[0] == 15 for r in semis)
+    assert len(quarters) == 2 and all(r[0] == 14 for r in quarters)
+
+
+def test_two_round_bracket_flags(state):
+    """The 2007 shape: semis + championship only. The old detector required
+    three playoff weeks and left 2007's championship unflagged for years."""
+    seed_bracket(state, OLD_L, rounds=2)
+    rows = flags(state, OLD_L)
+    champs = [r for r in rows if r[1]]
+    semis = [r for r in rows if r[2]]
+    quarters = [r for r in rows if r[3]]
+    assert len(champs) == 1 and champs[0][0] == 16
+    assert len(semis) == 2 and all(r[0] == 15 for r in semis)
+    assert quarters == []
