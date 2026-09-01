@@ -32,7 +32,7 @@ Run against any `DATABASE_URL` (local or Neon). The 44 MB historical file holds 
 DB="postgresql://<user>@localhost:5432/the_league"
 # 1. raw JSON -> public.*
 .venv/bin/python src/deployment/heroku_deployer.py \
-  --data-file data/current/yahoo_fantasy_nfl_private_20250610_124031.json --database-url "$DB"
+  --data-file data/current/yahoo_fantasy_nfl_private_2005_2024_sanitized.json --database-url "$DB"
 # 2. build edw.* (schema + ETL + views). --force-rebuild = clean bulk reload.
 .venv/bin/python scripts/deploy_complete_edw.py --database-url "$DB" --force-rebuild
 # 3. app.* schema (auth/chat/rules) — from the committed migration, not push
