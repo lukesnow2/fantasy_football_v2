@@ -6280,7 +6280,9 @@ def main():
                        help='EDW Database URL (or set DATABASE_URL env var)')
     parser.add_argument('--create-schema', action='store_true',
                        help='Create EDW schema before ETL')
-    
+    parser.add_argument('--force-rebuild', action='store_true',
+                       help='Truncate and bulk-reload EDW tables')
+
     args = parser.parse_args()
     
     # Get database URL

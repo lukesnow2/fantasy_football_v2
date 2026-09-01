@@ -89,4 +89,10 @@ git status
 
 ---
 
-**Security Status: Repository is clean and protected** ✅ 
+**Security Status (2026-09-01 audit)**: current HEAD is clean — no credential
+files tracked, tracked data snapshots are sanitized (passwords, invitation
+URLs, account GUIDs nulled) with ETL-equivalence proven before commit, and
+`.gitignore` blocks logs and raw `data/current` JSON. Outstanding until the
+history purge + credential rotation complete: the Yahoo client ID appears in
+17 historical blobs (via old committed DEBUG logs) and pre-sanitization data
+blobs remain in history. See the pipeline-rewrite plan, Phase 0. 

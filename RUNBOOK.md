@@ -51,8 +51,11 @@ psql "$DB" -f src/edw_schema/populate_metric_definitions.sql
 # after populate; idempotent, so re-running is safe.
 psql "$DB" -f src/edw_schema/add_metric_limitations.sql
 ```
-Expected counts (verification): fact_matchup 1499, fact_transaction 9691, fact_draft 3192,
-fact_player_statistics 40715, fact_team_performance 2998.
+Expected counts from the 2005–2025 baseline (verified on a clean rebuild, and
+matching `deploy_complete_edw.py`'s own verification): fact_matchup 1580,
+fact_transaction 10273, fact_draft 3342, fact_player_statistics 43147,
+fact_team_performance 3160. Note fact_player_statistics grows by roughly one
+week per season after the final-week repair run (the baseline predates it).
 
 ## Promote local → Neon
 The per-row ETL is slow over the network; dump the built warehouse and restore instead.
@@ -131,16 +134,32 @@ only constrains `push` and `introspect` — `generate` renders every table in
 `CREATE TABLE "edw"."dim_manager"`. The filter strips anything whose target is a
 pipeline-owned schema and aborts if any survives.
 
-## Weekly in-season updates (Phase 6 — GitHub Action)
-`.github/workflows/weekly-data-extraction.yml` runs Sundays in-season: extract current week →
-load → ETL. Requires repo secrets `DATABASE_URL` (Neon), `YAHOO_CLIENT_ID/SECRET`,
-`YAHOO_REFRESH_TOKEN`. Re-auth Yahoo locally to regenerate `oauth2.json` when the refresh token expires.
+## Weekly in-season updates
+`scripts/incremental_load.py` is the one mechanism for weekly loads, backfills,
+and repairs. It computes the gap from `public.pipeline_periods` (verified
+complete periods, not max-week), holds a Postgres advisory lock (a concurrent
+invocation exits 0), loads the raw delta in one transaction, and publishes to
+`edw.*` behind a snapshot that atomically restores the previous generation on
+any failure. Useful invocations:
+```bash
+python scripts/incremental_load.py --dry-run        # show the computed gap
+python scripts/incremental_load.py                  # load it
+python scripts/incremental_load.py --season 2007 --weeks 15 16   # repair
+python scripts/incremental_load.py --season 2019 --stats-only    # stats repair
+```
+`.github/workflows/weekly-data-extraction.yml` invokes it Wednesdays 10:00 UTC
+in-season, plus a monthly heartbeat (token keepalive + repo-activity commit
+against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
+`DATABASE_URL`, `YAHOO_CLIENT_KEY`, `YAHOO_CLIENT_SECRET`, `YAHOO_REFRESH_TOKEN`.
+Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)
+runs from OUTSIDE GitHub Actions (e.g. laptop cron) and files an issue when no
+successful run lands within 8 days in-season. Run ledger: `public.pipeline_runs`.
 
 ## Gotchas
 - **Don't run `drizzle-kit push` without `schemaFilter: ['app']`** — it defaults to managing only `public` and will DROP the pipeline's raw tables.
 - **SSL**: app/drizzle disable SSL for `localhost`, require it for remote (Neon). Set automatically by host detection.
 - **Manager attribution**: some teams have Yahoo-private (`--hidden--`) names and are mapped by team_id in `edw_etl_processor.get_manager_name_by_team_id`. Add new ones there.
-- **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `scripts/fix_championship_flags.py`.
+- **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `src/utils/fix_championship_flags.py`.
 
 ## Owner / config
 - Manager canonical names + aliases: `edw_etl_processor.consolidate_manager_name` and `get_manager_name_by_team_id`.

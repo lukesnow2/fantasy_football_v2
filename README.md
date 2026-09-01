@@ -10,18 +10,22 @@ This platform automatically:
 - **Analyzes** performance trends, draft patterns, and competitive dynamics
 - **Maintains** a Neon (serverless PostgreSQL) database with 70,000+ records across 26 leagues
 - **Serves** data through a modern SvelteKit web application with interactive visualizations
-- **Runs automatically** via GitHub Actions during fantasy season
+- **Runs weekly** via GitHub Actions in-season (Wednesdays), with an external dead-man check
 
 ## Key Features
 
-- ✅ **Complete Historical Dataset**: 2004-2025 fantasy data across 26 leagues
-- ✅ **Automated Pipeline**: Weekly data updates with zero maintenance  
-- ✅ **Performance Optimized**: 95% faster than traditional extraction methods
-- ✅ **Data Integrity**: Zero duplicates with comprehensive validation
-- ✅ **Live Database**: Neon serverless PostgreSQL with analytics views
-- ✅ **Modern Web Interface**: SvelteKit frontend with interactive dashboards
-- ✅ **Internationalization**: Multi-language support (English/Spanish)
-- ✅ **Security Hardened**: Protected credentials and clean git history
+- **Complete Historical Dataset**: 2005–2025 fantasy data, one league of record per season
+- **Incremental Pipeline**: `scripts/incremental_load.py` computes the gap between
+  what the warehouse has verified and what Yahoo has completed, and loads the
+  difference — the same mechanism serves weekly updates, backfills, and repairs
+- **Database-Enforced Safety**: advisory-lock concurrency, scoped deletes,
+  unique-index idempotency, snapshot-guarded EDW publication with atomic restore
+- **Live Database**: Neon serverless PostgreSQL with analytics views
+- **Modern Web Interface**: SvelteKit frontend reading `edw.*` live (fresh data
+  needs no redeploy)
+- **Internationalization**: Multi-language support (English/Spanish)
+- **Sanitized Snapshots**: tracked data snapshots pass a privacy audit and an
+  ETL-equivalence proof before commit (`scripts/sanitize_snapshot.py`)
 
 ## Web Application
 
@@ -66,14 +70,15 @@ cp data/templates/config.template.json config.json
 ### 2. Install and Test
 ```bash
 pip install -r requirements.txt
-python3 scripts/weekly_extraction.py --force
+export DATABASE_URL="your-postgres-url"
+python3 scripts/incremental_load.py --dry-run   # shows the computed gap
 ```
 
-### 3. Deploy to Database
+### 3. Load the Database
 ```bash
-export DATABASE_URL="your-postgres-url"
-python3 src/deployment/incremental_loader.py --data-file data/current/data.json
+python3 scripts/incremental_load.py             # loads the gap
 ```
+For a full rebuild from the tracked baseline snapshot, see RUNBOOK.md.
 
 ### 4. Launch Web Interface
 ```bash
@@ -121,4 +126,4 @@ npm run dev
 
 ---
 
-**Built for production. Zero maintenance required.** 🏆 
+**Built for production.** Operations live in RUNBOOK.md; the pipeline is self-healing but monitored, not maintenance-free. 
