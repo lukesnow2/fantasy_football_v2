@@ -54,5 +54,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - name: Install Playwright Chromium
+        # The client half of the suite runs in vitest browser mode, which
+        # drives a real Chromium. Without this the run dies before any test
+        # executes, reporting only "failed to scan for dependencies".
+        run: npx playwright install --with-deps chromium
       - name: Run unit tests
         run: npm run test:unit -- --run
