@@ -274,7 +274,13 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
                 "WHERE league_id = :l AND season = :s AND week = :w"),
                 params).fetchone()
             if claimed is None:
-                continue  # no recorded raw state: nothing is being claimed
+                # An unverifiable claim is a failed claim: publishing a
+                # period the state model has no record of would mark it
+                # published against nothing and verify nothing.
+                raise PublishVerificationError(
+                    f"period {league_id} {season} w{week} has no "
+                    "pipeline_periods row - refusing to publish an "
+                    "unverifiable period")
             holds = {'matchups': claimed[0], 'rosters': claimed[1],
                      'statistics': claimed[2]}
 

@@ -258,9 +258,13 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
         refresh_playoff_flags(conn, league_id)
 
     for week in weeks:
-        if per_week[week]:
-            state.mark_raw_complete(conn, league_id, season, week,
-                                    per_week[week])
+        # Only entities that actually landed rows are claimed complete. A
+        # fetched-but-empty entity is not evidence of completeness: marking
+        # it would retire the week from gap detection and make a transient
+        # Yahoo gap permanent. Leaving it unclaimed costs one re-fetch.
+        loaded = {e: n for e, n in per_week[week].items() if n}
+        if loaded:
+            state.mark_raw_complete(conn, league_id, season, week, loaded)
 
     logger.info("Loaded delta for %s weeks %s: %s", league_id, weeks, counts)
     return counts
@@ -303,9 +307,13 @@ def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
     # its first two weeks loaded, which looks exactly like a finished
     # two-round bracket - and flagged a semifinal as the championship,
     # showing a champion for an unfinished season until the final week landed.
+    # end_week is a text column and the extractor writes '' when Yahoo omits
+    # the setting; a bare ::int cast on that raises and rolls back the whole
+    # raw load. NULLIF makes an absent value behave as unknown, which the
+    # guard below already handles.
     end_week = conn.execute(text(
-        "SELECT max(end_week::int) FROM public.leagues WHERE league_id = :l"),
-        {'l': league_id}).scalar()
+        "SELECT max(NULLIF(end_week, '')::int) FROM public.leagues "
+        "WHERE league_id = :l"), {'l': league_id}).scalar()
     if end_week is not None and playoff_weeks[-1] < end_week:
         logger.info("Playoffs still in progress for %s (last playoff week %s "
                     "< end_week %s) - deferring round flags",

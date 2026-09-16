@@ -378,3 +378,36 @@ def test_playoff_flags_deferred_until_bracket_complete(state):
                 NEW_L, 16, [(t[0], t[1], 120, 110, 'championship')])]})
     champs = [r for r in flags(state, NEW_L) if r[1]]
     assert len(champs) == 1 and champs[0][0] == 16
+
+
+def test_zero_row_entity_is_not_claimed_complete(state):
+    """A fetched-but-empty entity is not evidence of completeness. Claiming
+    it would retire the week from gap detection and make a transient Yahoo
+    gap permanent."""
+    delta = week_delta(NEW_L, 5)
+    delta['rosters'] = []          # fetched, Yahoo returned nothing
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5], delta)
+
+    with state.engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT raw_matchups_complete, raw_rosters_complete, "
+            "raw_statistics_complete FROM public.pipeline_periods "
+            "WHERE league_id = :l AND week = 5"), {'l': NEW_L}).fetchone()
+    assert row == (True, False, True)
+    assert 5 not in state.raw_complete_weeks(NEW_L, SEASON)
+
+
+def test_blank_end_week_does_not_abort_the_load(state):
+    """end_week is text and the extractor writes '' when Yahoo omits it;
+    a bare ::int cast on that rolls back an otherwise good load."""
+    with state.engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO public.leagues (league_id, season, end_week) "
+            "VALUES (:l, :s, '')"), {'l': NEW_L, 's': str(SEASON)})
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              week_delta(NEW_L, 5))
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            "SELECT count(*) FROM public.matchups WHERE league_id = :l"),
+            {'l': NEW_L}).scalar() > 0

@@ -216,50 +216,70 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
     return data
 
 
-def apply_pending_migrations(database_url):
-    """Apply edw migrations that this database has not yet recorded.
+def pending_migrations(engine):
+    """Migration filenames this database has not recorded. Read-only."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        exists = conn.execute(text(
+            "SELECT to_regclass('public.pipeline_migrations')")).scalar()
+        done = set()
+        if exists:
+            done = {r[0] for r in conn.execute(text(
+                "SELECT filename FROM public.pipeline_migrations"))}
+    return [os.path.basename(p)
+            for p in sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql')))
+            if os.path.basename(p) not in done]
+
+
+def apply_pending_migrations(engine):
+    """Apply edw migrations this database has not yet recorded.
 
     The incremental path depends on constraints these migrations add; a
     database without them fails mid-run with an opaque "no unique or
     exclusion constraint matching the ON CONFLICT specification". Each
     migration is idempotent, but applied-tracking keeps runs cheap and
     makes the state auditable.
-    """
-    from sqlalchemy import create_engine, text
-    engine = create_engine(database_url.replace('postgres://', 'postgresql://', 1))
-    try:
-        with engine.begin() as conn:
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS public.pipeline_migrations (
-                    filename    text PRIMARY KEY,
-                    applied_at  timestamptz NOT NULL DEFAULT now()
-                )
-            """))
-        with engine.connect() as conn:
-            done = {r[0] for r in conn.execute(text(
-                "SELECT filename FROM public.pipeline_migrations"))}
 
-        files = sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql')))
-        for path in files:
-            name = os.path.basename(path)
-            if name in done:
-                continue
-            logger.info("Applying migration %s", name)
-            with open(path) as f:
-                sql = f.read()
-            # Each file manages its own BEGIN/COMMIT, so run it outside a
-            # SQLAlchemy transaction and record it separately.
-            with engine.connect().execution_options(
-                    isolation_level='AUTOCOMMIT') as conn:
-                conn.execute(text(sql))
-            with engine.begin() as conn:
-                conn.execute(text(
-                    "INSERT INTO public.pipeline_migrations (filename) "
-                    "VALUES (:f) ON CONFLICT (filename) DO NOTHING"),
-                    {'f': name})
-        return len(files) - len(done)
-    finally:
-        engine.dispose()
+    Call this with the pipeline advisory lock HELD. Schema migration is
+    pipeline work: two runs starting together against an unmigrated
+    database would otherwise execute the same backfill concurrently.
+
+    Returns the number of migrations applied by this call.
+    """
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS public.pipeline_migrations (
+                filename    text PRIMARY KEY,
+                applied_at  timestamptz NOT NULL DEFAULT now()
+            )
+        """))
+    with engine.connect() as conn:
+        done = {r[0] for r in conn.execute(text(
+            "SELECT filename FROM public.pipeline_migrations"))}
+
+    applied = 0
+    for path in sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql'))):
+        name = os.path.basename(path)
+        if name in done:
+            continue
+        logger.info("Applying migration %s", name)
+        with open(path) as f:
+            sql = f.read()
+        # Each file manages its own BEGIN/COMMIT, so run it outside a
+        # SQLAlchemy transaction and record it separately. exec_driver_sql
+        # passes the text through verbatim - text() would read any :token
+        # in the file as a bind parameter and fail on SQL it cannot bind.
+        with engine.connect().execution_options(
+                isolation_level='AUTOCOMMIT') as conn:
+            conn.exec_driver_sql(sql)
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO public.pipeline_migrations (filename) "
+                "VALUES (:f) ON CONFLICT (filename) DO NOTHING"),
+                {'f': name})
+        applied += 1
+    return applied
 
 
 def write_run_snapshot(data, league_id, season):
@@ -316,11 +336,6 @@ def run(args) -> int:
                     "use --force to run anyway. Exiting cleanly.")
         return 0
 
-    # Before anything touches the warehouse: the incremental path's upserts
-    # require constraints these migrations add, and without them a run fails
-    # mid-flight on an opaque ON CONFLICT error, every time.
-    apply_pending_migrations(args.database_url)
-
     state = PipelineState(args.database_url)
     try:
         try:
@@ -331,6 +346,19 @@ def run(args) -> int:
             return 0
 
         try:
+            # Under the lock, and never on a dry run: the incremental path's
+            # upserts need the constraints these migrations add, but a run
+            # that promises to change nothing must not migrate a database.
+            if args.dry_run:
+                pending = pending_migrations(state.engine)
+                if pending:
+                    logger.warning(
+                        "%d migration(s) not applied to this database (%s). "
+                        "A real run would apply them first.",
+                        len(pending), ', '.join(pending))
+            else:
+                apply_pending_migrations(state.engine)
+
             return _run_locked(args, state)
         finally:
             lock_ctx.__exit__(None, None, None)
