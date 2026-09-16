@@ -103,3 +103,7 @@ Desktop.ini
 # Note: web/ directory is tracked in git and has its own .gitignore
 # that properly excludes build artifacts (node_modules, .svelte-kit, .env, etc.)
 .vercel
+
+# Per-run extraction snapshots: audit artifacts, uploaded by CI, never tracked
+# (the retention policy keeps only the canonical baseline snapshot in-repo)
+data/runs/

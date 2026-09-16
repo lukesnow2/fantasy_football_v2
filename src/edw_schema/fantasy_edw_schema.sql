@@ -45,7 +45,11 @@ CREATE TABLE dim_league (
     is_active BOOLEAN DEFAULT TRUE,
     valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- The incremental loader upserts ON CONFLICT (league_id, season_year);
+    -- without this constraint that statement errors and new seasons never land.
+    UNIQUE (league_id, season_year)
 );
 
 CREATE INDEX idx_league_id ON dim_league (league_id);
@@ -69,7 +73,11 @@ CREATE TABLE dim_team (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
-    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key)
+    FOREIGN KEY (manager_key) REFERENCES dim_manager(manager_key),
+
+    -- The incremental loader upserts ON CONFLICT (team_id); without this
+    -- constraint that statement errors and new teams never land.
+    UNIQUE (team_id)
 );
 
 CREATE INDEX idx_team_id ON dim_team (team_id);
@@ -312,6 +320,10 @@ CREATE INDEX idx_scores ON fact_matchup (team1_points, team2_points);
 -- Fact: Transactions (Player movements)
 CREATE TABLE fact_transaction (
     transaction_key SERIAL PRIMARY KEY,
+    -- Yahoo's transaction key (e.g. "153.l.76788.tr.1"). With player_key this
+    -- is the business key republication upserts on; without it a re-run
+    -- duplicates every row it reloads.
+    source_transaction_id VARCHAR(100),
     league_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
     
@@ -346,7 +358,9 @@ CREATE TABLE fact_transaction (
     FOREIGN KEY (from_team_key) REFERENCES dim_team(team_key),
     FOREIGN KEY (to_team_key) REFERENCES dim_team(team_key),
     FOREIGN KEY (from_manager_key) REFERENCES dim_manager(manager_key),
-    FOREIGN KEY (to_manager_key) REFERENCES dim_manager(manager_key)
+    FOREIGN KEY (to_manager_key) REFERENCES dim_manager(manager_key),
+
+    UNIQUE (source_transaction_id, player_key)
 );
 
 -- Indexes for fact_transaction
@@ -855,8 +869,10 @@ ALTER TABLE fact_team_performance ADD CONSTRAINT chk_win_percentage
 ALTER TABLE fact_matchup ADD CONSTRAINT chk_point_difference 
     CHECK (point_difference = ABS(team1_points - team2_points));
 
-ALTER TABLE fact_roster ADD CONSTRAINT chk_weekly_points 
-    CHECK (weekly_points >= 0);
+-- No weekly_points >= 0 check: negative fantasy scores are legitimate
+-- (missed kicks, interceptions, defenses giving up points). 365 rows in the
+-- 2005-2025 history score below zero, low of -4, so the old constraint made
+-- fact_roster unloadable.
 
 ALTER TABLE fact_draft ADD CONSTRAINT chk_draft_position 
     CHECK (overall_pick > 0 AND round_number > 0 AND pick_in_round > 0);

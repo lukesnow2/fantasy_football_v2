@@ -192,19 +192,42 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
                     f"edw.{t} shrank {before} -> {after} "
                     f"(more than {MAX_SHRINK_FRACTION:.0%}) - refusing to publish")
 
+        # Every entity the raw layer holds for a period must be visible in the
+        # EDW after refresh. Checking statistics alone once let a whole
+        # season's matchups vanish (missing dim_week rows) while the refresh
+        # reported success, so each entity is compared against its own raw
+        # source: raw rows but no published rows means the transform dropped
+        # them, almost always an unresolved dimension key.
+        entity_checks = (
+            ('statistics', 'public.statistics',
+             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics "
+             "WHERE season_year = :s AND week_number = :w)",
+             "SELECT EXISTS (SELECT 1 FROM public.statistics "
+             "WHERE league_id = :l AND week_number = :w)"),
+            ('matchups', 'public.matchups',
+             "SELECT EXISTS (SELECT 1 FROM edw.fact_matchup fm "
+             "JOIN edw.dim_week dw ON fm.week_key = dw.week_key "
+             "WHERE fm.season_year = :s AND dw.week_number = :w)",
+             "SELECT EXISTS (SELECT 1 FROM public.matchups "
+             "WHERE league_id = :l AND week = :w)"),
+            ('rosters', 'public.rosters',
+             "SELECT EXISTS (SELECT 1 FROM edw.fact_roster fr "
+             "JOIN edw.dim_week dw ON fr.week_key = dw.week_key "
+             "WHERE dw.season_year = :s AND dw.week_number = :w)",
+             "SELECT EXISTS (SELECT 1 FROM public.rosters "
+             "WHERE league_id = :l AND week = :w)"),
+        )
+
         for league_id, season, week in periods:
-            visible = conn.execute(text(
-                "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics "
-                "WHERE season_year = :s AND week_number = :w)"),
-                {'s': season, 'w': week}).scalar()
-            if not visible:
-                # Statistics may legitimately be empty for a period whose
-                # raw load carried no statistics rows (e.g. pre-first-week
-                # draft-only loads never reach here; but a bye-shaped
-                # anomaly should fail loudly rather than publish blind).
-                raise PublishVerificationError(
-                    f"period {league_id} {season} w{week} not visible in "
-                    "edw.fact_player_statistics after refresh")
+            params = {'l': league_id, 's': season, 'w': week}
+            for entity, raw_table, edw_sql, raw_sql in entity_checks:
+                if not conn.execute(text(raw_sql), params).scalar():
+                    continue  # nothing raw to publish for this entity
+                if not conn.execute(text(edw_sql), params).scalar():
+                    raise PublishVerificationError(
+                        f"period {league_id} {season} w{week}: {raw_table} has "
+                        f"rows but none are visible in the EDW after refresh "
+                        f"(check dimension coverage for {entity})")
     return report
 
 

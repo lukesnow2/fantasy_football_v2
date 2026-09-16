@@ -43,8 +43,23 @@ def state(test_db):
             ' league_key text, season_year int, week_number int,'
             ' weekly_fantasy_points float)'))
         conn.execute(text(
+            'CREATE TABLE edw.dim_week (week_key serial primary key,'
+            ' season_year int, week_number int)'))
+        conn.execute(text(
             'CREATE TABLE edw.fact_matchup (league_key text, season_year int,'
-            ' week int, team1 text, team2 text)'))
+            ' week_key int, team1 text, team2 text)'))
+        conn.execute(text(
+            'CREATE TABLE edw.fact_roster (week_key int, player_key int)'))
+        # Raw sources the verification gate compares the EDW against.
+        for ddl in (
+            'CREATE TABLE IF NOT EXISTS public.statistics ('
+            ' league_id text, week_number int)',
+            'CREATE TABLE IF NOT EXISTS public.matchups (league_id text, week int)',
+            'CREATE TABLE IF NOT EXISTS public.rosters (league_id text, week int)',
+        ):
+            conn.execute(text(ddl))
+        conn.execute(text('TRUNCATE public.statistics, public.matchups,'
+                          ' public.rosters'))
         conn.execute(text(
             'CREATE VIEW edw.vw_totals AS SELECT season_year,'
             ' sum(weekly_fantasy_points) AS pts'
@@ -56,8 +71,16 @@ def state(test_db):
             conn.execute(text(
                 'INSERT INTO edw.fact_player_statistics VALUES '
                 f"('{L}', {S}, {w}, 10.0), ('{L}', {S}, {w}, 12.0)"))
+            wk = conn.execute(text(
+                'INSERT INTO edw.dim_week (season_year, week_number)'
+                f' VALUES ({S}, {w}) RETURNING week_key')).scalar()
             conn.execute(text(
-                f"INSERT INTO edw.fact_matchup VALUES ('{L}', {S}, {w}, 'a', 'b')"))
+                f"INSERT INTO edw.fact_matchup VALUES ('{L}', {S}, {wk}, 'a', 'b')"))
+            conn.execute(text(f'INSERT INTO edw.fact_roster VALUES ({wk}, 1)'))
+            conn.execute(text(
+                f"INSERT INTO public.statistics VALUES ('{L}', {w})"))
+            conn.execute(text(f"INSERT INTO public.matchups VALUES ('{L}', {w})"))
+            conn.execute(text(f"INSERT INTO public.rosters VALUES ('{L}', {w})"))
     # Mark weeks 1-2 as raw-complete so publish flags have rows to update.
     with st.engine.begin() as conn:
         for w in (1, 2):
@@ -151,12 +174,18 @@ def test_invisible_period_fails_verification(state):
     with state.engine.begin() as conn:
         state.mark_raw_complete(conn, L, S, 9, {'matchups': 1, 'rosters': 1,
                                                 'statistics': 1})
+        # Raw rows exist for week 9, so a refresh that publishes nothing for
+        # it is the silent-drop case the gate must catch.
+        conn.execute(text(f"INSERT INTO public.statistics VALUES ('{L}', 9)"))
+        conn.execute(text(f"INSERT INTO public.matchups VALUES ('{L}', 9)"))
+        conn.execute(text(f"INSERT INTO public.rosters VALUES ('{L}', 9)"))
 
     def refresh_that_skips_week9():
         return True  # commits nothing for week 9
 
     before = edw_state(state)
-    with pytest.raises(pub.PublishVerificationError, match='w9 not visible'):
+    with pytest.raises(pub.PublishVerificationError,
+                       match='w9: public.statistics has rows'):
         pub.publish(state, [(L, S, 9)], refresh_that_skips_week9)
     assert edw_state(state) == before
     assert 9 not in state.published_weeks(L, S)
@@ -164,7 +193,8 @@ def test_invisible_period_fails_verification(state):
 
 def test_snapshot_clones_views_in_dependency_order(state):
     tables = pub.clone_edw_snapshot(state.engine)
-    assert set(tables) == {'fact_player_statistics', 'fact_matchup'}
+    assert set(tables) == {'fact_player_statistics', 'fact_matchup',
+                           'fact_roster', 'dim_week'}
     with state.engine.connect() as conn:
         views = sorted(r[0] for r in conn.execute(text(
             "SELECT viewname FROM pg_views WHERE schemaname='edw_prev'")))

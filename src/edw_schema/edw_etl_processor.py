@@ -79,38 +79,59 @@ class EdwEtlProcessor:
     # Example: EXCLUDED_LEAGUE_IDS = {"449.l.999999"}  # Remove if added by mistake
     EXCLUDED_LEAGUE_IDS = set()
     
-    # EDW table processing strategies aligned with operational table changes
+    # EDW table processing strategies aligned with operational table changes.
+    #
+    # Each entry must list the DIMENSIONS its facts resolve keys against, not
+    # just the facts themselves. Dimensions are processed before facts, and a
+    # fact row whose dimension key is missing is silently dropped - which is
+    # how a new season's matchups (no dim_week rows) and rookies' statistics
+    # (no dim_player rows) vanished while the refresh reported success.
     EDW_PROCESSING_STRATEGIES = {
         'leagues': {
-            'triggers_refresh': ['dim_league', 'mart_league_summary'],
+            'triggers_refresh': ['dim_season', 'dim_week', 'dim_league',
+                                 'mart_league_summary'],
             'refresh_type': 'INCREMENTAL',  # Only changed leagues
             'depends_on': 'operational_leagues'
         },
         'teams': {
-            'triggers_refresh': ['dim_team', 'fact_team_performance', 'mart_manager_performance'],
+            'triggers_refresh': ['dim_league', 'dim_manager', 'dim_team',
+                                 'fact_team_performance', 'mart_manager_performance'],
             'refresh_type': 'INCREMENTAL',  # Only changed teams
             'depends_on': 'operational_teams'
         },
 
         'matchups': {
-            'triggers_refresh': ['fact_matchup', 'mart_league_summary', 'vw_league_competitiveness'],
+            'triggers_refresh': ['dim_season', 'dim_week', 'dim_league', 'dim_team',
+                                 'fact_matchup', 'mart_league_summary',
+                                 'vw_league_competitiveness'],
             'refresh_type': 'WEEKLY',  # Full refresh for current week
             'depends_on': 'operational_matchups'
         },
         'transactions': {
-            'triggers_refresh': ['fact_transaction', 'mart_player_value', 'vw_trade_analysis'],
+            'triggers_refresh': ['dim_player', 'dim_team', 'dim_manager',
+                                 'fact_transaction', 'mart_player_value',
+                                 'vw_trade_analysis'],
             'refresh_type': 'APPEND',  # Only new transactions
             'depends_on': 'operational_transactions'
         },
         'draft_picks': {
-            'triggers_refresh': ['fact_draft', 'mart_player_value'],
+            'triggers_refresh': ['dim_player', 'dim_team', 'dim_manager',
+                                 'fact_draft', 'mart_player_value'],
             'refresh_type': 'APPEND',  # Only new draft picks
             'depends_on': 'operational_draft_picks'
         },
         'statistics': {
-            'triggers_refresh': ['fact_player_statistics', 'fact_draft', 'mart_player_value', 'fact_team_performance'],
+            'triggers_refresh': ['dim_season', 'dim_week', 'dim_player',
+                                 'fact_player_statistics', 'fact_draft',
+                                 'mart_player_value', 'fact_team_performance'],
             'refresh_type': 'UPSERT',  # Update existing, insert new
             'depends_on': 'operational_statistics'
+        },
+        'rosters': {
+            'triggers_refresh': ['dim_season', 'dim_week', 'dim_player', 'dim_team',
+                                 'fact_roster', 'fact_team_performance'],
+            'refresh_type': 'WEEKLY',
+            'depends_on': 'operational_rosters'
         }
     }
     
@@ -1563,6 +1584,10 @@ class EdwEtlProcessor:
                 faab_bid = None
             
             facts.append({
+                # Yahoo's transaction key plus the player it moved: the business
+                # key a re-run upserts on. Without it this table had only a
+                # surrogate PK and would duplicate on every republication.
+                'source_transaction_id': str(transaction['transaction_id']),
                 'league_key': int(league_key),
                 'player_key': int(player_key),
                 'season_year': int(season_year),
@@ -2831,7 +2856,15 @@ class EdwEtlProcessor:
                         else:
                             logger.error(f"❌ Failed to process {table}")
                             return False
-            
+
+                    if category == "dimensions":
+                        # Fact transforms resolve surrogate keys through an
+                        # in-memory cache. Rebuild it now that this run's new
+                        # dimension rows exist, or facts referencing them (a
+                        # new season's league, teams and players) resolve to
+                        # None and are silently dropped.
+                        self.cache_dimension_mappings()
+
             # PHASE 2: Check for additional views that need refreshing based on what was actually processed
             logger.info("🔍 Checking for additional view dependencies...")
             views_to_refresh = self.determine_views_to_refresh()
@@ -2887,38 +2920,35 @@ class EdwEtlProcessor:
     def process_dimension_table(self, table_name: str) -> bool:
         """Process dimension table with incremental strategy"""
         try:
-            if table_name == 'dim_season':
-                seasons = self.extract_seasons()
-                if seasons:
-                    self.load_dimension_table('dim_season', seasons)
-                    self.refreshed_tables.add(table_name)  # Track refreshed table
-                    
-            elif table_name == 'dim_week':
-                weeks = self.extract_weeks()
-                if weeks:
-                    self.load_dimension_table('dim_week', weeks)
-                    self.refreshed_tables.add(table_name)  # Track refreshed table
-                    
-            elif table_name == 'dim_league':
-                leagues = self.transform_leagues()
-                if leagues:
-                    self.load_dimension_table('dim_league', leagues)
-                    self.refreshed_tables.add(table_name)  # Track refreshed table
-                    
-            elif table_name == 'dim_team':
-                teams = self.transform_teams()
-                if teams:
-                    self.load_dimension_table('dim_team', teams)
-                    self.refreshed_tables.add(table_name)  # Track refreshed table
-                    
-            elif table_name == 'dim_player':
-                players = self.transform_players()
-                if players:
-                    self.load_dimension_table('dim_player', players)
-                    self.refreshed_tables.add(table_name)  # Track refreshed table
-                    
+            # load_dimension_table returns False on failure. Discarding that
+            # let a broken dim_team upsert log an error and still report the
+            # dimension as processed, so new teams silently never landed.
+            extractors = {
+                'dim_season': self.extract_seasons,
+                'dim_week': self.extract_weeks,
+                'dim_league': self.transform_leagues,
+                'dim_team': self.transform_teams,
+                'dim_player': self.transform_players,
+                'dim_manager': self.transform_managers,
+            }
+
+            extractor = extractors.get(table_name)
+            if extractor is None:
+                logger.warning(f"⚠️ No dimension extractor for {table_name}")
+                return True
+
+            records = extractor()
+            if not records:
+                logger.info(f"📊 No records to load for {table_name}")
+                return True
+
+            if not self.load_dimension_table(table_name, records):
+                logger.error(f"❌ Dimension load failed for {table_name}")
+                return False
+
+            self.refreshed_tables.add(table_name)
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to process dimension {table_name}: {e}")
             return False
@@ -3057,19 +3087,37 @@ class EdwEtlProcessor:
                         """), record)
                         
                 elif table_name == 'dim_manager':
+                    # Column list must match transform_managers' records and the
+                    # actual table; the previous version named columns that exist
+                    # in neither (first_active_season, valid_from, valid_to) and
+                    # failed on every run once it was reachable.
                     for record in data:
                         conn.execute(text("""
-                            INSERT INTO edw.dim_manager (manager_name, first_active_season, 
-                                                   last_active_season, total_seasons, is_active, 
-                                                   valid_from, valid_to)
-                            VALUES (:manager_name, :first_active_season, :last_active_season,
-                                   :total_seasons, :is_active, :valid_from, :valid_to)
+                            INSERT INTO edw.dim_manager (manager_name, manager_id,
+                                                   first_season_year, last_season_year,
+                                                   total_seasons, total_leagues,
+                                                   is_current, include_in_analysis,
+                                                   email, display_name,
+                                                   profile_image_url, is_active)
+                            VALUES (:manager_name, :manager_id,
+                                    :first_season_year, :last_season_year,
+                                    :total_seasons, :total_leagues,
+                                    :is_current, :include_in_analysis,
+                                    :email, :display_name,
+                                    :profile_image_url, :is_active)
                             ON CONFLICT (manager_name) DO UPDATE SET
-                                first_active_season = EXCLUDED.first_active_season,
-                                last_active_season = EXCLUDED.last_active_season,
+                                manager_id = EXCLUDED.manager_id,
+                                first_season_year = EXCLUDED.first_season_year,
+                                last_season_year = EXCLUDED.last_season_year,
                                 total_seasons = EXCLUDED.total_seasons,
+                                total_leagues = EXCLUDED.total_leagues,
+                                is_current = EXCLUDED.is_current,
+                                include_in_analysis = EXCLUDED.include_in_analysis,
+                                email = EXCLUDED.email,
+                                display_name = EXCLUDED.display_name,
+                                profile_image_url = EXCLUDED.profile_image_url,
                                 is_active = EXCLUDED.is_active,
-                                valid_to = EXCLUDED.valid_to
+                                updated_at = CURRENT_TIMESTAMP
                         """), record)
                         
                 else:
@@ -3210,12 +3258,19 @@ class EdwEtlProcessor:
             if not data:
                 logger.info(f"📊 No data to load for {table_name}")
                 return True
-                
+
             logger.info(f"📊 Loading {len(data)} records into {table_name}")
-            
+
             # Convert to DataFrame for processing
             df = pd.DataFrame(data)
-            
+
+            # A DataFrame turns None in a numeric column into NaN. to_sql maps
+            # that back to NULL, but the row-wise upserts below bind values
+            # directly, where NaN reaches Postgres as an out-of-range integer.
+            # Nullable FKs (from_team_key on a free-agent add, for example) are
+            # legitimately absent, so restore them to None.
+            df = df.astype(object).where(pd.notnull(df), None)
+
             with self.engine.connect() as conn:
                 if self.force_rebuild:
                     # Force rebuild: truncate and reload all data
@@ -3280,14 +3335,14 @@ class EdwEtlProcessor:
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
                         
                     elif table_name in ['fact_transaction', 'fact_draft', 'fact_player_statistics']:
-                        # Append-only tables: use bulk insert (let database handle duplicates)
-                        logger.info(f"🔄 Using bulk insert for append-only table {table_name}")
-                        
-                        # Remove transaction_id column if it exists (not in table schema)
-                        if 'transaction_id' in df.columns:
-                            df = df.drop('transaction_id', axis=1)
-                            
-                        # For statistics, use UPSERT strategy since we may update stats
+                        # Event tables. The transform reads the full history from
+                        # public.*, so an append would re-insert rows that already
+                        # exist. Every one of these upserts on its business key
+                        # instead, which makes a re-run converge rather than fail
+                        # (fact_draft, fact_player_statistics) or silently
+                        # duplicate (fact_transaction).
+                        logger.info(f"🔄 Using business-key UPSERT for event table {table_name}")
+
                         if table_name == 'fact_player_statistics':
                             logger.info(f"🔄 Using UPSERT strategy for {table_name}")
                             # Convert DataFrame to records for individual upsert
@@ -3310,11 +3365,66 @@ class EdwEtlProcessor:
                                 """)
                                 conn.execute(upsert_sql, row.to_dict())
                             logger.info(f"✅ Upserted {len(df)} statistics records")
+
+                        elif table_name == 'fact_draft':
+                            upsert_sql = text("""
+                                INSERT INTO edw.fact_draft
+                                (league_key, team_key, manager_key, player_key, season_year,
+                                 overall_pick, round_number, pick_in_round, draft_type, draft_cost,
+                                 is_keeper_pick, season_points, fantasy_games_played, points_per_week)
+                                VALUES (:league_key, :team_key, :manager_key, :player_key, :season_year,
+                                        :overall_pick, :round_number, :pick_in_round, :draft_type, :draft_cost,
+                                        :is_keeper_pick, :season_points, :fantasy_games_played, :points_per_week)
+                                ON CONFLICT (league_key, season_year, overall_pick)
+                                DO UPDATE SET
+                                    team_key = EXCLUDED.team_key,
+                                    manager_key = EXCLUDED.manager_key,
+                                    player_key = EXCLUDED.player_key,
+                                    round_number = EXCLUDED.round_number,
+                                    pick_in_round = EXCLUDED.pick_in_round,
+                                    draft_type = EXCLUDED.draft_type,
+                                    draft_cost = EXCLUDED.draft_cost,
+                                    is_keeper_pick = EXCLUDED.is_keeper_pick,
+                                    season_points = EXCLUDED.season_points,
+                                    fantasy_games_played = EXCLUDED.fantasy_games_played,
+                                    points_per_week = EXCLUDED.points_per_week
+                            """)
+                            for _, row in df.iterrows():
+                                conn.execute(upsert_sql, row.to_dict())
+                            logger.info(f"✅ Upserted {len(df)} draft records")
+
+                        elif table_name == 'fact_transaction':
+                            upsert_sql = text("""
+                                INSERT INTO edw.fact_transaction
+                                (source_transaction_id, league_key, season_year, transaction_type,
+                                 transaction_date, transaction_week, player_key, from_team_key, to_team_key,
+                                 from_manager_key, to_manager_key, faab_bid, trade_group_id, transaction_status)
+                                VALUES (:source_transaction_id, :league_key, :season_year, :transaction_type,
+                                        :transaction_date, :transaction_week, :player_key, :from_team_key, :to_team_key,
+                                        :from_manager_key, :to_manager_key, :faab_bid, :trade_group_id, :transaction_status)
+                                ON CONFLICT (source_transaction_id, player_key)
+                                DO UPDATE SET
+                                    league_key = EXCLUDED.league_key,
+                                    season_year = EXCLUDED.season_year,
+                                    transaction_type = EXCLUDED.transaction_type,
+                                    transaction_date = EXCLUDED.transaction_date,
+                                    transaction_week = EXCLUDED.transaction_week,
+                                    from_team_key = EXCLUDED.from_team_key,
+                                    to_team_key = EXCLUDED.to_team_key,
+                                    from_manager_key = EXCLUDED.from_manager_key,
+                                    to_manager_key = EXCLUDED.to_manager_key,
+                                    faab_bid = EXCLUDED.faab_bid,
+                                    trade_group_id = EXCLUDED.trade_group_id,
+                                    transaction_status = EXCLUDED.transaction_status
+                            """)
+                            for _, row in df.iterrows():
+                                conn.execute(upsert_sql, row.to_dict())
+                            logger.info(f"✅ Upserted {len(df)} transaction records")
+
                         else:
-                            # Use bulk insert for other tables
                             df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
                             logger.info(f"✅ Bulk inserted {len(df)} records")
-                        
+
                     else:
                         logger.warning(f"⚠️ No incremental loading strategy for {table_name}, using bulk insert")
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
