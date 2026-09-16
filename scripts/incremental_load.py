@@ -28,11 +28,12 @@ import logging
 import os
 import sys
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.extractors.comprehensive_data_extractor import (  # noqa: E402
-    YahooFantasyExtractor, completed_weeks)
+    YahooFantasyExtractor, completed_weeks, week_is_complete)
 from src.pipeline import raw_loader, publish as pub  # noqa: E402
 from src.pipeline.state import PipelineState, LockHeld  # noqa: E402
 
@@ -62,6 +63,19 @@ def current_season_year(now=None):
     return now.year - 1 if now.month <= 7 else now.year
 
 
+def local_hour_matches(hour, tz_name, now=None):
+    """True when it is currently `hour` in `tz_name`.
+
+    GitHub cron only speaks UTC and does not follow daylight saving, so a
+    fixed UTC time drifts an hour against Mountain Time mid-season. The
+    workflow schedules both candidate UTC hours and this gate lets exactly
+    the right one through, keeping the real-world slot fixed year-round.
+    """
+    tz = ZoneInfo(tz_name)
+    now = now.astimezone(tz) if now else datetime.now(tz)
+    return now.hour == hour
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -87,6 +101,12 @@ def parse_args(argv=None):
     p.add_argument('--reload-window', type=int, default=2,
                    help='Recent complete weeks to re-fetch for stat '
                         'corrections (default 2)')
+    p.add_argument('--require-local-hour', type=int, metavar='HH',
+                   help='Exit 0 unless it is this hour in --local-tz. Lets a '
+                        'UTC-only scheduler hold a fixed local time across DST')
+    p.add_argument('--local-tz', default='America/Denver',
+                   help='Timezone for --require-local-hour '
+                        '(default America/Denver)')
     return p.parse_args(argv)
 
 
@@ -124,10 +144,38 @@ def resolve_league(extractor, state, args):
     return league_id, season, league, not known
 
 
-def yahoo_completed_weeks(league) -> list:
+def yahoo_completed_weeks(league, already_complete=()) -> list:
+    """Weeks Yahoo reports as finished.
+
+    Weeks we have already recorded complete stay complete - play does not
+    un-finish - so only the candidates beyond them are probed, and each is
+    confirmed with Yahoo's own per-week scoreboard status. That keeps this
+    to one or two API calls while removing the dependency on when Yahoo
+    advances current_week: a Tuesday-morning run must not read Monday
+    night's finished week as still in progress just because the season
+    pointer has not moved yet.
+    """
     settings = league.settings()
-    return completed_weeks(int(settings.get('current_week', 1)),
-                           int(settings.get('end_week', 17)),
+    current_week = int(settings.get('current_week', 1))
+    end_week = int(settings.get('end_week', 17))
+
+    settled = set(already_complete)
+    # current_week itself can be finished (Yahoo may not have advanced yet),
+    # so it is a candidate too.
+    candidates = [w for w in range(1, min(current_week, end_week) + 1)
+                  if w not in settled]
+
+    confirmed = set(settled)
+    for week in candidates:
+        if week_is_complete(league, week):
+            confirmed.add(week)
+
+    if confirmed:
+        return sorted(confirmed)
+
+    # No scoreboard answered (preseason, or an unexpected shape): fall back
+    # to the settings-level inference rather than reporting nothing.
+    return completed_weeks(current_week, end_week,
                            settings.get('is_finished', ''))
 
 
@@ -201,6 +249,14 @@ def run(args) -> int:
         logger.error("DATABASE_URL is required")
         return 2
 
+    # Cheapest gate first: costs no database connection and no Yahoo call.
+    if args.require_local_hour is not None and not local_hour_matches(
+            args.require_local_hour, args.local_tz):
+        logger.info("Not %02d:00 in %s - this is the off-DST twin of the "
+                    "scheduled run. Exiting cleanly.",
+                    args.require_local_hour, args.local_tz)
+        return 0
+
     if not (args.force or args.season or args.weeks or is_fantasy_season()):
         logger.info("Outside the fantasy season window (Aug 18 - Jan 18); "
                     "use --force to run anyway. Exiting cleanly.")
@@ -257,7 +313,9 @@ def _run_locked(args, state) -> int:
                          row_counts={'noop': 'predraft'})
         return 0
 
-    completed = yahoo_completed_weeks(league)
+    # Weeks already recorded raw-complete need no re-confirmation from Yahoo.
+    completed = yahoo_completed_weeks(
+        league, state.raw_complete_weeks(league_id, season))
 
     # 3. Compute the gap (or take explicit scope).
     if args.weeks:

@@ -48,7 +48,7 @@ logging.getLogger('yahoo_oauth').setLevel(logging.INFO)
 
 
 def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
-    """Weeks whose play is complete, per the league's own signals.
+    """Weeks whose play is complete, inferred from league-level settings.
 
     current_week == end_week both while the final week is in progress AND
     after the season ends, so the pair alone cannot decide the final week -
@@ -56,6 +56,11 @@ def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
     historical expression min(current_week, end_week + 1) as a range stop
     silently dropped every season's final (championship) week - verified
     missing from all 21 seasons in production.
+
+    This is the coarse fallback. It depends on Yahoo advancing current_week,
+    which happens at an unspecified time after Monday night, so it can read a
+    just-finished week as still in progress. Prefer week_is_complete(), which
+    asks Yahoo about the specific week instead of inferring.
     """
     finished = str(is_finished) in ('1', 'True', 'true')
     if finished:
@@ -63,6 +68,34 @@ def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
     else:
         last_complete = min(current_week - 1, end_week)
     return list(range(1, last_complete + 1))
+
+
+def matchup_status(league, week: int) -> Optional[str]:
+    """Yahoo's own status for a week's scoreboard.
+
+    'preevent' / 'midevent' / 'postevent', or None when the week has no
+    scoreboard (Yahoo returns an exceptions block for weeks that never
+    happened). Authoritative per week and, unlike current_week, does not
+    depend on when Yahoo rolls the season forward.
+    """
+    scoreboard = league.matchups(week)
+    try:
+        matchups = (scoreboard['fantasy_content']['league'][1]
+                    ['scoreboard']['0']['matchups'])
+    except (KeyError, IndexError, TypeError):
+        return None
+    for key, entry in matchups.items():
+        if not key.isdigit():
+            continue
+        status = entry.get('matchup', {}).get('status')
+        if status:
+            return str(status)
+    return None
+
+
+def week_is_complete(league, week: int) -> bool:
+    """True when Yahoo reports this week's play as finished."""
+    return matchup_status(league, week) == 'postevent'
 
 @dataclass
 class ExtractedLeague:
