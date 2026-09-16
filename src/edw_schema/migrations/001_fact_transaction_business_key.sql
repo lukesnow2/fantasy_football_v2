@@ -64,9 +64,27 @@ FROM fact_rows
 JOIN raw_rows USING (league_id, player_id, transaction_type, on_date, seq)
 WHERE ft.transaction_key = fact_rows.transaction_key;
 
--- Anything the backfill could not identify has no source row to match and
--- would break the unique constraint's purpose; there should be none.
-DELETE FROM edw.fact_transaction WHERE source_transaction_id IS NULL;
+-- Anything the backfill could not identify has no source row to match. Do
+-- NOT delete it: run this against a warehouse whose public.transactions is
+-- empty or partial -- an edw-only restore, or a cutover target seeded before
+-- the raw tables land -- and a blanket delete empties the table and every
+-- transaction-derived view on the site. Stop instead, so the operator sees
+-- the unmet precondition rather than losing the data.
+DO $$
+DECLARE
+    unmatched bigint;
+BEGIN
+    SELECT count(*) INTO unmatched
+    FROM edw.fact_transaction WHERE source_transaction_id IS NULL;
+
+    IF unmatched > 0 THEN
+        RAISE EXCEPTION
+            'migration 001: % of % fact_transaction rows could not be matched '
+            'to public.transactions. Load the raw transactions first, then '
+            're-run. (Refusing to delete unmatched rows.)',
+            unmatched, (SELECT count(*) FROM edw.fact_transaction);
+    END IF;
+END $$;
 
 DO $$
 BEGIN

@@ -120,6 +120,30 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
             conn.execute(text(
                 f'INSERT INTO {dst}."{t}" SELECT * FROM {src}."{t}"'))
 
+        # LIKE ... INCLUDING ALL does NOT copy foreign keys, despite the
+        # name. Restoring such a snapshot promoted a schema with no
+        # referential integrity at all and silently dropped it for good -
+        # production carried 36 FKs while a restored database carried none.
+        # Replay them explicitly, after the data is in place so they validate.
+        fkeys = conn.execute(text("""
+            SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE contype = 'f' AND connamespace = CAST(:s AS regnamespace)
+            ORDER BY conname
+        """), {'s': src}).fetchall()
+        for qualified_table, conname, definition in fkeys:
+            table_only = qualified_table.split('.')[-1].strip('"')
+            # Definitions reference the source schema either explicitly or
+            # via search_path; rewrite the former and set the latter.
+            rewritten = definition.replace(f'{src}.', f'{dst}.')
+            conn.execute(text(f'SET LOCAL search_path TO {dst}'))
+            conn.execute(text(
+                f'ALTER TABLE {dst}."{table_only}" '
+                f'ADD CONSTRAINT "{conname}" {rewritten}'))
+        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+        if fkeys:
+            logger.info("Snapshot %s: replayed %d foreign keys", dst, len(fkeys))
+
         views = {r[0]: r[1] for r in conn.execute(text(
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
             "FROM pg_views WHERE schemaname = :s"), {'s': src})}
@@ -187,6 +211,13 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
             before = conn.execute(text(f'SELECT count(*) FROM {snapshot}."{t}"')).scalar()
             after = conn.execute(text(f'SELECT count(*) FROM edw."{t}"')).scalar()
             report[t] = {'before': before, 'after': after}
+            # A table that had rows and now has none is always a wipe, at
+            # any size. The fractional test needs enough rows to be
+            # meaningful, but gating the zero case on it too left small
+            # dimensions (dim_manager holds exactly 20) entirely unguarded.
+            if before > 0 and after == 0:
+                raise PublishVerificationError(
+                    f"edw.{t} emptied ({before} -> 0) - refusing to publish")
             if before > 20 and after < before * (1 - MAX_SHRINK_FRACTION):
                 raise PublishVerificationError(
                     f"edw.{t} shrank {before} -> {after} "
@@ -198,29 +229,58 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
         # reported success, so each entity is compared against its own raw
         # source: raw rows but no published rows means the transform dropped
         # them, almost always an unresolved dimension key.
+        # Both sides filter on the same league. Checking the EDW side on
+        # season/week alone meant another league's rows at the same week
+        # could satisfy the gate for a league whose data had been dropped -
+        # the very failure this gate exists to catch.
+        #
+        # Only entities this period actually holds raw data FOR are checked,
+        # read from its raw_*_complete flags. Checking every entity with any
+        # raw rows failed on pre-existing historical gaps that no refresh
+        # ever claimed to fill - edw.fact_roster was never built for old
+        # seasons - which is a different problem from a transform silently
+        # dropping what we just loaded.
         entity_checks = (
             ('statistics', 'public.statistics',
-             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics "
-             "WHERE season_year = :s AND week_number = :w)",
+             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics f "
+             "JOIN edw.dim_league dl ON dl.league_key = f.league_key "
+             "WHERE dl.league_id = :l AND f.season_year = :s "
+             "AND f.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.statistics "
              "WHERE league_id = :l AND week_number = :w)"),
             ('matchups', 'public.matchups',
              "SELECT EXISTS (SELECT 1 FROM edw.fact_matchup fm "
              "JOIN edw.dim_week dw ON fm.week_key = dw.week_key "
-             "WHERE fm.season_year = :s AND dw.week_number = :w)",
+             "JOIN edw.dim_league dl ON dl.league_key = fm.league_key "
+             "WHERE dl.league_id = :l AND fm.season_year = :s "
+             "AND dw.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.matchups "
              "WHERE league_id = :l AND week = :w)"),
             ('rosters', 'public.rosters',
              "SELECT EXISTS (SELECT 1 FROM edw.fact_roster fr "
              "JOIN edw.dim_week dw ON fr.week_key = dw.week_key "
-             "WHERE dw.season_year = :s AND dw.week_number = :w)",
+             "JOIN edw.dim_league dl ON dl.league_key = fr.league_key "
+             "WHERE dl.league_id = :l AND dw.season_year = :s "
+             "AND dw.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.rosters "
              "WHERE league_id = :l AND week = :w)"),
         )
 
         for league_id, season, week in periods:
             params = {'l': league_id, 's': season, 'w': week}
+            claimed = conn.execute(text(
+                "SELECT raw_matchups_complete, raw_rosters_complete, "
+                "raw_statistics_complete FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = :w"),
+                params).fetchone()
+            if claimed is None:
+                continue  # no recorded raw state: nothing is being claimed
+            holds = {'matchups': claimed[0], 'rosters': claimed[1],
+                     'statistics': claimed[2]}
+
             for entity, raw_table, edw_sql, raw_sql in entity_checks:
+                if not holds.get(entity):
+                    continue  # this period never claimed this entity
                 if not conn.execute(text(raw_sql), params).scalar():
                     continue  # nothing raw to publish for this entity
                 if not conn.execute(text(edw_sql), params).scalar():

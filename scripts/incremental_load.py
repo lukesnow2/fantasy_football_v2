@@ -42,6 +42,9 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger('incremental_load')
 
 RUNS_DIR = 'data/runs'
+MIGRATIONS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'src', 'edw_schema', 'migrations')
 
 # Raw tables -> EDW refresh triggers, matching EdwEtlProcessor's
 # EDW_PROCESSING_STRATEGIES keys.
@@ -181,9 +184,14 @@ def yahoo_completed_weeks(league, already_complete=()) -> list:
 
 def extract_scope(extractor, league_id, weeks, stats_only, is_new,
                   since, league_info_rows):
-    """Fetch the scoped delta from Yahoo. Errors raise - never empty-on-fail."""
-    data = {'leagues': [], 'teams': [], 'rosters': [], 'matchups': [],
-            'transactions': [], 'draft_picks': [], 'statistics': []}
+    """Fetch the scoped delta from Yahoo. Errors raise - never empty-on-fail.
+
+    Only keys the run actually fetched are present. load_delta treats an
+    absent key as "not fetched" and leaves that table untouched; a key
+    present but empty means "fetched, genuinely nothing". Pre-seeding every
+    key made --stats-only delete the period's matchups and rosters.
+    """
+    data = {}
 
     data['statistics'] = [s.__dict__ for s in
                           extractor.extract_statistics_for_league(league_id, weeks)]
@@ -206,6 +214,52 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
         data['draft_picks'] = [d.__dict__ for d in
                                extractor.extract_draft_for_league(league_id)]
     return data
+
+
+def apply_pending_migrations(database_url):
+    """Apply edw migrations that this database has not yet recorded.
+
+    The incremental path depends on constraints these migrations add; a
+    database without them fails mid-run with an opaque "no unique or
+    exclusion constraint matching the ON CONFLICT specification". Each
+    migration is idempotent, but applied-tracking keeps runs cheap and
+    makes the state auditable.
+    """
+    from sqlalchemy import create_engine, text
+    engine = create_engine(database_url.replace('postgres://', 'postgresql://', 1))
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS public.pipeline_migrations (
+                    filename    text PRIMARY KEY,
+                    applied_at  timestamptz NOT NULL DEFAULT now()
+                )
+            """))
+        with engine.connect() as conn:
+            done = {r[0] for r in conn.execute(text(
+                "SELECT filename FROM public.pipeline_migrations"))}
+
+        files = sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql')))
+        for path in files:
+            name = os.path.basename(path)
+            if name in done:
+                continue
+            logger.info("Applying migration %s", name)
+            with open(path) as f:
+                sql = f.read()
+            # Each file manages its own BEGIN/COMMIT, so run it outside a
+            # SQLAlchemy transaction and record it separately.
+            with engine.connect().execution_options(
+                    isolation_level='AUTOCOMMIT') as conn:
+                conn.execute(text(sql))
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "INSERT INTO public.pipeline_migrations (filename) "
+                    "VALUES (:f) ON CONFLICT (filename) DO NOTHING"),
+                    {'f': name})
+        return len(files) - len(done)
+    finally:
+        engine.dispose()
 
 
 def write_run_snapshot(data, league_id, season):
@@ -261,6 +315,11 @@ def run(args) -> int:
         logger.info("Outside the fantasy season window (Aug 18 - Jan 18); "
                     "use --force to run anyway. Exiting cleanly.")
         return 0
+
+    # Before anything touches the warehouse: the incremental path's upserts
+    # require constraints these migrations add, and without them a run fails
+    # mid-flight on an opaque ON CONFLICT error, every time.
+    apply_pending_migrations(args.database_url)
 
     state = PipelineState(args.database_url)
     try:

@@ -169,9 +169,23 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
 
     The scoping is the point: this is the fix for the history-destroying
     unscoped week delete.
+
+    Rows must fall inside `weeks`. The insert deliberately carries no
+    ON CONFLICT clause -- it relies on the delete above having cleared
+    exactly what it is about to write -- so a row outside the scope would
+    either collide with a live row or slip in unreplaced. That is a caller
+    bug, so it raises rather than corrupting the period.
     """
     if not weeks:
         return {'deleted': 0, 'inserted': 0}
+
+    scope = set(weeks)
+    stray = {r.get(week_col) for r in rows} - scope
+    if stray:
+        raise ValueError(
+            f"{table}: rows for week(s) {sorted(stray)} outside the "
+            f"replacement scope {sorted(scope)}")
+
     deleted = conn.execute(
         text(f'DELETE FROM public.{table} '
              f'WHERE league_id = :l AND "{week_col}" = ANY(:weeks)'),
@@ -185,6 +199,14 @@ def append_only(conn, table: str, rows: List[dict], conflict_cols: str) -> int:
                         f'ON CONFLICT ({conflict_cols}) DO NOTHING')
 
 
+# Time-series entities: raw-data key -> (table, week column).
+PERIOD_ENTITIES = {
+    'matchups': ('matchups', 'week'),
+    'rosters': ('rosters', 'week'),
+    'statistics': ('statistics', 'week_number'),
+}
+
+
 def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
                data: Dict[str, List[dict]]) -> Dict[str, int]:
     """Load one league's delta for the given weeks on the caller's
@@ -192,42 +214,53 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     transaction. Caller owns commit/rollback - all tables land together
     or none do.
 
+    Only entities PRESENT IN `data` are touched. A key's absence means the
+    run did not fetch it, and a delete-then-insert for data that was never
+    fetched deletes the period and puts nothing back: --stats-only once
+    erased a week's matchups (championship game included) and rosters this
+    way. Absent entities are left alone and are NOT marked raw-complete,
+    so gap detection still knows they are outstanding.
+
     data keys: leagues, teams, rosters, matchups (RAW week-blobs),
     transactions, draft_picks, statistics.
     """
     counts: Dict[str, int] = {}
 
-    counts['leagues'] = upsert_dimension(
-        conn, 'leagues', 'league_id', data.get('leagues', []), LEAGUE_UPDATE_COLS)
-    counts['teams'] = upsert_dimension(
-        conn, 'teams', 'team_id', data.get('teams', []), TEAM_UPDATE_COLS)
+    if 'leagues' in data:
+        counts['leagues'] = upsert_dimension(
+            conn, 'leagues', 'league_id', data['leagues'], LEAGUE_UPDATE_COLS)
+    if 'teams' in data:
+        counts['teams'] = upsert_dimension(
+            conn, 'teams', 'team_id', data['teams'], TEAM_UPDATE_COLS)
 
-    flat_matchups = flatten_matchups(data.get('matchups', []))
-    m = replace_period_rows(conn, 'matchups', 'week', league_id, weeks, flat_matchups)
-    counts['matchups'] = m['inserted']
+    # Rows per entity, so each period records its own counts rather than
+    # the run's totals (and a week with genuinely no rows is visible).
+    per_week: Dict[int, Dict[str, int]] = {w: {} for w in weeks}
 
-    r = replace_period_rows(conn, 'rosters', 'week', league_id, weeks,
-                            data.get('rosters', []))
-    counts['rosters'] = r['inserted']
+    for entity, (table, week_col) in PERIOD_ENTITIES.items():
+        if entity not in data:
+            continue
+        rows = flatten_matchups(data[entity]) if entity == 'matchups' else data[entity]
+        result = replace_period_rows(conn, table, week_col, league_id, weeks, rows)
+        counts[entity] = result['inserted']
+        for week in weeks:
+            per_week[week][entity] = sum(1 for r in rows if r.get(week_col) == week)
 
-    s = replace_period_rows(conn, 'statistics', 'week_number', league_id, weeks,
-                            data.get('statistics', []))
-    counts['statistics'] = s['inserted']
+    if 'transactions' in data:
+        counts['transactions'] = append_only(
+            conn, 'transactions', data['transactions'],
+            'transaction_id, player_id')
+    if 'draft_picks' in data:
+        counts['draft_picks'] = append_only(
+            conn, 'draft_picks', data['draft_picks'], 'draft_pick_id')
 
-    counts['transactions'] = append_only(
-        conn, 'transactions', data.get('transactions', []),
-        'transaction_id, player_id')
-    counts['draft_picks'] = append_only(
-        conn, 'draft_picks', data.get('draft_picks', []), 'draft_pick_id')
-
-    refresh_playoff_flags(conn, league_id)
+    if 'matchups' in data:
+        refresh_playoff_flags(conn, league_id)
 
     for week in weeks:
-        state.mark_raw_complete(conn, league_id, season, week, {
-            'matchups': m['inserted'],
-            'rosters': r['inserted'],
-            'statistics': s['inserted'],
-        })
+        if per_week[week]:
+            state.mark_raw_complete(conn, league_id, season, week,
+                                    per_week[week])
 
     logger.info("Loaded delta for %s weeks %s: %s", league_id, weeks, counts)
     return counts
@@ -264,6 +297,19 @@ def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
         "ORDER BY week"), {'l': league_id})]
 
     if len(playoff_weeks) < 2:
+        return None
+
+    # The bracket must be over. Mid-playoffs, a three-round bracket has only
+    # its first two weeks loaded, which looks exactly like a finished
+    # two-round bracket - and flagged a semifinal as the championship,
+    # showing a champion for an unfinished season until the final week landed.
+    end_week = conn.execute(text(
+        "SELECT max(end_week::int) FROM public.leagues WHERE league_id = :l"),
+        {'l': league_id}).scalar()
+    if end_week is not None and playoff_weeks[-1] < end_week:
+        logger.info("Playoffs still in progress for %s (last playoff week %s "
+                    "< end_week %s) - deferring round flags",
+                    league_id, playoff_weeks[-1], end_week)
         return None
 
     champ_week = playoff_weeks[-1]

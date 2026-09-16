@@ -214,6 +214,13 @@ class PipelineState:
         unknown = set(entities) - set(RAW_ENTITIES)
         if unknown:
             raise ValueError(f"unknown raw entities: {unknown}")
+        if not entities:
+            # Joining over an empty dict produced "SET , raw_version = ..."
+            # - a syntax error that aborts the whole raw transaction and
+            # discards data that had already loaded successfully.
+            raise ValueError(
+                "mark_raw_complete requires at least one entity; "
+                "a period with nothing loaded must not be marked complete")
         sets = ", ".join(
             f"raw_{e}_complete = true" for e in entities)
         conn.execute(text(f"""

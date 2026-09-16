@@ -281,3 +281,100 @@ def test_two_round_bracket_flags(state):
     assert len(champs) == 1 and champs[0][0] == 16
     assert len(semis) == 2 and all(r[0] == 15 for r in semis)
     assert quarters == []
+
+
+# ------------------------------------------------- entities not fetched
+# load_delta must leave alone what the run did not fetch. It used to run a
+# delete-then-insert for every time-series table regardless, so --stats-only
+# deleted the period's matchups (championship game included) and rosters and
+# put nothing back.
+
+def stats_only_delta(league, week, players=('1', '2')):
+    """Exactly what extract_scope returns for --stats-only: statistics only."""
+    return {'statistics': [stat_row(league, week, p) for p in players]}
+
+
+def test_stats_only_preserves_matchups_and_rosters(state):
+    load(state, NEW_L, 5)
+    before_m = table_snapshot(state, 'matchups', NEW_L)
+    before_r = table_snapshot(state, 'rosters', NEW_L)
+    assert before_m and before_r
+
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              stats_only_delta(NEW_L, 5, players=('1', '2', '3')))
+
+    assert table_snapshot(state, 'matchups', NEW_L) == before_m
+    assert table_snapshot(state, 'rosters', NEW_L) == before_r
+    with state.engine.connect() as conn:
+        n = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 5"), {'l': NEW_L}).scalar()
+    assert n == 3  # statistics WERE replaced
+
+
+def test_unfetched_entity_is_not_marked_raw_complete(state):
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              stats_only_delta(NEW_L, 5))
+    with state.engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT raw_statistics_complete, raw_matchups_complete, "
+            "raw_rosters_complete FROM public.pipeline_periods "
+            "WHERE league_id = :l AND week = 5"), {'l': NEW_L}).fetchone()
+    assert row == (True, False, False)
+    # ...so the week is still outstanding for the entities never fetched.
+    assert 5 not in state.raw_complete_weeks(NEW_L, SEASON)
+
+
+def test_period_counts_are_per_week_not_run_totals(state):
+    delta = week_delta(NEW_L, 5)
+    for key in ('rosters', 'statistics'):
+        delta[key] = delta[key] + [
+            (roster_row if key == 'rosters' else stat_row)(NEW_L, 6, '9')]
+    delta['matchups'].append(matchup_blob(
+        NEW_L, 6, [(f'{NEW_L}.t.1', f'{NEW_L}.t.2', 70, 60, 'regular')]))
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5, 6], delta)
+
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            "SELECT week, detail->'raw_counts'->>'rosters' "
+            "FROM public.pipeline_periods WHERE league_id = :l"),
+            {'l': NEW_L}).fetchall())
+    assert rows['5' if '5' in rows else 5] == '2'   # week 5 got its own count
+    assert rows['6' if '6' in rows else 6] == '1'   # not the run total of 3
+
+
+def test_rows_outside_the_replacement_scope_raise(state):
+    with state.engine.begin() as conn:
+        with pytest.raises(ValueError, match='outside the replacement scope'):
+            raw_loader.replace_period_rows(
+                conn, 'rosters', 'week', NEW_L, [5],
+                [roster_row(NEW_L, 5, '1'), roster_row(NEW_L, 9, '2')])
+
+
+def test_playoff_flags_deferred_until_bracket_complete(state):
+    """Mid-playoffs a 3-round bracket shows only 2 loaded weeks, which used
+    to look like a finished 2-round bracket and flagged a semifinal as the
+    championship."""
+    t = [f'{NEW_L}.t.{i}' for i in range(1, 9)]
+    with state.engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO public.leagues (league_id, season, end_week) "
+            "VALUES (:l, :s, '16')"), {'l': NEW_L, 's': str(SEASON)})
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [14, 15], {
+            'matchups': [
+                matchup_blob(NEW_L, 14, [(t[2], t[5], 100, 90, 'playoffs'),
+                                         (t[3], t[4], 95, 85, 'playoffs')]),
+                matchup_blob(NEW_L, 15, [(t[0], t[2], 110, 100, 'playoffs'),
+                                         (t[1], t[3], 90, 80, 'playoffs')]),
+            ]})
+    assert [r for r in flags(state, NEW_L) if r[1]] == []  # no championship yet
+
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [16], {
+            'matchups': [matchup_blob(
+                NEW_L, 16, [(t[0], t[1], 120, 110, 'championship')])]})
+    champs = [r for r in flags(state, NEW_L) if r[1]]
+    assert len(champs) == 1 and champs[0][0] == 16
