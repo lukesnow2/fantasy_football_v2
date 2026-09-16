@@ -1,223 +1,149 @@
-name: Weekly Fantasy Football Data Pipeline
+# Weekly incremental data pipeline.
+#
+# The workflow is deliberately thin: completeness, idempotency, locking,
+# and atomic publication are enforced by the pipeline itself against the
+# database (see scripts/incremental_load.py). Season gating lives in
+# Python, not bash. The advisory lock - not the concurrency group - is
+# the real serialization; the group is politeness for the Actions UI.
+#
+# Schedules:
+#   - Tuesdays 08:00 America/Denver, Sep-Jan: the weekly load, after
+#     Monday Night Football has settled. Cron is UTC-only and ignores
+#     daylight saving, so both candidate hours are scheduled (14:00 UTC =
+#     08:00 MDT, 15:00 UTC = 08:00 MST) and --require-local-hour lets
+#     exactly one through; the other exits in seconds having touched
+#     nothing. Completeness comes from each week's own Yahoo scoreboard
+#     status, not from current_week, so a finished week is never read as
+#     in-progress just because Yahoo has not advanced the season pointer
+#     yet. Stat corrections land Tue-Thu and are picked up by the rolling
+#     two-week re-load on subsequent runs.
+#   - 1st of every month 15:00 UTC, year-round: heartbeat. Exercises the
+#     OAuth refresh token so it survives the Feb-Jul quiet months, and
+#     pushes a dated heartbeat commit so GitHub's 60-day inactivity
+#     auto-disable never fires (scheduled runs alone do not count as
+#     repository activity).
+#
+# Failure alerting: a GitHub issue per failed run. The dead-man's check
+# (nothing ran at all) deliberately does NOT live in this repository's
+# scheduled workflows - it must sit outside this failure domain; see
+# scripts/staleness_check.py.
+
+name: Weekly Data Pipeline
 
 on:
   schedule:
-    # Run every Sunday at 6 AM PST during fantasy season (Aug 18 - Jan 18)
-    # This captures all weekend games and gives time for Yahoo to finalize stats
-    - cron: '0 14 * 8,9,10,11,12,1 0'  # 6 AM PST = 14 UTC, Sundays only
-  
-  # Allow manual triggering for testing/emergency runs
+    - cron: '0 14 * 9,10,11,12,1 2'   # Tuesdays Sep-Jan, 08:00 MDT
+    - cron: '0 15 * 9,10,11,12,1 2'   # Tuesdays Sep-Jan, 08:00 MST
+    - cron: '0 15 1 * *'              # monthly: heartbeat + keepalive
   workflow_dispatch:
     inputs:
-      force_full_extraction:
-        description: 'Force full data extraction (includes draft data)'
+      season:
+        description: 'Season to load (repair runs), e.g. 2007'
         required: false
-        default: 'false'
-        type: choice
-        options:
-        - 'false'
-        - 'true'
+      weeks:
+        description: 'Space-separated weeks (repair runs), e.g. "15 16"'
+        required: false
+      stats_only:
+        description: 'Statistics only'
+        type: boolean
+        default: false
+
+concurrency:
+  group: weekly-load
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # heartbeat commit
+  issues: write     # failure alerts
 
 jobs:
-  check_season_dates:
+  pipeline:
     runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.date_check.outputs.should_run }}
-    steps:
-      - name: Check if we're in fantasy season
-        id: date_check
-        run: |
-          current_date=$(date +%Y-%m-%d)
-          current_year=$(date +%Y)
-          
-          # Fantasy season runs Aug 18 - Jan 18
-          season_start="${current_year}-08-18"
-          season_end="$((current_year + 1))-01-18"
-          
-          # If we're in January, check against current year
-          if [[ $(date +%m) == "01" ]]; then
-            season_start="$((current_year - 1))-08-18"
-            season_end="${current_year}-01-18"
-          fi
-          
-          echo "Current date: $current_date"
-          echo "Season start: $season_start"
-          echo "Season end: $season_end"
-          
-          if [[ "$current_date" >= "$season_start" && "$current_date" <= "$season_end" ]]; then
-            echo "✅ We're in fantasy season - pipeline should run"
-            echo "should_run=true" >> $GITHUB_OUTPUT
-          else
-            echo "⏸️ We're in off-season - skipping pipeline"
-            echo "should_run=false" >> $GITHUB_OUTPUT
-          fi
+    timeout-minutes: 30
 
-  extract_and_deploy:
-    runs-on: ubuntu-latest
-    needs: check_season_dates
-    if: needs.check_season_dates.outputs.should_run == 'true' || github.event_name == 'workflow_dispatch'
-    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
+          cache: pip
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Setup Yahoo OAuth credentials
+      - name: Write Yahoo credentials
         env:
-          YAHOO_CLIENT_ID: ${{ secrets.YAHOO_CLIENT_ID }}
+          YAHOO_CLIENT_KEY: ${{ secrets.YAHOO_CLIENT_KEY }}
           YAHOO_CLIENT_SECRET: ${{ secrets.YAHOO_CLIENT_SECRET }}
           YAHOO_REFRESH_TOKEN: ${{ secrets.YAHOO_REFRESH_TOKEN }}
         run: |
-          # Create config.json from secrets
-          cat > config.json << EOF
-          {
-            "consumer_key": "$YAHOO_CLIENT_ID",
-            "consumer_secret": "$YAHOO_CLIENT_SECRET"
-          }
-          EOF
-          
-          # Create oauth2.json from refresh token
+          # yahoo_oauth takes its non-interactive refresh path only when
+          # access_token AND token_type AND refresh_token are all truthy;
+          # token_time 0 forces the refresh. An empty access_token here is
+          # what stranded the old pipeline in an interactive input() call.
           cat > oauth2.json << EOF
           {
-            "access_token": "",
-            "consumer_key": "$YAHOO_CLIENT_ID",
-            "consumer_secret": "$YAHOO_CLIENT_SECRET", 
+            "access_token": "placeholder-refresh-me",
+            "token_type": "bearer",
             "refresh_token": "$YAHOO_REFRESH_TOKEN",
-            "token_time": 0,
-            "token_type": "bearer"
+            "consumer_key": "$YAHOO_CLIENT_KEY",
+            "consumer_secret": "$YAHOO_CLIENT_SECRET",
+            "token_time": 0
           }
           EOF
 
-      - name: Run weekly data extraction
-        id: extraction
+      - name: Heartbeat (monthly schedule only)
+        if: github.event_name == 'schedule' && github.event.schedule == '0 15 1 * *'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          timestamp=$(date +%Y%m%d_%H%M%S)
-          
-          if [[ "${{ github.event.inputs.force_full_extraction }}" == "true" ]]; then
-            echo "🔄 Running FULL extraction (including draft data)"
-            python3 scripts/full_extraction.py
-            
-            # Find the most recent file with drafts
-            latest_draft_file=$(ls -t data/current/yahoo_fantasy_COMPLETE_with_drafts_*.json | head -1)
-            echo "data_file=$latest_draft_file" >> $GITHUB_OUTPUT
-          else
-            echo "⚡ Running WEEKLY extraction (teams, rosters, matchups, transactions)"
-            python3 scripts/weekly_extraction.py
-            
-            # Find the most recent weekly extraction file
-            latest_file=$(ls -t data/current/yahoo_fantasy_weekly_data_*.json | head -1)
-            echo "data_file=$latest_file" >> $GITHUB_OUTPUT
+          # Exercises token refresh + prints the gap; loads nothing.
+          python scripts/incremental_load.py --dry-run --force
+          # Repo-activity keepalive against the 60-day scheduled-workflow
+          # auto-disable.
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/heartbeat
+          git config user.name "pipeline-heartbeat"
+          git config user.email "actions@github.com"
+          git add .github/heartbeat
+          git commit -m "Pipeline heartbeat [skip ci]" || true
+          git push || true
+
+      - name: Weekly load
+        if: github.event_name != 'schedule' || github.event.schedule != '0 15 1 * *'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.season }}" ]; then ARGS="$ARGS --season ${{ inputs.season }}"; fi
+          if [ -n "${{ inputs.weeks }}" ]; then ARGS="$ARGS --weeks ${{ inputs.weeks }}"; fi
+          if [ "${{ inputs.stats_only }}" = "true" ]; then ARGS="$ARGS --stats-only"; fi
+          # Only the scheduled pair is DST-gated; a manual dispatch runs now.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            ARGS="$ARGS --require-local-hour 8 --local-tz America/Denver"
           fi
+          python scripts/incremental_load.py $ARGS
 
-      - name: Deploy to Heroku Postgres
-        env:
-          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
-        run: |
-          echo "🚀 Deploying data to Heroku Postgres"
-          python3 scripts/deploy.py --data-file "${{ steps.extraction.outputs.data_file }}" --database-url "$DATABASE_URL"
-
-      - name: Deploy EDW Schema
-        env:
-          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
-        run: |
-          echo "🏗️ Deploying EDW (Enterprise Data Warehouse)..."
-          python3 src/edw_schema/deploy_edw.py
-
-      - name: Test EDW Deployment
-        env:
-          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
-        run: |
-          echo "🧪 Testing EDW deployment..."
-          python3 src/edw_schema/test_edw_deployment.py --fast
-
-      - name: Deploy EDW Schema
-        env:
-          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
-        run: |
-          echo "🏗️ Deploying EDW (Enterprise Data Warehouse)..."
-          python3 src/edw_schema/deploy_edw.py
-
-      - name: Test EDW Deployment
-        env:
-          DATABASE_URL: ${{ secrets.HEROKU_DATABASE_URL }}
-        run: |
-          echo "🧪 Testing EDW deployment..."
-          python3 src/edw_schema/test_edw_deployment.py --fast
-
-      - name: Archive extraction file
-        uses: actions/upload-artifact@v3
+      - name: Upload run snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: weekly-extraction-${{ github.run_number }}
-          path: ${{ steps.extraction.outputs.data_file }}
-          retention-days: 30
+          name: run-snapshot-${{ github.run_number }}
+          path: data/runs/*.json.gz
+          if-no-files-found: ignore
+          retention-days: 90
 
-      - name: Send success notification
-        if: success()
-        run: |
-          echo "✅ Weekly fantasy football data pipeline completed successfully!"
-          echo "📊 Data file: ${{ steps.extraction.outputs.data_file }}"
-          echo "🗄️ Deployed to Heroku Postgres"
-          echo "🏗️ EDW Schema deployed and tested"
-
-      - name: Send success email notification
-        if: success()
-        run: |
-          echo "📧 SUCCESS: Fantasy Football Pipeline #${{ github.run_number }} completed successfully!"
-          echo "📊 Data extracted and deployed to Heroku Postgres"
-          echo "📁 Data file: ${{ steps.extraction.outputs.data_file }}"
-          echo "🔗 View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          # Create success summary
-          cat > success_summary.txt << EOF
-          🏆 Fantasy Football Data Pipeline SUCCESS
-          
-          Run #${{ github.run_number }} completed successfully!
-          📅 Date: $(date)
-          📊 Data extracted and deployed to Heroku Postgres
-          🏗️ EDW Schema deployed and validated
-          📁 File: ${{ steps.extraction.outputs.data_file }}
-          ⚡ Type: ${{ github.event.inputs.force_full_extraction == 'true' && 'Full Extraction (with draft data)' || 'Weekly Update' }}
-          
-          🔗 View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EOF
-
-      - name: Send failure notification
+      - name: File failure issue
         if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "❌ Weekly fantasy football data pipeline failed!"
-          echo "🔍 Check the logs for details"
+          gh issue create \
+            --title "Weekly data pipeline failed (run #${{ github.run_number }})" \
+            --body "The scheduled pipeline run failed.
 
-      - name: Send failure email notification
-        if: failure()
-        run: |
-          echo "🚨 FAILURE: Fantasy Football Pipeline #${{ github.run_number }} failed!"
-          echo "❌ The automated data pipeline encountered an error"
-          echo "🔗 View logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          
-          # Create failure summary
-          cat > failure_summary.txt << EOF
-          ⚠️ Fantasy Football Data Pipeline FAILED
-          
-          Run #${{ github.run_number }} encountered an error!
-          📅 Date: $(date)
-          ⚡ Type: ${{ github.event.inputs.force_full_extraction == 'true' && 'Full Extraction (with draft data)' || 'Weekly Update' }}
-          
-          🔧 Next Steps:
-          1. Check logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          2. Common issues:
-             - Yahoo API authentication (OAuth token expired?)
-             - Heroku database connection
-             - Network/rate limiting issues
-          3. Retry manually from Actions tab if needed
-          
-          🔗 View detailed logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EOF 
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Trigger: ${{ github.event_name }}
+
+          The pipeline is self-healing: once the cause is fixed, the next run loads every missing period automatically. Check the run log for the error tail; 'pipeline_runs' in the database holds the failure record." \
+            --label bug || true

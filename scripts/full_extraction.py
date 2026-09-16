@@ -12,7 +12,6 @@ import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.extractors.comprehensive_data_extractor import YahooFantasyExtractor
-from src.extractors.draft_extractor import main as extract_drafts
 import json
 import logging
 from datetime import datetime

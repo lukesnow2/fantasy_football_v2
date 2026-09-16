@@ -23,6 +23,24 @@ temp_oauth.json
 config.json
 **/config.json
 
+# Logs - a committed data_extraction.log once leaked the Yahoo client ID via
+# yahoo_oauth's DEBUG logging of the full authorize URL. No log is ever safe
+# to track.
+*.log
+
+# Raw data snapshots - raw Yahoo API responses carry league join passwords,
+# invitation URLs, and account GUIDs. Only sanitized snapshots (produced by
+# scripts/sanitize_snapshot.py, which nulls those fields) may be tracked, and
+# only gzipped: the baseline is 44MB as pretty JSON and 2.1MB compressed, and
+# this history has already had to be purged of uncompressed blobs once.
+data/current/*.json
+data/current/*.json.gz
+!data/current/*_sanitized.json.gz
+
+# Pipeline state - checkpoints and local databases are machine-local
+resume_*.txt
+*.db
+
 # Environment variables
 .env
 .env.local
@@ -88,3 +106,7 @@ Desktop.ini
 # Note: web/ directory is tracked in git and has its own .gitignore
 # that properly excludes build artifacts (node_modules, .svelte-kit, .env, etc.)
 .vercel
+
+# Per-run extraction snapshots: audit artifacts, uploaded by CI, never tracked
+# (the retention policy keeps only the canonical baseline snapshot in-repo)
+data/runs/

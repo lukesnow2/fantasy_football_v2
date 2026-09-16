@@ -15,33 +15,26 @@
 
 ### Configure Authentication
 ```bash
-# Copy template and add your credentials
-cp data/templates/config.template.json config.json
-
-# Edit config.json:
-{
-  "consumer_key": "your_yahoo_client_id",
-  "consumer_secret": "your_yahoo_client_secret"
-}
-```
-
-### Complete OAuth Flow
-```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run authentication (opens browser)
-python3 src/auth/yahoo_oauth.py
-# This creates oauth2.json automatically
+# Provide credentials via environment (or a pre-existing oauth2.json):
+export YAHOO_CLIENT_KEY="your_yahoo_client_id"
+export YAHOO_CLIENT_SECRET="your_yahoo_client_secret"
+
+# First run opens a browser for the one-time OAuth verifier, then writes
+# oauth2.json (gitignored). Later runs refresh the token automatically.
+python3 scripts/incremental_load.py --dry-run
 ```
 
 ## Step 2: Extract Data
 
 ```bash
-# Test extraction (works any time of year)
-python3 scripts/weekly_extraction.py --force
+# Show what the pipeline would load (any time of year):
+python3 scripts/incremental_load.py --dry-run --force
 
-# This creates: data/current/data.json
+# Load it (writes a gzipped, sanitized run snapshot under data/runs/):
+python3 scripts/incremental_load.py --force
 ```
 
 ## Step 3: Deploy to Database
@@ -61,7 +54,7 @@ heroku config:get DATABASE_URL --app your-app
 export DATABASE_URL="your-postgres-connection-string"
 
 # Deploy data
-python3 src/deployment/incremental_loader.py --data-file data/current/data.json
+python3 scripts/incremental_load.py
 ```
 
 ## Step 4: Automation (Optional)
@@ -70,10 +63,10 @@ python3 src/deployment/incremental_loader.py --data-file data/current/data.json
 Add these secrets to your GitHub repository (Settings → Secrets):
 
 ```
-YAHOO_CLIENT_ID=your_yahoo_client_id
-YAHOO_CLIENT_SECRET=your_yahoo_client_secret  
+YAHOO_CLIENT_KEY=your_yahoo_client_id
+YAHOO_CLIENT_SECRET=your_yahoo_client_secret
 YAHOO_REFRESH_TOKEN=your_refresh_token
-HEROKU_DATABASE_URL=your_postgres_url
+DATABASE_URL=your_postgres_url
 ```
 
 Get refresh token from oauth2.json:
@@ -81,14 +74,16 @@ Get refresh token from oauth2.json:
 cat oauth2.json | grep refresh_token
 ```
 
-The pipeline will automatically run every Sunday during fantasy season (Aug-Jan).
+The pipeline runs Wednesdays 10:00 UTC in-season, plus a monthly heartbeat.
+Failures file a GitHub issue; run scripts/staleness_check.py from an external
+host (laptop cron) as the dead-man's check.
 
 ## Verification
 
 ### Check Data Extraction
 ```bash
 # View extracted data structure
-python3 scripts/analyze_data_structure.py --data-file data/current/data.json
+psql "$DATABASE_URL" -c "SELECT * FROM public.pipeline_runs ORDER BY run_id DESC LIMIT 5"
 ```
 
 ### Check Database
@@ -108,10 +103,8 @@ SELECT 'rosters', COUNT(*) FROM rosters;
 
 ### Common Issues
 
-**Authentication Error**: Verify Yahoo API credentials and OAuth flow
-```bash
-python3 src/auth/yahoo_oauth.py --verbose
-```
+**Authentication Error**: delete oauth2.json and re-run any pipeline command
+to redo the one-time OAuth flow; verify YAHOO_CLIENT_KEY/SECRET are set.
 
 **Database Connection**: Test connection string
 ```bash
@@ -120,7 +113,7 @@ psql $DATABASE_URL -c "SELECT version();"
 
 **No Data**: Check if you have fantasy leagues
 ```bash
-python3 scripts/weekly_extraction.py --force --verbose
+python3 scripts/incremental_load.py --dry-run --force
 ```
 
 ### Support
