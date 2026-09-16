@@ -28,15 +28,16 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 ## Full warehouse rebuild from existing JSON
 Run against any `DATABASE_URL` (local or Neon). The tracked canonical baseline
-is the **sanitized 2005–2025 combined snapshot** (sensitive fields nulled by
-`scripts/sanitize_snapshot.py`; ETL-equivalence proven against the original).
-Seasons after the baseline are recovered by the pipeline itself:
+is the **sanitized 2005–2025 combined snapshot**, stored gzipped (sensitive
+fields nulled by `scripts/sanitize_snapshot.py`; ETL-equivalence proven against
+the original). The loader reads `.json` and `.json.gz` alike. Seasons after the
+baseline are recovered by the pipeline itself:
 `scripts/incremental_load.py --season <year>` re-extracts from Yahoo.
 ```bash
 DB="postgresql://<user>@localhost:5432/the_league"
 # 1. raw JSON -> public.*
 .venv/bin/python src/deployment/heroku_deployer.py \
-  --data-file data/current/yahoo_fantasy_combined_2005_2025_sanitized.json --database-url "$DB"
+  --data-file data/current/yahoo_fantasy_combined_2005_2025_sanitized.json.gz --database-url "$DB"
 # 2. build edw.* (schema + ETL + views). --force-rebuild = clean bulk reload.
 .venv/bin/python scripts/deploy_complete_edw.py --database-url "$DB" --force-rebuild
 # 3. app.* schema (auth/chat/rules) — from the committed migration, not push

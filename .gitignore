@@ -30,9 +30,12 @@ config.json
 
 # Raw data snapshots - raw Yahoo API responses carry league join passwords,
 # invitation URLs, and account GUIDs. Only sanitized snapshots (produced by
-# scripts/sanitize_snapshot.py, which nulls those fields) may be tracked.
+# scripts/sanitize_snapshot.py, which nulls those fields) may be tracked, and
+# only gzipped: the baseline is 44MB as pretty JSON and 2.1MB compressed, and
+# this history has already had to be purged of uncompressed blobs once.
 data/current/*.json
-!data/current/*_sanitized.json
+data/current/*.json.gz
+!data/current/*_sanitized.json.gz
 
 # Pipeline state - checkpoints and local databases are machine-local
 resume_*.txt

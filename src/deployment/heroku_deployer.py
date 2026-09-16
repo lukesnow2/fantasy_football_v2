@@ -4,6 +4,7 @@ Deploy Yahoo Fantasy Data to Heroku Postgres
 Streamlined deployment of fantasy football data to PostgreSQL
 """
 
+import gzip
 import json
 import logging
 import os
@@ -63,11 +64,18 @@ class HerokuPostgresDeployer:
             return False
     
     def load_data(self) -> bool:
-        """Load data from JSON file"""
+        """Load data from a JSON file, plain or gzipped.
+
+        The tracked baseline snapshot is stored gzipped: 44MB of pretty
+        JSON compresses to 2.3MB, which is the difference between a
+        reviewable repository and re-creating the blob bloat that had to
+        be purged from this history once already.
+        """
         try:
             logger.info(f"📂 Loading data from {self.data_file}...")
-            
-            with open(self.data_file, 'r') as f:
+
+            opener = gzip.open if self.data_file.endswith('.gz') else open
+            with opener(self.data_file, 'rt') as f:
                 self.data = json.load(f)
             
             # Log summary
