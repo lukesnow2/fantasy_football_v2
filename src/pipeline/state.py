@@ -28,7 +28,7 @@ from contextlib import contextmanager
 from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, InvalidRequestError, ResourceClosedError
 
 logger = logging.getLogger(__name__)
 
@@ -173,8 +173,11 @@ class PipelineState:
                 "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
                 "AND objid = :k AND pid = pg_backend_pid()"),
                 {'k': ADVISORY_LOCK_KEY}).scalar())
-        except DBAPIError:
-            # The connection is gone, which IS the loss this reports.
+        except (DBAPIError, ResourceClosedError, InvalidRequestError):
+            # The connection is gone or unusable, which IS the loss this
+            # reports. ResourceClosedError is not a DBAPIError, so catching
+            # only the latter made a closed lock connection report the lock
+            # as HELD - the exact inversion of what this check is for.
             return False
         except Exception:
             # Anything else is a bug in this check, not a lost lock. Say so,
