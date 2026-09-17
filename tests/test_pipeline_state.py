@@ -172,3 +172,23 @@ def test_last_successful_run_start(state):
     r1 = state.start_run(season=S)
     state.finish_run(r1, 'success')
     assert state.last_successful_run_start() is not None
+
+
+def test_readers_tolerate_missing_schema(test_db):
+    """A dry run must be able to report against a database whose pipeline
+    tables do not exist yet, without creating them."""
+    import subprocess
+    from src.pipeline.state import PipelineState
+    subprocess.run(['psql', test_db.rsplit('/', 1)[-1], '-qc',
+                    'DROP TABLE IF EXISTS public.pipeline_periods CASCADE'],
+                   check=True)
+    st = PipelineState(test_db)
+    try:
+        assert st.schema_exists() is False
+        assert st.unpublished_raw() == []
+        assert st.published_weeks('x', 2026) == set()
+        assert st.raw_complete_weeks('x', 2026) == set()
+        assert st.recorded_weeks('x', 2026, [1, 2]) == set()
+        assert st.schema_exists() is False, 'reading must not create anything'
+    finally:
+        st.close()

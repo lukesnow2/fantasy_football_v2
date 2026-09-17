@@ -216,6 +216,42 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
     return data
 
 
+RAW_TABLES = ('leagues', 'teams', 'rosters', 'matchups', 'statistics',
+              'transactions', 'draft_picks')
+
+
+def require_warehouse(engine):
+    """Fail with a readable message when this database is not a warehouse.
+
+    Checked BEFORE migrations, which target edw and would otherwise abort
+    with a bare 'schema "edw" does not exist'; and before ensure_constraints,
+    which indexes public.leagues and surfaced as
+    'relation "public.leagues" does not exist'. The cutover - pointing the
+    pipeline at a fresh target - is exactly when the operator needs to be
+    told what is missing rather than handed a driver traceback.
+    """
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        has_edw = conn.execute(text(
+            "SELECT 1 FROM information_schema.schemata "
+            "WHERE schema_name = 'edw'")).scalar()
+        missing = [t for t in RAW_TABLES
+                   if not conn.execute(text("SELECT to_regclass(:t)"),
+                                       {'t': f'public.{t}'}).scalar()]
+    problems = []
+    if not has_edw:
+        problems.append("the edw schema is absent")
+    if missing:
+        problems.append("raw tables are absent: "
+                        + ', '.join(f'public.{t}' for t in missing))
+    if problems:
+        raise RuntimeError(
+            "This database is not a built warehouse (" + "; ".join(problems)
+            + "). Load a baseline snapshot and build the EDW first (see "
+              "RUNBOOK, 'Full warehouse rebuild'); the incremental pipeline "
+              "extends an existing warehouse, it does not create one.")
+
+
 def pending_migrations(engine):
     """Migration filenames this database has not recorded. Read-only."""
     from sqlalchemy import text
@@ -267,12 +303,20 @@ def apply_pending_migrations(engine):
         with open(path) as f:
             sql = f.read()
         # Each file manages its own BEGIN/COMMIT, so run it outside a
-        # SQLAlchemy transaction and record it separately. exec_driver_sql
-        # passes the text through verbatim - text() would read any :token
-        # in the file as a bind parameter and fail on SQL it cannot bind.
+        # SQLAlchemy transaction and record it separately.
+        #
+        # Executed on a raw cursor with NO parameter argument, the only form
+        # that passes arbitrary SQL through untouched: text() reads :token as
+        # a bind parameter, and exec_driver_sql hands psycopg2 an empty
+        # parameter set, which makes it interpret % - so a migration
+        # containing LIKE '%.p.%' dies with "KeyError: 0".
         with engine.connect().execution_options(
                 isolation_level='AUTOCOMMIT') as conn:
-            conn.exec_driver_sql(sql)
+            cursor = conn.connection.cursor()
+            try:
+                cursor.execute(sql)
+            finally:
+                cursor.close()
         with engine.begin() as conn:
             conn.execute(text(
                 "INSERT INTO public.pipeline_migrations (filename) "
@@ -357,6 +401,12 @@ def run(args) -> int:
                         "A real run would apply them first.",
                         len(pending), ', '.join(pending))
             else:
+                try:
+                    require_warehouse(state.engine)
+                except RuntimeError as e:
+                    # A precondition, not a crash: say what is wrong once.
+                    logger.error("%s", e)
+                    return 2
                 apply_pending_migrations(state.engine)
 
             return _run_locked(args, state)
@@ -367,10 +417,19 @@ def run(args) -> int:
 
 
 def _run_locked(args, state) -> int:
-    state.ensure_schema()
-    with state.engine.begin() as conn:
-        raw_loader.ensure_constraints(conn)
-    pub.ensure_edw_serial_defaults(state.engine)
+    # A dry run reports; it does not prepare. Creating the pipeline tables
+    # and indexes here made --dry-run write to a database it promised to
+    # leave alone.
+    if not args.dry_run:
+        state.ensure_schema()
+        with state.engine.begin() as conn:
+            raw_loader.ensure_constraints(conn)
+        pub.ensure_edw_serial_defaults(state.engine)
+    elif not state.schema_exists():
+        # Nothing to report a gap against, and a dry run must not create it.
+        logger.warning("This database has no pipeline state tables yet; a "
+                       "real run would create them. Reporting Yahoo-side "
+                       "state only.")
 
     # 1. Repair publication BEFORE anything else: raw-complete periods the
     #    site cannot see yet need EDW work only - no Yahoo calls.
@@ -461,8 +520,24 @@ def _run_locked(args, state) -> int:
                                            weeks, data)
 
         # 6. Publish: snapshot-guarded EDW refresh + verification gate.
+        #    Only periods the load actually recorded are published. A week
+        #    that fetched nothing has no pipeline_periods row, and publishing
+        #    it would trip the gate's unverifiable-period check with an error
+        #    about bookkeeping rather than the real condition.
+        recorded = state.recorded_weeks(league_id, season, weeks)
+        empty = [w for w in weeks if w not in recorded]
+        if empty:
+            logger.warning("No data fetched for week(s) %s - nothing to "
+                           "publish for them", empty)
+        if not recorded:
+            logger.warning("Nothing was loaded for weeks %s; skipping publish.",
+                           weeks)
+            state.finish_run(run_id, 'success', weeks_loaded=[],
+                             row_counts={'noop': 'no-data', 'weeks': weeks})
+            return 0
+
         changed = {t for t, n in counts.items() if n} or ALL_OPERATIONAL_TABLES
-        periods = [(league_id, season, w) for w in weeks]
+        periods = [(league_id, season, w) for w in sorted(recorded)]
         pub.publish(state, periods,
                     make_edw_refresh(args.database_url, changed))
 

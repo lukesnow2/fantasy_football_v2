@@ -93,6 +93,17 @@ class PipelineState:
                 if stmt.strip():
                     conn.execute(text(stmt))
 
+    def schema_exists(self) -> bool:
+        """Whether the pipeline state tables have been created.
+
+        Read-only, so a dry run can report against a database it must not
+        modify. The readers below return empty rather than raising when the
+        answer is no.
+        """
+        with self.engine.connect() as conn:
+            return bool(conn.execute(text(
+                "SELECT to_regclass('public.pipeline_periods')")).scalar())
+
     def close(self):
         if self._lock_conn is not None:
             self.release_lock()
@@ -265,10 +276,14 @@ class PipelineState:
             q += " AND league_id = :l"
             params['l'] = league_id
         q += " ORDER BY season, week"
+        if not self.schema_exists():
+            return []
         with self.engine.connect() as conn:
             return [tuple(r) for r in conn.execute(text(q), params)]
 
     def published_weeks(self, league_id: str, season: int) -> Set[int]:
+        if not self.schema_exists():
+            return set()
         with self.engine.connect() as conn:
             rows = conn.execute(text(
                 "SELECT week FROM public.pipeline_periods "
@@ -276,8 +291,30 @@ class PipelineState:
                 {'l': league_id, 's': season})
             return {r[0] for r in rows}
 
+    def recorded_weeks(self, league_id: str, season: int,
+                       weeks: List[int]) -> Set[int]:
+        """Which of `weeks` have a pipeline_periods row at all.
+
+        A week the load fetched nothing for is never recorded, and must not
+        be handed to publish: the verification gate refuses periods it has
+        no record of, which would report a bookkeeping error instead of the
+        real condition.
+        """
+        if not weeks:
+            return set()
+        if not self.schema_exists():
+            return set()
+        with self.engine.connect() as conn:
+            rows = conn.execute(text(
+                "SELECT week FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = ANY(:w)"),
+                {'l': league_id, 's': season, 'w': list(weeks)})
+            return {r[0] for r in rows}
+
     def raw_complete_weeks(self, league_id: str, season: int) -> Set[int]:
         """Weeks where every raw entity is complete (published or not)."""
+        if not self.schema_exists():
+            return set()
         with self.engine.connect() as conn:
             rows = conn.execute(text(
                 "SELECT week FROM public.pipeline_periods "
