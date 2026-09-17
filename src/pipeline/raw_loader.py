@@ -183,7 +183,7 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
     stray = {r.get(week_col) for r in rows} - scope
     if stray:
         raise ValueError(
-            f"{table}: rows for week(s) {sorted(stray)} outside the "
+            f"{table}: rows for week(s) {sorted(stray, key=str)} outside the "
             f"replacement scope {sorted(scope)}")
 
     deleted = conn.execute(
@@ -221,6 +221,10 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     way. Absent entities are left alone and are NOT marked raw-complete,
     so gap detection still knows they are outstanding.
 
+    An entity that IS present but returns no rows for a given week is
+    likewise left alone for that week. Only weeks with incoming rows are
+    replaced; an empty fetch never deletes.
+
     data keys: leagues, teams, rosters, matchups (RAW week-blobs),
     transactions, draft_picks, statistics.
     """
@@ -237,14 +241,52 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     # the run's totals (and a week with genuinely no rows is visible).
     per_week: Dict[int, Dict[str, int]] = {w: {} for w in weeks}
 
+    scope = set(weeks)
     for entity, (table, week_col) in PERIOD_ENTITIES.items():
         if entity not in data:
             continue
         rows = flatten_matchups(data[entity]) if entity == 'matchups' else data[entity]
-        result = replace_period_rows(conn, table, week_col, league_id, weeks, rows)
-        counts[entity] = result['inserted']
+
+        by_week: Dict[int, List[dict]] = {w: [] for w in weeks}
+        stray = set()
+        for row in rows:
+            week = row.get(week_col)
+            if week in scope:
+                by_week[week].append(row)
+            else:
+                stray.add(week)
+        if stray:
+            # Same contract replace_period_rows enforces, applied before the
+            # rows are split so the message names the entity.
+            raise ValueError(
+                f"{table}: rows for week(s) {sorted(stray, key=str)} outside "
+                f"the replacement scope {sorted(scope)}")
         for week in weeks:
-            per_week[week][entity] = sum(1 for r in rows if r.get(week_col) == week)
+            per_week[week][entity] = len(by_week[week])
+
+        # Replace only the weeks this fetch actually returned rows for. A
+        # delete-then-insert over a week that came back empty deletes what we
+        # already hold and puts nothing back - and because raw_*_complete is
+        # only ever set, never cleared, the week goes on claiming to be
+        # complete and published, so gap detection never asks for it again.
+        # The rolling reload window re-fetches the two most recent complete
+        # weeks on EVERY run, which makes this the common case rather than
+        # the rare one: one empty response (a swallowed rate-limit denial, a
+        # league whose taken_players momentarily returns nothing) would erase
+        # two weeks of raw data permanently and invisibly. An empty fetch is
+        # not evidence that the source has nothing, so leave what we hold and
+        # let the next run reconcile.
+        present = [w for w in weeks if by_week[w]]
+        empty = [w for w in weeks if not by_week[w]]
+        if empty:
+            logger.warning(
+                "%s: no rows returned for week(s) %s - leaving the rows "
+                "already held in place (an empty fetch is not a deletion)",
+                table, empty)
+        result = replace_period_rows(
+            conn, table, week_col, league_id, present,
+            [row for w in present for row in by_week[w]])
+        counts[entity] = result['inserted']
 
     if 'transactions' in data:
         counts['transactions'] = append_only(

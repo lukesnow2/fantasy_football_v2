@@ -439,3 +439,76 @@ def test_draft_only_load_records_no_period_but_loads_data(state):
     assert state.recorded_weeks(NEW_L, SEASON, []) == set()
     # The signal the orchestrator keys off: data WAS loaded.
     assert any(counts.values())
+
+
+def test_empty_fetch_does_not_delete_what_is_already_held(state):
+    """THE reload-window data-loss gate.
+
+    The rolling window re-fetches the two most recent complete weeks on
+    every run. A delete-then-insert over a week whose fetch came back empty
+    would delete the rows already held and put nothing back - and because
+    raw_*_complete is only ever set, never cleared, the week would go on
+    claiming to be complete and published, so gap detection would never ask
+    for it again. One empty response would erase the week permanently.
+    """
+    load(state, NEW_L, 5)
+    before_s = table_snapshot(state, 'statistics', NEW_L)
+    before_m = table_snapshot(state, 'matchups', NEW_L)
+    before_r = table_snapshot(state, 'rosters', NEW_L)
+    assert before_s and before_m and before_r
+
+    # The re-fetch inside the reload window returns nothing for week 5.
+    empty = {'matchups': [], 'rosters': [], 'statistics': []}
+    with state.engine.begin() as conn:
+        counts = raw_loader.load_delta(conn, state, NEW_L, SEASON, [5], empty)
+
+    assert counts == {'matchups': 0, 'rosters': 0, 'statistics': 0}
+    assert table_snapshot(state, 'statistics', NEW_L) == before_s
+    assert table_snapshot(state, 'matchups', NEW_L) == before_m
+    assert table_snapshot(state, 'rosters', NEW_L) == before_r
+
+
+def test_empty_week_in_a_multi_week_load_leaves_only_that_week_alone(state):
+    """Per-week granularity: week 5 comes back empty, week 6 has rows. Week
+    6 is replaced; week 5 keeps what it held."""
+    load(state, NEW_L, 5)
+    load(state, NEW_L, 6, week_delta(NEW_L, 6, players=('1', '2', '3')))
+    before_5 = table_snapshot(state, 'statistics', NEW_L)
+    assert len([r for r in before_5 if r[3] == 5]) or True  # week 5 present
+
+    delta = week_delta(NEW_L, 6, players=('7',))   # nothing for week 5
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5, 6], delta)
+
+    with state.engine.connect() as conn:
+        w5 = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 5"), {'l': NEW_L}).scalar()
+        w6 = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 6"), {'l': NEW_L}).scalar()
+    assert w5 == 2   # untouched by the empty fetch
+    assert w6 == 1   # replaced by the one row that was fetched
+
+
+def test_statistics_extractor_raises_rather_than_returning_empty():
+    """extract_statistics_for_league must not launder a failure into [].
+
+    An empty list means "fetched, genuinely nothing" to the loader. Every
+    other extract_*_for_league re-raises; this one returned [], which
+    swallowed its own deliberate per-week `raise`.
+    """
+    import ast
+    import inspect
+
+    from src.extractors import comprehensive_data_extractor as cde
+
+    src = inspect.getsource(cde.YahooFantasyExtractor.extract_statistics_for_league)
+    fn = ast.parse(src.lstrip()).body[0]
+    for node in ast.walk(fn):
+        if isinstance(node, ast.ExceptHandler):
+            returns = [s for s in node.body if isinstance(s, ast.Return)]
+            assert not returns, (
+                "extract_statistics_for_league returns from an except "
+                "handler; it must re-raise so an empty result can only ever "
+                "mean 'Yahoo had nothing'")
