@@ -82,7 +82,21 @@ class PipelineState:
 
     def __init__(self, database_url: str):
         url = database_url.replace('postgres://', 'postgresql://', 1)
-        self.engine = create_engine(url)
+        # TCP keepalives, because the advisory lock is session-scoped and a
+        # hosted Postgres drops idle connections: on Neon the lock connection
+        # sat idle through an 8-minute publish and was closed, which both
+        # failed the run at cleanup and silently released the lock while work
+        # was still running. pool_pre_ping recycles dead pooled connections
+        # (it cannot help the held lock connection - hence the keepalives).
+        self.engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={
+                'keepalives': 1,
+                'keepalives_idle': 30,
+                'keepalives_interval': 10,
+                'keepalives_count': 5,
+            })
         self._ledger = self.engine.connect().execution_options(
             isolation_level='AUTOCOMMIT')
         self._lock_conn = None
@@ -105,9 +119,15 @@ class PipelineState:
                 "SELECT to_regclass('public.pipeline_periods')")).scalar())
 
     def close(self):
+        # Cleanup must never turn a completed run into a failure; a hosted
+        # Postgres may have closed any of these sockets already.
         if self._lock_conn is not None:
             self.release_lock()
-        self._ledger.close()
+        try:
+            self._ledger.close()
+        except Exception as e:
+            logger.warning("Ledger connection close failed (%s)",
+                           type(e).__name__)
         self.engine.dispose()
 
     # ------------------------------------------------------------------
@@ -137,14 +157,43 @@ class PipelineState:
                      {'k': ADVISORY_LOCK_KEY})
         self._lock_conn = conn
 
+    def lock_still_held(self) -> bool:
+        """Whether this session still holds the advisory lock.
+
+        A dropped lock connection releases the lock silently, so a long run
+        can finish believing it was serialised when it was not. Checked
+        before publishing results so the loss is reported rather than
+        assumed away.
+        """
+        if self._lock_conn is None:
+            return False
+        try:
+            return bool(self._lock_conn.execute(text(
+                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                "AND objid = :k AND pid = pg_backend_pid()"),
+                {'k': ADVISORY_LOCK_KEY}).scalar())
+        except Exception:
+            return False
+
     def release_lock(self):
         if self._lock_conn is not None:
             try:
                 self._lock_conn.execute(
                     text("SELECT pg_advisory_unlock(:k)"),
                     {'k': ADVISORY_LOCK_KEY})
+            except Exception as e:
+                # The connection may already be gone (hosted Postgres closing
+                # an idle session). The lock dies with it, so there is nothing
+                # to release - but a completed run must not be reported as a
+                # failure because its cleanup found a closed socket.
+                logger.warning("Advisory lock release skipped (%s): the "
+                               "connection was already closed, so the lock "
+                               "is gone with it.", type(e).__name__)
             finally:
-                self._lock_conn.close()
+                try:
+                    self._lock_conn.close()
+                except Exception:
+                    pass
                 self._lock_conn = None
 
     @contextmanager

@@ -300,3 +300,40 @@ def test_emptied_small_table_fails_verification(state):
     with state.engine.connect() as conn:
         assert conn.execute(text(
             'SELECT count(*) FROM edw.dim_small')).scalar() == 5
+
+
+def test_batch_upsert_survives_commit(state):
+    """A batched upsert runs on the raw DBAPI cursor, which SQLAlchemy does
+    not see. Without an explicit transaction its commit() is a no-op and
+    every 'upserted' row is silently rolled back - the upsert still reports
+    success, so only the verification gate catches it."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+    import pandas as pd
+
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP TABLE IF EXISTS edw.batch_probe'))
+        conn.execute(text(
+            'CREATE TABLE edw.batch_probe (id int primary key, v text)'))
+
+    df = pd.DataFrame([{'id': 1, 'v': 'a'}, {'id': 2, 'v': 'b'}])
+    with state.engine.connect() as conn:
+        n = EdwEtlProcessor._batch_upsert(
+            conn, 'batch_probe', ['id', 'v'], 'id', ['v'], df)
+        conn.commit()
+    assert n == 2
+
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            'SELECT count(*) FROM edw.batch_probe')).scalar() == 2, \
+            'batched rows must survive the commit'
+
+    # And it must still upsert rather than duplicate.
+    df2 = pd.DataFrame([{'id': 2, 'v': 'B2'}, {'id': 3, 'v': 'c'}])
+    with state.engine.connect() as conn:
+        EdwEtlProcessor._batch_upsert(
+            conn, 'batch_probe', ['id', 'v'], 'id', ['v'], df2)
+        conn.commit()
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            'SELECT id, v FROM edw.batch_probe ORDER BY id')).fetchall())
+    assert rows == {1: 'a', 2: 'B2', 3: 'c'}

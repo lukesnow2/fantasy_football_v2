@@ -559,6 +559,12 @@ def _run_locked(args, state) -> int:
         # 7. Audit-trail snapshot (sanitized, gzipped; never load-bearing).
         write_run_snapshot(data, league_id, season)
 
+        if not state.lock_still_held():
+            # Not fatal - the work is committed and verified - but the run
+            # was not serialised for its whole duration, so say so.
+            logger.warning("Advisory lock was lost during this run (the "
+                           "database closed its connection). The load "
+                           "completed, but a concurrent run was possible.")
         state.finish_run(run_id, 'success', weeks_loaded=weeks,
                          row_counts=counts)
         logger.info("Run %d complete: weeks %s, %s", run_id, weeks, counts)
