@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -172,8 +173,16 @@ class PipelineState:
                 "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
                 "AND objid = :k AND pid = pg_backend_pid()"),
                 {'k': ADVISORY_LOCK_KEY}).scalar())
-        except Exception:
+        except DBAPIError:
+            # The connection is gone, which IS the loss this reports.
             return False
+        except Exception:
+            # Anything else is a bug in this check, not a lost lock. Say so,
+            # or a broken query would report "lock lost" on every healthy run
+            # until the warning became noise and hid the real event.
+            logger.exception("Advisory-lock check failed; treating the lock "
+                             "as held. This is a bug in the check itself.")
+            return True
 
     def release_lock(self):
         if self._lock_conn is not None:

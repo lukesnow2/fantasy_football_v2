@@ -337,3 +337,29 @@ def test_batch_upsert_survives_commit(state):
         rows = dict(conn.execute(text(
             'SELECT id, v FROM edw.batch_probe ORDER BY id')).fetchall())
     assert rows == {1: 'a', 2: 'B2', 3: 'c'}
+
+
+def test_batch_upsert_collapses_duplicate_keys(state):
+    """One statement per row tolerated a repeated business key; a single
+    multi-row ON CONFLICT raises 'cannot affect row a second time' and takes
+    the whole refresh down. Duplicates must be collapsed, last write wins."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+    import pandas as pd
+
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP TABLE IF EXISTS edw.dup_probe'))
+        conn.execute(text(
+            'CREATE TABLE edw.dup_probe (id int primary key, v text)'))
+
+    df = pd.DataFrame([{'id': 1, 'v': 'first'},
+                       {'id': 1, 'v': 'last'},
+                       {'id': 2, 'v': 'other'}])
+    with state.engine.connect() as conn:
+        EdwEtlProcessor._batch_upsert(
+            conn, 'dup_probe', ['id', 'v'], 'id', ['v'], df)
+        conn.commit()
+
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            'SELECT id, v FROM edw.dup_probe ORDER BY id')).fetchall())
+    assert rows == {1: 'last', 2: 'other'}

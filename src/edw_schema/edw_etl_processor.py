@@ -3276,6 +3276,20 @@ class EdwEtlProcessor:
         # Reindex so tuple order always matches `columns`, and make missing
         # columns explicit NULLs rather than a silent KeyError.
         frame = df.reindex(columns=columns)
+
+        # One statement per row tolerated a repeated business key (the last
+        # write won); a single multi-row ON CONFLICT DO UPDATE raises
+        # "cannot affect row a second time" and takes the whole refresh down
+        # with it. Keep the old semantics by collapsing duplicates here.
+        key_cols = [c.strip().strip('"') for c in conflict.split(',')]
+        if all(c in frame.columns for c in key_cols):
+            before = len(frame)
+            frame = frame.drop_duplicates(subset=key_cols, keep='last')
+            if len(frame) != before:
+                logger.warning(
+                    "%s: collapsed %d row(s) sharing a business key (%s)",
+                    table, before - len(frame), conflict)
+
         rows = [tuple(None if pd.isna(v) else v for v in rec)
                 for rec in frame.itertuples(index=False, name=None)]
 
