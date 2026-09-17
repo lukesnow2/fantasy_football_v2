@@ -393,6 +393,17 @@ def run(args) -> int:
             # Under the lock, and never on a dry run: the incremental path's
             # upserts need the constraints these migrations add, but a run
             # that promises to change nothing must not migrate a database.
+            # The precondition applies to both paths: inspecting a
+            # prospective target with --dry-run is the safest thing an
+            # operator can do before pointing the pipeline at it, and it
+            # must report the problem rather than die inside a query.
+            try:
+                require_warehouse(state.engine)
+            except RuntimeError as e:
+                # A precondition, not a crash: say what is wrong once.
+                logger.error("%s", e)
+                return 2
+
             if args.dry_run:
                 pending = pending_migrations(state.engine)
                 if pending:
@@ -401,12 +412,6 @@ def run(args) -> int:
                         "A real run would apply them first.",
                         len(pending), ', '.join(pending))
             else:
-                try:
-                    require_warehouse(state.engine)
-                except RuntimeError as e:
-                    # A precondition, not a crash: say what is wrong once.
-                    logger.error("%s", e)
-                    return 2
                 apply_pending_migrations(state.engine)
 
             return _run_locked(args, state)
@@ -454,9 +459,13 @@ def _run_locked(args, state) -> int:
     if settings.get('draft_status') != 'postdraft' and not args.weeks:
         logger.info("League %s is %s - clean no-op until the draft completes.",
                     league_id, settings.get('draft_status'))
-        run_id = state.start_run(season)
-        state.finish_run(run_id, 'success', weeks_loaded=[],
-                         row_counts={'noop': 'predraft'})
+        # A dry run reports this and stops: writing a ledger row here made
+        # --dry-run mutate the database every off-season heartbeat, and fail
+        # outright where the pipeline tables do not exist yet.
+        if not args.dry_run:
+            run_id = state.start_run(season)
+            state.finish_run(run_id, 'success', weeks_loaded=[],
+                             row_counts={'noop': 'predraft'})
         return 0
 
     # Weeks already recorded raw-complete need no re-confirmation from Yahoo.
@@ -529,7 +538,13 @@ def _run_locked(args, state) -> int:
         if empty:
             logger.warning("No data fetched for week(s) %s - nothing to "
                            "publish for them", empty)
-        if not recorded:
+
+        # An empty period list is NOT the same as nothing to publish: a new
+        # league's draft-only load (draft done, week 1 not yet complete)
+        # records no period while still landing leagues, teams and draft
+        # picks, and those must reach the EDW. Only a run that loaded
+        # nothing at all skips publication.
+        if not recorded and not any(counts.values()):
             logger.warning("Nothing was loaded for weeks %s; skipping publish.",
                            weeks)
             state.finish_run(run_id, 'success', weeks_loaded=[],

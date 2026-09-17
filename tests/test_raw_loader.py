@@ -411,3 +411,31 @@ def test_blank_end_week_does_not_abort_the_load(state):
         assert conn.execute(text(
             "SELECT count(*) FROM public.matchups WHERE league_id = :l"),
             {'l': NEW_L}).scalar() > 0
+
+
+def test_draft_only_load_records_no_period_but_loads_data(state):
+    """A new league whose draft is done but whose week 1 has not finished
+    loads leagues/teams/draft picks with weeks=[]. It records no period -
+    so the orchestrator must NOT treat 'no period' as 'nothing to publish',
+    or the new season never reaches the warehouse."""
+    delta = {
+        'leagues': [{'league_id': NEW_L, 'name': 'New', 'season': str(SEASON),
+                     'game_code': 'nfl', 'game_id': '470', 'num_teams': 10,
+                     'current_week': '1', 'start_week': '1', 'end_week': '17',
+                     'league_type': 'private', 'draft_status': 'postdraft',
+                     'is_pro_league': False, 'is_cash_league': False,
+                     'url': '', 'logo_url': '', 'extracted_at': NOW}],
+        'draft_picks': [{'draft_pick_id': f'{NEW_L}_1', 'league_id': NEW_L,
+                         'pick_number': 1, 'round_number': 1,
+                         'team_id': f'{NEW_L}.t.1', 'player_id': '9',
+                         'player_name': 'P9', 'position': 'RB', 'cost': None,
+                         'is_keeper': False, 'is_auction_draft': False,
+                         'extracted_at': NOW}],
+    }
+    with state.engine.begin() as conn:
+        counts = raw_loader.load_delta(conn, state, NEW_L, SEASON, [], delta)
+
+    assert counts['leagues'] == 1 and counts['draft_picks'] == 1
+    assert state.recorded_weeks(NEW_L, SEASON, []) == set()
+    # The signal the orchestrator keys off: data WAS loaded.
+    assert any(counts.values())
