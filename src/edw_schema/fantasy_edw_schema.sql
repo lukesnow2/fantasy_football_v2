@@ -323,7 +323,10 @@ CREATE TABLE fact_transaction (
     -- Yahoo's transaction key (e.g. "153.l.76788.tr.1"). With player_key this
     -- is the business key republication upserts on; without it a re-run
     -- duplicates every row it reloads.
-    source_transaction_id VARCHAR(100),
+    -- NOT NULL because it is half the business key: batched upserts dedupe
+    -- with pandas (NaN == NaN), while Postgres treats NULL as distinct, so a
+    -- nullable key would silently collapse rows the database would keep.
+    source_transaction_id VARCHAR(100) NOT NULL,
     league_key INTEGER NOT NULL,
     season_year INTEGER NOT NULL,
     

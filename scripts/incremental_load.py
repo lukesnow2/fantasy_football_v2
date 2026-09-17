@@ -42,6 +42,9 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger('incremental_load')
 
 RUNS_DIR = 'data/runs'
+MIGRATIONS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'src', 'edw_schema', 'migrations')
 
 # Raw tables -> EDW refresh triggers, matching EdwEtlProcessor's
 # EDW_PROCESSING_STRATEGIES keys.
@@ -181,9 +184,14 @@ def yahoo_completed_weeks(league, already_complete=()) -> list:
 
 def extract_scope(extractor, league_id, weeks, stats_only, is_new,
                   since, league_info_rows):
-    """Fetch the scoped delta from Yahoo. Errors raise - never empty-on-fail."""
-    data = {'leagues': [], 'teams': [], 'rosters': [], 'matchups': [],
-            'transactions': [], 'draft_picks': [], 'statistics': []}
+    """Fetch the scoped delta from Yahoo. Errors raise - never empty-on-fail.
+
+    Only keys the run actually fetched are present. load_delta treats an
+    absent key as "not fetched" and leaves that table untouched; a key
+    present but empty means "fetched, genuinely nothing". Pre-seeding every
+    key made --stats-only delete the period's matchups and rosters.
+    """
+    data = {}
 
     data['statistics'] = [s.__dict__ for s in
                           extractor.extract_statistics_for_league(league_id, weeks)]
@@ -206,6 +214,116 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
         data['draft_picks'] = [d.__dict__ for d in
                                extractor.extract_draft_for_league(league_id)]
     return data
+
+
+RAW_TABLES = ('leagues', 'teams', 'rosters', 'matchups', 'statistics',
+              'transactions', 'draft_picks')
+
+
+def require_warehouse(engine):
+    """Fail with a readable message when this database is not a warehouse.
+
+    Checked BEFORE migrations, which target edw and would otherwise abort
+    with a bare 'schema "edw" does not exist'; and before ensure_constraints,
+    which indexes public.leagues and surfaced as
+    'relation "public.leagues" does not exist'. The cutover - pointing the
+    pipeline at a fresh target - is exactly when the operator needs to be
+    told what is missing rather than handed a driver traceback.
+    """
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        has_edw = conn.execute(text(
+            "SELECT 1 FROM information_schema.schemata "
+            "WHERE schema_name = 'edw'")).scalar()
+        missing = [t for t in RAW_TABLES
+                   if not conn.execute(text("SELECT to_regclass(:t)"),
+                                       {'t': f'public.{t}'}).scalar()]
+    problems = []
+    if not has_edw:
+        problems.append("the edw schema is absent")
+    if missing:
+        problems.append("raw tables are absent: "
+                        + ', '.join(f'public.{t}' for t in missing))
+    if problems:
+        raise RuntimeError(
+            "This database is not a built warehouse (" + "; ".join(problems)
+            + "). Load a baseline snapshot and build the EDW first (see "
+              "RUNBOOK, 'Full warehouse rebuild'); the incremental pipeline "
+              "extends an existing warehouse, it does not create one.")
+
+
+def pending_migrations(engine):
+    """Migration filenames this database has not recorded. Read-only."""
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        exists = conn.execute(text(
+            "SELECT to_regclass('public.pipeline_migrations')")).scalar()
+        done = set()
+        if exists:
+            done = {r[0] for r in conn.execute(text(
+                "SELECT filename FROM public.pipeline_migrations"))}
+    return [os.path.basename(p)
+            for p in sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql')))
+            if os.path.basename(p) not in done]
+
+
+def apply_pending_migrations(engine):
+    """Apply edw migrations this database has not yet recorded.
+
+    The incremental path depends on constraints these migrations add; a
+    database without them fails mid-run with an opaque "no unique or
+    exclusion constraint matching the ON CONFLICT specification". Each
+    migration is idempotent, but applied-tracking keeps runs cheap and
+    makes the state auditable.
+
+    Call this with the pipeline advisory lock HELD. Schema migration is
+    pipeline work: two runs starting together against an unmigrated
+    database would otherwise execute the same backfill concurrently.
+
+    Returns the number of migrations applied by this call.
+    """
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS public.pipeline_migrations (
+                filename    text PRIMARY KEY,
+                applied_at  timestamptz NOT NULL DEFAULT now()
+            )
+        """))
+    with engine.connect() as conn:
+        done = {r[0] for r in conn.execute(text(
+            "SELECT filename FROM public.pipeline_migrations"))}
+
+    applied = 0
+    for path in sorted(glob.glob(os.path.join(MIGRATIONS_DIR, '*.sql'))):
+        name = os.path.basename(path)
+        if name in done:
+            continue
+        logger.info("Applying migration %s", name)
+        with open(path) as f:
+            sql = f.read()
+        # Each file manages its own BEGIN/COMMIT, so run it outside a
+        # SQLAlchemy transaction and record it separately.
+        #
+        # Executed on a raw cursor with NO parameter argument, the only form
+        # that passes arbitrary SQL through untouched: text() reads :token as
+        # a bind parameter, and exec_driver_sql hands psycopg2 an empty
+        # parameter set, which makes it interpret % - so a migration
+        # containing LIKE '%.p.%' dies with "KeyError: 0".
+        with engine.connect().execution_options(
+                isolation_level='AUTOCOMMIT') as conn:
+            cursor = conn.connection.cursor()
+            try:
+                cursor.execute(sql)
+            finally:
+                cursor.close()
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO public.pipeline_migrations (filename) "
+                "VALUES (:f) ON CONFLICT (filename) DO NOTHING"),
+                {'f': name})
+        applied += 1
+    return applied
 
 
 def write_run_snapshot(data, league_id, season):
@@ -272,6 +390,30 @@ def run(args) -> int:
             return 0
 
         try:
+            # Under the lock, and never on a dry run: the incremental path's
+            # upserts need the constraints these migrations add, but a run
+            # that promises to change nothing must not migrate a database.
+            # The precondition applies to both paths: inspecting a
+            # prospective target with --dry-run is the safest thing an
+            # operator can do before pointing the pipeline at it, and it
+            # must report the problem rather than die inside a query.
+            try:
+                require_warehouse(state.engine)
+            except RuntimeError as e:
+                # A precondition, not a crash: say what is wrong once.
+                logger.error("%s", e)
+                return 2
+
+            if args.dry_run:
+                pending = pending_migrations(state.engine)
+                if pending:
+                    logger.warning(
+                        "%d migration(s) not applied to this database (%s). "
+                        "A real run would apply them first.",
+                        len(pending), ', '.join(pending))
+            else:
+                apply_pending_migrations(state.engine)
+
             return _run_locked(args, state)
         finally:
             lock_ctx.__exit__(None, None, None)
@@ -280,10 +422,19 @@ def run(args) -> int:
 
 
 def _run_locked(args, state) -> int:
-    state.ensure_schema()
-    with state.engine.begin() as conn:
-        raw_loader.ensure_constraints(conn)
-    pub.ensure_edw_serial_defaults(state.engine)
+    # A dry run reports; it does not prepare. Creating the pipeline tables
+    # and indexes here made --dry-run write to a database it promised to
+    # leave alone.
+    if not args.dry_run:
+        state.ensure_schema()
+        with state.engine.begin() as conn:
+            raw_loader.ensure_constraints(conn)
+        pub.ensure_edw_serial_defaults(state.engine)
+    elif not state.schema_exists():
+        # Nothing to report a gap against, and a dry run must not create it.
+        logger.warning("This database has no pipeline state tables yet; a "
+                       "real run would create them. Reporting Yahoo-side "
+                       "state only.")
 
     # 1. Repair publication BEFORE anything else: raw-complete periods the
     #    site cannot see yet need EDW work only - no Yahoo calls.
@@ -308,9 +459,13 @@ def _run_locked(args, state) -> int:
     if settings.get('draft_status') != 'postdraft' and not args.weeks:
         logger.info("League %s is %s - clean no-op until the draft completes.",
                     league_id, settings.get('draft_status'))
-        run_id = state.start_run(season)
-        state.finish_run(run_id, 'success', weeks_loaded=[],
-                         row_counts={'noop': 'predraft'})
+        # A dry run reports this and stops: writing a ledger row here made
+        # --dry-run mutate the database every off-season heartbeat, and fail
+        # outright where the pipeline tables do not exist yet.
+        if not args.dry_run:
+            run_id = state.start_run(season)
+            state.finish_run(run_id, 'success', weeks_loaded=[],
+                             row_counts={'noop': 'predraft'})
         return 0
 
     # Weeks already recorded raw-complete need no re-confirmation from Yahoo.
@@ -374,14 +529,42 @@ def _run_locked(args, state) -> int:
                                            weeks, data)
 
         # 6. Publish: snapshot-guarded EDW refresh + verification gate.
+        #    Only periods the load actually recorded are published. A week
+        #    that fetched nothing has no pipeline_periods row, and publishing
+        #    it would trip the gate's unverifiable-period check with an error
+        #    about bookkeeping rather than the real condition.
+        recorded = state.recorded_weeks(league_id, season, weeks)
+        empty = [w for w in weeks if w not in recorded]
+        if empty:
+            logger.warning("No data fetched for week(s) %s - nothing to "
+                           "publish for them", empty)
+
+        # An empty period list is NOT the same as nothing to publish: a new
+        # league's draft-only load (draft done, week 1 not yet complete)
+        # records no period while still landing leagues, teams and draft
+        # picks, and those must reach the EDW. Only a run that loaded
+        # nothing at all skips publication.
+        if not recorded and not any(counts.values()):
+            logger.warning("Nothing was loaded for weeks %s; skipping publish.",
+                           weeks)
+            state.finish_run(run_id, 'success', weeks_loaded=[],
+                             row_counts={'noop': 'no-data', 'weeks': weeks})
+            return 0
+
         changed = {t for t, n in counts.items() if n} or ALL_OPERATIONAL_TABLES
-        periods = [(league_id, season, w) for w in weeks]
+        periods = [(league_id, season, w) for w in sorted(recorded)]
         pub.publish(state, periods,
                     make_edw_refresh(args.database_url, changed))
 
         # 7. Audit-trail snapshot (sanitized, gzipped; never load-bearing).
         write_run_snapshot(data, league_id, season)
 
+        if not state.lock_still_held():
+            # Not fatal - the work is committed and verified - but the run
+            # was not serialised for its whole duration, so say so.
+            logger.warning("Advisory lock was lost during this run (the "
+                           "database closed its connection). The load "
+                           "completed, but a concurrent run was possible.")
         state.finish_run(run_id, 'success', weeks_loaded=weeks,
                          row_counts=counts)
         logger.info("Run %d complete: weeks %s, %s", run_id, weeks, counts)

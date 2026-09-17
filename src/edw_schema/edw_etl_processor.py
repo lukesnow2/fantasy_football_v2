@@ -3252,6 +3252,71 @@ class EdwEtlProcessor:
         
         return True
     
+    @staticmethod
+    def _batch_upsert(conn, table: str, columns: List[str], conflict: str,
+                      update_cols: List[str], df, page_size: int = 1000,
+                      extra_set: Optional[List[str]] = None) -> int:
+        """Upsert a DataFrame in batched multi-row statements.
+
+        One statement per row costs one network round trip per row. That is
+        invisible against a local database and ruinous against a hosted one:
+        publishing ~57,000 event rows to Neon took over half an hour and blew
+        the workflow's 30-minute budget, because each upsert waited on
+        us-east-1. execute_values sends them in pages instead, turning tens of
+        thousands of round trips into tens.
+
+        Semantics are unchanged: same target columns, same ON CONFLICT key,
+        same DO UPDATE set.
+        """
+        from psycopg2.extras import execute_values
+
+        if df is None or df.empty:
+            return 0
+
+        # Reindex so tuple order always matches `columns`, and make missing
+        # columns explicit NULLs rather than a silent KeyError.
+        frame = df.reindex(columns=columns)
+
+        # One statement per row tolerated a repeated business key (the last
+        # write won); a single multi-row ON CONFLICT DO UPDATE raises
+        # "cannot affect row a second time" and takes the whole refresh down
+        # with it. Keep the old semantics by collapsing duplicates here.
+        key_cols = [c.strip().strip('"') for c in conflict.split(',')]
+        if all(c in frame.columns for c in key_cols):
+            before = len(frame)
+            frame = frame.drop_duplicates(subset=key_cols, keep='last')
+            if len(frame) != before:
+                logger.warning(
+                    "%s: collapsed %d row(s) sharing a business key (%s)",
+                    table, before - len(frame), conflict)
+
+        rows = [tuple(None if pd.isna(v) else v for v in rec)
+                for rec in frame.itertuples(index=False, name=None)]
+
+        col_list = ', '.join(f'"{c}"' for c in columns)
+        set_parts = [f'"{c}" = EXCLUDED."{c}"' for c in update_cols]
+        # Expressions EXCLUDED cannot carry, e.g. updated_at = CURRENT_TIMESTAMP.
+        set_parts.extend(extra_set or [])
+        sets = ', '.join(set_parts)
+        sql = (f'INSERT INTO edw.{table} ({col_list}) VALUES %s '
+               f'ON CONFLICT ({conflict}) DO UPDATE SET {sets}')
+
+        # The batch runs on the raw DBAPI cursor, which SQLAlchemy does not
+        # see. If SQLAlchemy has no transaction of its own, its later
+        # commit() is a no-op and every row written here is rolled back when
+        # the connection returns to the pool - silently, with the upsert
+        # still reporting success. Opening the transaction explicitly makes
+        # the caller's commit cover this work.
+        if not conn.in_transaction():
+            conn.begin()
+
+        cursor = conn.connection.cursor()
+        try:
+            execute_values(cursor, sql, rows, page_size=page_size)
+        finally:
+            cursor.close()
+        return len(rows)
+
     def load_fact_table(self, table_name: str, data: List[Dict]) -> bool:
         """Load data into fact table with proper incremental loading strategy"""
         try:
@@ -3344,82 +3409,54 @@ class EdwEtlProcessor:
                         logger.info(f"🔄 Using business-key UPSERT for event table {table_name}")
 
                         if table_name == 'fact_player_statistics':
-                            logger.info(f"🔄 Using UPSERT strategy for {table_name}")
-                            # Convert DataFrame to records for individual upsert
-                            for _, row in df.iterrows():
-                                upsert_sql = text("""
-                                    INSERT INTO edw.fact_player_statistics 
-                                    (league_key, player_key, season_year, week_number, weekly_fantasy_points, position_type, 
-                                     position_rank, league_rank, points_above_replacement, source_stat_id, game_code)
-                                    VALUES (:league_key, :player_key, :season_year, :week_number, :weekly_fantasy_points, :position_type,
-                                            :position_rank, :league_rank, :points_above_replacement, :source_stat_id, :game_code)
-                                    ON CONFLICT (league_key, player_key, season_year, week_number) 
-                                    DO UPDATE SET
-                                        weekly_fantasy_points = EXCLUDED.weekly_fantasy_points,
-                                        position_type = EXCLUDED.position_type,
-                                        position_rank = EXCLUDED.position_rank,
-                                        league_rank = EXCLUDED.league_rank,
-                                        points_above_replacement = EXCLUDED.points_above_replacement,
-                                        source_stat_id = EXCLUDED.source_stat_id,
-                                        updated_at = CURRENT_TIMESTAMP
-                                """)
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} statistics records")
+                            n = self._batch_upsert(
+                                conn, 'fact_player_statistics',
+                                ['league_key', 'player_key', 'season_year',
+                                 'week_number', 'weekly_fantasy_points',
+                                 'position_type', 'position_rank', 'league_rank',
+                                 'points_above_replacement', 'source_stat_id',
+                                 'game_code'],
+                                'league_key, player_key, season_year, week_number',
+                                ['weekly_fantasy_points', 'position_type',
+                                 'position_rank', 'league_rank',
+                                 'points_above_replacement', 'source_stat_id'],
+                                df,
+                                extra_set=['updated_at = CURRENT_TIMESTAMP'])
+                            logger.info(f"✅ Upserted {n} statistics records")
 
                         elif table_name == 'fact_draft':
-                            upsert_sql = text("""
-                                INSERT INTO edw.fact_draft
-                                (league_key, team_key, manager_key, player_key, season_year,
-                                 overall_pick, round_number, pick_in_round, draft_type, draft_cost,
-                                 is_keeper_pick, season_points, fantasy_games_played, points_per_week)
-                                VALUES (:league_key, :team_key, :manager_key, :player_key, :season_year,
-                                        :overall_pick, :round_number, :pick_in_round, :draft_type, :draft_cost,
-                                        :is_keeper_pick, :season_points, :fantasy_games_played, :points_per_week)
-                                ON CONFLICT (league_key, season_year, overall_pick)
-                                DO UPDATE SET
-                                    team_key = EXCLUDED.team_key,
-                                    manager_key = EXCLUDED.manager_key,
-                                    player_key = EXCLUDED.player_key,
-                                    round_number = EXCLUDED.round_number,
-                                    pick_in_round = EXCLUDED.pick_in_round,
-                                    draft_type = EXCLUDED.draft_type,
-                                    draft_cost = EXCLUDED.draft_cost,
-                                    is_keeper_pick = EXCLUDED.is_keeper_pick,
-                                    season_points = EXCLUDED.season_points,
-                                    fantasy_games_played = EXCLUDED.fantasy_games_played,
-                                    points_per_week = EXCLUDED.points_per_week
-                            """)
-                            for _, row in df.iterrows():
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} draft records")
+                            n = self._batch_upsert(
+                                conn, 'fact_draft',
+                                ['league_key', 'team_key', 'manager_key',
+                                 'player_key', 'season_year', 'overall_pick',
+                                 'round_number', 'pick_in_round', 'draft_type',
+                                 'draft_cost', 'is_keeper_pick', 'season_points',
+                                 'fantasy_games_played', 'points_per_week'],
+                                'league_key, season_year, overall_pick',
+                                ['team_key', 'manager_key', 'player_key',
+                                 'round_number', 'pick_in_round', 'draft_type',
+                                 'draft_cost', 'is_keeper_pick', 'season_points',
+                                 'fantasy_games_played', 'points_per_week'],
+                                df)
+                            logger.info(f"✅ Upserted {n} draft records")
 
                         elif table_name == 'fact_transaction':
-                            upsert_sql = text("""
-                                INSERT INTO edw.fact_transaction
-                                (source_transaction_id, league_key, season_year, transaction_type,
-                                 transaction_date, transaction_week, player_key, from_team_key, to_team_key,
-                                 from_manager_key, to_manager_key, faab_bid, trade_group_id, transaction_status)
-                                VALUES (:source_transaction_id, :league_key, :season_year, :transaction_type,
-                                        :transaction_date, :transaction_week, :player_key, :from_team_key, :to_team_key,
-                                        :from_manager_key, :to_manager_key, :faab_bid, :trade_group_id, :transaction_status)
-                                ON CONFLICT (source_transaction_id, player_key)
-                                DO UPDATE SET
-                                    league_key = EXCLUDED.league_key,
-                                    season_year = EXCLUDED.season_year,
-                                    transaction_type = EXCLUDED.transaction_type,
-                                    transaction_date = EXCLUDED.transaction_date,
-                                    transaction_week = EXCLUDED.transaction_week,
-                                    from_team_key = EXCLUDED.from_team_key,
-                                    to_team_key = EXCLUDED.to_team_key,
-                                    from_manager_key = EXCLUDED.from_manager_key,
-                                    to_manager_key = EXCLUDED.to_manager_key,
-                                    faab_bid = EXCLUDED.faab_bid,
-                                    trade_group_id = EXCLUDED.trade_group_id,
-                                    transaction_status = EXCLUDED.transaction_status
-                            """)
-                            for _, row in df.iterrows():
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} transaction records")
+                            n = self._batch_upsert(
+                                conn, 'fact_transaction',
+                                ['source_transaction_id', 'league_key',
+                                 'season_year', 'transaction_type',
+                                 'transaction_date', 'transaction_week',
+                                 'player_key', 'from_team_key', 'to_team_key',
+                                 'from_manager_key', 'to_manager_key', 'faab_bid',
+                                 'trade_group_id', 'transaction_status'],
+                                'source_transaction_id, player_key',
+                                ['league_key', 'season_year', 'transaction_type',
+                                 'transaction_date', 'transaction_week',
+                                 'from_team_key', 'to_team_key',
+                                 'from_manager_key', 'to_manager_key', 'faab_bid',
+                                 'trade_group_id', 'transaction_status'],
+                                df)
+                            logger.info(f"✅ Upserted {n} transaction records")
 
                         else:
                             df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)

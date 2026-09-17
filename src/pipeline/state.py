@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError, InvalidRequestError, ResourceClosedError
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,21 @@ class PipelineState:
 
     def __init__(self, database_url: str):
         url = database_url.replace('postgres://', 'postgresql://', 1)
-        self.engine = create_engine(url)
+        # TCP keepalives, because the advisory lock is session-scoped and a
+        # hosted Postgres drops idle connections: on Neon the lock connection
+        # sat idle through an 8-minute publish and was closed, which both
+        # failed the run at cleanup and silently released the lock while work
+        # was still running. pool_pre_ping recycles dead pooled connections
+        # (it cannot help the held lock connection - hence the keepalives).
+        self.engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={
+                'keepalives': 1,
+                'keepalives_idle': 30,
+                'keepalives_interval': 10,
+                'keepalives_count': 5,
+            })
         self._ledger = self.engine.connect().execution_options(
             isolation_level='AUTOCOMMIT')
         self._lock_conn = None
@@ -93,10 +108,27 @@ class PipelineState:
                 if stmt.strip():
                     conn.execute(text(stmt))
 
+    def schema_exists(self) -> bool:
+        """Whether the pipeline state tables have been created.
+
+        Read-only, so a dry run can report against a database it must not
+        modify. The readers below return empty rather than raising when the
+        answer is no.
+        """
+        with self.engine.connect() as conn:
+            return bool(conn.execute(text(
+                "SELECT to_regclass('public.pipeline_periods')")).scalar())
+
     def close(self):
+        # Cleanup must never turn a completed run into a failure; a hosted
+        # Postgres may have closed any of these sockets already.
         if self._lock_conn is not None:
             self.release_lock()
-        self._ledger.close()
+        try:
+            self._ledger.close()
+        except Exception as e:
+            logger.warning("Ledger connection close failed (%s)",
+                           type(e).__name__)
         self.engine.dispose()
 
     # ------------------------------------------------------------------
@@ -126,14 +158,54 @@ class PipelineState:
                      {'k': ADVISORY_LOCK_KEY})
         self._lock_conn = conn
 
+    def lock_still_held(self) -> bool:
+        """Whether this session still holds the advisory lock.
+
+        A dropped lock connection releases the lock silently, so a long run
+        can finish believing it was serialised when it was not. Checked
+        before publishing results so the loss is reported rather than
+        assumed away.
+        """
+        if self._lock_conn is None:
+            return False
+        try:
+            return bool(self._lock_conn.execute(text(
+                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                "AND objid = :k AND pid = pg_backend_pid()"),
+                {'k': ADVISORY_LOCK_KEY}).scalar())
+        except (DBAPIError, ResourceClosedError, InvalidRequestError):
+            # The connection is gone or unusable, which IS the loss this
+            # reports. ResourceClosedError is not a DBAPIError, so catching
+            # only the latter made a closed lock connection report the lock
+            # as HELD - the exact inversion of what this check is for.
+            return False
+        except Exception:
+            # Anything else is a bug in this check, not a lost lock. Say so,
+            # or a broken query would report "lock lost" on every healthy run
+            # until the warning became noise and hid the real event.
+            logger.exception("Advisory-lock check failed; treating the lock "
+                             "as held. This is a bug in the check itself.")
+            return True
+
     def release_lock(self):
         if self._lock_conn is not None:
             try:
                 self._lock_conn.execute(
                     text("SELECT pg_advisory_unlock(:k)"),
                     {'k': ADVISORY_LOCK_KEY})
+            except Exception as e:
+                # The connection may already be gone (hosted Postgres closing
+                # an idle session). The lock dies with it, so there is nothing
+                # to release - but a completed run must not be reported as a
+                # failure because its cleanup found a closed socket.
+                logger.warning("Advisory lock release skipped (%s): the "
+                               "connection was already closed, so the lock "
+                               "is gone with it.", type(e).__name__)
             finally:
-                self._lock_conn.close()
+                try:
+                    self._lock_conn.close()
+                except Exception:
+                    pass
                 self._lock_conn = None
 
     @contextmanager
@@ -214,6 +286,13 @@ class PipelineState:
         unknown = set(entities) - set(RAW_ENTITIES)
         if unknown:
             raise ValueError(f"unknown raw entities: {unknown}")
+        if not entities:
+            # Joining over an empty dict produced "SET , raw_version = ..."
+            # - a syntax error that aborts the whole raw transaction and
+            # discards data that had already loaded successfully.
+            raise ValueError(
+                "mark_raw_complete requires at least one entity; "
+                "a period with nothing loaded must not be marked complete")
         sets = ", ".join(
             f"raw_{e}_complete = true" for e in entities)
         conn.execute(text(f"""
@@ -258,10 +337,14 @@ class PipelineState:
             q += " AND league_id = :l"
             params['l'] = league_id
         q += " ORDER BY season, week"
+        if not self.schema_exists():
+            return []
         with self.engine.connect() as conn:
             return [tuple(r) for r in conn.execute(text(q), params)]
 
     def published_weeks(self, league_id: str, season: int) -> Set[int]:
+        if not self.schema_exists():
+            return set()
         with self.engine.connect() as conn:
             rows = conn.execute(text(
                 "SELECT week FROM public.pipeline_periods "
@@ -269,8 +352,30 @@ class PipelineState:
                 {'l': league_id, 's': season})
             return {r[0] for r in rows}
 
+    def recorded_weeks(self, league_id: str, season: int,
+                       weeks: List[int]) -> Set[int]:
+        """Which of `weeks` have a pipeline_periods row at all.
+
+        A week the load fetched nothing for is never recorded, and must not
+        be handed to publish: the verification gate refuses periods it has
+        no record of, which would report a bookkeeping error instead of the
+        real condition.
+        """
+        if not weeks:
+            return set()
+        if not self.schema_exists():
+            return set()
+        with self.engine.connect() as conn:
+            rows = conn.execute(text(
+                "SELECT week FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = ANY(:w)"),
+                {'l': league_id, 's': season, 'w': list(weeks)})
+            return {r[0] for r in rows}
+
     def raw_complete_weeks(self, league_id: str, season: int) -> Set[int]:
         """Weeks where every raw entity is complete (published or not)."""
+        if not self.schema_exists():
+            return set()
         with self.engine.connect() as conn:
             rows = conn.execute(text(
                 "SELECT week FROM public.pipeline_periods "

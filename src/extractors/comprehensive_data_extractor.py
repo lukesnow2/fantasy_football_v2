@@ -1096,10 +1096,47 @@ class YahooFantasyExtractor:
             logger.error(f"Failed to extract matchups for league {league_id}")
             raise
     
+    @staticmethod
+    def _fetch_transactions(league, tran_types: str, count: int) -> List[Dict[str, Any]]:
+        """Fetch transactions without the library's paired-iteration parser.
+
+        yahoo_fantasy_api's League.transactions() walks the objectpath result
+        two nodes at a time - a transaction's details, then its players - and
+        calls next() unconditionally for the second. A transaction with no
+        players node overruns the iterator and raises StopIteration straight
+        out of the library, failing the whole run.
+
+        That is not hypothetical: a commish transaction carries no players.
+        Verified on 449.l.674707, whose single commish transaction yields one
+        node with keys transaction_key/transaction_id/type/status/timestamp
+        and no 'players' - so `incremental_load.py --season 2024` died here.
+        Since 'commish' is one of the types we request, the first
+        commissioner action in any league would break every run from then on.
+
+        Pair the nodes here instead: a node carrying transaction_key starts a
+        record, anything else merges into the one before it. Same merged
+        dicts the library produces, minus the assumption that every
+        transaction has players.
+        """
+        import objectpath
+
+        raw = league.yhandler.get_transactions_raw(
+            league.league_id, tran_types, count)
+        nodes = objectpath.Tree(raw).execute('$..transactions..transaction')
+        merged: List[Dict[str, Any]] = []
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            if 'transaction_key' in node:
+                merged.append(dict(node))
+            elif merged:
+                merged[-1].update(node)
+        return merged
+
     def extract_transactions_for_league(self, league_id: str) -> List[ExtractedTransaction]:
         """Extract transaction data for a league"""
         transactions = []
-        
+
         try:
             # Get league object
             league = self.game.to_league(league_id)
@@ -1112,7 +1149,8 @@ class YahooFantasyExtractor:
             for trans_type in transaction_types:
                 try:
                     league_transactions = self._rate_limited_request(
-                        lambda tt=trans_type: league.transactions(tt, TRANSACTION_FETCH_CAP)
+                        lambda tt=trans_type: self._fetch_transactions(
+                            league, tt, TRANSACTION_FETCH_CAP)
                     )
 
                     # The Yahoo API has no pagination for transactions - the
@@ -1748,8 +1786,14 @@ class YahooFantasyExtractor:
             return statistics
             
         except Exception as e:
+            # Re-raise, like every other extract_*_for_league. Returning []
+            # here swallowed the deliberate `raise` above - the one written so
+            # a week is never skipped silently - and handed the caller an
+            # empty list, which the loader reads as "fetched, genuinely
+            # nothing". That is not a harmless no-op: the rolling reload
+            # window would replace the period with nothing.
             logger.error(f"Error extracting weekly statistics for league {league_id}: {e}")
-            return []
+            raise
 
     # ==========================================
     # DATABASE INTEGRATION METHODS

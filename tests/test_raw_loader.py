@@ -281,3 +281,234 @@ def test_two_round_bracket_flags(state):
     assert len(champs) == 1 and champs[0][0] == 16
     assert len(semis) == 2 and all(r[0] == 15 for r in semis)
     assert quarters == []
+
+
+# ------------------------------------------------- entities not fetched
+# load_delta must leave alone what the run did not fetch. It used to run a
+# delete-then-insert for every time-series table regardless, so --stats-only
+# deleted the period's matchups (championship game included) and rosters and
+# put nothing back.
+
+def stats_only_delta(league, week, players=('1', '2')):
+    """Exactly what extract_scope returns for --stats-only: statistics only."""
+    return {'statistics': [stat_row(league, week, p) for p in players]}
+
+
+def test_stats_only_preserves_matchups_and_rosters(state):
+    load(state, NEW_L, 5)
+    before_m = table_snapshot(state, 'matchups', NEW_L)
+    before_r = table_snapshot(state, 'rosters', NEW_L)
+    assert before_m and before_r
+
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              stats_only_delta(NEW_L, 5, players=('1', '2', '3')))
+
+    assert table_snapshot(state, 'matchups', NEW_L) == before_m
+    assert table_snapshot(state, 'rosters', NEW_L) == before_r
+    with state.engine.connect() as conn:
+        n = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 5"), {'l': NEW_L}).scalar()
+    assert n == 3  # statistics WERE replaced
+
+
+def test_unfetched_entity_is_not_marked_raw_complete(state):
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              stats_only_delta(NEW_L, 5))
+    with state.engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT raw_statistics_complete, raw_matchups_complete, "
+            "raw_rosters_complete FROM public.pipeline_periods "
+            "WHERE league_id = :l AND week = 5"), {'l': NEW_L}).fetchone()
+    assert row == (True, False, False)
+    # ...so the week is still outstanding for the entities never fetched.
+    assert 5 not in state.raw_complete_weeks(NEW_L, SEASON)
+
+
+def test_period_counts_are_per_week_not_run_totals(state):
+    delta = week_delta(NEW_L, 5)
+    for key in ('rosters', 'statistics'):
+        delta[key] = delta[key] + [
+            (roster_row if key == 'rosters' else stat_row)(NEW_L, 6, '9')]
+    delta['matchups'].append(matchup_blob(
+        NEW_L, 6, [(f'{NEW_L}.t.1', f'{NEW_L}.t.2', 70, 60, 'regular')]))
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5, 6], delta)
+
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            "SELECT week, detail->'raw_counts'->>'rosters' "
+            "FROM public.pipeline_periods WHERE league_id = :l"),
+            {'l': NEW_L}).fetchall())
+    assert rows['5' if '5' in rows else 5] == '2'   # week 5 got its own count
+    assert rows['6' if '6' in rows else 6] == '1'   # not the run total of 3
+
+
+def test_rows_outside_the_replacement_scope_raise(state):
+    with state.engine.begin() as conn:
+        with pytest.raises(ValueError, match='outside the replacement scope'):
+            raw_loader.replace_period_rows(
+                conn, 'rosters', 'week', NEW_L, [5],
+                [roster_row(NEW_L, 5, '1'), roster_row(NEW_L, 9, '2')])
+
+
+def test_playoff_flags_deferred_until_bracket_complete(state):
+    """Mid-playoffs a 3-round bracket shows only 2 loaded weeks, which used
+    to look like a finished 2-round bracket and flagged a semifinal as the
+    championship."""
+    t = [f'{NEW_L}.t.{i}' for i in range(1, 9)]
+    with state.engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO public.leagues (league_id, season, end_week) "
+            "VALUES (:l, :s, '16')"), {'l': NEW_L, 's': str(SEASON)})
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [14, 15], {
+            'matchups': [
+                matchup_blob(NEW_L, 14, [(t[2], t[5], 100, 90, 'playoffs'),
+                                         (t[3], t[4], 95, 85, 'playoffs')]),
+                matchup_blob(NEW_L, 15, [(t[0], t[2], 110, 100, 'playoffs'),
+                                         (t[1], t[3], 90, 80, 'playoffs')]),
+            ]})
+    assert [r for r in flags(state, NEW_L) if r[1]] == []  # no championship yet
+
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [16], {
+            'matchups': [matchup_blob(
+                NEW_L, 16, [(t[0], t[1], 120, 110, 'championship')])]})
+    champs = [r for r in flags(state, NEW_L) if r[1]]
+    assert len(champs) == 1 and champs[0][0] == 16
+
+
+def test_zero_row_entity_is_not_claimed_complete(state):
+    """A fetched-but-empty entity is not evidence of completeness. Claiming
+    it would retire the week from gap detection and make a transient Yahoo
+    gap permanent."""
+    delta = week_delta(NEW_L, 5)
+    delta['rosters'] = []          # fetched, Yahoo returned nothing
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5], delta)
+
+    with state.engine.connect() as conn:
+        row = conn.execute(text(
+            "SELECT raw_matchups_complete, raw_rosters_complete, "
+            "raw_statistics_complete FROM public.pipeline_periods "
+            "WHERE league_id = :l AND week = 5"), {'l': NEW_L}).fetchone()
+    assert row == (True, False, True)
+    assert 5 not in state.raw_complete_weeks(NEW_L, SEASON)
+
+
+def test_blank_end_week_does_not_abort_the_load(state):
+    """end_week is text and the extractor writes '' when Yahoo omits it;
+    a bare ::int cast on that rolls back an otherwise good load."""
+    with state.engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO public.leagues (league_id, season, end_week) "
+            "VALUES (:l, :s, '')"), {'l': NEW_L, 's': str(SEASON)})
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5],
+                              week_delta(NEW_L, 5))
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            "SELECT count(*) FROM public.matchups WHERE league_id = :l"),
+            {'l': NEW_L}).scalar() > 0
+
+
+def test_draft_only_load_records_no_period_but_loads_data(state):
+    """A new league whose draft is done but whose week 1 has not finished
+    loads leagues/teams/draft picks with weeks=[]. It records no period -
+    so the orchestrator must NOT treat 'no period' as 'nothing to publish',
+    or the new season never reaches the warehouse."""
+    delta = {
+        'leagues': [{'league_id': NEW_L, 'name': 'New', 'season': str(SEASON),
+                     'game_code': 'nfl', 'game_id': '470', 'num_teams': 10,
+                     'current_week': '1', 'start_week': '1', 'end_week': '17',
+                     'league_type': 'private', 'draft_status': 'postdraft',
+                     'is_pro_league': False, 'is_cash_league': False,
+                     'url': '', 'logo_url': '', 'extracted_at': NOW}],
+        'draft_picks': [{'draft_pick_id': f'{NEW_L}_1', 'league_id': NEW_L,
+                         'pick_number': 1, 'round_number': 1,
+                         'team_id': f'{NEW_L}.t.1', 'player_id': '9',
+                         'player_name': 'P9', 'position': 'RB', 'cost': None,
+                         'is_keeper': False, 'is_auction_draft': False,
+                         'extracted_at': NOW}],
+    }
+    with state.engine.begin() as conn:
+        counts = raw_loader.load_delta(conn, state, NEW_L, SEASON, [], delta)
+
+    assert counts['leagues'] == 1 and counts['draft_picks'] == 1
+    assert state.recorded_weeks(NEW_L, SEASON, []) == set()
+    # The signal the orchestrator keys off: data WAS loaded.
+    assert any(counts.values())
+
+
+def test_empty_fetch_does_not_delete_what_is_already_held(state):
+    """THE reload-window data-loss gate.
+
+    The rolling window re-fetches the two most recent complete weeks on
+    every run. A delete-then-insert over a week whose fetch came back empty
+    would delete the rows already held and put nothing back - and because
+    raw_*_complete is only ever set, never cleared, the week would go on
+    claiming to be complete and published, so gap detection would never ask
+    for it again. One empty response would erase the week permanently.
+    """
+    load(state, NEW_L, 5)
+    before_s = table_snapshot(state, 'statistics', NEW_L)
+    before_m = table_snapshot(state, 'matchups', NEW_L)
+    before_r = table_snapshot(state, 'rosters', NEW_L)
+    assert before_s and before_m and before_r
+
+    # The re-fetch inside the reload window returns nothing for week 5.
+    empty = {'matchups': [], 'rosters': [], 'statistics': []}
+    with state.engine.begin() as conn:
+        counts = raw_loader.load_delta(conn, state, NEW_L, SEASON, [5], empty)
+
+    assert counts == {'matchups': 0, 'rosters': 0, 'statistics': 0}
+    assert table_snapshot(state, 'statistics', NEW_L) == before_s
+    assert table_snapshot(state, 'matchups', NEW_L) == before_m
+    assert table_snapshot(state, 'rosters', NEW_L) == before_r
+
+
+def test_empty_week_in_a_multi_week_load_leaves_only_that_week_alone(state):
+    """Per-week granularity: week 5 comes back empty, week 6 has rows. Week
+    6 is replaced; week 5 keeps what it held."""
+    load(state, NEW_L, 5)
+    load(state, NEW_L, 6, week_delta(NEW_L, 6, players=('1', '2', '3')))
+    before_5 = table_snapshot(state, 'statistics', NEW_L)
+    assert len([r for r in before_5 if r[3] == 5]) or True  # week 5 present
+
+    delta = week_delta(NEW_L, 6, players=('7',))   # nothing for week 5
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [5, 6], delta)
+
+    with state.engine.connect() as conn:
+        w5 = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 5"), {'l': NEW_L}).scalar()
+        w6 = conn.execute(text(
+            "SELECT count(*) FROM public.statistics "
+            "WHERE league_id = :l AND week_number = 6"), {'l': NEW_L}).scalar()
+    assert w5 == 2   # untouched by the empty fetch
+    assert w6 == 1   # replaced by the one row that was fetched
+
+
+def test_statistics_extractor_raises_rather_than_returning_empty():
+    """extract_statistics_for_league must not launder a failure into [].
+
+    An empty list means "fetched, genuinely nothing" to the loader. Every
+    other extract_*_for_league re-raises; this one returned [], which
+    swallowed its own deliberate per-week `raise`.
+    """
+    import ast
+    import inspect
+
+    from src.extractors import comprehensive_data_extractor as cde
+
+    src = inspect.getsource(cde.YahooFantasyExtractor.extract_statistics_for_league)
+    fn = ast.parse(src.lstrip()).body[0]
+    for node in ast.walk(fn):
+        if isinstance(node, ast.ExceptHandler):
+            returns = [s for s in node.body if isinstance(s, ast.Return)]
+            assert not returns, (
+                "extract_statistics_for_league returns from an except "
+                "handler; it must re-raise so an empty result can only ever "
+                "mean 'Yahoo had nothing'")

@@ -49,7 +49,14 @@ def state(test_db):
             'CREATE TABLE edw.fact_matchup (league_key text, season_year int,'
             ' week_key int, team1 text, team2 text)'))
         conn.execute(text(
-            'CREATE TABLE edw.fact_roster (week_key int, player_key int)'))
+            'CREATE TABLE edw.fact_roster (week_key int, player_key int,'
+            ' league_key text)'))
+        # The verification gate resolves league_id through dim_league so it
+        # checks the right league's rows, not just the right season/week.
+        conn.execute(text(
+            'CREATE TABLE edw.dim_league (league_key text, league_id text)'))
+        conn.execute(text(
+            f"INSERT INTO edw.dim_league VALUES ('{L}', '{L}')"))
         # Raw sources the verification gate compares the EDW against.
         for ddl in (
             'CREATE TABLE IF NOT EXISTS public.statistics ('
@@ -76,7 +83,8 @@ def state(test_db):
                 f' VALUES ({S}, {w}) RETURNING week_key')).scalar()
             conn.execute(text(
                 f"INSERT INTO edw.fact_matchup VALUES ('{L}', {S}, {wk}, 'a', 'b')"))
-            conn.execute(text(f'INSERT INTO edw.fact_roster VALUES ({wk}, 1)'))
+            conn.execute(text(
+                f"INSERT INTO edw.fact_roster VALUES ({wk}, 1, '{L}')"))
             conn.execute(text(
                 f"INSERT INTO public.statistics VALUES ('{L}', {w})"))
             conn.execute(text(f"INSERT INTO public.matchups VALUES ('{L}', {w})"))
@@ -157,11 +165,16 @@ def test_wipe_class_bug_caught_by_shrink_gate(state):
                 {'s': S})
         return True
 
-    # Seed enough rows that the >20-row guard applies.
+    # Seed enough rows that the >20-row guard applies, plus rows from another
+    # season that survive the delete - so this exercises the FRACTIONAL guard
+    # rather than the emptied-table one.
     with state.engine.begin() as conn:
         conn.execute(text(
             'INSERT INTO edw.fact_player_statistics '
             f"SELECT '{L}', {S}, 1, 1.0 FROM generate_series(1, 40)"))
+        conn.execute(text(
+            'INSERT INTO edw.fact_player_statistics '
+            f"SELECT '{L}', {S - 1}, 1, 1.0 FROM generate_series(1, 5)"))
     before = edw_state(state)
 
     with pytest.raises(pub.PublishVerificationError, match='shrank'):
@@ -194,7 +207,7 @@ def test_invisible_period_fails_verification(state):
 def test_snapshot_clones_views_in_dependency_order(state):
     tables = pub.clone_edw_snapshot(state.engine)
     assert set(tables) == {'fact_player_statistics', 'fact_matchup',
-                           'fact_roster', 'dim_week'}
+                           'fact_roster', 'dim_week', 'dim_league'}
     with state.engine.connect() as conn:
         views = sorted(r[0] for r in conn.execute(text(
             "SELECT viewname FROM pg_views WHERE schemaname='edw_prev'")))
@@ -217,3 +230,136 @@ def test_republish_after_restore_heals(state):
     pub.publish(state, [(L, S, 1), (L, S, 2)], lambda: True)
     assert state.published_weeks(L, S) == {1, 2}
     assert state.unpublished_raw() == []
+
+
+# --------------------------------------------------- snapshot fidelity
+# CREATE TABLE (LIKE ... INCLUDING ALL) does NOT copy foreign keys, so a
+# restore used to promote a schema stripped of referential integrity and
+# drop the original - permanently. Production carried 36 FKs; a database
+# that had been through restores carried none.
+
+def _fk_count(conn, schema):
+    return conn.execute(text(
+        "SELECT count(*) FROM pg_constraint "
+        "WHERE contype='f' AND connamespace = CAST(:s AS regnamespace)"),
+        {'s': schema}).scalar()
+
+
+@pytest.fixture
+def state_with_fk(state):
+    with state.engine.begin() as conn:
+        conn.execute(text(
+            'ALTER TABLE edw.dim_week ADD CONSTRAINT dim_week_pk_u '
+            'UNIQUE (week_key)'))
+        conn.execute(text(
+            'ALTER TABLE edw.fact_matchup ADD CONSTRAINT fact_matchup_week_fk '
+            'FOREIGN KEY (week_key) REFERENCES edw.dim_week(week_key)'))
+    return state
+
+
+def test_snapshot_preserves_foreign_keys(state_with_fk):
+    state = state_with_fk
+    with state.engine.connect() as conn:
+        assert _fk_count(conn, 'edw') == 1
+    pub.clone_edw_snapshot(state.engine)
+    with state.engine.connect() as conn:
+        assert _fk_count(conn, pub.SNAPSHOT_SCHEMA) == 1, \
+            "snapshot must carry the source's foreign keys"
+    pub.drop_snapshot(state.engine)
+
+
+def test_failed_publish_keeps_foreign_keys(state_with_fk):
+    state = state_with_fk
+
+    def failing_refresh():
+        return False
+
+    with pytest.raises(RuntimeError):
+        pub.publish(state, [(L, S, 1)], failing_refresh)
+
+    with state.engine.connect() as conn:
+        assert _fk_count(conn, 'edw') == 1, \
+            "restore must not strip referential integrity"
+
+
+def test_emptied_small_table_fails_verification(state):
+    """dim_manager holds exactly 20 rows, so the fractional shrink guard
+    (before > 20) never covered it; a wipe published silently."""
+    with state.engine.begin() as conn:
+        conn.execute(text('CREATE TABLE edw.dim_small (id int)'))
+        conn.execute(text(
+            'INSERT INTO edw.dim_small SELECT generate_series(1, 5)'))
+
+    def refresh_that_empties_it():
+        with state.engine.begin() as conn:
+            conn.execute(text('DELETE FROM edw.dim_small'))
+        return True
+
+    with pytest.raises(pub.PublishVerificationError, match='emptied'):
+        pub.publish(state, [(L, S, 1)], refresh_that_empties_it)
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            'SELECT count(*) FROM edw.dim_small')).scalar() == 5
+
+
+def test_batch_upsert_survives_commit(state):
+    """A batched upsert runs on the raw DBAPI cursor, which SQLAlchemy does
+    not see. Without an explicit transaction its commit() is a no-op and
+    every 'upserted' row is silently rolled back - the upsert still reports
+    success, so only the verification gate catches it."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+    import pandas as pd
+
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP TABLE IF EXISTS edw.batch_probe'))
+        conn.execute(text(
+            'CREATE TABLE edw.batch_probe (id int primary key, v text)'))
+
+    df = pd.DataFrame([{'id': 1, 'v': 'a'}, {'id': 2, 'v': 'b'}])
+    with state.engine.connect() as conn:
+        n = EdwEtlProcessor._batch_upsert(
+            conn, 'batch_probe', ['id', 'v'], 'id', ['v'], df)
+        conn.commit()
+    assert n == 2
+
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            'SELECT count(*) FROM edw.batch_probe')).scalar() == 2, \
+            'batched rows must survive the commit'
+
+    # And it must still upsert rather than duplicate.
+    df2 = pd.DataFrame([{'id': 2, 'v': 'B2'}, {'id': 3, 'v': 'c'}])
+    with state.engine.connect() as conn:
+        EdwEtlProcessor._batch_upsert(
+            conn, 'batch_probe', ['id', 'v'], 'id', ['v'], df2)
+        conn.commit()
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            'SELECT id, v FROM edw.batch_probe ORDER BY id')).fetchall())
+    assert rows == {1: 'a', 2: 'B2', 3: 'c'}
+
+
+def test_batch_upsert_collapses_duplicate_keys(state):
+    """One statement per row tolerated a repeated business key; a single
+    multi-row ON CONFLICT raises 'cannot affect row a second time' and takes
+    the whole refresh down. Duplicates must be collapsed, last write wins."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+    import pandas as pd
+
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP TABLE IF EXISTS edw.dup_probe'))
+        conn.execute(text(
+            'CREATE TABLE edw.dup_probe (id int primary key, v text)'))
+
+    df = pd.DataFrame([{'id': 1, 'v': 'first'},
+                       {'id': 1, 'v': 'last'},
+                       {'id': 2, 'v': 'other'}])
+    with state.engine.connect() as conn:
+        EdwEtlProcessor._batch_upsert(
+            conn, 'dup_probe', ['id', 'v'], 'id', ['v'], df)
+        conn.commit()
+
+    with state.engine.connect() as conn:
+        rows = dict(conn.execute(text(
+            'SELECT id, v FROM edw.dup_probe ORDER BY id')).fetchall())
+    assert rows == {1: 'last', 2: 'other'}
