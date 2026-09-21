@@ -297,6 +297,64 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
     return report
 
 
+def reconcile_deletions(engine, periods: List[Tuple[str, int, int]]) -> int:
+    """Drop EDW rows for published periods that raw no longer holds.
+
+    fact_player_statistics is loaded with a business-key UPSERT while its
+    raw period is delete-and-replace. Additions and revisions therefore
+    propagate, but RETRACTIONS never do: a row Yahoo stops returning is
+    simply never touched again, and stays visible on the site for good.
+    The rolling reload window re-fetches the two most recent weeks
+    precisely to pick up Yahoo's corrections, so this is the common path,
+    not an edge case. Confirmed on dev: 23 orphaned rows, all of them in
+    the two league-weeks that had been reloaded most often.
+
+    The other fact tables do not need this. fact_roster / fact_matchup /
+    fact_team_performance delete their week before inserting, and
+    fact_draft / fact_transaction are append-only against raw tables that
+    never shrink - all three verified at zero orphans.
+
+    Deliberately conservative, for the same reason load_delta is: a
+    period is reconciled only when it CLAIMS the entity complete and raw
+    actually holds rows for it. If raw is empty, nothing is deleted - an
+    empty raw side must never be read as a retraction.
+    """
+    removed = 0
+    with engine.begin() as conn:
+        for league_id, season, week in periods:
+            params = {'l': league_id, 's': season, 'w': week}
+            claimed = conn.execute(text(
+                "SELECT raw_statistics_complete FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = :w"),
+                params).scalar()
+            if not claimed:
+                continue
+            if not conn.execute(text(
+                    "SELECT EXISTS (SELECT 1 FROM public.statistics "
+                    "WHERE league_id = :l AND week_number = :w)"),
+                    params).scalar():
+                continue
+            n = conn.execute(text("""
+                DELETE FROM edw.fact_player_statistics f
+                USING edw.dim_league dl, edw.dim_player dp
+                WHERE dl.league_key = f.league_key
+                  AND dp.player_key = f.player_key
+                  AND dl.league_id = :l
+                  AND f.season_year = :s
+                  AND f.week_number = :w
+                  AND NOT EXISTS (
+                      SELECT 1 FROM public.statistics s
+                      WHERE s.league_id = :l AND s.week_number = :w
+                        AND s.player_id = dp.player_id)
+            """), params).rowcount
+            if n:
+                logger.info(
+                    "Reconciled %d statistics row(s) out of %s %s w%s - raw "
+                    "no longer has them", n, league_id, season, week)
+                removed += n
+    return removed
+
+
 def publish(state, periods: List[Tuple[str, int, int]],
             refresh: Callable[[], bool],
             verify: Callable = verify_refresh) -> Dict[str, Dict]:
@@ -316,6 +374,10 @@ def publish(state, periods: List[Tuple[str, int, int]],
         ok = refresh()
         if not ok:
             raise RuntimeError("EDW refresh reported failure")
+        # Before verifying, not after: reconciliation is part of the
+        # generation being published, so it lives inside the snapshot
+        # guard and the gate sees its result.
+        reconcile_deletions(engine, periods)
         report = verify(engine, periods)
     except BaseException:
         restore_snapshot(engine)

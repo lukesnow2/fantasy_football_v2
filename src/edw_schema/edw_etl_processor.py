@@ -3380,21 +3380,40 @@ class EdwEtlProcessor:
                     logger.info(f"🔄 Using incremental loading strategy for {table_name}")
                     
                     if table_name in ['fact_roster', 'fact_matchup', 'fact_team_performance']:
-                        # Weekly refresh tables: delete current week data and insert new
-                        if 'week_key' in df.columns or 'season_year' in df.columns:
-                            if 'week_key' in df.columns:
-                                week_keys = df['week_key'].unique()
-                                delete_condition = f"week_key IN ({','.join(map(str, week_keys))})"
-                            else:
-                                # Use current season for deletion
-                                current_season = df['season_year'].max()
-                                delete_condition = f"season_year = {current_season}"
-                            
-                            logger.info(f"🗑️ Deleting existing records where {delete_condition}")
-                            result = conn.execute(text(f"DELETE FROM edw.{table_name} WHERE {delete_condition}"))
-                            deleted_count = result.rowcount
-                            logger.info(f"  ✅ Deleted {deleted_count} existing records")
-                        
+                        # Weekly refresh tables: delete this league's week, then insert.
+                        #
+                        # Scoped by league AND week. dim_week is a GLOBAL
+                        # (season_year, week_number) dimension - exactly one row
+                        # per season-week, shared by every league in that season -
+                        # so deleting on week_key alone wipes that week for every
+                        # league of record in the season. This is the same
+                        # unscoped-week delete that would have destroyed 20 years
+                        # of public.* history, one level up in the warehouse. It
+                        # is dormant only because exactly one league per season is
+                        # of record today; is_league_of_record auto-admits every
+                        # league from FUTURE_SEASON_THRESHOLD on, and the raw data
+                        # already carries seasons with two league ids.
+                        if 'week_key' not in df.columns or 'league_key' not in df.columns:
+                            # The previous fallback deleted a whole season
+                            # (season_year = N) and reinserted only what this
+                            # frame happened to carry. Refuse instead: an
+                            # unscoped delete is never the safe default.
+                            raise RuntimeError(
+                                f"{table_name}: refusing a weekly refresh without "
+                                f"both week_key and league_key (have: "
+                                f"{sorted(df.columns)}) - the delete could not be "
+                                "scoped to this league's week.")
+
+                        week_keys = ','.join(str(int(k)) for k in df['week_key'].unique())
+                        league_keys = ','.join(str(int(k)) for k in df['league_key'].unique())
+                        delete_condition = (f"week_key IN ({week_keys}) "
+                                            f"AND league_key IN ({league_keys})")
+
+                        logger.info(f"🗑️ Deleting existing records where {delete_condition}")
+                        result = conn.execute(text(f"DELETE FROM edw.{table_name} WHERE {delete_condition}"))
+                        deleted_count = result.rowcount
+                        logger.info(f"  ✅ Deleted {deleted_count} existing records")
+
                         # Insert new data
                         logger.info(f"⚡ Inserting {len(df)} new records...")
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)

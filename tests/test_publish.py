@@ -41,7 +41,9 @@ def state(test_db):
         conn.execute(text(
             'CREATE TABLE edw.fact_player_statistics ('
             ' league_key text, season_year int, week_number int,'
-            ' weekly_fantasy_points float)'))
+            ' weekly_fantasy_points float, player_key int)'))
+        conn.execute(text(
+            'CREATE TABLE edw.dim_player (player_key int, player_id text)'))
         conn.execute(text(
             'CREATE TABLE edw.dim_week (week_key serial primary key,'
             ' season_year int, week_number int)'))
@@ -60,7 +62,7 @@ def state(test_db):
         # Raw sources the verification gate compares the EDW against.
         for ddl in (
             'CREATE TABLE IF NOT EXISTS public.statistics ('
-            ' league_id text, week_number int)',
+            ' league_id text, week_number int, player_id text)',
             'CREATE TABLE IF NOT EXISTS public.matchups (league_id text, week int)',
             'CREATE TABLE IF NOT EXISTS public.rosters (league_id text, week int)',
         ):
@@ -207,7 +209,8 @@ def test_invisible_period_fails_verification(state):
 def test_snapshot_clones_views_in_dependency_order(state):
     tables = pub.clone_edw_snapshot(state.engine)
     assert set(tables) == {'fact_player_statistics', 'fact_matchup',
-                           'fact_roster', 'dim_week', 'dim_league'}
+                           'fact_roster', 'dim_week', 'dim_league',
+                           'dim_player'}
     with state.engine.connect() as conn:
         views = sorted(r[0] for r in conn.execute(text(
             "SELECT viewname FROM pg_views WHERE schemaname='edw_prev'")))
@@ -363,3 +366,82 @@ def test_batch_upsert_collapses_duplicate_keys(state):
         rows = dict(conn.execute(text(
             'SELECT id, v FROM edw.dup_probe ORDER BY id')).fetchall())
     assert rows == {1: 'last', 2: 'other'}
+
+
+def _setup_player_level(state, players=(11, 12, 13)):
+    """Give the fixture's statistics tables the player grain reconciliation
+    works at: EDW rows keyed by player_key, raw rows by player_id."""
+    with state.engine.begin() as conn:
+        conn.execute(text('TRUNCATE edw.dim_player'))
+        conn.execute(text('DELETE FROM edw.fact_player_statistics WHERE week_number = 1'))
+        conn.execute(text('DELETE FROM public.statistics WHERE week_number = 1'))
+        for pk in players:
+            conn.execute(text('INSERT INTO edw.dim_player VALUES (:k, :i)'),
+                         {'k': pk, 'i': str(pk)})
+            conn.execute(text(
+                'INSERT INTO edw.fact_player_statistics '
+                '(league_key, season_year, week_number, weekly_fantasy_points, player_key) '
+                f"VALUES ('{L}', {S}, 1, 5.0, :k)"), {'k': pk})
+            conn.execute(text(
+                'INSERT INTO public.statistics (league_id, week_number, player_id) '
+                f"VALUES ('{L}', 1, :i)"), {'i': str(pk)})
+
+
+def _edw_stat_count(state, week=1):
+    with state.engine.connect() as conn:
+        return conn.execute(text(
+            'SELECT count(*) FROM edw.fact_player_statistics '
+            f"WHERE league_key = '{L}' AND week_number = :w"), {'w': week}).scalar()
+
+
+def test_reconcile_deletions_removes_rows_raw_no_longer_has(state):
+    """The upsert-only statistics path never removes a retracted row.
+
+    The rolling reload window re-fetches the two most recent weeks to pick
+    up Yahoo's corrections. Additions and revisions propagate through the
+    business-key upsert; retractions do not, so a voided stat line stays
+    in the warehouse - and on the site - for good.
+    """
+    _setup_player_level(state)
+    assert _edw_stat_count(state) == 3
+    assert pub.reconcile_deletions(state.engine, [(L, S, 1)]) == 0
+
+    # Yahoo retracts one player: the raw period is replaced with two rows,
+    # the EDW upsert leaves all three in place.
+    with state.engine.begin() as conn:
+        conn.execute(text("DELETE FROM public.statistics "
+                          f"WHERE league_id = '{L}' AND week_number = 1 "
+                          "AND player_id = '13'"))
+    assert _edw_stat_count(state) == 3
+
+    assert pub.reconcile_deletions(state.engine, [(L, S, 1)]) == 1
+    assert _edw_stat_count(state) == 2
+
+
+def test_reconcile_deletions_will_not_act_on_an_empty_raw_side(state):
+    """An empty raw side is not a retraction - the same rule load_delta
+    follows. Deleting here would turn one failed fetch into warehouse
+    data loss."""
+    _setup_player_level(state)
+    with state.engine.begin() as conn:
+        conn.execute(text("DELETE FROM public.statistics "
+                          f"WHERE league_id = '{L}' AND week_number = 1"))
+
+    assert pub.reconcile_deletions(state.engine, [(L, S, 1)]) == 0
+    assert _edw_stat_count(state) == 3
+
+
+def test_reconcile_deletions_skips_a_period_that_claims_nothing(state):
+    """A period whose statistics were never fetched must not be reconciled
+    against a raw table it never populated."""
+    _setup_player_level(state)
+    with state.engine.begin() as conn:
+        conn.execute(text('UPDATE public.pipeline_periods SET '
+                          'raw_statistics_complete = false '
+                          f"WHERE league_id = '{L}' AND week = 1"))
+        conn.execute(text("DELETE FROM public.statistics "
+                          f"WHERE league_id = '{L}' AND week_number = 1 "
+                          "AND player_id = '13'"))
+
+    assert pub.reconcile_deletions(state.engine, [(L, S, 1)]) == 0
+    assert _edw_stat_count(state) == 3
