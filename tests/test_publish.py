@@ -445,3 +445,43 @@ def test_reconcile_deletions_skips_a_period_that_claims_nothing(state):
 
     assert pub.reconcile_deletions(state.engine, [(L, S, 1)]) == 0
     assert _edw_stat_count(state) == 3
+
+
+def _default_expr(state, schema, table, col):
+    with state.engine.connect() as conn:
+        return conn.execute(text("""
+            SELECT pg_get_expr(d.adbin, d.adrelid)
+            FROM pg_class c
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attname = :c
+            LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+            WHERE c.relnamespace = CAST(:s AS regnamespace) AND c.relname = :t
+        """), {'s': schema, 't': table, 'c': col}).scalar()
+
+
+def test_restored_snapshot_can_still_insert(state):
+    """A restore must not strip the SERIAL defaults.
+
+    CREATE TABLE (LIKE ... INCLUDING ALL) copies the default text, so the
+    clone's keys default to nextval() on the SOURCE schema's sequence.
+    restore_snapshot then drops that schema CASCADE, destroying those
+    sequences and the defaults with them - leaving a restored warehouse
+    that cannot insert a single dimension row. The pipeline hid this by
+    repairing defaults at the top of every run; deploy_complete_edw.py
+    does not, so the documented rebuild died on a NOT NULL violation.
+    """
+    pub.ensure_edw_serial_defaults(state.engine)
+    assert _default_expr(state, 'edw', 'dim_week', 'week_key')
+
+    pub.clone_edw_snapshot(state.engine)
+    # The snapshot owns its sequence, so it survives the old schema's drop.
+    assert 'edw_prev' in _default_expr(state, 'edw_prev', 'dim_week', 'week_key')
+
+    pub.restore_snapshot(state.engine)
+    assert _default_expr(state, 'edw', 'dim_week', 'week_key')
+
+    # The real proof: the restored warehouse accepts an insert.
+    with state.engine.begin() as conn:
+        key = conn.execute(text(
+            'INSERT INTO edw.dim_week (season_year, week_number) '
+            f'VALUES ({S}, 9) RETURNING week_key')).scalar()
+    assert key is not None

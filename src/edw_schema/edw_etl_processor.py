@@ -2572,12 +2572,20 @@ class EdwEtlProcessor:
             leagues = self.transform_leagues()
             for league in leagues:
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams, 
-                                          league_type, scoring_type, draft_type, 
+                    INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams,
+                                          league_type, scoring_type, draft_type,
                                           is_active, valid_from, valid_to)
-                    VALUES (:league_id, :league_name, :season_year, :num_teams, 
+                    VALUES (:league_id, :league_name, :season_year, :num_teams,
                             :league_type, :scoring_type, :draft_type,
                             :is_active, :valid_from, :valid_to)
+                    ON CONFLICT (league_id, season_year) DO UPDATE SET
+                        league_name = EXCLUDED.league_name,
+                        num_teams = EXCLUDED.num_teams,
+                        league_type = EXCLUDED.league_type,
+                        scoring_type = EXCLUDED.scoring_type,
+                        draft_type = EXCLUDED.draft_type,
+                        is_active = EXCLUDED.is_active,
+                        valid_to = EXCLUDED.valid_to
                     RETURNING league_key, league_id
                 """), league)
                 
@@ -2607,24 +2615,49 @@ class EdwEtlProcessor:
             
             logger.info(f"  ✅ Players: {len(players)} processed")
             
-            # Load managers
-            # Load managers (truncate first to eliminate duplicates from consolidation)
+            # Load managers.
+            #
+            # This used to TRUNCATE dim_manager RESTART IDENTITY CASCADE first,
+            # "to eliminate duplicates from consolidation". Two things were
+            # wrong with that. CASCADE empties every table with a foreign key
+            # to dim_manager - verified against the restored key graph, that is
+            # dim_team, fact_draft, fact_matchup, fact_roster,
+            # fact_team_performance, fact_transaction, and mart_weekly_power_
+            # rankings through dim_team: seven tables, the bulk of the
+            # warehouse. And RESTART IDENTITY reassigns every manager_key, so
+            # any surviving child row would point at a different manager. It
+            # only ever "worked" because the same run happened to rebuild
+            # everything the cascade destroyed - and it was inert before
+            # migrations 005/007 restored the foreign keys, which is precisely
+            # what gave it teeth.
+            #
+            # dim_manager has UNIQUE (manager_name), so consolidation
+            # duplicates cannot arise from an upsert in the first place. Keys
+            # stay stable and children keep resolving.
             managers = self.transform_managers()
-            
-            # Truncate manager table to ensure clean consolidation
-            logger.info(f"🗑️ Truncating dim_manager to eliminate duplicates from consolidation...")
-            self.session.execute(text("TRUNCATE TABLE edw.dim_manager RESTART IDENTITY CASCADE"))
-            
+
             for manager in managers:
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_manager (manager_name, manager_id, first_season_year, 
+                    INSERT INTO edw.dim_manager (manager_name, manager_id, first_season_year,
                                            last_season_year, total_seasons, total_leagues,
-                                           is_current, include_in_analysis, email, 
+                                           is_current, include_in_analysis, email,
                                            display_name, profile_image_url, is_active)
-                    VALUES (:manager_name, :manager_id, :first_season_year, 
+                    VALUES (:manager_name, :manager_id, :first_season_year,
                             :last_season_year, :total_seasons, :total_leagues,
                             :is_current, :include_in_analysis, :email,
                             :display_name, :profile_image_url, :is_active)
+                    ON CONFLICT (manager_name) DO UPDATE SET
+                        manager_id = EXCLUDED.manager_id,
+                        first_season_year = EXCLUDED.first_season_year,
+                        last_season_year = EXCLUDED.last_season_year,
+                        total_seasons = EXCLUDED.total_seasons,
+                        total_leagues = EXCLUDED.total_leagues,
+                        is_current = EXCLUDED.is_current,
+                        include_in_analysis = EXCLUDED.include_in_analysis,
+                        email = EXCLUDED.email,
+                        display_name = EXCLUDED.display_name,
+                        profile_image_url = EXCLUDED.profile_image_url,
+                        is_active = EXCLUDED.is_active
                     RETURNING manager_key, manager_name
                 """), manager)
                 
@@ -2641,10 +2674,18 @@ class EdwEtlProcessor:
                 team['league_key'] = league_key
                 
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_team (team_id, league_key, team_name, manager_name, 
+                    INSERT INTO edw.dim_team (team_id, league_key, team_name, manager_name,
                                         manager_id, team_logo_url, is_active, valid_from, valid_to)
-                    VALUES (:team_id, :league_key, :team_name, :manager_name, 
+                    VALUES (:team_id, :league_key, :team_name, :manager_name,
                             :manager_id, :team_logo_url, :is_active, :valid_from, :valid_to)
+                    ON CONFLICT (team_id) DO UPDATE SET
+                        league_key = EXCLUDED.league_key,
+                        team_name = EXCLUDED.team_name,
+                        manager_name = EXCLUDED.manager_name,
+                        manager_id = EXCLUDED.manager_id,
+                        team_logo_url = EXCLUDED.team_logo_url,
+                        is_active = EXCLUDED.is_active,
+                        valid_to = EXCLUDED.valid_to
                     RETURNING team_key, team_id
                 """), team)
                 

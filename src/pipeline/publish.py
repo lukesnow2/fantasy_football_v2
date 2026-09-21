@@ -63,32 +63,67 @@ EDW_SERIAL_KEYS = [
 ]
 
 
-def ensure_edw_serial_defaults(engine):
-    """Restore missing SERIAL defaults on EDW surrogate keys, idempotently."""
-    with engine.begin() as conn:
+def ensure_edw_serial_defaults(engine, schema: str = 'edw', force: bool = False,
+                               conn=None):
+    """Give EDW surrogate keys a SERIAL default owned by `schema`, idempotently.
+
+    `force` rewrites the default even when one is already present. That is
+    what a freshly cloned snapshot needs: CREATE TABLE (LIKE ... INCLUDING
+    ALL) copies the column default verbatim, so the clone's keys default to
+    nextval() on the SOURCE schema's sequence. restore_snapshot then renames
+    the old schema aside and DROPs it CASCADE - which destroys exactly those
+    sequences, and the defaults with them. A restored warehouse therefore
+    comes back unable to insert a single dimension row.
+
+    The pipeline masked this by calling ensure_edw_serial_defaults at the top
+    of every run. Nothing else does: deploy_complete_edw.py, the RUNBOOK's
+    full rebuild and an operator's natural response to a broken warehouse,
+    goes straight to load_dimensions and dies on
+    'null value in column "season_key"'. Pointing the clone at its own
+    sequences fixes it at the source, the same way foreign keys are replayed.
+    """
+    def _apply(conn):
         for table, col in EDW_SERIAL_KEYS:
             exists = conn.execute(text(
                 "SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema='edw' AND table_name=:t"), {'t': table}).scalar()
+                "WHERE table_schema=:s AND table_name=:t"),
+                {'s': schema, 't': table}).scalar()
             if not exists:
                 continue
-            has_default = conn.execute(text(
-                "SELECT column_default IS NOT NULL FROM information_schema.columns "
-                "WHERE table_schema='edw' AND table_name=:t AND column_name=:c"),
-                {'t': table, 'c': col}).scalar()
-            if has_default:
+            # A sequence default only makes sense on an integer key. Guarding
+            # on the type matters now that force=True runs this on every
+            # clone: a column of some other type would otherwise fail the
+            # COALESCE(max(col), 0) and take the whole publish down with it.
+            col_type = conn.execute(text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
+                {'s': schema, 't': table, 'c': col}).scalar()
+            if col_type not in ('integer', 'bigint', 'smallint'):
                 continue
-            seq = f'edw.{table}_{col}_seq'
+            if not force:
+                has_default = conn.execute(text(
+                    "SELECT column_default IS NOT NULL FROM information_schema.columns "
+                    "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
+                    {'s': schema, 't': table, 'c': col}).scalar()
+                if has_default:
+                    continue
+            seq = f'{schema}.{table}_{col}_seq'
             conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
             conn.execute(text(
-                f'ALTER TABLE edw."{table}" ALTER COLUMN "{col}" '
+                f'ALTER TABLE {schema}."{table}" ALTER COLUMN "{col}" '
                 f"SET DEFAULT nextval('{seq}')"))
             conn.execute(text(
                 f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
-                f'FROM edw."{table}"), 0) + 1, false)'))
+                f'FROM {schema}."{table}"), 0) + 1, false)'))
             conn.execute(text(
-                f'ALTER SEQUENCE {seq} OWNED BY edw."{table}"."{col}"'))
-            logger.info("Restored SERIAL default on edw.%s.%s", table, col)
+                f'ALTER SEQUENCE {seq} OWNED BY {schema}."{table}"."{col}"'))
+            logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
+
+    if conn is not None:
+        _apply(conn)
+        return
+    with engine.begin() as conn:
+        _apply(conn)
 
 
 def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
@@ -143,6 +178,13 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         conn.execute(text('SET LOCAL search_path TO DEFAULT'))
         if fkeys:
             logger.info("Snapshot %s: replayed %d foreign keys", dst, len(fkeys))
+
+        # Repoint the cloned SERIAL defaults at sequences the snapshot owns.
+        # LIKE copies the default text, so without this the clone's keys
+        # depend on src's sequences - which restore_snapshot destroys when it
+        # drops the old schema, leaving the restored warehouse unable to
+        # insert. See ensure_edw_serial_defaults.
+        ensure_edw_serial_defaults(None, schema=dst, force=True, conn=conn)
 
         views = {r[0]: r[1] for r in conn.execute(text(
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
