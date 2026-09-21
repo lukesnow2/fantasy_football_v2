@@ -854,64 +854,34 @@ class YahooFantasyExtractor:
                 logger.info(f"    📋 Week {week}: Processing {team_count} teams efficiently...")
                 
                 try:
-                    # OPTIMIZATION 1: Try to get all rosters for the week in one call
-                    # Yahoo API: league.matchups(week) includes roster data
-                    week_matchups = self._rate_limited_request(
-                        lambda w=week: league.matchups(w)
-                    )
-                    
-                    if week_matchups:
-                        logger.info(f"        🚀 BULK SUCCESS: Got week {week} data via matchups")
-                        week_rosters_count = 0
-                        
-                        # Extract roster data from matchup response (includes lineups)
-                        for matchup in week_matchups:
-                            try:
-                                teams_in_matchup = matchup.get('teams', {})
-                                
-                                # Process each team in the matchup
-                                for team_key, team_data in teams_in_matchup.items():
-                                    if isinstance(team_data, dict) and 'roster' in team_data:
-                                        roster_data = team_data['roster']
-                                        team_id = team_data.get('team_key', team_key)
-                                        
-                                        # Process roster players
-                                        if roster_data and 'players' in roster_data:
-                                            players = roster_data['players']
-                                            for player_key, player_data in players.items():
-                                                if isinstance(player_data, dict):
-                                                    roster_entry = self._extract_roster_player_data(
-                                                        player_data, league_id, team_id, week
-                                                    )
-                                                    if roster_entry:
-                                                        rosters.append(roster_entry)
-                                                        week_rosters_count += 1
-                                            
-                            except Exception as e:
-                                logger.debug(f"        Error processing matchup roster data: {e}")
-                                continue
-                        
-                        if week_rosters_count > 0:
-                            logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from bulk call")
-                            continue  # Successfully got week data, move to next week
-                    
-                    # OPTIMIZATION 2: Fallback to efficient individual team calls only if needed
-                    logger.info(f"        📋 Fallback: Individual team calls for week {week}")
+                    # One call per team. There used to be a "bulk" path ahead of
+                    # this one that read rosters out of league.matchups(week) and
+                    # fell through to here on failure. It could never succeed:
+                    # matchups() returns the raw {'fantasy_content': ...} dict,
+                    # so iterating it yielded the string 'fantasy_content' and
+                    # the first .get() raised AttributeError every time - caught,
+                    # logged at DEBUG, and invisible. It also stored team_id as
+                    # the full Yahoo key rather than the bare number, which the
+                    # warehouse cannot resolve (see migration 008). It has been
+                    # removed rather than repaired: it never ran, so there is no
+                    # behaviour to preserve, and it cost a redundant API call per
+                    # week on top of the one extract_matchups_for_league makes.
                     week_rosters_count = 0
-                    
+                    dropped = 0
+
                     for team_key, team_data in teams_dict.items():
                         try:
-                            team_id = team_data.get('team_key', team_key).split('.')[-1]
-                            
+                            team_id = str(team_data.get('team_key', team_key)).split('.')[-1]
+
                             # Build proper team key for API
                             full_team_key = f"{league_id}.t.{team_id}"
-                            
+
                             # SINGLE EFFICIENT CALL: Get team roster for week
                             # Yahoo API: /league/{league_key}/team/{team_key}/roster;week={week}
                             roster_data = self._rate_limited_request(
                                 lambda tk=full_team_key, w=week: league.to_team(tk).roster(week=w)
                             )
-                            
+
                             if roster_data:
                                 # Process roster players
                                 for player_data in roster_data:
@@ -921,16 +891,34 @@ class YahooFantasyExtractor:
                                     if roster_entry:
                                         rosters.append(roster_entry)
                                         week_rosters_count += 1
-                            
+                                    else:
+                                        dropped += 1
+
                         except Exception as e:
-                            logger.debug(f"        Error getting roster for team {team_key} week {week}: {e}")
-                            continue
-                    
-                    logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from individual calls")
-                    
+                            # The HTTP layer has already exhausted its retries. One
+                            # team silently missing leaves a week that load_delta
+                            # still marks raw-complete, publishes, and retires from
+                            # gap detection - permanently short a team.
+                            logger.error(f"        ❌ Week {week}: roster call failed "
+                                         f"for team {team_key}: {e}")
+                            raise
+
+                    covered = self._teams_covered(rosters, week)
+                    if dropped or len(covered) < team_count:
+                        raise RuntimeError(
+                            f"Week {week} of {league_id} is incomplete: "
+                            f"{len(covered)}/{team_count} teams, {dropped} unparseable "
+                            "player record(s). A partial roster week would be marked "
+                            "complete and never re-fetched; refusing to return one.")
+                    logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from {team_count} teams")
+
                 except Exception as e:
-                    logger.warning(f"    ❌ Error processing week {week}: {e}")
-                    continue
+                    # Never skip a week silently - the same rule the statistics
+                    # extractor follows. A week that logs-and-continues here is
+                    # invisible: the loader sees no rows for it, leaves the period
+                    # alone, and the run still reports success.
+                    logger.error(f"    ❌ Week {week} failed for league {league_id}: {e}")
+                    raise
             
             logger.info(f"  ✅ OPTIMIZED ROSTERS: Found {len(rosters)} total roster entries")
             return rosters
@@ -939,6 +927,18 @@ class YahooFantasyExtractor:
             logger.error(f"Roster extraction failed for league {league_id}")
             raise
     
+    @staticmethod
+    def _teams_covered(rosters: List['ExtractedRoster'], week: int) -> set:
+        """Distinct team_ids represented in `rosters` for one week.
+
+        A week missing a team is the failure mode that matters: load_delta
+        marks a week raw-complete on "any rows landed", publish's gate only
+        asks whether the EDW has any roster row for the league-week, and gap
+        detection then retires it. Nine teams out of ten looks identical to
+        ten unless somebody counts.
+        """
+        return {r.team_id for r in rosters if r.week == week}
+
     def _extract_roster_player_data(self, player_data: Dict, league_id: str, team_id: str, week: int) -> Optional[ExtractedRoster]:
         """Helper method to extract roster player data consistently"""
         try:

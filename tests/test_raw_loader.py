@@ -512,3 +512,51 @@ def test_statistics_extractor_raises_rather_than_returning_empty():
                 "extract_statistics_for_league returns from an except "
                 "handler; it must re-raise so an empty result can only ever "
                 "mean 'Yahoo had nothing'")
+
+
+def test_roster_team_id_is_the_form_the_warehouse_resolves():
+    """Both roster paths must write the bare team number.
+
+    transform_fact_roster rebuilds the key as f"{league_id}.t.{team_id}",
+    so a full Yahoo team key stored in public.rosters.team_id becomes
+    "449.l.674707.t.449.l.674707.t.1", matches nothing in dim_team, and
+    every row is dropped into missing_keys. The bulk via-matchups path used
+    to write exactly that, and it serves the final week of a season - so
+    every season's championship-week rosters were unresolvable.
+    """
+    import ast
+    import inspect
+
+    from src.extractors import comprehensive_data_extractor as cde
+
+    src = inspect.getsource(cde.YahooFantasyExtractor.extract_rosters_for_league)
+    fn = ast.parse(src.lstrip()).body[0]
+    assignments = [
+        ast.unparse(node.value)
+        for node in ast.walk(fn)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == 'team_id'
+                for t in node.targets)]
+    assert assignments, "expected team_id assignments in the roster extractor"
+    for expr in assignments:
+        assert "split('.')[-1]" in expr, (
+            f"roster team_id assigned without normalizing: {expr!r}. "
+            "Both paths must write the bare team number.")
+
+
+def test_roster_extractor_does_not_swallow_a_failed_week():
+    """A week or team that logs-and-continues leaves a partial period that
+    load_delta still marks raw-complete and retires from gap detection."""
+    import ast
+    import inspect
+
+    from src.extractors import comprehensive_data_extractor as cde
+
+    src = inspect.getsource(cde.YahooFantasyExtractor.extract_rosters_for_league)
+    fn = ast.parse(src.lstrip()).body[0]
+    for node in ast.walk(fn):
+        if isinstance(node, ast.ExceptHandler):
+            has_raise = any(isinstance(s, ast.Raise) for s in ast.walk(node))
+            assert has_raise, (
+                f"except handler at offset line {node.lineno} of "
+                "extract_rosters_for_league continues instead of raising")
