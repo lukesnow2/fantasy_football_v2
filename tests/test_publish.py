@@ -560,3 +560,75 @@ def test_preflight_names_missing_app_keys(state):
 
 def test_preflight_is_silent_without_an_app_schema(state):
     assert pub.check_inbound_foreign_keys(state.engine) == []
+
+
+def test_restore_keeps_views_when_edw_is_on_the_search_path(test_db):
+    """Production's database default is 'app, edw, public' (RUNBOOK). There,
+    pg_get_viewdef returned unqualified table names, the snapshot's views
+    were created reading the LIVE edw tables, and restore's DROP ... CASCADE
+    of the old schema took every view with it."""
+    from sqlalchemy import create_engine
+
+    db = 'publish_searchpath_test'
+    subprocess.run(['psql', 'postgres', '-qc',
+                    f'DROP DATABASE IF EXISTS {db} WITH (FORCE)'], check=True)
+    subprocess.run(['psql', 'postgres', '-qc', f'CREATE DATABASE {db}'], check=True)
+    subprocess.run(['psql', 'postgres', '-qc',
+                    f'ALTER DATABASE {db} SET search_path TO app, edw, public'],
+                   check=True)
+    engine = create_engine(f'postgresql://localhost:5432/{db}')
+    try:
+        with engine.begin() as conn:
+            conn.execute(text('CREATE SCHEMA edw'))
+            conn.execute(text('CREATE TABLE edw.fact_x (pts int)'))
+            conn.execute(text('INSERT INTO edw.fact_x VALUES (10)'))
+            conn.execute(text('CREATE VIEW edw.vw_pts AS SELECT sum(pts) AS pts '
+                              'FROM edw.fact_x'))
+            conn.execute(text('CREATE VIEW edw.vw_pts2 AS SELECT pts FROM edw.vw_pts'))
+
+        pub.clone_edw_snapshot(engine)
+        with engine.connect() as conn:
+            reads = {r[0] for r in conn.execute(text("""
+                SELECT DISTINCT t.relnamespace::regnamespace::text
+                FROM pg_rewrite r JOIN pg_depend d ON d.objid = r.oid
+                JOIN pg_class t ON t.oid = d.refobjid
+                WHERE r.ev_class = CAST('edw_prev.vw_pts' AS regclass)
+                  AND t.oid <> r.ev_class"""))}
+        assert reads == {'edw_prev'}, 'snapshot view reads the live schema'
+
+        pub.restore_snapshot(engine)
+        with engine.connect() as conn:
+            views = sorted(r[0] for r in conn.execute(text(
+                "SELECT viewname FROM pg_views WHERE schemaname = 'edw'")))
+            assert views == ['vw_pts', 'vw_pts2']
+            assert conn.execute(text('SELECT pts FROM edw.vw_pts2')).scalar() == 10
+    finally:
+        engine.dispose()
+        subprocess.run(['psql', 'postgres', '-qc',
+                        f'DROP DATABASE IF EXISTS {db} WITH (FORCE)'], check=True)
+
+
+def test_retarget_rewrites_only_whole_qualifiers():
+    assert pub._retarget('FROM edw.fact_x fedw JOIN edw.dim y ON fedw.k = y.k',
+                         'edw', 'edw_prev') == \
+        'FROM edw_prev.fact_x fedw JOIN edw_prev.dim y ON fedw.k = y.k'
+
+
+def test_preflight_accepts_an_app_key_under_any_name(state):
+    """A key re-added by hand under Postgres's default name protects the rows
+    just the same; reporting it missing every run trains people to ignore
+    the warning."""
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA IF EXISTS app CASCADE'))
+        conn.execute(text('CREATE SCHEMA app'))
+        conn.execute(text('CREATE TABLE edw.dim_manager (manager_key int primary key)'))
+        conn.execute(text('CREATE TABLE app.league_member (manager_key int '
+                          'REFERENCES edw.dim_manager(manager_key))'))
+        conn.execute(text('CREATE TABLE app."user" (manager_key int)'))
+    try:
+        missing = pub.check_inbound_foreign_keys(state.engine, validate=False)
+        assert missing == ['user_manager_key_dim_manager_manager_key_fk']
+    finally:
+        with state.engine.begin() as conn:
+            conn.execute(text('DROP SCHEMA app CASCADE'))
+            conn.execute(text('DROP TABLE edw.dim_manager'))

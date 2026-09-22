@@ -431,11 +431,15 @@ def _run_locked(args, state) -> int:
             raw_loader.ensure_constraints(conn)
         pub.ensure_edw_serial_defaults(state.engine)
         pub.check_inbound_foreign_keys(state.engine)
-    elif not state.schema_exists():
-        # Nothing to report a gap against, and a dry run must not create it.
-        logger.warning("This database has no pipeline state tables yet; a "
-                       "real run would create them. Reporting Yahoo-side "
-                       "state only.")
+    else:
+        # Read-only: inspecting a prospective cutover target with --dry-run
+        # is exactly when a missing app -> edw key needs to be reported.
+        pub.check_inbound_foreign_keys(state.engine, validate=False)
+        if not state.schema_exists():
+            # Nothing to report a gap against, and a dry run must not create it.
+            logger.warning("This database has no pipeline state tables yet; a "
+                           "real run would create them. Reporting Yahoo-side "
+                           "state only.")
 
     # 1. Repair publication BEFORE anything else: raw-complete periods the
     #    site cannot see yet need EDW work only - no Yahoo calls.

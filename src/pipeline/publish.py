@@ -29,6 +29,7 @@ requires refactoring the processor's internal commit seams; revisit if
 it ever matters at this site's traffic.
 """
 import logging
+import re
 from typing import Callable, Dict, List, Tuple
 
 from sqlalchemy import text
@@ -113,6 +114,15 @@ def _set_serial_defaults(conn, schema: str, force: bool):
         logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
 
 
+def _retarget(definition: str, src: str, dst: str) -> str:
+    """Rewrite schema-qualified references from src to dst.
+
+    Only a whole qualifier: an alias or identifier that merely ends in the
+    schema name (fedw.pts for src 'edw') must not be rewritten into fedw_prev.
+    """
+    return re.sub(rf'(?<![\w"]){re.escape(src)}\.', f'{dst}.', definition)
+
+
 def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
     """Clone src's tables (data + constraints) and views into dst.
 
@@ -162,7 +172,7 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
             table_only = qualified_table.split('.')[-1].strip('"')
             conn.execute(text(
                 f'ALTER TABLE {dst}."{table_only}" ADD CONSTRAINT "{conname}" '
-                f'{definition.replace(f"{src}.", f"{dst}.")}'))
+                f'{_retarget(definition, src, dst)}'))
         if fkeys:
             logger.info("Snapshot %s: replayed %d foreign keys", dst, len(fkeys))
 
@@ -173,14 +183,25 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         # insert. See ensure_edw_serial_defaults.
         _set_serial_defaults(conn, dst, force=True)
 
+        # Also captured under a pg_catalog-only search_path, and for a worse
+        # reason than the foreign keys. pg_get_viewdef only qualifies a table
+        # that isn't on the search_path, and production's database default is
+        # 'app, edw, public' (RUNBOOK). There it returned 'FROM fact_x', the
+        # src. -> dst. rewrite found nothing to rewrite, and each snapshot view
+        # was created reading the LIVE edw tables. restore_snapshot then drops
+        # the old schema CASCADE, and every view went with it - reproduced on a
+        # scratch database with that search_path: zero views left in edw. The
+        # site reads four of them.
+        conn.execute(text('SET LOCAL search_path TO pg_catalog'))
         views = {r[0]: r[1] for r in conn.execute(text(
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
             "FROM pg_views WHERE schemaname = :s"), {'s': src})}
+        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
         pending = dict(views)
         while pending:
             progressed = []
             for name, definition in list(pending.items()):
-                rewritten = definition.replace(f'{src}.', f'{dst}.')
+                rewritten = _retarget(definition, src, dst)
                 try:
                     with conn.begin_nested():
                         conn.execute(text(
@@ -218,28 +239,45 @@ def restore_snapshot(engine, src: str = 'edw', snapshot: str = SNAPSHOT_SCHEMA):
         # scratch run of this function removed both. Re-point them at the
         # restored tables in the same transaction as the swap. NOT VALID so a
         # restore can never fail on a validation scan; validated afterwards.
+        #
+        # Each re-point is a savepoint. Altering another schema's table needs
+        # its owner's rights; if the pipeline's role lacks them, failing here
+        # would roll back the swap itself and leave the site on the broken
+        # generation - far worse than losing the key, which is the pre-fix
+        # outcome and is now at least logged (and reported by the preflight).
+        repointed = []
         for child, conname, definition in inbound:
-            conn.execute(text(f'ALTER TABLE {child} DROP CONSTRAINT "{conname}"'))
-            conn.execute(text(
-                f'ALTER TABLE {child} ADD CONSTRAINT "{conname}" '
-                f'{definition.removesuffix(" NOT VALID")} NOT VALID'))
+            try:
+                with conn.begin_nested():
+                    conn.execute(text(f'ALTER TABLE {child} DROP CONSTRAINT "{conname}"'))
+                    conn.execute(text(
+                        f'ALTER TABLE {child} ADD CONSTRAINT "{conname}" '
+                        f'{definition.removesuffix(" NOT VALID")} NOT VALID'))
+                repointed.append((child, conname))
+            except Exception as e:
+                logger.error("Could not re-point %s on %s at the restored "
+                             "generation (%s); it will be lost with the old "
+                             "schema. Re-add it by hand.", conname, child,
+                             type(e).__name__)
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
-    _validate_foreign_keys(engine, [(child, conname) for child, conname, _ in inbound])
+    _validate_foreign_keys(engine, repointed)
     logger.warning("EDW restored to previous generation from %s", snapshot)
 
 
-# Declared by web/drizzle/0000. The web app owns them, but the pipeline is
-# what can silently lose them (a schema swap or DROP SCHEMA edw CASCADE), and
-# without them nothing stops app rows from naming managers that don't exist -
-# or a rebuild that renumbers manager_key from re-attributing their data.
+# Declared by web/drizzle/0000 (constraint names given for the re-add
+# instructions). The web app owns them, but the pipeline is what can silently
+# lose them (a schema swap or DROP SCHEMA edw CASCADE), and without them
+# nothing stops app rows from naming managers that don't exist - or a
+# rebuild that renumbers manager_key from re-attributing their data.
 EXPECTED_INBOUND_FKS = [
     ('app."user"', 'user_manager_key_dim_manager_manager_key_fk'),
     ('app.league_member', 'league_member_manager_key_dim_manager_manager_key_fk'),
 ]
 
 
-def check_inbound_foreign_keys(engine, schema: str = 'edw') -> List[str]:
+def check_inbound_foreign_keys(engine, schema: str = 'edw',
+                               validate: bool = True) -> List[str]:
     """Finish any NOT VALID inbound FK and report the app ones that are gone.
 
     A restore re-adds inbound keys NOT VALID and validates them once; if that
@@ -248,6 +286,13 @@ def check_inbound_foreign_keys(engine, schema: str = 'edw') -> List[str]:
     that are missing outright, rather than re-adding them itself: the app
     owns them, and adding one would fail on any orphaned row anyway. Returns
     the missing constraint names.
+
+    A key counts as present if ANY foreign key on that table references
+    dim_manager.manager_key, whatever it is called: one re-added by hand
+    without the drizzle name protects the rows just the same, and a
+    name-only check would warn about it on every run until the warning was
+    ignored. validate=False keeps it read-only, for --dry-run against a
+    prospective cutover target.
     """
     with engine.begin() as conn:
         pending = [(child, conname) for child, conname, _ in
@@ -257,11 +302,18 @@ def check_inbound_foreign_keys(engine, schema: str = 'edw') -> List[str]:
         for table, conname in EXPECTED_INBOUND_FKS:
             if not conn.execute(text("SELECT to_regclass(:t)"), {'t': table}).scalar():
                 continue  # no app schema here (a bare warehouse)
-            if not conn.execute(text(
-                    "SELECT 1 FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) "
-                    "AND conname = :c"), {'t': table, 'c': conname}).scalar():
+            if not conn.execute(text("""
+                    SELECT 1 FROM pg_constraint c
+                    JOIN pg_attribute a ON a.attrelid = c.conrelid
+                                       AND a.attnum = ANY(c.conkey)
+                    WHERE c.contype = 'f'
+                      AND c.conrelid = CAST(:t AS regclass)
+                      AND c.confrelid = to_regclass(:target)
+                      AND a.attname = 'manager_key'"""),
+                    {'t': table, 'target': f'{schema}.dim_manager'}).scalar():
                 missing.append(conname)
-    _validate_foreign_keys(engine, pending)
+    if validate:
+        _validate_foreign_keys(engine, pending)
     for conname in missing:
         logger.warning(
             "%s is missing: the web app's rows are not protected against "
