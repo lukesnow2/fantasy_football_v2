@@ -114,6 +114,22 @@ def _set_serial_defaults(conn, schema: str, force: bool):
         logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
 
 
+def _qualified_rows(conn, sql: str, params: dict) -> list:
+    """Run a catalog query under a pg_catalog-only search_path.
+
+    pg_get_constraintdef and pg_get_viewdef qualify a relation only when it
+    isn't on the search_path, so what they return depends on the database
+    default - and production's is 'app, edw, public'. Under pg_catalog alone
+    every reference comes back schema-qualified, which is what makes a plain
+    edw. -> edw_prev. rewrite (or re-adding a key after a swap) correct
+    everywhere rather than only on databases configured like dev.
+    """
+    conn.execute(text('SET LOCAL search_path TO pg_catalog'))
+    rows = conn.execute(text(sql), params).fetchall()
+    conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+    return rows
+
+
 def _retarget(definition: str, src: str, dst: str) -> str:
     """Rewrite schema-qualified references from src to dst.
 
@@ -157,17 +173,12 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         # referential integrity at all and silently dropped it for good -
         # production carried 36 FKs while a restored database carried none.
         # Replay them explicitly, after the data is in place so they validate.
-        # Captured under a pg_catalog-only search_path, as _inbound_foreign_keys
-        # does, so every referenced table comes back schema-qualified and a
-        # plain src. -> dst. rewrite is the whole translation.
-        conn.execute(text('SET LOCAL search_path TO pg_catalog'))
-        fkeys = conn.execute(text("""
+        fkeys = _qualified_rows(conn, """
             SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
             FROM pg_constraint
             WHERE contype = 'f' AND connamespace = CAST(:s AS regnamespace)
             ORDER BY conname
-        """), {'s': src}).fetchall()
-        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+        """, {'s': src})
         for qualified_table, conname, definition in fkeys:
             table_only = qualified_table.split('.')[-1].strip('"')
             conn.execute(text(
@@ -183,21 +194,17 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         # insert. See ensure_edw_serial_defaults.
         _set_serial_defaults(conn, dst, force=True)
 
-        # Also captured under a pg_catalog-only search_path, and for a worse
-        # reason than the foreign keys. pg_get_viewdef only qualifies a table
-        # that isn't on the search_path, and production's database default is
-        # 'app, edw, public' (RUNBOOK). There it returned 'FROM fact_x', the
-        # src. -> dst. rewrite found nothing to rewrite, and each snapshot view
-        # was created reading the LIVE edw tables. restore_snapshot then drops
-        # the old schema CASCADE, and every view went with it - reproduced on a
-        # scratch database with that search_path: zero views left in edw. The
-        # site reads four of them.
-        conn.execute(text('SET LOCAL search_path TO pg_catalog'))
-        views = {r[0]: r[1] for r in conn.execute(text(
+        # Views qualified the same way, and for a worse reason than the
+        # foreign keys: under production's search_path pg_get_viewdef returned
+        # 'FROM fact_x', the rewrite found nothing to rewrite, each snapshot
+        # view read the LIVE edw tables, and restore's DROP ... CASCADE of the
+        # old schema took every view with it (reproduced: zero views left).
+        # The site reads four of them.
+        views = dict(_qualified_rows(conn,
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
-            "FROM pg_views WHERE schemaname = :s"), {'s': src})}
-        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+            "FROM pg_views WHERE schemaname = :s", {'s': src}))
         pending = dict(views)
+        errors: Dict[str, str] = {}
         while pending:
             progressed = []
             for name, definition in list(pending.items()):
@@ -207,12 +214,15 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
                         conn.execute(text(
                             f'CREATE VIEW {dst}."{name}" AS {rewritten}'))
                     progressed.append(name)
-                except Exception:
-                    continue  # depends on a view not yet created; next pass
+                except Exception as e:
+                    # Usually a view not yet created; retried next pass. Kept,
+                    # because when no pass makes progress this IS the error.
+                    errors[name] = str(getattr(e, 'orig', e)).strip().splitlines()[0]
+                    continue
             if not progressed:
                 raise RuntimeError(
-                    f"could not clone views (circular or external "
-                    f"dependency?): {sorted(pending)}")
+                    "could not clone views: " + "; ".join(
+                        f"{n}: {errors.get(n, 'unknown')}" for n in sorted(pending)))
             for name in progressed:
                 del pending[name]
         logger.info("Snapshot %s: %d tables, %d views cloned from %s",
@@ -297,7 +307,7 @@ def check_inbound_foreign_keys(engine, schema: str = 'edw',
     with engine.begin() as conn:
         pending = [(child, conname) for child, conname, _ in
                    _inbound_foreign_keys(conn, schema, (SNAPSHOT_SCHEMA, BROKEN_SCHEMA),
-                                         only_not_valid=True)]
+                                         only_not_valid=True)] if validate else []
         missing = []
         for table, conname in EXPECTED_INBOUND_FKS:
             if not conn.execute(text("SELECT to_regclass(:t)"), {'t': table}).scalar():
@@ -348,8 +358,7 @@ def _inbound_foreign_keys(conn, schema: str, also_exclude=(),
     which is what lets it resolve to the restored generation once re-added.
     """
     excluded = [schema, *also_exclude]
-    conn.execute(text('SET LOCAL search_path TO pg_catalog'))
-    rows = conn.execute(text("""
+    return _qualified_rows(conn, """
         SELECT c.conrelid::regclass::text, c.conname, pg_get_constraintdef(c.oid)
         FROM pg_constraint c
         JOIN pg_class r ON r.oid = c.confrelid
@@ -359,10 +368,7 @@ def _inbound_foreign_keys(conn, schema: str, also_exclude=(),
           AND cn.nspname <> ALL(:excluded)
           AND (NOT :only_not_valid OR NOT c.convalidated)
         ORDER BY 1, 2
-    """), {'s': schema, 'excluded': excluded,
-           'only_not_valid': only_not_valid}).fetchall()
-    conn.execute(text('SET LOCAL search_path TO DEFAULT'))
-    return rows
+    """, {'s': schema, 'excluded': excluded, 'only_not_valid': only_not_valid})
 
 
 def drop_snapshot(engine, snapshot: str = SNAPSHOT_SCHEMA):

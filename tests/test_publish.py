@@ -632,3 +632,75 @@ def test_preflight_accepts_an_app_key_under_any_name(state):
         with state.engine.begin() as conn:
             conn.execute(text('DROP SCHEMA app CASCADE'))
             conn.execute(text('DROP TABLE edw.dim_manager'))
+
+
+def test_restore_completes_when_the_app_table_is_not_ours(test_db):
+    """Re-pointing an inbound key means altering another schema's table. If
+    the pipeline's role doesn't own it, that failure must not roll back the
+    swap and leave the broken generation live - it did, before each re-point
+    got its own savepoint."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import ProgrammingError
+
+    db, role = 'publish_role_test', 'publish_pipeline_role'
+    admin = create_engine('postgresql://localhost:5432/postgres',
+                          isolation_level='AUTOCOMMIT')
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS {db} WITH (FORCE)'))
+            conn.execute(text(f'DROP ROLE IF EXISTS {role}'))
+            conn.execute(text(f'CREATE ROLE {role} LOGIN'))
+            conn.execute(text(f'CREATE DATABASE {db}'))
+    except ProgrammingError:
+        pytest.skip('needs permission to create roles')
+
+    owner = create_engine(f'postgresql://localhost:5432/{db}')
+    pipeline = create_engine(f'postgresql://{role}@localhost:5432/{db}')
+    try:
+        with owner.begin() as conn:
+            conn.execute(text(f'GRANT CREATE ON DATABASE {db} TO {role}'))
+            conn.execute(text(f'CREATE SCHEMA edw AUTHORIZATION {role}'))
+            conn.execute(text(f'SET ROLE {role}'))
+            conn.execute(text('CREATE TABLE edw.dim_manager (manager_key int primary key)'))
+            conn.execute(text('INSERT INTO edw.dim_manager VALUES (1)'))
+            conn.execute(text('CREATE VIEW edw.vw_m AS SELECT count(*) AS n FROM edw.dim_manager'))
+            conn.execute(text('RESET ROLE'))
+            conn.execute(text('CREATE SCHEMA app'))
+            conn.execute(text(f'GRANT USAGE ON SCHEMA app TO {role}'))
+            conn.execute(text('CREATE TABLE app.league_member (manager_key int '
+                              'REFERENCES edw.dim_manager(manager_key))'))
+            conn.execute(text('INSERT INTO app.league_member VALUES (1)'))
+
+        pub.clone_edw_snapshot(pipeline)
+        pub.restore_snapshot(pipeline)   # must not raise
+
+        with owner.connect() as conn:
+            schemas = sorted(r[0] for r in conn.execute(text(
+                "SELECT nspname FROM pg_namespace WHERE nspname LIKE 'edw%'")))
+            assert schemas == ['edw'], 'swap rolled back or left debris'
+            assert conn.execute(text('SELECT n FROM edw.vw_m')).scalar() == 1
+            assert conn.execute(text('SELECT count(*) FROM app.league_member')).scalar() == 1
+    finally:
+        pipeline.dispose()
+        owner.dispose()
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS {db} WITH (FORCE)'))
+            conn.execute(text(f'DROP ROLE IF EXISTS {role}'))
+        admin.dispose()
+
+
+def test_uncloneable_view_reports_its_real_error(state):
+    """With every other view created, a view that still can't be made fails
+    for a reason - and that reason, not a guess about dependencies, is what
+    an operator needs from a publish that fails every week."""
+    with state.engine.begin() as conn:
+        conn.execute(text('CREATE FUNCTION edw.bonus() RETURNS int '
+                          'LANGUAGE sql AS $$ SELECT 1 $$'))
+        conn.execute(text('CREATE VIEW edw.vw_bonus AS SELECT edw.bonus() AS b'))
+    try:
+        with pytest.raises(RuntimeError, match=r'vw_bonus: .*edw_prev\.bonus'):
+            pub.clone_edw_snapshot(state.engine)
+    finally:
+        with state.engine.begin() as conn:
+            conn.execute(text('DROP VIEW edw.vw_bonus'))
+            conn.execute(text('DROP FUNCTION edw.bonus()'))
