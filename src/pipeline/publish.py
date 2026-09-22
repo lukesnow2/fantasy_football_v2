@@ -63,8 +63,7 @@ EDW_SERIAL_KEYS = [
 ]
 
 
-def ensure_edw_serial_defaults(engine, schema: str = 'edw', force: bool = False,
-                               conn=None):
+def ensure_edw_serial_defaults(engine, schema: str = 'edw', force: bool = False):
     """Give EDW surrogate keys a SERIAL default owned by `schema`, idempotently.
 
     `force` rewrites the default even when one is already present. That is
@@ -82,48 +81,36 @@ def ensure_edw_serial_defaults(engine, schema: str = 'edw', force: bool = False,
     'null value in column "season_key"'. Pointing the clone at its own
     sequences fixes it at the source, the same way foreign keys are replayed.
     """
-    def _apply(conn):
-        for table, col in EDW_SERIAL_KEYS:
-            exists = conn.execute(text(
-                "SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema=:s AND table_name=:t"),
-                {'s': schema, 't': table}).scalar()
-            if not exists:
-                continue
-            # A sequence default only makes sense on an integer key. Guarding
-            # on the type matters now that force=True runs this on every
-            # clone: a column of some other type would otherwise fail the
-            # COALESCE(max(col), 0) and take the whole publish down with it.
-            col_type = conn.execute(text(
-                "SELECT data_type FROM information_schema.columns "
-                "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
-                {'s': schema, 't': table, 'c': col}).scalar()
-            if col_type not in ('integer', 'bigint', 'smallint'):
-                continue
-            if not force:
-                has_default = conn.execute(text(
-                    "SELECT column_default IS NOT NULL FROM information_schema.columns "
-                    "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
-                    {'s': schema, 't': table, 'c': col}).scalar()
-                if has_default:
-                    continue
-            seq = f'{schema}.{table}_{col}_seq'
-            conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
-            conn.execute(text(
-                f'ALTER TABLE {schema}."{table}" ALTER COLUMN "{col}" '
-                f"SET DEFAULT nextval('{seq}')"))
-            conn.execute(text(
-                f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
-                f'FROM {schema}."{table}"), 0) + 1, false)'))
-            conn.execute(text(
-                f'ALTER SEQUENCE {seq} OWNED BY {schema}."{table}"."{col}"'))
-            logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
-
-    if conn is not None:
-        _apply(conn)
-        return
     with engine.begin() as conn:
-        _apply(conn)
+        _set_serial_defaults(conn, schema, force)
+
+
+def _set_serial_defaults(conn, schema: str, force: bool):
+    for table, col in EDW_SERIAL_KEYS:
+        # One catalog read covers existence, type and current default. A
+        # sequence default only makes sense on an integer key; guarding the
+        # type matters because force=True runs this on every clone, where a
+        # column of another type would fail COALESCE(max(col), 0) and take
+        # the whole publish down with it.
+        row = conn.execute(text(
+            "SELECT data_type, column_default FROM information_schema.columns "
+            "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
+            {'s': schema, 't': table, 'c': col}).fetchone()
+        if row is None or row[0] not in ('integer', 'bigint', 'smallint'):
+            continue
+        if row[1] is not None and not force:
+            continue
+        seq = f'{schema}.{table}_{col}_seq'
+        conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
+        conn.execute(text(
+            f'ALTER TABLE {schema}."{table}" ALTER COLUMN "{col}" '
+            f"SET DEFAULT nextval('{seq}')"))
+        conn.execute(text(
+            f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
+            f'FROM {schema}."{table}"), 0) + 1, false)'))
+        conn.execute(text(
+            f'ALTER SEQUENCE {seq} OWNED BY {schema}."{table}"."{col}"'))
+        logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
 
 
 def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
@@ -184,7 +171,7 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         # depend on src's sequences - which restore_snapshot destroys when it
         # drops the old schema, leaving the restored warehouse unable to
         # insert. See ensure_edw_serial_defaults.
-        ensure_edw_serial_defaults(None, schema=dst, force=True, conn=conn)
+        _set_serial_defaults(conn, dst, force=True)
 
         views = {r[0]: r[1] for r in conn.execute(text(
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
@@ -220,12 +207,58 @@ def restore_snapshot(engine, src: str = 'edw', snapshot: str = SNAPSHOT_SCHEMA):
     in a single commit.
     """
     with engine.begin() as conn:
+        inbound = _inbound_foreign_keys(conn, src, (snapshot, BROKEN_SCHEMA))
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
         conn.execute(text(f'ALTER SCHEMA {src} RENAME TO {BROKEN_SCHEMA}'))
         conn.execute(text(f'ALTER SCHEMA {snapshot} RENAME TO {src}'))
+        # Foreign keys held by OTHER schemas follow the renamed tables by OID,
+        # so they now point into the broken generation - and the DROP ...
+        # CASCADE below would silently delete them. That is not hypothetical:
+        # app.user and app.league_member reference edw.dim_manager, and a
+        # scratch run of this function removed both. Re-point them at the
+        # restored tables in the same transaction as the swap. NOT VALID so a
+        # restore can never fail on a validation scan; validated afterwards.
+        for child, conname, definition in inbound:
+            conn.execute(text(f'ALTER TABLE {child} DROP CONSTRAINT "{conname}"'))
+            conn.execute(text(
+                f'ALTER TABLE {child} ADD CONSTRAINT "{conname}" '
+                f'{definition.removesuffix(" NOT VALID")} NOT VALID'))
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
+    for child, conname, _ in inbound:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    f'ALTER TABLE {child} VALIDATE CONSTRAINT "{conname}"'))
+        except Exception as e:
+            logger.warning("Restored FK %s on %s is enforced for new rows but "
+                           "could not be validated against existing ones (%s)",
+                           conname, child, type(e).__name__)
     logger.warning("EDW restored to previous generation from %s", snapshot)
+
+
+def _inbound_foreign_keys(conn, schema: str, also_exclude=()) -> list:
+    """Foreign keys held by tables outside `schema` that reference into it.
+
+    Returned as (child table, constraint name, definition). The definition
+    is captured under a pg_catalog-only search_path so pg_get_constraintdef
+    schema-qualifies the referenced table (e.g. REFERENCES edw.dim_manager),
+    which is what lets it resolve to the restored generation once re-added.
+    """
+    excluded = [schema, *also_exclude]
+    conn.execute(text('SET LOCAL search_path TO pg_catalog'))
+    rows = conn.execute(text("""
+        SELECT c.conrelid::regclass::text, c.conname, pg_get_constraintdef(c.oid)
+        FROM pg_constraint c
+        JOIN pg_class r ON r.oid = c.confrelid
+        JOIN pg_namespace rn ON rn.oid = r.relnamespace
+        JOIN pg_namespace cn ON cn.oid = c.connamespace
+        WHERE c.contype = 'f' AND rn.nspname = :s
+          AND cn.nspname <> ALL(:excluded)
+        ORDER BY 1, 2
+    """), {'s': schema, 'excluded': excluded}).fetchall()
+    conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+    return rows
 
 
 def drop_snapshot(engine, snapshot: str = SNAPSHOT_SCHEMA):

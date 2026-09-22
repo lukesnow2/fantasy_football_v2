@@ -485,3 +485,33 @@ def test_restored_snapshot_can_still_insert(state):
             'INSERT INTO edw.dim_week (season_year, week_number) '
             f'VALUES ({S}, 9) RETURNING week_key')).scalar()
     assert key is not None
+
+
+def test_restore_keeps_foreign_keys_held_by_other_schemas(state):
+    """app.user and app.league_member reference edw.dim_manager. Those keys
+    follow the renamed tables by OID, so without re-pointing them the
+    restore's DROP SCHEMA edw_broken CASCADE deleted them - silently, on
+    every failed publish."""
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA IF EXISTS ext CASCADE'))
+        conn.execute(text('CREATE SCHEMA ext'))
+        conn.execute(text(
+            'CREATE TABLE ext.member (id serial primary key, week_key int, '
+            'CONSTRAINT member_week_fk FOREIGN KEY (week_key) '
+            'REFERENCES edw.dim_week(week_key))'))
+        wk = conn.execute(text('SELECT min(week_key) FROM edw.dim_week')).scalar()
+        conn.execute(text('INSERT INTO ext.member (week_key) VALUES (:w)'), {'w': wk})
+
+    pub.clone_edw_snapshot(state.engine)
+    pub.restore_snapshot(state.engine)
+
+    with state.engine.connect() as conn:
+        target = conn.execute(text(
+            "SELECT confrelid::regclass::text, convalidated FROM pg_constraint "
+            "WHERE conname = 'member_week_fk'")).fetchone()
+    assert target == ('edw.dim_week', True)
+    with pytest.raises(Exception, match='member_week_fk'):
+        with state.engine.begin() as conn:
+            conn.execute(text('INSERT INTO ext.member (week_key) VALUES (-1)'))
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA ext CASCADE'))

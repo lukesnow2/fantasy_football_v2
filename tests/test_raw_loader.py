@@ -560,3 +560,27 @@ def test_roster_extractor_does_not_swallow_a_failed_week():
             assert has_raise, (
                 f"except handler at offset line {node.lineno} of "
                 "extract_rosters_for_league continues instead of raising")
+
+
+def test_full_rebuild_dimensions_upsert_and_never_truncate():
+    """load_dimensions must be re-runnable against a populated warehouse.
+
+    Its dim_league and dim_team inserts had no ON CONFLICT, so the unique
+    keys added by migrations 002/003 made a second run fail; and it cleared
+    dim_manager with TRUNCATE ... CASCADE, which empties most of the
+    warehouse and - where app.* references dim_manager - the site's users,
+    chat, bets and constitution.
+    """
+    import inspect
+    import re
+
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+
+    src = inspect.getsource(EdwEtlProcessor.load_dimensions)
+    executed_truncate = re.search(r'text\(\s*f?["\']+\s*TRUNCATE', src, re.IGNORECASE)
+    assert not executed_truncate, 'load_dimensions executes a TRUNCATE'
+    inserts = re.findall(r'INSERT INTO edw\.(dim_\w+).*?RETURNING', src, re.DOTALL)
+    assert set(inserts) >= {'dim_season', 'dim_week', 'dim_league', 'dim_player',
+                            'dim_manager', 'dim_team'}
+    for block in re.findall(r'INSERT INTO edw\.dim_\w+.*?RETURNING', src, re.DOTALL):
+        assert 'ON CONFLICT' in block, block.split('(')[0]
