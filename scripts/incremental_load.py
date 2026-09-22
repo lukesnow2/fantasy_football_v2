@@ -430,6 +430,7 @@ def _run_locked(args, state) -> int:
         with state.engine.begin() as conn:
             raw_loader.ensure_constraints(conn)
         pub.ensure_edw_serial_defaults(state.engine)
+        pub.check_inbound_foreign_keys(state.engine)
     elif not state.schema_exists():
         # Nothing to report a gap against, and a dry run must not create it.
         logger.warning("This database has no pipeline state tables yet; a "

@@ -515,3 +515,48 @@ def test_restore_keeps_foreign_keys_held_by_other_schemas(state):
             conn.execute(text('INSERT INTO ext.member (week_key) VALUES (-1)'))
     with state.engine.begin() as conn:
         conn.execute(text('DROP SCHEMA ext CASCADE'))
+
+
+def test_preflight_finishes_not_valid_inbound_keys(state):
+    """A restore re-adds inbound keys NOT VALID and validates once. If that
+    one attempt fails, nothing retried it - the key stayed NOT VALID
+    forever. The per-run preflight finishes it once the data allows."""
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA IF EXISTS ext CASCADE'))
+        conn.execute(text('CREATE SCHEMA ext'))
+        conn.execute(text('CREATE TABLE ext.member (week_key int)'))
+        wk = conn.execute(text('SELECT min(week_key) FROM edw.dim_week')).scalar()
+        conn.execute(text('INSERT INTO ext.member VALUES (:w)'), {'w': wk})
+        conn.execute(text(
+            'ALTER TABLE ext.member ADD CONSTRAINT member_week_fk FOREIGN KEY '
+            '(week_key) REFERENCES edw.dim_week(week_key) NOT VALID'))
+
+    pub.check_inbound_foreign_keys(state.engine)
+
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            "SELECT convalidated FROM pg_constraint "
+            "WHERE conname = 'member_week_fk'")).scalar() is True
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA ext CASCADE'))
+
+
+def test_preflight_names_missing_app_keys(state):
+    """dev had lost both drizzle-declared app -> edw.dim_manager keys and
+    nothing said so, which is why every dev verification ran against a
+    different key graph from production's."""
+    with state.engine.begin() as conn:
+        conn.execute(text('DROP SCHEMA IF EXISTS app CASCADE'))
+        conn.execute(text('CREATE SCHEMA app'))
+        conn.execute(text('CREATE TABLE app.league_member (manager_key int)'))
+        conn.execute(text('CREATE TABLE app."user" (manager_key int)'))
+    try:
+        missing = pub.check_inbound_foreign_keys(state.engine)
+        assert set(missing) == {c for _, c in pub.EXPECTED_INBOUND_FKS}
+    finally:
+        with state.engine.begin() as conn:
+            conn.execute(text('DROP SCHEMA app CASCADE'))
+
+
+def test_preflight_is_silent_without_an_app_schema(state):
+    assert pub.check_inbound_foreign_keys(state.engine) == []

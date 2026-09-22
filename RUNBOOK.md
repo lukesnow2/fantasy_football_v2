@@ -67,8 +67,11 @@ pg_dump "$LOCAL" --schema=edw --schema=meta_data --no-owner --no-privileges -f /
 psql "$NEON" -f /tmp/edw.sql
 cd web && DATABASE_URL="$NEON" npx drizzle-kit push     # app.* on Neon (first time only)
 psql "$NEON" -c "ALTER DATABASE neondb SET search_path TO app, edw, public;"
-# DROP SCHEMA edw CASCADE also drops the app.user -> edw.dim_manager FK; re-add it:
+# DROP SCHEMA edw CASCADE also drops BOTH app -> edw.dim_manager FKs
+# (web/drizzle/0000 declares app.user's and app.league_member's); re-add both:
 psql "$NEON" -c "ALTER TABLE app.\"user\" ADD CONSTRAINT user_manager_key_dim_manager_manager_key_fk \
+  FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key);"
+psql "$NEON" -c "ALTER TABLE app.league_member ADD CONSTRAINT league_member_manager_key_dim_manager_manager_key_fk \
   FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key);"
 ```
 Then load the raw `public.*` on Neon too (step 1 above with `--database-url "$NEON"`) so weekly

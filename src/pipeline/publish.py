@@ -147,22 +147,22 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
         # referential integrity at all and silently dropped it for good -
         # production carried 36 FKs while a restored database carried none.
         # Replay them explicitly, after the data is in place so they validate.
+        # Captured under a pg_catalog-only search_path, as _inbound_foreign_keys
+        # does, so every referenced table comes back schema-qualified and a
+        # plain src. -> dst. rewrite is the whole translation.
+        conn.execute(text('SET LOCAL search_path TO pg_catalog'))
         fkeys = conn.execute(text("""
             SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
             FROM pg_constraint
             WHERE contype = 'f' AND connamespace = CAST(:s AS regnamespace)
             ORDER BY conname
         """), {'s': src}).fetchall()
+        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
         for qualified_table, conname, definition in fkeys:
             table_only = qualified_table.split('.')[-1].strip('"')
-            # Definitions reference the source schema either explicitly or
-            # via search_path; rewrite the former and set the latter.
-            rewritten = definition.replace(f'{src}.', f'{dst}.')
-            conn.execute(text(f'SET LOCAL search_path TO {dst}'))
             conn.execute(text(
-                f'ALTER TABLE {dst}."{table_only}" '
-                f'ADD CONSTRAINT "{conname}" {rewritten}'))
-        conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+                f'ALTER TABLE {dst}."{table_only}" ADD CONSTRAINT "{conname}" '
+                f'{definition.replace(f"{src}.", f"{dst}.")}'))
         if fkeys:
             logger.info("Snapshot %s: replayed %d foreign keys", dst, len(fkeys))
 
@@ -225,19 +225,69 @@ def restore_snapshot(engine, src: str = 'edw', snapshot: str = SNAPSHOT_SCHEMA):
                 f'{definition.removesuffix(" NOT VALID")} NOT VALID'))
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
-    for child, conname, _ in inbound:
+    _validate_foreign_keys(engine, [(child, conname) for child, conname, _ in inbound])
+    logger.warning("EDW restored to previous generation from %s", snapshot)
+
+
+# Declared by web/drizzle/0000. The web app owns them, but the pipeline is
+# what can silently lose them (a schema swap or DROP SCHEMA edw CASCADE), and
+# without them nothing stops app rows from naming managers that don't exist -
+# or a rebuild that renumbers manager_key from re-attributing their data.
+EXPECTED_INBOUND_FKS = [
+    ('app."user"', 'user_manager_key_dim_manager_manager_key_fk'),
+    ('app.league_member', 'league_member_manager_key_dim_manager_manager_key_fk'),
+]
+
+
+def check_inbound_foreign_keys(engine, schema: str = 'edw') -> List[str]:
+    """Finish any NOT VALID inbound FK and report the app ones that are gone.
+
+    A restore re-adds inbound keys NOT VALID and validates them once; if that
+    validation fails the key stays NOT VALID and nothing else would ever try
+    again. This retries every run. It also names the web app's declared keys
+    that are missing outright, rather than re-adding them itself: the app
+    owns them, and adding one would fail on any orphaned row anyway. Returns
+    the missing constraint names.
+    """
+    with engine.begin() as conn:
+        pending = [(child, conname) for child, conname, _ in
+                   _inbound_foreign_keys(conn, schema, (SNAPSHOT_SCHEMA, BROKEN_SCHEMA),
+                                         only_not_valid=True)]
+        missing = []
+        for table, conname in EXPECTED_INBOUND_FKS:
+            if not conn.execute(text("SELECT to_regclass(:t)"), {'t': table}).scalar():
+                continue  # no app schema here (a bare warehouse)
+            if not conn.execute(text(
+                    "SELECT 1 FROM pg_constraint WHERE conrelid = CAST(:t AS regclass) "
+                    "AND conname = :c"), {'t': table, 'c': conname}).scalar():
+                missing.append(conname)
+    _validate_foreign_keys(engine, pending)
+    for conname in missing:
+        logger.warning(
+            "%s is missing: the web app's rows are not protected against "
+            "naming managers that do not exist. Re-add it (RUNBOOK, 'DROP "
+            "SCHEMA edw CASCADE also drops BOTH app -> edw.dim_manager FKs').",
+            conname)
+    return missing
+
+
+def _validate_foreign_keys(engine, fkeys):
+    """VALIDATE each (table, constraint), one transaction apiece so a single
+    failure cannot hold the others back. A NOT VALID key still enforces new
+    rows, so a failure is logged, not raised."""
+    for child, conname in fkeys:
         try:
             with engine.begin() as conn:
                 conn.execute(text(
                     f'ALTER TABLE {child} VALIDATE CONSTRAINT "{conname}"'))
         except Exception as e:
-            logger.warning("Restored FK %s on %s is enforced for new rows but "
-                           "could not be validated against existing ones (%s)",
+            logger.warning("FK %s on %s is enforced for new rows but could not "
+                           "be validated against existing ones (%s)",
                            conname, child, type(e).__name__)
-    logger.warning("EDW restored to previous generation from %s", snapshot)
 
 
-def _inbound_foreign_keys(conn, schema: str, also_exclude=()) -> list:
+def _inbound_foreign_keys(conn, schema: str, also_exclude=(),
+                          only_not_valid: bool = False) -> list:
     """Foreign keys held by tables outside `schema` that reference into it.
 
     Returned as (child table, constraint name, definition). The definition
@@ -255,8 +305,10 @@ def _inbound_foreign_keys(conn, schema: str, also_exclude=()) -> list:
         JOIN pg_namespace cn ON cn.oid = c.connamespace
         WHERE c.contype = 'f' AND rn.nspname = :s
           AND cn.nspname <> ALL(:excluded)
+          AND (NOT :only_not_valid OR NOT c.convalidated)
         ORDER BY 1, 2
-    """), {'s': schema, 'excluded': excluded}).fetchall()
+    """), {'s': schema, 'excluded': excluded,
+           'only_not_valid': only_not_valid}).fetchall()
     conn.execute(text('SET LOCAL search_path TO DEFAULT'))
     return rows
 
