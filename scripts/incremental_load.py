@@ -193,16 +193,26 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
     """
     data = {}
 
+    # Rosters first: each week's statistics are fetched for the players on
+    # THAT week's rosters, not whoever is rostered today (see
+    # extract_statistics_for_league). A --stats-only repair fetches them for
+    # the same reason but does not load them - it must not touch rosters.
+    rosters = [r.__dict__ for r in
+               extractor.extract_rosters_for_league(league_id, weeks)]
+    players_by_week = {}
+    for r in rosters:
+        players_by_week.setdefault(r['week'], set()).add(r['player_id'])
+
     data['statistics'] = [s.__dict__ for s in
-                          extractor.extract_statistics_for_league(league_id, weeks)]
+                          extractor.extract_statistics_for_league(
+                              league_id, weeks, players_by_week=players_by_week)]
     if stats_only:
         return data
 
     data['leagues'] = league_info_rows
     data['teams'] = [t.__dict__ for t in
                      extractor.extract_teams_for_league(league_id)]
-    data['rosters'] = [r.__dict__ for r in
-                       extractor.extract_rosters_for_league(league_id, weeks)]
+    data['rosters'] = rosters
     data['matchups'] = extractor.extract_matchups_for_league(league_id, weeks)
 
     txns = extractor.extract_transactions_for_league(league_id)

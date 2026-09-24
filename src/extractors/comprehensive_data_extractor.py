@@ -1626,7 +1626,9 @@ class YahooFantasyExtractor:
 
         logger.info(f"💾 Data saved to {filename}")
 
-    def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None) -> List[ExtractedPlayerStatistics]:
+    def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None,
+                                      players_by_week: Optional[Dict[int, List]] = None
+                                      ) -> List[ExtractedPlayerStatistics]:
         """Extract weekly player fantasy points using optimized bulk season loading
         
         Uses efficient bulk API calls to get all weekly data for a season with minimal requests.
@@ -1634,6 +1636,12 @@ class YahooFantasyExtractor:
         Args:
             league_id: League ID to extract statistics for
             weeks: List of weeks to extract. If None, extracts all completed weeks
+            players_by_week: The players to fetch for each week - the ones on
+                that week's rosters. Without it, every week is fetched for
+                league.taken_players(), which is who is rostered NOW: re-fetching
+                a past week then swaps in today's players and loses the stats of
+                everyone dropped since (16 of 155 week-1 players after a single
+                reload in 2026). Omitted only by the historical backfill path.
         
         Returns:
             List of ExtractedPlayerStatistics objects with weekly fantasy points
@@ -1676,36 +1684,51 @@ class YahooFantasyExtractor:
                 logger.warning(f"No valid weeks to extract for league {league_id}")
                 return statistics
             
-            # Get all players who were taken in this league
-            taken_players = self._rate_limited_request(
-                lambda: league.taken_players()
-            )
-            
-            if not taken_players:
-                logger.warning(f"No taken players found for league {league_id}")
-                return statistics
-            
-            # Extract all player IDs for bulk API call
-            all_player_ids = [int(player.get('player_id')) for player in taken_players if player.get('player_id')]
-            
-            if not all_player_ids:
-                logger.warning(f"No valid player IDs found for league {league_id}")
-                return statistics
-            
-            logger.info(f"    📊 BULK OPTIMIZATION: Processing {len(all_player_ids)} players × {len(extract_weeks)} weeks")
-            logger.info(f"    🚀 Target: {len(extract_weeks)} bulk API calls instead of {len(extract_weeks) * len(all_player_ids)} individual calls")
+            if players_by_week is not None:
+                # Each week's own rostered players. A week with none is a
+                # caller bug (the roster extractor refuses to return a week
+                # missing any team), never a reason to fetch nothing.
+                empty = [w for w in extract_weeks if not players_by_week.get(w)]
+                if empty:
+                    raise ValueError(
+                        f"No rostered players supplied for week(s) {empty} of "
+                        f"{league_id}; refusing to fetch statistics for nobody")
+                ids_by_week = {w: sorted({int(p) for p in players_by_week[w]})
+                               for w in extract_weeks}
+            else:
+                # Historical backfill only: whoever is rostered now. Correct
+                # for a finished season's final week; wrong for any week a
+                # player was on a roster and later dropped.
+                taken_players = self._rate_limited_request(
+                    lambda: league.taken_players()
+                )
+
+                if not taken_players:
+                    logger.warning(f"No taken players found for league {league_id}")
+                    return statistics
+
+                all_player_ids = [int(player.get('player_id')) for player in taken_players if player.get('player_id')]
+
+                if not all_player_ids:
+                    logger.warning(f"No valid player IDs found for league {league_id}")
+                    return statistics
+                ids_by_week = {w: all_player_ids for w in extract_weeks}
+
+            player_weeks = sum(len(ids) for ids in ids_by_week.values())
+            logger.info(f"    📊 BULK OPTIMIZATION: {player_weeks} player-weeks across {len(extract_weeks)} weeks")
             
             total_stats_extracted = 0
             total_points = 0.0
             
             # OPTIMIZED BULK PROCESSING: Get all weeks efficiently
             for week_num in extract_weeks:
-                logger.info(f"        📈 Week {week_num}: Bulk processing {len(all_player_ids)} players...")
+                week_ids = ids_by_week[week_num]
+                logger.info(f"        📈 Week {week_num}: Bulk processing {len(week_ids)} players...")
                 
                 try:
                     # SINGLE BULK API CALL: Get weekly statistics for ALL players at once
                     weekly_stats = self._rate_limited_request(
-                        lambda: league.player_stats(all_player_ids, 'week', week=week_num)
+                        lambda: league.player_stats(week_ids, 'week', week=week_num)
                     )
                     
                     if not weekly_stats:
@@ -1771,11 +1794,11 @@ class YahooFantasyExtractor:
                 avg_points = total_points / total_stats_extracted if total_stats_extracted > 0 else 0
                 players_with_points = len([s for s in statistics if s.weekly_fantasy_points > 0])
                 api_calls_made = len(extract_weeks)
-                api_calls_saved = (len(extract_weeks) * len(all_player_ids)) - api_calls_made
+                api_calls_saved = player_weeks - api_calls_made
                 efficiency_percent = ((api_calls_saved / (api_calls_saved + api_calls_made)) * 100) if api_calls_saved > 0 else 0
                 
                 logger.info(f"    🎉 BULK SEASON SUCCESS: Extracted {total_stats_extracted:,} weekly records")
-                logger.info(f"        📅 Coverage: {len(extract_weeks)} weeks × {len(all_player_ids)} players")
+                logger.info(f"        📅 Coverage: {len(extract_weeks)} weeks, {player_weeks} player-weeks")
                 logger.info(f"        💰 Total fantasy points: {total_points:,.1f}")
                 logger.info(f"        📈 Players with points: {players_with_points:,} ({(players_with_points/total_stats_extracted)*100:.1f}%)")
                 logger.info(f"        ⚡ API Efficiency: {api_calls_made} calls vs {api_calls_made + api_calls_saved} individual calls")
