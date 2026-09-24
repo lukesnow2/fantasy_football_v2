@@ -270,24 +270,41 @@ class EdwDeployment:
         
         try:
             logger.info("🗑️ Truncating EDW tables for clean rebuild...")
-            
-            edw_tables = [
-                'fact_team_performance', 'fact_matchup', 'fact_transaction', 
-                'fact_draft', 'fact_roster',
-                'dim_team', 'dim_player', 'dim_league', 'dim_week', 'dim_season', 'dim_manager'
-            ]
-            
+
+            # Every edw table EXCEPT dim_manager and edw_metadata, in ONE
+            # statement and WITHOUT CASCADE.
+            #
+            # dim_manager is not warehouse-private. The web app's app.* schema
+            # stores its manager_key in seven columns, and app.user and
+            # app.league_member carry foreign keys into it. This used to run
+            # TRUNCATE edw.dim_manager RESTART IDENTITY CASCADE, which -
+            # proven against a scratch copy of that key graph - cascades into
+            # app.user and app.league_member and from there into chat_message,
+            # wager, rule_proposal, rule_vote, rule_amendment and the whole
+            # constitution: the sign-in allowlist and every piece of user data
+            # the site holds, wiped by the RUNBOOK's documented rebuild. Where
+            # the foreign keys were absent, RESTART IDENTITY instead renumbered
+            # manager_key and silently re-attributed every chat message, bet
+            # and vote to whoever received that number next. load_dimensions
+            # upserts dim_manager on manager_name, so its keys stay stable and
+            # there is nothing to clear.
+            #
+            # No CASCADE: Postgres then requires every table referencing a
+            # truncated table to be truncated in the same statement, so a
+            # reference from outside the warehouse makes this fail loudly
+            # instead of silently emptying someone else's data.
             with self.engine.connect() as conn:
-                for table in edw_tables:
-                    try:
-                        conn.execute(text(f"TRUNCATE TABLE edw.{table} RESTART IDENTITY CASCADE"))
-                        logger.info(f"  ✅ Truncated {table}")
-                    except Exception as e:
-                        logger.warning(f"  ⚠️ Could not truncate {table}: {e}")
-                
+                tables = [r[0] for r in conn.execute(text(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'edw' "
+                    "AND tablename NOT IN ('dim_manager', 'edw_metadata') "
+                    "ORDER BY tablename"))]
+                conn.execute(text(
+                    'TRUNCATE TABLE ' + ', '.join(f'edw."{t}"' for t in tables)
+                    + ' RESTART IDENTITY'))
                 conn.commit()
-                logger.info("✅ Table truncation completed")
-            
+                logger.info(f"✅ Truncated {len(tables)} tables (dim_manager kept: "
+                            "the app references its keys)")
+
             return True
         except Exception as e:
             logger.error(f"❌ Table truncation failed: {e}")

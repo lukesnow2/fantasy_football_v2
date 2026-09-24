@@ -29,6 +29,7 @@ requires refactoring the processor's internal commit seams; revisit if
 it ever matters at this site's traffic.
 """
 import logging
+import re
 from typing import Callable, Dict, List, Tuple
 
 from sqlalchemy import text
@@ -63,32 +64,79 @@ EDW_SERIAL_KEYS = [
 ]
 
 
-def ensure_edw_serial_defaults(engine):
-    """Restore missing SERIAL defaults on EDW surrogate keys, idempotently."""
+def ensure_edw_serial_defaults(engine, schema: str = 'edw', force: bool = False):
+    """Give EDW surrogate keys a SERIAL default owned by `schema`, idempotently.
+
+    `force` rewrites the default even when one is already present. That is
+    what a freshly cloned snapshot needs: CREATE TABLE (LIKE ... INCLUDING
+    ALL) copies the column default verbatim, so the clone's keys default to
+    nextval() on the SOURCE schema's sequence. restore_snapshot then renames
+    the old schema aside and DROPs it CASCADE - which destroys exactly those
+    sequences, and the defaults with them. A restored warehouse therefore
+    comes back unable to insert a single dimension row.
+
+    The pipeline masked this by calling ensure_edw_serial_defaults at the top
+    of every run. Nothing else does: deploy_complete_edw.py, the RUNBOOK's
+    full rebuild and an operator's natural response to a broken warehouse,
+    goes straight to load_dimensions and dies on
+    'null value in column "season_key"'. Pointing the clone at its own
+    sequences fixes it at the source, the same way foreign keys are replayed.
+    """
     with engine.begin() as conn:
-        for table, col in EDW_SERIAL_KEYS:
-            exists = conn.execute(text(
-                "SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema='edw' AND table_name=:t"), {'t': table}).scalar()
-            if not exists:
-                continue
-            has_default = conn.execute(text(
-                "SELECT column_default IS NOT NULL FROM information_schema.columns "
-                "WHERE table_schema='edw' AND table_name=:t AND column_name=:c"),
-                {'t': table, 'c': col}).scalar()
-            if has_default:
-                continue
-            seq = f'edw.{table}_{col}_seq'
-            conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
-            conn.execute(text(
-                f'ALTER TABLE edw."{table}" ALTER COLUMN "{col}" '
-                f"SET DEFAULT nextval('{seq}')"))
-            conn.execute(text(
-                f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
-                f'FROM edw."{table}"), 0) + 1, false)'))
-            conn.execute(text(
-                f'ALTER SEQUENCE {seq} OWNED BY edw."{table}"."{col}"'))
-            logger.info("Restored SERIAL default on edw.%s.%s", table, col)
+        _set_serial_defaults(conn, schema, force)
+
+
+def _set_serial_defaults(conn, schema: str, force: bool):
+    for table, col in EDW_SERIAL_KEYS:
+        # One catalog read covers existence, type and current default. A
+        # sequence default only makes sense on an integer key; guarding the
+        # type matters because force=True runs this on every clone, where a
+        # column of another type would fail COALESCE(max(col), 0) and take
+        # the whole publish down with it.
+        row = conn.execute(text(
+            "SELECT data_type, column_default FROM information_schema.columns "
+            "WHERE table_schema=:s AND table_name=:t AND column_name=:c"),
+            {'s': schema, 't': table, 'c': col}).fetchone()
+        if row is None or row[0] not in ('integer', 'bigint', 'smallint'):
+            continue
+        if row[1] is not None and not force:
+            continue
+        seq = f'{schema}.{table}_{col}_seq'
+        conn.execute(text(f'CREATE SEQUENCE IF NOT EXISTS {seq}'))
+        conn.execute(text(
+            f'ALTER TABLE {schema}."{table}" ALTER COLUMN "{col}" '
+            f"SET DEFAULT nextval('{seq}')"))
+        conn.execute(text(
+            f"SELECT setval('{seq}', COALESCE((SELECT max(\"{col}\") "
+            f'FROM {schema}."{table}"), 0) + 1, false)'))
+        conn.execute(text(
+            f'ALTER SEQUENCE {seq} OWNED BY {schema}."{table}"."{col}"'))
+        logger.info("Set SERIAL default on %s.%s.%s", schema, table, col)
+
+
+def _qualified_rows(conn, sql: str, params: dict) -> list:
+    """Run a catalog query under a pg_catalog-only search_path.
+
+    pg_get_constraintdef and pg_get_viewdef qualify a relation only when it
+    isn't on the search_path, so what they return depends on the database
+    default - and production's is 'app, edw, public'. Under pg_catalog alone
+    every reference comes back schema-qualified, which is what makes a plain
+    edw. -> edw_prev. rewrite (or re-adding a key after a swap) correct
+    everywhere rather than only on databases configured like dev.
+    """
+    conn.execute(text('SET LOCAL search_path TO pg_catalog'))
+    rows = conn.execute(text(sql), params).fetchall()
+    conn.execute(text('SET LOCAL search_path TO DEFAULT'))
+    return rows
+
+
+def _retarget(definition: str, src: str, dst: str) -> str:
+    """Rewrite schema-qualified references from src to dst.
+
+    Only a whole qualifier: an alias or identifier that merely ends in the
+    schema name (fedw.pts for src 'edw') must not be rewritten into fedw_prev.
+    """
+    return re.sub(rf'(?<![\w"]){re.escape(src)}\.', f'{dst}.', definition)
 
 
 def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
@@ -120,25 +168,61 @@ def clone_edw_snapshot(engine, src: str = 'edw', dst: str = SNAPSHOT_SCHEMA):
             conn.execute(text(
                 f'INSERT INTO {dst}."{t}" SELECT * FROM {src}."{t}"'))
 
-        views = {r[0]: r[1] for r in conn.execute(text(
+        # LIKE ... INCLUDING ALL does NOT copy foreign keys, despite the
+        # name. Restoring such a snapshot promoted a schema with no
+        # referential integrity at all and silently dropped it for good -
+        # production carried 36 FKs while a restored database carried none.
+        # Replay them explicitly, after the data is in place so they validate.
+        fkeys = _qualified_rows(conn, """
+            SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
+            FROM pg_constraint
+            WHERE contype = 'f' AND connamespace = CAST(:s AS regnamespace)
+            ORDER BY conname
+        """, {'s': src})
+        for qualified_table, conname, definition in fkeys:
+            table_only = qualified_table.split('.')[-1].strip('"')
+            conn.execute(text(
+                f'ALTER TABLE {dst}."{table_only}" ADD CONSTRAINT "{conname}" '
+                f'{_retarget(definition, src, dst)}'))
+        if fkeys:
+            logger.info("Snapshot %s: replayed %d foreign keys", dst, len(fkeys))
+
+        # Repoint the cloned SERIAL defaults at sequences the snapshot owns.
+        # LIKE copies the default text, so without this the clone's keys
+        # depend on src's sequences - which restore_snapshot destroys when it
+        # drops the old schema, leaving the restored warehouse unable to
+        # insert. See ensure_edw_serial_defaults.
+        _set_serial_defaults(conn, dst, force=True)
+
+        # Views qualified the same way, and for a worse reason than the
+        # foreign keys: under production's search_path pg_get_viewdef returned
+        # 'FROM fact_x', the rewrite found nothing to rewrite, each snapshot
+        # view read the LIVE edw tables, and restore's DROP ... CASCADE of the
+        # old schema took every view with it (reproduced: zero views left).
+        # The site reads four of them.
+        views = dict(_qualified_rows(conn,
             "SELECT viewname, pg_get_viewdef(schemaname || '.' || viewname) "
-            "FROM pg_views WHERE schemaname = :s"), {'s': src})}
+            "FROM pg_views WHERE schemaname = :s", {'s': src}))
         pending = dict(views)
+        errors: Dict[str, str] = {}
         while pending:
             progressed = []
             for name, definition in list(pending.items()):
-                rewritten = definition.replace(f'{src}.', f'{dst}.')
+                rewritten = _retarget(definition, src, dst)
                 try:
                     with conn.begin_nested():
                         conn.execute(text(
                             f'CREATE VIEW {dst}."{name}" AS {rewritten}'))
                     progressed.append(name)
-                except Exception:
-                    continue  # depends on a view not yet created; next pass
+                except Exception as e:
+                    # Usually a view not yet created; retried next pass. Kept,
+                    # because when no pass makes progress this IS the error.
+                    errors[name] = str(getattr(e, 'orig', e)).strip().splitlines()[0]
+                    continue
             if not progressed:
                 raise RuntimeError(
-                    f"could not clone views (circular or external "
-                    f"dependency?): {sorted(pending)}")
+                    "could not clone views: " + "; ".join(
+                        f"{n}: {errors.get(n, 'unknown')}" for n in sorted(pending)))
             for name in progressed:
                 del pending[name]
         logger.info("Snapshot %s: %d tables, %d views cloned from %s",
@@ -154,12 +238,137 @@ def restore_snapshot(engine, src: str = 'edw', snapshot: str = SNAPSHOT_SCHEMA):
     in a single commit.
     """
     with engine.begin() as conn:
+        inbound = _inbound_foreign_keys(conn, src, (snapshot, BROKEN_SCHEMA))
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
         conn.execute(text(f'ALTER SCHEMA {src} RENAME TO {BROKEN_SCHEMA}'))
         conn.execute(text(f'ALTER SCHEMA {snapshot} RENAME TO {src}'))
+        # Foreign keys held by OTHER schemas follow the renamed tables by OID,
+        # so they now point into the broken generation - and the DROP ...
+        # CASCADE below would silently delete them. That is not hypothetical:
+        # app.user and app.league_member reference edw.dim_manager, and a
+        # scratch run of this function removed both. Re-point them at the
+        # restored tables in the same transaction as the swap. NOT VALID so a
+        # restore can never fail on a validation scan; validated afterwards.
+        #
+        # Each re-point is a savepoint. Altering another schema's table needs
+        # its owner's rights; if the pipeline's role lacks them, failing here
+        # would roll back the swap itself and leave the site on the broken
+        # generation - far worse than losing the key, which is the pre-fix
+        # outcome and is now at least logged (and reported by the preflight).
+        repointed = []
+        for child, conname, definition in inbound:
+            try:
+                with conn.begin_nested():
+                    conn.execute(text(f'ALTER TABLE {child} DROP CONSTRAINT "{conname}"'))
+                    conn.execute(text(
+                        f'ALTER TABLE {child} ADD CONSTRAINT "{conname}" '
+                        f'{definition.removesuffix(" NOT VALID")} NOT VALID'))
+                repointed.append((child, conname))
+            except Exception as e:
+                logger.error("Could not re-point %s on %s at the restored "
+                             "generation (%s); it will be lost with the old "
+                             "schema. Re-add it by hand.", conname, child,
+                             type(e).__name__)
     with engine.begin() as conn:
         conn.execute(text(f'DROP SCHEMA IF EXISTS {BROKEN_SCHEMA} CASCADE'))
+    _validate_foreign_keys(engine, repointed)
     logger.warning("EDW restored to previous generation from %s", snapshot)
+
+
+# Declared by web/drizzle/0000 (constraint names given for the re-add
+# instructions). The web app owns them, but the pipeline is what can silently
+# lose them (a schema swap or DROP SCHEMA edw CASCADE), and without them
+# nothing stops app rows from naming managers that don't exist - or a
+# rebuild that renumbers manager_key from re-attributing their data.
+EXPECTED_INBOUND_FKS = [
+    ('app."user"', 'user_manager_key_dim_manager_manager_key_fk'),
+    ('app.league_member', 'league_member_manager_key_dim_manager_manager_key_fk'),
+]
+
+
+def check_inbound_foreign_keys(engine, schema: str = 'edw',
+                               validate: bool = True) -> List[str]:
+    """Finish any NOT VALID inbound FK and report the app ones that are gone.
+
+    A restore re-adds inbound keys NOT VALID and validates them once; if that
+    validation fails the key stays NOT VALID and nothing else would ever try
+    again. This retries every run. It also names the web app's declared keys
+    that are missing outright, rather than re-adding them itself: the app
+    owns them, and adding one would fail on any orphaned row anyway. Returns
+    the missing constraint names.
+
+    A key counts as present if ANY foreign key on that table references
+    dim_manager.manager_key, whatever it is called: one re-added by hand
+    without the drizzle name protects the rows just the same, and a
+    name-only check would warn about it on every run until the warning was
+    ignored. validate=False keeps it read-only, for --dry-run against a
+    prospective cutover target.
+    """
+    with engine.begin() as conn:
+        pending = [(child, conname) for child, conname, _ in
+                   _inbound_foreign_keys(conn, schema, (SNAPSHOT_SCHEMA, BROKEN_SCHEMA),
+                                         only_not_valid=True)] if validate else []
+        missing = []
+        for table, conname in EXPECTED_INBOUND_FKS:
+            if not conn.execute(text("SELECT to_regclass(:t)"), {'t': table}).scalar():
+                continue  # no app schema here (a bare warehouse)
+            if not conn.execute(text("""
+                    SELECT 1 FROM pg_constraint c
+                    JOIN pg_attribute a ON a.attrelid = c.conrelid
+                                       AND a.attnum = ANY(c.conkey)
+                    WHERE c.contype = 'f'
+                      AND c.conrelid = CAST(:t AS regclass)
+                      AND c.confrelid = to_regclass(:target)
+                      AND a.attname = 'manager_key'"""),
+                    {'t': table, 'target': f'{schema}.dim_manager'}).scalar():
+                missing.append(conname)
+    if validate:
+        _validate_foreign_keys(engine, pending)
+    for conname in missing:
+        logger.warning(
+            "%s is missing: the web app's rows are not protected against "
+            "naming managers that do not exist. Re-add it (RUNBOOK, 'DROP "
+            "SCHEMA edw CASCADE also drops BOTH app -> edw.dim_manager FKs').",
+            conname)
+    return missing
+
+
+def _validate_foreign_keys(engine, fkeys):
+    """VALIDATE each (table, constraint), one transaction apiece so a single
+    failure cannot hold the others back. A NOT VALID key still enforces new
+    rows, so a failure is logged, not raised."""
+    for child, conname in fkeys:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    f'ALTER TABLE {child} VALIDATE CONSTRAINT "{conname}"'))
+        except Exception as e:
+            logger.warning("FK %s on %s is enforced for new rows but could not "
+                           "be validated against existing ones (%s)",
+                           conname, child, type(e).__name__)
+
+
+def _inbound_foreign_keys(conn, schema: str, also_exclude=(),
+                          only_not_valid: bool = False) -> list:
+    """Foreign keys held by tables outside `schema` that reference into it.
+
+    Returned as (child table, constraint name, definition). The definition
+    is captured under a pg_catalog-only search_path so pg_get_constraintdef
+    schema-qualifies the referenced table (e.g. REFERENCES edw.dim_manager),
+    which is what lets it resolve to the restored generation once re-added.
+    """
+    excluded = [schema, *also_exclude]
+    return _qualified_rows(conn, """
+        SELECT c.conrelid::regclass::text, c.conname, pg_get_constraintdef(c.oid)
+        FROM pg_constraint c
+        JOIN pg_class r ON r.oid = c.confrelid
+        JOIN pg_namespace rn ON rn.oid = r.relnamespace
+        JOIN pg_namespace cn ON cn.oid = c.connamespace
+        WHERE c.contype = 'f' AND rn.nspname = :s
+          AND cn.nspname <> ALL(:excluded)
+          AND (NOT :only_not_valid OR NOT c.convalidated)
+        ORDER BY 1, 2
+    """, {'s': schema, 'excluded': excluded, 'only_not_valid': only_not_valid})
 
 
 def drop_snapshot(engine, snapshot: str = SNAPSHOT_SCHEMA):
@@ -187,6 +396,13 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
             before = conn.execute(text(f'SELECT count(*) FROM {snapshot}."{t}"')).scalar()
             after = conn.execute(text(f'SELECT count(*) FROM edw."{t}"')).scalar()
             report[t] = {'before': before, 'after': after}
+            # A table that had rows and now has none is always a wipe, at
+            # any size. The fractional test needs enough rows to be
+            # meaningful, but gating the zero case on it too left small
+            # dimensions (dim_manager holds exactly 20) entirely unguarded.
+            if before > 0 and after == 0:
+                raise PublishVerificationError(
+                    f"edw.{t} emptied ({before} -> 0) - refusing to publish")
             if before > 20 and after < before * (1 - MAX_SHRINK_FRACTION):
                 raise PublishVerificationError(
                     f"edw.{t} shrank {before} -> {after} "
@@ -198,29 +414,64 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
         # reported success, so each entity is compared against its own raw
         # source: raw rows but no published rows means the transform dropped
         # them, almost always an unresolved dimension key.
+        # Both sides filter on the same league. Checking the EDW side on
+        # season/week alone meant another league's rows at the same week
+        # could satisfy the gate for a league whose data had been dropped -
+        # the very failure this gate exists to catch.
+        #
+        # Only entities this period actually holds raw data FOR are checked,
+        # read from its raw_*_complete flags. Checking every entity with any
+        # raw rows failed on pre-existing historical gaps that no refresh
+        # ever claimed to fill - edw.fact_roster was never built for old
+        # seasons - which is a different problem from a transform silently
+        # dropping what we just loaded.
         entity_checks = (
             ('statistics', 'public.statistics',
-             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics "
-             "WHERE season_year = :s AND week_number = :w)",
+             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics f "
+             "JOIN edw.dim_league dl ON dl.league_key = f.league_key "
+             "WHERE dl.league_id = :l AND f.season_year = :s "
+             "AND f.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.statistics "
              "WHERE league_id = :l AND week_number = :w)"),
             ('matchups', 'public.matchups',
              "SELECT EXISTS (SELECT 1 FROM edw.fact_matchup fm "
              "JOIN edw.dim_week dw ON fm.week_key = dw.week_key "
-             "WHERE fm.season_year = :s AND dw.week_number = :w)",
+             "JOIN edw.dim_league dl ON dl.league_key = fm.league_key "
+             "WHERE dl.league_id = :l AND fm.season_year = :s "
+             "AND dw.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.matchups "
              "WHERE league_id = :l AND week = :w)"),
             ('rosters', 'public.rosters',
              "SELECT EXISTS (SELECT 1 FROM edw.fact_roster fr "
              "JOIN edw.dim_week dw ON fr.week_key = dw.week_key "
-             "WHERE dw.season_year = :s AND dw.week_number = :w)",
+             "JOIN edw.dim_league dl ON dl.league_key = fr.league_key "
+             "WHERE dl.league_id = :l AND dw.season_year = :s "
+             "AND dw.week_number = :w)",
              "SELECT EXISTS (SELECT 1 FROM public.rosters "
              "WHERE league_id = :l AND week = :w)"),
         )
 
         for league_id, season, week in periods:
             params = {'l': league_id, 's': season, 'w': week}
+            claimed = conn.execute(text(
+                "SELECT raw_matchups_complete, raw_rosters_complete, "
+                "raw_statistics_complete FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = :w"),
+                params).fetchone()
+            if claimed is None:
+                # An unverifiable claim is a failed claim: publishing a
+                # period the state model has no record of would mark it
+                # published against nothing and verify nothing.
+                raise PublishVerificationError(
+                    f"period {league_id} {season} w{week} has no "
+                    "pipeline_periods row - refusing to publish an "
+                    "unverifiable period")
+            holds = {'matchups': claimed[0], 'rosters': claimed[1],
+                     'statistics': claimed[2]}
+
             for entity, raw_table, edw_sql, raw_sql in entity_checks:
+                if not holds.get(entity):
+                    continue  # this period never claimed this entity
                 if not conn.execute(text(raw_sql), params).scalar():
                     continue  # nothing raw to publish for this entity
                 if not conn.execute(text(edw_sql), params).scalar():
@@ -229,6 +480,64 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
                         f"rows but none are visible in the EDW after refresh "
                         f"(check dimension coverage for {entity})")
     return report
+
+
+def reconcile_deletions(engine, periods: List[Tuple[str, int, int]]) -> int:
+    """Drop EDW rows for published periods that raw no longer holds.
+
+    fact_player_statistics is loaded with a business-key UPSERT while its
+    raw period is delete-and-replace. Additions and revisions therefore
+    propagate, but RETRACTIONS never do: a row Yahoo stops returning is
+    simply never touched again, and stays visible on the site for good.
+    The rolling reload window re-fetches the two most recent weeks
+    precisely to pick up Yahoo's corrections, so this is the common path,
+    not an edge case. Confirmed on dev: 23 orphaned rows, all of them in
+    the two league-weeks that had been reloaded most often.
+
+    The other fact tables do not need this. fact_roster / fact_matchup /
+    fact_team_performance delete their week before inserting, and
+    fact_draft / fact_transaction are append-only against raw tables that
+    never shrink - all three verified at zero orphans.
+
+    Deliberately conservative, for the same reason load_delta is: a
+    period is reconciled only when it CLAIMS the entity complete and raw
+    actually holds rows for it. If raw is empty, nothing is deleted - an
+    empty raw side must never be read as a retraction.
+    """
+    removed = 0
+    with engine.begin() as conn:
+        for league_id, season, week in periods:
+            params = {'l': league_id, 's': season, 'w': week}
+            claimed = conn.execute(text(
+                "SELECT raw_statistics_complete FROM public.pipeline_periods "
+                "WHERE league_id = :l AND season = :s AND week = :w"),
+                params).scalar()
+            if not claimed:
+                continue
+            if not conn.execute(text(
+                    "SELECT EXISTS (SELECT 1 FROM public.statistics "
+                    "WHERE league_id = :l AND week_number = :w)"),
+                    params).scalar():
+                continue
+            n = conn.execute(text("""
+                DELETE FROM edw.fact_player_statistics f
+                USING edw.dim_league dl, edw.dim_player dp
+                WHERE dl.league_key = f.league_key
+                  AND dp.player_key = f.player_key
+                  AND dl.league_id = :l
+                  AND f.season_year = :s
+                  AND f.week_number = :w
+                  AND NOT EXISTS (
+                      SELECT 1 FROM public.statistics s
+                      WHERE s.league_id = :l AND s.week_number = :w
+                        AND s.player_id = dp.player_id)
+            """), params).rowcount
+            if n:
+                logger.info(
+                    "Reconciled %d statistics row(s) out of %s %s w%s - raw "
+                    "no longer has them", n, league_id, season, week)
+                removed += n
+    return removed
 
 
 def publish(state, periods: List[Tuple[str, int, int]],
@@ -250,6 +559,10 @@ def publish(state, periods: List[Tuple[str, int, int]],
         ok = refresh()
         if not ok:
             raise RuntimeError("EDW refresh reported failure")
+        # Before verifying, not after: reconciliation is part of the
+        # generation being published, so it lives inside the snapshot
+        # guard and the gate sees its result.
+        reconcile_deletions(engine, periods)
         report = verify(engine, periods)
     except BaseException:
         restore_snapshot(engine)

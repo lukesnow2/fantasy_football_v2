@@ -1,5 +1,6 @@
 yahoo_fantasy_api>=2.12.3
 yahoo_oauth>=2.0.0
+objectpath>=0.6.1           # transaction parsing (see _fetch_transactions)
 requests>=2.25.0
 requests-oauthlib>=1.3.0
 python-dotenv>=0.19.0

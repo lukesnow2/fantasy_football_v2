@@ -169,9 +169,23 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
 
     The scoping is the point: this is the fix for the history-destroying
     unscoped week delete.
+
+    Rows must fall inside `weeks`. The insert deliberately carries no
+    ON CONFLICT clause -- it relies on the delete above having cleared
+    exactly what it is about to write -- so a row outside the scope would
+    either collide with a live row or slip in unreplaced. That is a caller
+    bug, so it raises rather than corrupting the period.
     """
     if not weeks:
         return {'deleted': 0, 'inserted': 0}
+
+    scope = set(weeks)
+    stray = {r.get(week_col) for r in rows} - scope
+    if stray:
+        raise ValueError(
+            f"{table}: rows for week(s) {sorted(stray, key=str)} outside the "
+            f"replacement scope {sorted(scope)}")
+
     deleted = conn.execute(
         text(f'DELETE FROM public.{table} '
              f'WHERE league_id = :l AND "{week_col}" = ANY(:weeks)'),
@@ -185,6 +199,14 @@ def append_only(conn, table: str, rows: List[dict], conflict_cols: str) -> int:
                         f'ON CONFLICT ({conflict_cols}) DO NOTHING')
 
 
+# Time-series entities: raw-data key -> (table, week column).
+PERIOD_ENTITIES = {
+    'matchups': ('matchups', 'week'),
+    'rosters': ('rosters', 'week'),
+    'statistics': ('statistics', 'week_number'),
+}
+
+
 def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
                data: Dict[str, List[dict]]) -> Dict[str, int]:
     """Load one league's delta for the given weeks on the caller's
@@ -192,42 +214,99 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     transaction. Caller owns commit/rollback - all tables land together
     or none do.
 
+    Only entities PRESENT IN `data` are touched. A key's absence means the
+    run did not fetch it, and a delete-then-insert for data that was never
+    fetched deletes the period and puts nothing back: --stats-only once
+    erased a week's matchups (championship game included) and rosters this
+    way. Absent entities are left alone and are NOT marked raw-complete,
+    so gap detection still knows they are outstanding.
+
+    An entity that IS present but returns no rows for a given week is
+    likewise left alone for that week. Only weeks with incoming rows are
+    replaced; an empty fetch never deletes.
+
     data keys: leagues, teams, rosters, matchups (RAW week-blobs),
     transactions, draft_picks, statistics.
     """
     counts: Dict[str, int] = {}
 
-    counts['leagues'] = upsert_dimension(
-        conn, 'leagues', 'league_id', data.get('leagues', []), LEAGUE_UPDATE_COLS)
-    counts['teams'] = upsert_dimension(
-        conn, 'teams', 'team_id', data.get('teams', []), TEAM_UPDATE_COLS)
+    if 'leagues' in data:
+        counts['leagues'] = upsert_dimension(
+            conn, 'leagues', 'league_id', data['leagues'], LEAGUE_UPDATE_COLS)
+    if 'teams' in data:
+        counts['teams'] = upsert_dimension(
+            conn, 'teams', 'team_id', data['teams'], TEAM_UPDATE_COLS)
 
-    flat_matchups = flatten_matchups(data.get('matchups', []))
-    m = replace_period_rows(conn, 'matchups', 'week', league_id, weeks, flat_matchups)
-    counts['matchups'] = m['inserted']
+    # Rows per entity, so each period records its own counts rather than
+    # the run's totals (and a week with genuinely no rows is visible).
+    per_week: Dict[int, Dict[str, int]] = {w: {} for w in weeks}
 
-    r = replace_period_rows(conn, 'rosters', 'week', league_id, weeks,
-                            data.get('rosters', []))
-    counts['rosters'] = r['inserted']
+    scope = set(weeks)
+    for entity, (table, week_col) in PERIOD_ENTITIES.items():
+        if entity not in data:
+            continue
+        rows = flatten_matchups(data[entity]) if entity == 'matchups' else data[entity]
 
-    s = replace_period_rows(conn, 'statistics', 'week_number', league_id, weeks,
-                            data.get('statistics', []))
-    counts['statistics'] = s['inserted']
+        by_week: Dict[int, List[dict]] = {w: [] for w in weeks}
+        stray = set()
+        for row in rows:
+            week = row.get(week_col)
+            if week in scope:
+                by_week[week].append(row)
+            else:
+                stray.add(week)
+        if stray:
+            # Same contract replace_period_rows enforces, applied before the
+            # rows are split so the message names the entity.
+            raise ValueError(
+                f"{table}: rows for week(s) {sorted(stray, key=str)} outside "
+                f"the replacement scope {sorted(scope)}")
+        for week in weeks:
+            per_week[week][entity] = len(by_week[week])
 
-    counts['transactions'] = append_only(
-        conn, 'transactions', data.get('transactions', []),
-        'transaction_id, player_id')
-    counts['draft_picks'] = append_only(
-        conn, 'draft_picks', data.get('draft_picks', []), 'draft_pick_id')
+        # Replace only the weeks this fetch actually returned rows for. A
+        # delete-then-insert over a week that came back empty deletes what we
+        # already hold and puts nothing back - and because raw_*_complete is
+        # only ever set, never cleared, the week goes on claiming to be
+        # complete and published, so gap detection never asks for it again.
+        # The rolling reload window re-fetches the two most recent complete
+        # weeks on EVERY run, which makes this the common case rather than
+        # the rare one: one empty response (a swallowed rate-limit denial, a
+        # league whose taken_players momentarily returns nothing) would erase
+        # two weeks of raw data permanently and invisibly. An empty fetch is
+        # not evidence that the source has nothing, so leave what we hold and
+        # let the next run reconcile.
+        present = [w for w in weeks if by_week[w]]
+        empty = [w for w in weeks if not by_week[w]]
+        if empty:
+            logger.warning(
+                "%s: no rows returned for week(s) %s - leaving the rows "
+                "already held in place (an empty fetch is not a deletion)",
+                table, empty)
+        result = replace_period_rows(
+            conn, table, week_col, league_id, present,
+            [row for w in present for row in by_week[w]])
+        counts[entity] = result['inserted']
 
-    refresh_playoff_flags(conn, league_id)
+    if 'transactions' in data:
+        counts['transactions'] = append_only(
+            conn, 'transactions', data['transactions'],
+            'transaction_id, player_id')
+    if 'draft_picks' in data:
+        counts['draft_picks'] = append_only(
+            conn, 'draft_picks', data['draft_picks'], 'draft_pick_id')
+
+    if 'matchups' in data:
+        refresh_playoff_flags(conn, league_id)
 
     for week in weeks:
-        state.mark_raw_complete(conn, league_id, season, week, {
-            'matchups': m['inserted'],
-            'rosters': r['inserted'],
-            'statistics': s['inserted'],
-        })
+        # Only entities that actually landed rows are claimed complete. A
+        # fetched-but-empty entity is not evidence of completeness: marking
+        # it would retire the week from gap detection and make a transient
+        # Yahoo gap permanent. Leaving it unclaimed costs one re-fetch.
+        loaded = {e: n for e, n in per_week[week].items() if n}
+        if loaded:
+            state.mark_raw_complete(conn, league_id, season, week, loaded)
 
     logger.info("Loaded delta for %s weeks %s: %s", league_id, weeks, counts)
     return counts
@@ -264,6 +343,23 @@ def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
         "ORDER BY week"), {'l': league_id})]
 
     if len(playoff_weeks) < 2:
+        return None
+
+    # The bracket must be over. Mid-playoffs, a three-round bracket has only
+    # its first two weeks loaded, which looks exactly like a finished
+    # two-round bracket - and flagged a semifinal as the championship,
+    # showing a champion for an unfinished season until the final week landed.
+    # end_week is a text column and the extractor writes '' when Yahoo omits
+    # the setting; a bare ::int cast on that raises and rolls back the whole
+    # raw load. NULLIF makes an absent value behave as unknown, which the
+    # guard below already handles.
+    end_week = conn.execute(text(
+        "SELECT max(NULLIF(end_week, '')::int) FROM public.leagues "
+        "WHERE league_id = :l"), {'l': league_id}).scalar()
+    if end_week is not None and playoff_weeks[-1] < end_week:
+        logger.info("Playoffs still in progress for %s (last playoff week %s "
+                    "< end_week %s) - deferring round flags",
+                    league_id, playoff_weeks[-1], end_week)
         return None
 
     champ_week = playoff_weeks[-1]

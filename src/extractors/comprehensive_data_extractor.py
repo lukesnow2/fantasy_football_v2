@@ -854,64 +854,34 @@ class YahooFantasyExtractor:
                 logger.info(f"    📋 Week {week}: Processing {team_count} teams efficiently...")
                 
                 try:
-                    # OPTIMIZATION 1: Try to get all rosters for the week in one call
-                    # Yahoo API: league.matchups(week) includes roster data
-                    week_matchups = self._rate_limited_request(
-                        lambda w=week: league.matchups(w)
-                    )
-                    
-                    if week_matchups:
-                        logger.info(f"        🚀 BULK SUCCESS: Got week {week} data via matchups")
-                        week_rosters_count = 0
-                        
-                        # Extract roster data from matchup response (includes lineups)
-                        for matchup in week_matchups:
-                            try:
-                                teams_in_matchup = matchup.get('teams', {})
-                                
-                                # Process each team in the matchup
-                                for team_key, team_data in teams_in_matchup.items():
-                                    if isinstance(team_data, dict) and 'roster' in team_data:
-                                        roster_data = team_data['roster']
-                                        team_id = team_data.get('team_key', team_key)
-                                        
-                                        # Process roster players
-                                        if roster_data and 'players' in roster_data:
-                                            players = roster_data['players']
-                                            for player_key, player_data in players.items():
-                                                if isinstance(player_data, dict):
-                                                    roster_entry = self._extract_roster_player_data(
-                                                        player_data, league_id, team_id, week
-                                                    )
-                                                    if roster_entry:
-                                                        rosters.append(roster_entry)
-                                                        week_rosters_count += 1
-                                            
-                            except Exception as e:
-                                logger.debug(f"        Error processing matchup roster data: {e}")
-                                continue
-                        
-                        if week_rosters_count > 0:
-                            logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from bulk call")
-                            continue  # Successfully got week data, move to next week
-                    
-                    # OPTIMIZATION 2: Fallback to efficient individual team calls only if needed
-                    logger.info(f"        📋 Fallback: Individual team calls for week {week}")
+                    # One call per team. There used to be a "bulk" path ahead of
+                    # this one that read rosters out of league.matchups(week) and
+                    # fell through to here on failure. It could never succeed:
+                    # matchups() returns the raw {'fantasy_content': ...} dict,
+                    # so iterating it yielded the string 'fantasy_content' and
+                    # the first .get() raised AttributeError every time - caught,
+                    # logged at DEBUG, and invisible. It also stored team_id as
+                    # the full Yahoo key rather than the bare number, which the
+                    # warehouse cannot resolve (see migration 008). It has been
+                    # removed rather than repaired: it never ran, so there is no
+                    # behaviour to preserve, and it cost a redundant API call per
+                    # week on top of the one extract_matchups_for_league makes.
                     week_rosters_count = 0
-                    
+                    dropped = 0
+
                     for team_key, team_data in teams_dict.items():
                         try:
-                            team_id = team_data.get('team_key', team_key).split('.')[-1]
-                            
+                            team_id = str(team_data.get('team_key', team_key)).split('.')[-1]
+
                             # Build proper team key for API
                             full_team_key = f"{league_id}.t.{team_id}"
-                            
+
                             # SINGLE EFFICIENT CALL: Get team roster for week
                             # Yahoo API: /league/{league_key}/team/{team_key}/roster;week={week}
                             roster_data = self._rate_limited_request(
                                 lambda tk=full_team_key, w=week: league.to_team(tk).roster(week=w)
                             )
-                            
+
                             if roster_data:
                                 # Process roster players
                                 for player_data in roster_data:
@@ -921,16 +891,34 @@ class YahooFantasyExtractor:
                                     if roster_entry:
                                         rosters.append(roster_entry)
                                         week_rosters_count += 1
-                            
+                                    else:
+                                        dropped += 1
+
                         except Exception as e:
-                            logger.debug(f"        Error getting roster for team {team_key} week {week}: {e}")
-                            continue
-                    
-                    logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from individual calls")
-                    
+                            # The HTTP layer has already exhausted its retries. One
+                            # team silently missing leaves a week that load_delta
+                            # still marks raw-complete, publishes, and retires from
+                            # gap detection - permanently short a team.
+                            logger.error(f"        ❌ Week {week}: roster call failed "
+                                         f"for team {team_key}: {e}")
+                            raise
+
+                    covered = self._teams_covered(rosters, week)
+                    if dropped or len(covered) < team_count:
+                        raise RuntimeError(
+                            f"Week {week} of {league_id} is incomplete: "
+                            f"{len(covered)}/{team_count} teams, {dropped} unparseable "
+                            "player record(s). A partial roster week would be marked "
+                            "complete and never re-fetched; refusing to return one.")
+                    logger.info(f"        ✅ Week {week}: {week_rosters_count} roster entries from {team_count} teams")
+
                 except Exception as e:
-                    logger.warning(f"    ❌ Error processing week {week}: {e}")
-                    continue
+                    # Never skip a week silently - the same rule the statistics
+                    # extractor follows. A week that logs-and-continues here is
+                    # invisible: the loader sees no rows for it, leaves the period
+                    # alone, and the run still reports success.
+                    logger.error(f"    ❌ Week {week} failed for league {league_id}: {e}")
+                    raise
             
             logger.info(f"  ✅ OPTIMIZED ROSTERS: Found {len(rosters)} total roster entries")
             return rosters
@@ -939,6 +927,18 @@ class YahooFantasyExtractor:
             logger.error(f"Roster extraction failed for league {league_id}")
             raise
     
+    @staticmethod
+    def _teams_covered(rosters: List['ExtractedRoster'], week: int) -> set:
+        """Distinct team_ids represented in `rosters` for one week.
+
+        A week missing a team is the failure mode that matters: load_delta
+        marks a week raw-complete on "any rows landed", publish's gate only
+        asks whether the EDW has any roster row for the league-week, and gap
+        detection then retires it. Nine teams out of ten looks identical to
+        ten unless somebody counts.
+        """
+        return {r.team_id for r in rosters if r.week == week}
+
     def _extract_roster_player_data(self, player_data: Dict, league_id: str, team_id: str, week: int) -> Optional[ExtractedRoster]:
         """Helper method to extract roster player data consistently"""
         try:
@@ -1096,10 +1096,47 @@ class YahooFantasyExtractor:
             logger.error(f"Failed to extract matchups for league {league_id}")
             raise
     
+    @staticmethod
+    def _fetch_transactions(league, tran_types: str, count: int) -> List[Dict[str, Any]]:
+        """Fetch transactions without the library's paired-iteration parser.
+
+        yahoo_fantasy_api's League.transactions() walks the objectpath result
+        two nodes at a time - a transaction's details, then its players - and
+        calls next() unconditionally for the second. A transaction with no
+        players node overruns the iterator and raises StopIteration straight
+        out of the library, failing the whole run.
+
+        That is not hypothetical: a commish transaction carries no players.
+        Verified on 449.l.674707, whose single commish transaction yields one
+        node with keys transaction_key/transaction_id/type/status/timestamp
+        and no 'players' - so `incremental_load.py --season 2024` died here.
+        Since 'commish' is one of the types we request, the first
+        commissioner action in any league would break every run from then on.
+
+        Pair the nodes here instead: a node carrying transaction_key starts a
+        record, anything else merges into the one before it. Same merged
+        dicts the library produces, minus the assumption that every
+        transaction has players.
+        """
+        import objectpath
+
+        raw = league.yhandler.get_transactions_raw(
+            league.league_id, tran_types, count)
+        nodes = objectpath.Tree(raw).execute('$..transactions..transaction')
+        merged: List[Dict[str, Any]] = []
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            if 'transaction_key' in node:
+                merged.append(dict(node))
+            elif merged:
+                merged[-1].update(node)
+        return merged
+
     def extract_transactions_for_league(self, league_id: str) -> List[ExtractedTransaction]:
         """Extract transaction data for a league"""
         transactions = []
-        
+
         try:
             # Get league object
             league = self.game.to_league(league_id)
@@ -1112,7 +1149,8 @@ class YahooFantasyExtractor:
             for trans_type in transaction_types:
                 try:
                     league_transactions = self._rate_limited_request(
-                        lambda tt=trans_type: league.transactions(tt, TRANSACTION_FETCH_CAP)
+                        lambda tt=trans_type: self._fetch_transactions(
+                            league, tt, TRANSACTION_FETCH_CAP)
                     )
 
                     # The Yahoo API has no pagination for transactions - the
@@ -1588,7 +1626,9 @@ class YahooFantasyExtractor:
 
         logger.info(f"💾 Data saved to {filename}")
 
-    def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None) -> List[ExtractedPlayerStatistics]:
+    def extract_statistics_for_league(self, league_id: str, weeks: Optional[List[int]] = None,
+                                      players_by_week: Optional[Dict[int, List]] = None
+                                      ) -> List[ExtractedPlayerStatistics]:
         """Extract weekly player fantasy points using optimized bulk season loading
         
         Uses efficient bulk API calls to get all weekly data for a season with minimal requests.
@@ -1596,6 +1636,12 @@ class YahooFantasyExtractor:
         Args:
             league_id: League ID to extract statistics for
             weeks: List of weeks to extract. If None, extracts all completed weeks
+            players_by_week: The players to fetch for each week - the ones on
+                that week's rosters. Without it, every week is fetched for
+                league.taken_players(), which is who is rostered NOW: re-fetching
+                a past week then swaps in today's players and loses the stats of
+                everyone dropped since (16 of 155 week-1 players after a single
+                reload in 2026). Omitted only by the historical backfill path.
         
         Returns:
             List of ExtractedPlayerStatistics objects with weekly fantasy points
@@ -1638,36 +1684,51 @@ class YahooFantasyExtractor:
                 logger.warning(f"No valid weeks to extract for league {league_id}")
                 return statistics
             
-            # Get all players who were taken in this league
-            taken_players = self._rate_limited_request(
-                lambda: league.taken_players()
-            )
-            
-            if not taken_players:
-                logger.warning(f"No taken players found for league {league_id}")
-                return statistics
-            
-            # Extract all player IDs for bulk API call
-            all_player_ids = [int(player.get('player_id')) for player in taken_players if player.get('player_id')]
-            
-            if not all_player_ids:
-                logger.warning(f"No valid player IDs found for league {league_id}")
-                return statistics
-            
-            logger.info(f"    📊 BULK OPTIMIZATION: Processing {len(all_player_ids)} players × {len(extract_weeks)} weeks")
-            logger.info(f"    🚀 Target: {len(extract_weeks)} bulk API calls instead of {len(extract_weeks) * len(all_player_ids)} individual calls")
+            if players_by_week is not None:
+                # Each week's own rostered players. A week with none is a
+                # caller bug (the roster extractor refuses to return a week
+                # missing any team), never a reason to fetch nothing.
+                empty = [w for w in extract_weeks if not players_by_week.get(w)]
+                if empty:
+                    raise ValueError(
+                        f"No rostered players supplied for week(s) {empty} of "
+                        f"{league_id}; refusing to fetch statistics for nobody")
+                ids_by_week = {w: sorted({int(p) for p in players_by_week[w]})
+                               for w in extract_weeks}
+            else:
+                # Historical backfill only: whoever is rostered now. Correct
+                # for a finished season's final week; wrong for any week a
+                # player was on a roster and later dropped.
+                taken_players = self._rate_limited_request(
+                    lambda: league.taken_players()
+                )
+
+                if not taken_players:
+                    logger.warning(f"No taken players found for league {league_id}")
+                    return statistics
+
+                all_player_ids = [int(player.get('player_id')) for player in taken_players if player.get('player_id')]
+
+                if not all_player_ids:
+                    logger.warning(f"No valid player IDs found for league {league_id}")
+                    return statistics
+                ids_by_week = {w: all_player_ids for w in extract_weeks}
+
+            player_weeks = sum(len(ids) for ids in ids_by_week.values())
+            logger.info(f"    📊 BULK OPTIMIZATION: {player_weeks} player-weeks across {len(extract_weeks)} weeks")
             
             total_stats_extracted = 0
             total_points = 0.0
             
             # OPTIMIZED BULK PROCESSING: Get all weeks efficiently
             for week_num in extract_weeks:
-                logger.info(f"        📈 Week {week_num}: Bulk processing {len(all_player_ids)} players...")
+                week_ids = ids_by_week[week_num]
+                logger.info(f"        📈 Week {week_num}: Bulk processing {len(week_ids)} players...")
                 
                 try:
                     # SINGLE BULK API CALL: Get weekly statistics for ALL players at once
                     weekly_stats = self._rate_limited_request(
-                        lambda: league.player_stats(all_player_ids, 'week', week=week_num)
+                        lambda: league.player_stats(week_ids, 'week', week=week_num)
                     )
                     
                     if not weekly_stats:
@@ -1733,11 +1794,11 @@ class YahooFantasyExtractor:
                 avg_points = total_points / total_stats_extracted if total_stats_extracted > 0 else 0
                 players_with_points = len([s for s in statistics if s.weekly_fantasy_points > 0])
                 api_calls_made = len(extract_weeks)
-                api_calls_saved = (len(extract_weeks) * len(all_player_ids)) - api_calls_made
+                api_calls_saved = player_weeks - api_calls_made
                 efficiency_percent = ((api_calls_saved / (api_calls_saved + api_calls_made)) * 100) if api_calls_saved > 0 else 0
                 
                 logger.info(f"    🎉 BULK SEASON SUCCESS: Extracted {total_stats_extracted:,} weekly records")
-                logger.info(f"        📅 Coverage: {len(extract_weeks)} weeks × {len(all_player_ids)} players")
+                logger.info(f"        📅 Coverage: {len(extract_weeks)} weeks, {player_weeks} player-weeks")
                 logger.info(f"        💰 Total fantasy points: {total_points:,.1f}")
                 logger.info(f"        📈 Players with points: {players_with_points:,} ({(players_with_points/total_stats_extracted)*100:.1f}%)")
                 logger.info(f"        ⚡ API Efficiency: {api_calls_made} calls vs {api_calls_made + api_calls_saved} individual calls")
@@ -1748,8 +1809,14 @@ class YahooFantasyExtractor:
             return statistics
             
         except Exception as e:
+            # Re-raise, like every other extract_*_for_league. Returning []
+            # here swallowed the deliberate `raise` above - the one written so
+            # a week is never skipped silently - and handed the caller an
+            # empty list, which the loader reads as "fetched, genuinely
+            # nothing". That is not a harmless no-op: the rolling reload
+            # window would replace the period with nothing.
             logger.error(f"Error extracting weekly statistics for league {league_id}: {e}")
-            return []
+            raise
 
     # ==========================================
     # DATABASE INTEGRATION METHODS
