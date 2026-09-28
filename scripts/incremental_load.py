@@ -113,21 +113,64 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def league_for_season(conn, season) -> str:
+    """The league of record for a season already in the database.
+
+    Five seasons (2007, 2010, 2011, 2014, 2023) carry more than one league id
+    in public.leagues, and this used to take whichever row came back first,
+    with no ORDER BY - so a repair of one of those seasons could reload a
+    league the warehouse excludes. With several ids it picks the one
+    edw.dim_league holds (the leagues of record) and refuses when that
+    doesn't settle it.
+    """
+    from sqlalchemy import text
+    ids = [r[0] for r in conn.execute(text(
+        "SELECT league_id FROM public.leagues WHERE season = :s ORDER BY league_id"),
+        {'s': str(season)})]
+    if not ids:
+        raise SystemExit(f"no league found in public.leagues for season {season}")
+    if len(ids) == 1:
+        return ids[0]
+    of_record = [r[0] for r in conn.execute(text(
+        "SELECT league_id FROM edw.dim_league "
+        "WHERE season_year = :y AND league_id = ANY(:ids) ORDER BY league_id"),
+        {'y': int(season), 'ids': ids})]
+    if len(of_record) == 1:
+        logger.info("Season %s has leagues %s; using the league of record %s",
+                    season, ids, of_record[0])
+        return of_record[0]
+    raise SystemExit(
+        f"season {season} has {len(ids)} leagues ({', '.join(ids)}) and "
+        f"{len(of_record) or 'none'} of them in edw.dim_league - pass "
+        "--league-id to choose")
+
+
+def check_league_season(conn, league_id, season):
+    """Refuse --league-id/--season pairs that disagree.
+
+    The season is what pipeline_periods and the run ledger are keyed on, so a
+    mismatch would record one season's weeks under another's.
+    """
+    from sqlalchemy import text
+    known = conn.execute(text(
+        "SELECT season FROM public.leagues WHERE league_id = :l"),
+        {'l': league_id}).scalar()
+    if known is not None and int(known) != int(season):
+        raise SystemExit(f"league {league_id} is season {known}, not {season}")
+
+
 def resolve_league(extractor, state, args):
     """Return (league_id, season, league_obj_or_None, is_new_league)."""
     season = args.season or current_season_year()
 
     if args.league_id:
         league_id = args.league_id
+        if args.season:
+            with state.engine.connect() as conn:
+                check_league_season(conn, league_id, season)
     elif args.season:
-        from sqlalchemy import text
         with state.engine.connect() as conn:
-            row = conn.execute(text(
-                "SELECT league_id FROM public.leagues WHERE season = :s"),
-                {'s': str(season)}).fetchone()
-        if not row:
-            raise SystemExit(f"no league found in public.leagues for season {season}")
-        league_id = row[0]
+            league_id = league_for_season(conn, season)
     else:
         ids = extractor.game.league_ids(year=season)
         if not ids:
