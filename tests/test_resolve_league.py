@@ -61,3 +61,12 @@ def test_league_and_season_must_agree(conn):
     check_league_season(conn, '359.l.1', 2016)
     with pytest.raises(SystemExit, match='is season 2016, not 2017'):
         check_league_season(conn, '359.l.1', 2017)
+
+
+def test_weeks_before_a_late_start_are_outside_the_season():
+    """2006 and 2007 began in week 2; week 1 has no matchups or dim_week row."""
+    from scripts.incremental_load import weeks_outside_season
+    settings = {'start_week': '2', 'end_week': '16'}
+    assert weeks_outside_season(range(1, 17), settings) == [1]
+    assert weeks_outside_season(range(2, 17), settings) == []
+    assert weeks_outside_season([16, 17], {'start_week': '1', 'end_week': '16'}) == [17]

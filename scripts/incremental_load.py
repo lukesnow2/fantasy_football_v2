@@ -113,6 +113,20 @@ def parse_args(argv=None):
     return p.parse_args(argv)
 
 
+def weeks_outside_season(weeks, settings) -> list:
+    """Requested weeks that fall outside the league's own start..end weeks.
+
+    Not every season starts in week 1: 2006 and 2007 began in week 2, so
+    week 1 has no matchups and no dim_week row. Yahoo still returns rosters
+    for it, and loading them produced a period the warehouse could not
+    publish - which, because every run repairs unpublished periods first,
+    then failed every season after it.
+    """
+    start = int(settings.get('start_week') or 1)
+    end = int(settings.get('end_week') or max(weeks))
+    return sorted(w for w in weeks if not start <= w <= end)
+
+
 def league_for_season(conn, season) -> str:
     """The league of record for a season already in the database.
 
@@ -525,6 +539,17 @@ def _run_locked(args, state) -> int:
             state.finish_run(run_id, 'success', weeks_loaded=[],
                              row_counts={'noop': 'predraft'})
         return 0
+
+    if args.weeks:
+        outside = weeks_outside_season(args.weeks, settings)
+        if outside:
+            logger.error(
+                "Week(s) %s are outside %s's season (weeks %s-%s). Yahoo will "
+                "still return rosters for them, but the warehouse has no such "
+                "week, so the publish would fail and block every later run.",
+                outside, league_id, settings.get('start_week'),
+                settings.get('end_week'))
+            return 2
 
     # Weeks already recorded raw-complete need no re-confirmation from Yahoo.
     completed = yahoo_completed_weeks(
