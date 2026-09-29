@@ -162,3 +162,13 @@ def test_backfill_plan_starts_each_season_at_its_own_week():
                                  (2007, '175.l.658531', 2, 16),
                                  (2016, '359.l.696366', 1, 16)]
     assert season_plan(rows, only={2016}) == [(2016, '359.l.696366', 1, 16)]
+
+
+def test_backfill_queues_behind_the_lock_and_keeps_the_url_out_of_argv():
+    """A lock-held run exits 0 'nothing to do'; without --wait-for-lock the
+    backfill would report every season done having loaded nothing."""
+    from scripts.backfill_history import season_command
+    cmd = season_command(2007, '175.l.658531', 2, 16)
+    assert '--wait-for-lock' in cmd
+    assert cmd[cmd.index('--weeks') + 1:] == [str(w) for w in range(2, 17)]
+    assert '--database-url' not in cmd

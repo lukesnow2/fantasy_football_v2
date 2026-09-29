@@ -10,9 +10,10 @@ then that week's stats for exactly those players.
 
 Run it after any rebuild from the tracked snapshot, which predates the fix:
 
-    python scripts/backfill_history.py --database-url "$DB"              # all past seasons
-    python scripts/backfill_history.py --database-url "$DB" --seasons 2016 2017
-    python scripts/backfill_history.py --database-url "$DB" --dry-run    # print the plan
+    export DATABASE_URL="$DB"     # env, not --database-url: keeps the password out of ps
+    python scripts/backfill_history.py                    # all past seasons
+    python scripts/backfill_history.py --seasons 2016 2017
+    python scripts/backfill_history.py --dry-run          # print the plan
 
 About 8 minutes of Yahoo calls per season (~2.7 hours for all 21). Each
 season is one ordinary incremental_load run - locked, verified, published or
@@ -49,6 +50,21 @@ def season_plan(rows, only=None):
     return sorted(plan)
 
 
+LOADER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'incremental_load.py')
+
+
+def season_command(season, league_id, first, last):
+    """The incremental_load invocation for one season.
+
+    --wait-for-lock matters: without it, a run that finds the pipeline lock
+    held (the weekly job, another backfill) exits 0 with "nothing to do", and
+    every season would "succeed" in seconds having loaded nothing.
+    """
+    return [sys.executable, LOADER, '--wait-for-lock',
+            '--season', str(season), '--league-id', league_id,
+            '--weeks', *[str(w) for w in range(first, last + 1)]]
+
+
 def leagues_of_record(database_url, before_season):
     from sqlalchemy import create_engine, text
     engine = create_engine(database_url.replace('postgres://', 'postgresql://', 1))
@@ -83,14 +99,12 @@ def main(argv=None):
     if args.dry_run or not plan:
         return 0
 
-    loader = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'incremental_load.py')
+    # The URL goes through the environment, not argv: as an argument it sat in
+    # the process list, password and all, for the whole multi-hour run.
+    env = {**os.environ, 'DATABASE_URL': args.database_url}
     for season, league_id, first, last in plan:
         started = time.time()
-        rc = subprocess.run([
-            sys.executable, loader, '--database-url', args.database_url,
-            '--season', str(season), '--league-id', league_id,
-            '--weeks', *[str(w) for w in range(first, last + 1)],
-        ]).returncode
+        rc = subprocess.run(season_command(season, league_id, first, last), env=env).returncode
         print(f"SEASON {season} exit={rc} secs={int(time.time() - started)}", flush=True)
         if rc != 0:
             print(f"Stopped at {season}: every later season would repeat this failure "

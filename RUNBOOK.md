@@ -64,9 +64,12 @@ every past season through the pipeline, which fetches each week's rosters and
 then that week's stats for exactly those players (~8 min of Yahoo calls per
 season, ~2.7 h for all; stops at the first failure, resumable by season):
 ```bash
-.venv/bin/python scripts/incremental_load.py --database-url "$DB" --dry-run   # applies nothing; checks access
-.venv/bin/python scripts/backfill_history.py --database-url "$DB" --dry-run  # the per-season plan
-.venv/bin/python scripts/backfill_history.py --database-url "$DB"
+# DATABASE_URL via the environment keeps the password out of the process list
+# for the ~2.7 h run; the driver queues behind any running pipeline.
+export DATABASE_URL="$DB"
+.venv/bin/python scripts/incremental_load.py --dry-run   # applies nothing; checks access
+.venv/bin/python scripts/backfill_history.py --dry-run   # the per-season plan
+.venv/bin/python scripts/backfill_history.py
 ```
 The first incremental run also applies the migrations (e.g. 010 removes the
 week-1 stats of 2006/2007, whose seasons started in week 2). Afterwards every
@@ -75,9 +78,20 @@ Do NOT re-extract history with `scripts/full_extraction.py` instead: it still
 fetches each week's stats for today's rosters and recreates the gaps.
 
 ## Promote local → Neon
-The per-row ETL is slow over the network; dump the built warehouse and restore instead.
+Copy dev's **raw layer, pipeline state and warehouse together**; rebuild none of
+them on Neon. The per-row ETL is slow over the network, and dev holds the
+corrected history: the tracked snapshot predates the 2026-09 history backfill.
+Promote into a new Neon database or branch and keep the old one as the rollback.
 ```bash
 NEON="postgresql://...neon.tech/neondb?sslmode=require"
+# 1. raw public.* + pipeline state (periods, run ledger, applied migrations).
+#    --clean replaces any stale copies; the run-id identity keeps its value.
+#    (Flags written out, not held in a variable: zsh doesn't word-split one.)
+pg_dump "$LOCAL" --clean --if-exists --no-owner --no-privileges -f /tmp/raw.sql \
+  -t public.leagues -t public.teams -t public.rosters -t public.matchups \
+  -t public.transactions -t public.draft_picks -t public.statistics -t 'public.pipeline_*'
+psql "$NEON" -v ON_ERROR_STOP=1 -f /tmp/raw.sql
+# 2. edw.* + meta_data.*
 psql "$NEON" -c "DROP SCHEMA IF EXISTS edw CASCADE; DROP SCHEMA IF EXISTS meta_data CASCADE;"
 pg_dump "$LOCAL" --schema=edw --schema=meta_data --no-owner --no-privileges -f /tmp/edw.sql
 psql "$NEON" -f /tmp/edw.sql
@@ -90,8 +104,13 @@ psql "$NEON" -c "ALTER TABLE app.\"user\" ADD CONSTRAINT user_manager_key_dim_ma
 psql "$NEON" -c "ALTER TABLE app.league_member ADD CONSTRAINT league_member_manager_key_dim_manager_manager_key_fk \
   FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key);"
 ```
-Then load the raw `public.*` on Neon too (step 1 above with `--database-url "$NEON"`) so weekly
-incremental updates have their landing tables.
+Do **not** load Neon's `public.*` from the snapshot (rebuild step 1) instead of
+dumping it: the snapshot's stats predate the backfill, and the first weekly run
+refreshes the warehouse from `public.*` - `fact_draft.season_points` is recomputed
+from `public.statistics` - so the corrected history would quietly revert (2016's
+board back to 130 zero-point picks). After promoting, `incremental_load.py
+--dry-run` against Neon should report no pending migrations and the gap you
+expect.
 
 
 ## Authentication & the league roster
