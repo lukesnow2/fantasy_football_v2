@@ -380,9 +380,9 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
                    snapshot: str = SNAPSHOT_SCHEMA) -> Dict[str, Dict]:
     """The verification gate. Raises PublishVerificationError on failure.
 
-    (a) Every loaded period is visible in the refreshed EDW
-        (fact_player_statistics has rows at that season/week when the
-        raw statistics landed; season presence otherwise).
+    (a) Every loaded period is complete in the refreshed EDW: for each
+        entity the period claims, the warehouse holds exactly as many rows
+        as the raw layer for that league and week.
     (b) No EDW table shrank more than MAX_SHRINK_FRACTION vs the
         snapshot - the signature of wipe-class bugs.
     Returns per-table before/after counts for the run ledger.
@@ -427,28 +427,28 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
         # dropping what we just loaded.
         entity_checks = (
             ('statistics', 'public.statistics',
-             "SELECT EXISTS (SELECT 1 FROM edw.fact_player_statistics f "
+             "SELECT count(*) FROM edw.fact_player_statistics f "
              "JOIN edw.dim_league dl ON dl.league_key = f.league_key "
              "WHERE dl.league_id = :l AND f.season_year = :s "
-             "AND f.week_number = :w)",
-             "SELECT EXISTS (SELECT 1 FROM public.statistics "
-             "WHERE league_id = :l AND week_number = :w)"),
+             "AND f.week_number = :w",
+             "SELECT count(*) FROM public.statistics "
+             "WHERE league_id = :l AND week_number = :w"),
             ('matchups', 'public.matchups',
-             "SELECT EXISTS (SELECT 1 FROM edw.fact_matchup fm "
+             "SELECT count(*) FROM edw.fact_matchup fm "
              "JOIN edw.dim_week dw ON fm.week_key = dw.week_key "
              "JOIN edw.dim_league dl ON dl.league_key = fm.league_key "
              "WHERE dl.league_id = :l AND fm.season_year = :s "
-             "AND dw.week_number = :w)",
-             "SELECT EXISTS (SELECT 1 FROM public.matchups "
-             "WHERE league_id = :l AND week = :w)"),
+             "AND dw.week_number = :w",
+             "SELECT count(*) FROM public.matchups "
+             "WHERE league_id = :l AND week = :w"),
             ('rosters', 'public.rosters',
-             "SELECT EXISTS (SELECT 1 FROM edw.fact_roster fr "
+             "SELECT count(*) FROM edw.fact_roster fr "
              "JOIN edw.dim_week dw ON fr.week_key = dw.week_key "
              "JOIN edw.dim_league dl ON dl.league_key = fr.league_key "
              "WHERE dl.league_id = :l AND dw.season_year = :s "
-             "AND dw.week_number = :w)",
-             "SELECT EXISTS (SELECT 1 FROM public.rosters "
-             "WHERE league_id = :l AND week = :w)"),
+             "AND dw.week_number = :w",
+             "SELECT count(*) FROM public.rosters "
+             "WHERE league_id = :l AND week = :w"),
         )
 
         for league_id, season, week in periods:
@@ -472,12 +472,18 @@ def verify_refresh(engine, periods: List[Tuple[str, int, int]],
             for entity, raw_table, edw_sql, raw_sql in entity_checks:
                 if not holds.get(entity):
                     continue  # this period never claimed this entity
-                if not conn.execute(text(raw_sql), params).scalar():
+                raw_n = conn.execute(text(raw_sql), params).scalar()
+                if not raw_n:
                     continue  # nothing raw to publish for this entity
-                if not conn.execute(text(edw_sql), params).scalar():
+                # Completeness, not existence. "Any row visible" passed a
+                # refresh that dropped 2 of 159 week-3 stat and roster rows
+                # (players missing from dim_player). Every raw row maps to
+                # exactly one warehouse row, so the counts must agree.
+                edw_n = conn.execute(text(edw_sql), params).scalar()
+                if edw_n != raw_n:
                     raise PublishVerificationError(
                         f"period {league_id} {season} w{week}: {raw_table} has "
-                        f"rows but none are visible in the EDW after refresh "
+                        f"{raw_n} rows but the EDW holds {edw_n} after refresh "
                         f"(check dimension coverage for {entity})")
     return report
 

@@ -87,8 +87,10 @@ def state(test_db):
                 f"INSERT INTO edw.fact_matchup VALUES ('{L}', {S}, {wk}, 'a', 'b')"))
             conn.execute(text(
                 f"INSERT INTO edw.fact_roster VALUES ({wk}, 1, '{L}')"))
+            # Two raw stat rows per week, matching the two warehouse rows
+            # above: the gate compares counts, not mere presence.
             conn.execute(text(
-                f"INSERT INTO public.statistics VALUES ('{L}', {w})"))
+                f"INSERT INTO public.statistics VALUES ('{L}', {w}), ('{L}', {w})"))
             conn.execute(text(f"INSERT INTO public.matchups VALUES ('{L}', {w})"))
             conn.execute(text(f"INSERT INTO public.rosters VALUES ('{L}', {w})"))
     # Mark weeks 1-2 as raw-complete so publish flags have rows to update.
@@ -200,7 +202,7 @@ def test_invisible_period_fails_verification(state):
 
     before = edw_state(state)
     with pytest.raises(pub.PublishVerificationError,
-                       match='w9: public.statistics has rows'):
+                       match='w9: public.statistics has 1 rows but the EDW holds 0'):
         pub.publish(state, [(L, S, 9)], refresh_that_skips_week9)
     assert edw_state(state) == before
     assert 9 not in state.published_weeks(L, S)
@@ -704,3 +706,16 @@ def test_uncloneable_view_reports_its_real_error(state):
         with state.engine.begin() as conn:
             conn.execute(text('DROP VIEW edw.vw_bonus'))
             conn.execute(text('DROP FUNCTION edw.bonus()'))
+
+
+def test_partially_dropped_period_fails_verification(state):
+    """A refresh that publishes SOME of a period's rows must fail too. The
+    existence-only gate passed 2026 week 3 with 2 of 159 stat and roster rows
+    dropped (players missing from dim_player)."""
+    with state.engine.begin() as conn:
+        conn.execute(text(f"INSERT INTO public.statistics VALUES ('{L}', 2)"))
+
+    with pytest.raises(pub.PublishVerificationError,
+                       match='w2: public.statistics has 3 rows but the EDW holds 2'):
+        pub.publish(state, [(L, S, 2)], lambda: True)
+    assert 2 not in state.published_weeks(L, S)

@@ -240,7 +240,7 @@ def yahoo_completed_weeks(league, already_complete=()) -> list:
 
 
 def extract_scope(extractor, league_id, weeks, stats_only, is_new,
-                  since, league_info_rows):
+                  league_info_rows):
     """Fetch the scoped delta from Yahoo. Errors raise - never empty-on-fail.
 
     Only keys the run actually fetched are present. load_delta treats an
@@ -272,10 +272,16 @@ def extract_scope(extractor, league_id, weeks, stats_only, is_new,
     data['rosters'] = rosters
     data['matchups'] = extractor.extract_matchups_for_league(league_id, weeks)
 
-    txns = extractor.extract_transactions_for_league(league_id)
-    if since is not None:
-        txns = [t for t in txns if t.timestamp >= since.replace(tzinfo=None)]
-    data['transactions'] = [t.__dict__ for t in txns]
+    # Every transaction Yahoo returns, unfiltered. This used to keep only
+    # those newer than the start of the last successful run - of ANY season -
+    # so a repair or backfill run for 2005 moved the cutoff and the next
+    # weekly run silently skipped everything the live league did in between
+    # (16 of 107 2026 transactions lost in dev, 9/24-9/27). Yahoo returns the
+    # full list on every call regardless (capped at 500 per type), and the
+    # loader already ignores rows it holds, so a cutoff saved nothing and
+    # could only ever lose data.
+    data['transactions'] = [t.__dict__ for t in
+                            extractor.extract_transactions_for_league(league_id)]
 
     if is_new:
         data['draft_picks'] = [d.__dict__ for d in
@@ -602,9 +608,8 @@ def _run_locked(args, state) -> int:
             'url': settings.get('url'), 'logo_url': settings.get('logo_url') or '',
             'extracted_at': datetime.now(),
         }]
-        since = state.last_successful_run_start()
         data = extract_scope(extractor, league_id, weeks, args.stats_only,
-                             is_new, since, league_info_rows)
+                             is_new, league_info_rows)
 
         # 5. One transaction: the full raw delta + period flags.
         with state.engine.begin() as conn:

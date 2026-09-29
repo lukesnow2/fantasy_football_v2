@@ -167,13 +167,6 @@ def test_ledger_survives_data_rollback(state):
     assert 'simulated' in row[1]
 
 
-def test_last_successful_run_start(state):
-    assert state.last_successful_run_start() is None
-    r1 = state.start_run(season=S)
-    state.finish_run(r1, 'success')
-    assert state.last_successful_run_start() is not None
-
-
 def test_readers_tolerate_missing_schema(test_db):
     """A dry run must be able to report against a database whose pipeline
     tables do not exist yet, without creating them."""

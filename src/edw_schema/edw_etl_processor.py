@@ -944,61 +944,54 @@ class EdwEtlProcessor:
         
         logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
         
-        # Collect unique players from all sources
+        # Collect unique players from every source that names one.
+        #
+        # Transactions and draft picks alone were not enough: a player who
+        # reaches a roster through a transaction the pipeline did not load
+        # (or one Yahoo never exposes) had no dim_player row, and every fact
+        # keyed on him - his weekly stats and his roster rows - was silently
+        # dropped at the dimension lookup. Tyler Shough and Terrance Ferguson
+        # (2026 week 3) vanished from the warehouse this way. Rosters and
+        # statistics now contribute too; sources are read in the old order so
+        # an existing player's name is taken from the same place as before.
         unique_players = {}
-        
-        # Extract players from transactions (most comprehensive player list)
+
+        def numeric(raw_player_id) -> str:
+            # "124.p.5994" -> "5994"
+            raw = str(raw_player_id)
+            return raw.split('.p.')[-1] if '.p.' in raw else raw
+
+        def add(player_id, player_name):
+            if not player_id or player_id in unique_players:
+                return
+            position = position_lookup.get(player_id, 'Unknown')
+            unique_players[player_id] = {
+                'player_id': player_id,
+                'player_name': player_name or f'Player {player_id}',
+                'primary_position': position,
+                'eligible_positions': [position] if position != 'Unknown' else [],
+                'nfl_team': 'Unknown',
+                'jersey_number': None,
+                'rookie_year': None,
+                'is_active': True,
+                'valid_from': date.today(),
+                'valid_to': None
+            }
+
         for transaction in self.data.get('transactions', []):
-            raw_player_id = transaction['player_id']
-            
-            # Extract numeric player ID from Yahoo format (e.g., "124.p.5994" -> "5994")
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
-            
-            if numeric_player_id not in unique_players:
-                # Use position lookup to get position data
-                position = position_lookup.get(numeric_player_id, 'Unknown')
-                
-                unique_players[numeric_player_id] = {
-                    'player_id': numeric_player_id,
-                    'player_name': transaction.get('player_name', f'Player {numeric_player_id}'),
-                    'primary_position': position,
-                    'eligible_positions': [position] if position != 'Unknown' else [],
-                    'nfl_team': 'Unknown',
-                    'jersey_number': None,
-                    'rookie_year': None,
-                    'is_active': True,
-                    'valid_from': date.today(),
-                    'valid_to': None
-                }
-        
-        # Extract players from draft picks (ensure we have all drafted players)
+            add(numeric(transaction['player_id']), transaction.get('player_name'))
         for draft_pick in self.data.get('draft_picks', []):
-            player_id = draft_pick['player_id']
-            
-            if player_id not in unique_players:
-                position = position_lookup.get(player_id, 'Unknown')
-                
-                unique_players[player_id] = {
-                    'player_id': player_id,
-                    'player_name': draft_pick.get('player_name', f'Player {player_id}'),
-                    'primary_position': position,
-                    'eligible_positions': [position] if position != 'Unknown' else [],
-                    'nfl_team': 'Unknown',
-                    'jersey_number': None,
-                    'rookie_year': None,
-                    'is_active': True,
-                    'valid_from': date.today(),
-                    'valid_to': None
-                }
-        
+            add(numeric(draft_pick['player_id']), draft_pick.get('player_name'))
+        for roster in self.data.get('rosters', []):
+            add(numeric(roster['player_id']), roster.get('player_name'))
+        for stat in self.data.get('statistics', []):
+            add(numeric(stat['player_id']), stat.get('player_name'))
+
         transformed = list(unique_players.values())
         
         # Count how many players have position data
         players_with_positions = sum(1 for player in transformed if player['primary_position'] != 'Unknown')
-        logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions and draft data")
+        logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions, drafts, rosters and statistics")
         logger.info(f"🏈 {players_with_positions} players have position data ({players_with_positions/len(transformed)*100:.1f}%)")
         
         return transformed

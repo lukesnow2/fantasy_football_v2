@@ -249,17 +249,6 @@ class PipelineState:
              'counts': json.dumps(row_counts or {}), 'error': error,
              'run_id': run_id})
 
-    def last_successful_run_start(self):
-        """Start timestamp of the most recent successful run (or None).
-
-        The transactions since-filter uses the run START, not finish -
-        transactions landing mid-run would otherwise be skipped forever
-        (overlap is harmless; the loader dedupes on transaction_id).
-        """
-        return self._ledger.execute(
-            text("SELECT max(started_at) FROM public.pipeline_runs "
-                 "WHERE status = 'success'")).scalar()
-
     # ------------------------------------------------------------------
     # Period completeness
     # ------------------------------------------------------------------

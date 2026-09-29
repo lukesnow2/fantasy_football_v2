@@ -195,8 +195,19 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
 
 
 def append_only(conn, table: str, rows: List[dict], conflict_cols: str) -> int:
-    return _insert_rows(conn, table, rows,
-                        f'ON CONFLICT ({conflict_cols}) DO NOTHING')
+    """Insert rows not already held; returns how many were actually new.
+
+    Callers pass Yahoo's full list every run, so the number of rows offered
+    says nothing - the run ledger and the EDW refresh triggers need the
+    number that landed. Counted on the caller's transaction, which the
+    pipeline's advisory lock keeps free of concurrent writers.
+    """
+    if not rows:
+        return 0
+    count = text(f'SELECT count(*) FROM public.{table}')
+    before = conn.execute(count).scalar()
+    _insert_rows(conn, table, rows, f'ON CONFLICT ({conflict_cols}) DO NOTHING')
+    return conn.execute(count).scalar() - before
 
 
 # Time-series entities: raw-data key -> (table, week column).

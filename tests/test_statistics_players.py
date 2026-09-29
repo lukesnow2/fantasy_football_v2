@@ -87,7 +87,7 @@ class FakeExtractor:
 def test_scope_passes_each_weeks_roster_to_statistics():
     ex = FakeExtractor()
     data = extract_scope(ex, '470.l.1', [1, 2], stats_only=False, is_new=False,
-                         since=None, league_info_rows=[])
+                         league_info_rows=[])
     assert ex.stats_players == {1: {'11', '12'}, 2: {'13'}}
     assert len(data['rosters']) == 3
 
@@ -97,6 +97,39 @@ def test_stats_only_uses_rosters_but_does_not_load_them():
     rosters table alone - an absent key means 'not fetched' to the loader."""
     ex = FakeExtractor()
     data = extract_scope(ex, '470.l.1', [1], stats_only=True, is_new=False,
-                         since=None, league_info_rows=[])
+                         league_info_rows=[])
     assert ex.stats_players == {1: {'11', '12'}}
     assert set(data) == {'statistics'}
+
+
+def test_every_transaction_yahoo_returns_is_passed_on():
+    """No cutoff. A 'newer than the last successful run' filter let a repair
+    run for another season move the cutoff past the live league's recent
+    adds, which were then skipped for good."""
+    ex = FakeExtractor()
+    old, new = SimpleNamespace(transaction_id='t1', timestamp=1), \
+        SimpleNamespace(transaction_id='t2', timestamp=2)
+    ex.extract_transactions_for_league = lambda league_id: [old, new]
+    data = extract_scope(ex, '470.l.1', [1], stats_only=False, is_new=False,
+                         league_info_rows=[])
+    assert [t['transaction_id'] for t in data['transactions']] == ['t1', 't2']
+
+
+def test_player_dimension_includes_rostered_and_stat_players():
+    """A rostered player with no loaded draft pick or transaction had no
+    dim_player row, so his stats and roster rows were dropped from the
+    warehouse without a word (Shough and Ferguson, 2026 week 3)."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+
+    proc = EdwEtlProcessor.__new__(EdwEtlProcessor)
+    proc.data = {
+        'transactions': [{'player_id': '449.p.100', 'player_name': 'Traded Guy'}],
+        'draft_picks': [{'player_id': '200', 'player_name': 'Drafted Guy', 'position': 'RB'}],
+        'rosters': [{'player_id': '41825', 'player_name': 'Tyler Shough', 'position': 'QB'}],
+        'statistics': [{'player_id': '41831', 'player_name': 'Terrance Ferguson'}],
+    }
+    players = {p['player_id']: p for p in proc.transform_players()}
+    assert set(players) == {'100', '200', '41825', '41831'}
+    assert players['41825']['player_name'] == 'Tyler Shough'
+    assert players['41825']['primary_position'] == 'QB'
+    assert players['41831']['player_name'] == 'Terrance Ferguson'

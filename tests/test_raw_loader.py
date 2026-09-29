@@ -200,8 +200,13 @@ def test_transactions_append_only_dedupe(state):
         'timestamp': NOW, 'player_id': 'p9', 'player_name': 'P9',
         'source_team_id': None, 'destination_team_id': f'{NEW_L}.t.1',
         'faab_bid': None, 'status': 'successful', 'extracted_at': NOW}]
-    load(state, NEW_L, 1, delta=delta)
-    load(state, NEW_L, 1, delta=delta)  # replay: must not duplicate
+    first = load(state, NEW_L, 1, delta=delta)
+    replay = load(state, NEW_L, 1, delta=delta)  # replay: must not duplicate
+    # The count is what actually landed, not what was offered: every run now
+    # passes Yahoo's full transaction list, and the ledger and the EDW
+    # refresh triggers must not read "1 new" forever.
+    assert first['transactions'] == 1
+    assert replay['transactions'] == 0
     with state.engine.connect() as conn:
         n = conn.execute(text(
             "SELECT count(*) FROM public.transactions WHERE league_id = :l"),
