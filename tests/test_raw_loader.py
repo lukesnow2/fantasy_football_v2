@@ -584,3 +584,31 @@ def test_full_rebuild_dimensions_upsert_and_never_truncate():
                             'dim_manager', 'dim_team'}
     for block in re.findall(r'INSERT INTO edw\.dim_\w+.*?RETURNING', src, re.DOTALL):
         assert 'ON CONFLICT' in block, block.split('(')[0]
+
+
+def test_all_consolation_playoffs_are_read_as_the_bracket(state):
+    """Yahoo marks every 2005-2007 playoff game is_consolation='1', the final
+    included. Taken at face value there is no bracket and no champion - which
+    is what the history backfill's reload of those seasons produced."""
+    seed_bracket(state, OLD_L, rounds=2)
+    with state.engine.begin() as conn:
+        conn.execute(text("UPDATE public.matchups SET is_consolation = true, "
+                          "is_championship = false, is_semifinal = false "
+                          "WHERE league_id = :l AND is_playoffs"), {'l': OLD_L})
+        raw_loader.refresh_playoff_flags(conn, OLD_L)
+
+    rows = flags(state, OLD_L)
+    assert [r[0] for r in rows if r[1]] == [16]          # one champion, week 16
+    assert sum(1 for r in rows if r[2]) == 2              # two semifinals
+
+
+def test_real_consolation_games_are_left_alone(state):
+    """Only a league with NO bracket game is corrected; a normal season's
+    consolation games stay consolation."""
+    seed_bracket(state, OLD_L, rounds=3)
+    with state.engine.begin() as conn:
+        raw_loader.refresh_playoff_flags(conn, OLD_L)
+        n = conn.execute(text("SELECT count(*) FROM public.matchups "
+                              "WHERE league_id = :l AND is_consolation"),
+                         {'l': OLD_L}).scalar()
+    assert n == 3

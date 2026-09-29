@@ -325,6 +325,13 @@ def _winner(row) -> Optional[str]:
     return None
 
 
+def _bracket_weeks(conn, league_id: str) -> List[int]:
+    return [r[0] for r in conn.execute(text(
+        "SELECT DISTINCT week FROM public.matchups "
+        "WHERE league_id = :l AND is_playoffs AND NOT is_consolation "
+        "ORDER BY week"), {'l': league_id})]
+
+
 def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
     """Recompute championship/semifinal/quarterfinal flags for a league
     from the matchup rows in the database.
@@ -337,10 +344,27 @@ def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
 
     Returns the championship matchup_id, or None when undeterminable.
     """
-    playoff_weeks = [r[0] for r in conn.execute(text(
-        "SELECT DISTINCT week FROM public.matchups "
-        "WHERE league_id = :l AND is_playoffs AND NOT is_consolation "
-        "ORDER BY week"), {'l': league_id})]
+    playoff_weeks = _bracket_weeks(conn, league_id)
+
+    if not playoff_weeks:
+        # Yahoo marks EVERY playoff game of the 2005-2007 seasons
+        # is_consolation='1', the championship included (verified in the raw
+        # scoreboards; 2008 on is marked correctly). A league whose every
+        # playoff game is "consolation" has no bracket at all, so the label is
+        # wrong, not the bracket missing. The original loader corrected exactly
+        # these three leagues with a hardcoded post-load UPDATE that was never
+        # ported, and the history backfill's reload of those seasons silently
+        # erased their champions. Correct it from the data instead of the ids.
+        fixed = conn.execute(text(
+            "UPDATE public.matchups SET is_consolation = false "
+            "WHERE league_id = :l AND is_playoffs AND is_consolation"),
+            {'l': league_id}).rowcount
+        if fixed:
+            logger.warning(
+                "%s: every playoff game was marked consolation (Yahoo's "
+                "pre-2008 data); cleared the flag on %d game(s) so the "
+                "bracket can be read", league_id, fixed)
+            playoff_weeks = _bracket_weeks(conn, league_id)
 
     if len(playoff_weeks) < 2:
         return None
