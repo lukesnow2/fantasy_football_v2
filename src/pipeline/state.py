@@ -83,12 +83,11 @@ class PipelineState:
 
     def __init__(self, database_url: str):
         url = database_url.replace('postgres://', 'postgresql://', 1)
-        # TCP keepalives, because the advisory lock is session-scoped and a
-        # hosted Postgres drops idle connections: on Neon the lock connection
-        # sat idle through an 8-minute publish and was closed, which both
-        # failed the run at cleanup and silently released the lock while work
-        # was still running. pool_pre_ping recycles dead pooled connections
-        # (it cannot help the held lock connection - hence the keepalives).
+        # TCP keepalives, because the advisory lock is session-scoped and must
+        # survive network idleness for the whole run (the lock connection is
+        # otherwise silent). They do NOT help against Neon's 5-minute
+        # idle-in-transaction timeout - see _lock_connection for that.
+        # pool_pre_ping recycles dead pooled connections.
         self.engine = create_engine(
             url,
             pool_pre_ping=True,
@@ -135,13 +134,26 @@ class PipelineState:
     # Advisory lock (fail-fast; DB-owned concurrency)
     # ------------------------------------------------------------------
 
+    def _lock_connection(self):
+        """A connection that holds the lock OUTSIDE any transaction.
+
+        The lock is session-scoped and needs no transaction, but SQLAlchemy
+        opens one implicitly on the first statement. The lock connection then
+        sat "idle in transaction" for the whole run, and Neon kills such
+        sessions after 5 minutes (idle_in_transaction_session_timeout), so
+        every run longer than that silently lost its lock (Neon rehearsal,
+        run 72). An idle session outside a transaction is not timed out.
+        """
+        return self.engine.connect().execution_options(
+            isolation_level='AUTOCOMMIT')
+
     def try_lock(self) -> bool:
         """Acquire the pipeline advisory lock, fail-fast.
 
         Returns True on acquisition. The lock is session-scoped on a
         dedicated connection held until release_lock()/close().
         """
-        conn = self.engine.connect()
+        conn = self._lock_connection()
         got = conn.execute(
             text("SELECT pg_try_advisory_lock(:k)"), {'k': ADVISORY_LOCK_KEY}
         ).scalar()
@@ -153,7 +165,7 @@ class PipelineState:
 
     def wait_lock(self):
         """Blocking acquisition, for manual repairs that want queueing."""
-        conn = self.engine.connect()
+        conn = self._lock_connection()
         conn.execute(text("SELECT pg_advisory_lock(:k)"),
                      {'k': ADVISORY_LOCK_KEY})
         self._lock_conn = conn

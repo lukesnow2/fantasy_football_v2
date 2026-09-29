@@ -81,37 +81,35 @@ fetches each week's stats for today's rosters and recreates the gaps.
 Copy dev's **raw layer, pipeline state and warehouse together**; rebuild none of
 them on Neon. The per-row ETL is slow over the network, and dev holds the
 corrected history: the tracked snapshot predates the 2026-09 history backfill.
-Promote into a new Neon database or branch and keep the old one as the rollback.
+`scripts/promote_to_neon.sh` does it in **one transaction** - the target is
+either fully promoted or untouched - and leaves `app.*` / `drizzle.*` alone:
 ```bash
-NEON="postgresql://...neon.tech/neondb?sslmode=require"
-# 1. raw public.* + pipeline state (periods, run ledger, applied migrations).
-#    --clean replaces any stale copies; the run-id identity keeps its value.
-#    (Flags written out, not held in a variable: zsh doesn't word-split one.)
-pg_dump "$LOCAL" --clean --if-exists --no-owner --no-privileges -f /tmp/raw.sql \
-  -t public.leagues -t public.teams -t public.rosters -t public.matchups \
-  -t public.transactions -t public.draft_picks -t public.statistics -t 'public.pipeline_*'
-psql "$NEON" -v ON_ERROR_STOP=1 -f /tmp/raw.sql
-# 2. edw.* + meta_data.*
-psql "$NEON" -c "DROP SCHEMA IF EXISTS edw CASCADE; DROP SCHEMA IF EXISTS meta_data CASCADE;"
-pg_dump "$LOCAL" --schema=edw --schema=meta_data --no-owner --no-privileges -f /tmp/edw.sql
-psql "$NEON" -f /tmp/edw.sql
-cd web && DATABASE_URL="$NEON" npx drizzle-kit push     # app.* on Neon (first time only)
-psql "$NEON" -c "ALTER DATABASE neondb SET search_path TO app, edw, public;"
-# DROP SCHEMA edw CASCADE also drops BOTH app -> edw.dim_manager FKs
-# (web/drizzle/0000 declares app.user's and app.league_member's); re-add both:
-psql "$NEON" -c "ALTER TABLE app.\"user\" ADD CONSTRAINT user_manager_key_dim_manager_manager_key_fk \
-  FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key);"
-psql "$NEON" -c "ALTER TABLE app.league_member ADD CONSTRAINT league_member_manager_key_dim_manager_manager_key_fk \
-  FOREIGN KEY (manager_key) REFERENCES edw.dim_manager(manager_key);"
+export TARGET_DATABASE_URL="postgresql://...neon.tech/<db>?sslmode=require"   # DIRECT host, not -pooler
+scripts/promote_to_neon.sh
+.venv/bin/python scripts/incremental_load.py --dry-run    # with DATABASE_URL = the target
 ```
+It copies raw `public.*` + `public.pipeline_*` + `edw` + `meta_data`, re-adds
+both `app -> edw.dim_manager` FKs (dropping `edw` removes them), and refuses to
+start if the source is mid-run or has unpublished periods, if the target's
+`edw.dim_manager` keys differ from the source's (`app.*` stores them), or if a
+pipeline run holds the target's lock. It needs a PostgreSQL 18 client
+(`brew install postgresql@18`; `PG_BIN` overrides the path): Neon runs PG18.
+A brand-new target first needs `ALTER DATABASE <db> SET search_path TO app, edw, public`
+and the app schema (`cd web && DATABASE_URL=... npm run db:migrate`).
+
+Before promoting production, rehearse: restore a dump of production into
+`neondb_rehearsal` (`pg_dump -Fc` / `pg_restore --no-owner --no-privileges`,
+same search_path), promote into it, dry-run, run once, point a local site at
+it. Take a Neon branch of `neondb` immediately before the real promote; it is
+the rollback.
+
 Do **not** load Neon's `public.*` from the snapshot (rebuild step 1) instead of
-dumping it: the snapshot's stats predate the backfill, and the first weekly run
+promoting it: the snapshot's stats predate the backfill, and the first weekly run
 refreshes the warehouse from `public.*` - `fact_draft.season_points` is recomputed
 from `public.statistics` - so the corrected history would quietly revert (2016's
 board back to 130 zero-point picks). After promoting, `incremental_load.py
---dry-run` against Neon should report no pending migrations and the gap you
-expect.
-
+--dry-run` against Neon should report no pending migrations and a gap of just
+the rolling reload window.
 
 ## Authentication & the league roster
 Sign-in is an emailed magic link. There is no password and no registration: a link
@@ -192,6 +190,9 @@ America/Denver in-season. GitHub cron is UTC-only, so it schedules both
 exactly one through across DST. Plus a monthly heartbeat (token keepalive + repo-activity commit
 against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
 `DATABASE_URL`, `YAHOO_CLIENT_KEY`, `YAHOO_CLIENT_SECRET`, `YAHOO_REFRESH_TOKEN`.
+`DATABASE_URL` must be Neon's **direct** host (as in `web/.env.production.local`),
+not the `-pooler` host Vercel uses: the session advisory lock and per-session
+settings don't survive transaction pooling.
 Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)
 runs from OUTSIDE GitHub Actions (e.g. laptop cron) and files an issue when no
 successful run lands within 8 days in-season. Run ledger: `public.pipeline_runs`.
@@ -200,6 +201,8 @@ successful run lands within 8 days in-season. Run ledger: `public.pipeline_runs`
 - **Don't run `drizzle-kit push` without `schemaFilter: ['app']`** — it defaults to managing only `public` and will DROP the pipeline's raw tables.
 - **SSL**: app/drizzle disable SSL for `localhost`, require it for remote (Neon). Set automatically by host detection.
 - **Manager attribution**: some teams have Yahoo-private (`--hidden--`) names and are mapped by team_id in `edw_etl_processor.get_manager_name_by_team_id`. Add new ones there.
+- **Neon kills sessions idle inside a transaction after 5 minutes** (`idle_in_transaction_session_timeout`); local Postgres has no limit, so dev can't catch it. Never hold a connection in an open transaction across slow work (Yahoo calls, the EDW refresh). The pipeline lock connection is AUTOCOMMIT for this reason (`PipelineState._lock_connection`).
+- **PostgreSQL client version**: Neon is PG18; use `/usr/local/opt/postgresql@18/bin` for `pg_dump`/`psql` against it (the default 14 client can't dump a newer server).
 - **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `src/utils/fix_championship_flags.py`.
 
 ## Owner / config

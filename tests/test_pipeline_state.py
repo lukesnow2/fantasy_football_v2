@@ -131,6 +131,23 @@ def test_lock_mutual_exclusion(test_db, state):
         other.close()
 
 
+@pytest.mark.parametrize('acquire', ['try_lock', 'wait_lock'])
+def test_lock_survives_idle_in_transaction_timeout(test_db, acquire):
+    # Neon kills a session left idle inside an open transaction after 5 min
+    # (idle_in_transaction_session_timeout = 300000). The lock connection
+    # idles for the whole run, so if acquiring the lock opened a transaction,
+    # every run over 5 minutes lost its lock (Neon rehearsal, run 72, 6.4 min).
+    # Same setting here, shrunk to 1s.
+    import time
+    st = PipelineState(f'{test_db}?options=-c%20idle_in_transaction_session_timeout%3D1000')
+    try:
+        getattr(st, acquire)()
+        time.sleep(2)
+        assert st.lock_still_held() is True
+    finally:
+        st.close()
+
+
 def test_lock_context_manager_raises_lockheld(test_db, state):
     other = PipelineState(test_db)
     try:
