@@ -2561,8 +2561,36 @@ class EdwEtlProcessor:
                 
                 prev_points = fact['weekly_points']
         
+        self._assign_standings_ranks(facts)
+
         logger.info(f"✅ Weekly rankings and playoff probabilities calculated for {len(weekly_groups)} league-week combinations")
         return facts
+
+    @staticmethod
+    def _assign_standings_ranks(facts: List[Dict]) -> None:
+        """Set season_rank: each team's place in the standings after that week.
+
+        Win percentage first, then points scored (weekly_points here is the
+        running average, which orders the same as points-for within a
+        league-week because every team has played the same number of games).
+        season_rank used to be written as NULL for every row of every season,
+        so the power-rankings playoff-odds model could never tell a team in
+        playoff position from one outside it, and its cutoff fell back to a
+        fixed 0.6 win percentage: every 2-1 team came out at 69%.
+        """
+        groups: Dict[tuple, List[Dict]] = {}
+        for fact in facts:
+            groups.setdefault((fact['league_key'], fact['week_key']), []).append(fact)
+        for group in groups.values():
+            ordered = sorted(group, key=lambda f: (f['win_percentage'] or 0.0,
+                                                    f['weekly_points'] or 0.0),
+                             reverse=True)
+            rank, previous = 0, None
+            for position, fact in enumerate(ordered, start=1):
+                key = (fact['win_percentage'] or 0.0, fact['weekly_points'] or 0.0)
+                if key != previous:
+                    rank, previous = position, key
+                fact['season_rank'] = rank
     
     def load_dimensions(self) -> bool:
         """Load all dimension tables"""
@@ -5726,15 +5754,67 @@ class EdwEtlProcessor:
                     AND am.matchup_week <= aw.week_number
                 GROUP BY aw.team_key, aw.league_key, aw.week_key
             ),
+            playoff_games AS (
+                SELECT fm.league_key, dw.week_number, fm.team1_key, fm.team2_key, fm.is_championship
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+                WHERE fm.is_playoffs
+            ),
+            finalists AS (
+                SELECT pg.league_key, pg.week_number, t.team_key
+                FROM playoff_games pg
+                CROSS JOIN LATERAL (VALUES (pg.team1_key), (pg.team2_key)) AS t(team_key)
+                WHERE pg.is_championship
+            ),
+            semifinalists AS (
+                -- The finalists plus whoever they played the week before.
+                SELECT f.league_key, f.week_number, f.team_key FROM finalists f
+                UNION
+                SELECT f.league_key, f.week_number,
+                       CASE WHEN pg.team1_key = f.team_key THEN pg.team2_key ELSE pg.team1_key END
+                FROM finalists f
+                JOIN playoff_games pg ON pg.league_key = f.league_key
+                    AND pg.week_number = f.week_number - 1
+                    AND f.team_key IN (pg.team1_key, pg.team2_key)
+            ),
+            bracket_teams AS (
+                -- ...plus whoever the semifinalists played the week before
+                -- that, if it was a playoff week (a quarterfinal; teams on a
+                -- bye have no game there).
+                SELECT sf.league_key, sf.team_key FROM semifinalists sf
+                UNION
+                SELECT sf.league_key,
+                       CASE WHEN pg.team1_key = sf.team_key THEN pg.team2_key ELSE pg.team1_key END
+                FROM semifinalists sf
+                JOIN playoff_games pg ON pg.league_key = sf.league_key
+                    AND pg.week_number = sf.week_number - 2
+                    AND sf.team_key IN (pg.team1_key, pg.team2_key)
+            ),
+            bracket_sizes AS (
+                -- Traced back from the final rather than read from round
+                -- labels: 2005-2007 labels are unreliable (Yahoo marks every
+                -- playoff game consolation, and 2007's consolation games carry
+                -- semifinal flags), and counting labels gave 2007 an 8-team
+                -- bracket where Yahoo's settings say 4. 6 in every other
+                -- season. This used to be a hardcoded 6 for all.
+                SELECT league_key, count(DISTINCT team_key) AS bracket_teams
+                FROM bracket_teams GROUP BY league_key
+            ),
             league_settings AS (
-                -- League settings for playoff odds calculation (10-team league, 6 playoff spots)
                 SELECT 
                     dl.league_key,
                     dl.season_year,
                     dl.num_teams,
-                    -- Your league structure: 10 teams, 6 playoff spots
-                    6 as playoff_spots
+                    -- A season still being played has no bracket yet: use the
+                    -- most recent completed season's size.
+                    COALESCE(
+                        bs.bracket_teams,
+                        (SELECT b2.bracket_teams FROM bracket_sizes b2
+                         JOIN edw.dim_league d2 ON d2.league_key = b2.league_key
+                         ORDER BY d2.season_year DESC LIMIT 1),
+                        6) as playoff_spots
                 FROM edw.dim_league dl
+                LEFT JOIN bracket_sizes bs ON bs.league_key = dl.league_key
             ),
             cumulative_records AS (
                 -- Calculate cumulative wins/losses/ties through each week
@@ -5766,22 +5846,22 @@ class EdwEtlProcessor:
                 GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
             ),
             playoff_cutoff_teams AS (
-                -- Get 6th place team's win percentage for games back calculation
+                -- Win percentage of the team holding the LAST playoff spot, for
+                -- games back. (Was a hardcoded 6th place.) With a tie at the
+                -- cutoff, the best record at or below it.
                 SELECT 
                     ws.league_key,
                     ws.week_key,
-                    -- Use win percentage of 6th place team (handles ties better than raw wins)
-                    MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END) as sixth_place_win_pct,
-                    -- If no exact 6th place team, use the team closest to 6th place
                     COALESCE(
-                        MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END),
-                        MAX(CASE WHEN ws.season_rank <= 6 THEN ws.win_percentage ELSE NULL END)
+                        MAX(CASE WHEN ws.season_rank = ws.playoff_spots THEN ws.win_percentage ELSE NULL END),
+                        MIN(CASE WHEN ws.season_rank <= ws.playoff_spots THEN ws.win_percentage ELSE NULL END)
                     ) as playoff_cutoff_win_pct
                 FROM (
                     SELECT 
                         ftp.league_key,
                         ftp.week_key,
                         ftp.season_rank,
+                        ls.playoff_spots,
                         -- Calculate win percentage from cumulative records
                         CASE 
                             WHEN COALESCE(cr.games_played, 0) > 0 THEN
@@ -5789,10 +5869,11 @@ class EdwEtlProcessor:
                             ELSE 0.0
                         END as win_percentage
                     FROM edw.fact_team_performance ftp
+                    JOIN league_settings ls ON ls.league_key = ftp.league_key
+                        AND ls.season_year = ftp.season_year
                     LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
                         AND ftp.league_key = cr.league_key 
                         AND ftp.week_key = cr.week_key
-                    WHERE ftp.season_rank <= 8  -- Only look at teams reasonably close to playoffs
                 ) ws
                 GROUP BY ws.league_key, ws.week_key
             ),
@@ -5815,6 +5896,10 @@ class EdwEtlProcessor:
                     ftp.points_for,
                     ftp.points_against,
                     ftp.season_rank,
+                    -- Season-to-date scoring (running average; every team in a
+                    -- league-week has played the same number of games, so it
+                    -- orders the same as total points for).
+                    ftp.weekly_points as season_avg_points,
                     ftp.playoff_probability,
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
@@ -5936,8 +6021,12 @@ class EdwEtlProcessor:
                     COALESCE(mm.biggest_win_margin, 0) as biggest_win_margin,
                     COALESCE(mm.biggest_loss_margin, 0) as biggest_loss_margin,
                     ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.power_score DESC) as power_rank,
-                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.win_percentage DESC, pc.points_for DESC) as record_rank,
-                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.points_for DESC) as points_rank
+                    -- The standings order, the same one the playoff odds use
+                    -- (season_rank). Both columns broke ties, or ranked outright,
+                    -- on THIS WEEK's points: a 1-2 team with the league's
+                    -- second-most points showed points rank 10 after one low week.
+                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.season_rank, pc.season_avg_points DESC) as record_rank,
+                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.season_avg_points DESC) as points_rank
                 FROM power_calculations pc
                 LEFT JOIN matchup_margins mm ON pc.team_key = mm.team_key 
                     AND pc.league_key = mm.league_key 

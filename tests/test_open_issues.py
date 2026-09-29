@@ -133,3 +133,21 @@ def test_completed_season_still_reads_its_own_bracket():
     season = {s['season_year']: s for s in proc.extract_seasons()}[2007]
     assert season['championship_week'] == 16
     assert season['playoff_start_week'] == 15
+
+
+def test_standings_rank_is_record_then_points():
+    """season_rank was NULL for every row of every season, so the playoff-odds
+    model never knew who held a playoff spot."""
+    def fact(team, pct, avg, week=3):
+        return {'league_key': 1, 'week_key': week, 'team': team,
+                'win_percentage': pct, 'weekly_points': avg, 'season_rank': None}
+    facts = [fact('a', 2 / 3, 120.0), fact('b', 1.0, 100.0),
+             fact('c', 2 / 3, 130.0), fact('d', 0.0, 150.0),
+             fact('e', 2 / 3, 130.0), fact('x', 0.0, 1.0, week=4)]
+    EdwEtlProcessor._assign_standings_ranks(facts)
+    rank = {f['team']: f['season_rank'] for f in facts}
+    assert rank['b'] == 1                       # 3-0 leads regardless of points
+    assert rank['c'] == rank['e'] == 2          # same record and points: shared
+    assert rank['a'] == 4                       # 2-1 but fewer points
+    assert rank['d'] == 5                       # most points, worst record
+    assert rank['x'] == 1                       # ranked within its own week
