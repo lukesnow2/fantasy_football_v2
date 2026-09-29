@@ -952,26 +952,8 @@ class EdwEtlProcessor:
                 normalized_position = position.split(',')[0] if ',' in position else position
                 position_lookup[player_id] = normalized_position
         
-        # Extract position data from rosters (fallback for players not in draft)
-        for roster in self.data.get('rosters', []):
-            raw_player_id = roster['player_id']
-            
-            # Extract numeric player ID from Yahoo format  
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
-                
-            position = roster.get('position')
-            if position and position.strip() and position != 'Unknown':
-                # Only use if we don't already have position data from draft
-                if numeric_player_id not in position_lookup:
-                    normalized_position = position.split(',')[0] if ',' in position else position
-                    position_lookup[numeric_player_id] = normalized_position
-        
-        logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
-
-        # Each player's current NFL team: the team on his most recent roster
+        # Rosters give a fallback position for players not in the draft and
+        # each player's current NFL team: the team on his most recent roster
         # row that carries one. Only seasons loaded live record a team (Yahoo
         # returns today's team for past seasons), so this is the latest team
         # actually observed, or 'Unknown'. Season-specific teams live on
@@ -980,14 +962,24 @@ class EdwEtlProcessor:
                          for l in self.data.get('leagues', []) if l.get('season')}
         team_lookup, team_seen = {}, {}
         for roster in self.data.get('rosters', []):
+            raw_player_id = str(roster['player_id'])
+            numeric_player_id = raw_player_id.split('.p.')[-1] if '.p.' in raw_player_id else raw_player_id
+
+            position = roster.get('position')
+            if position and position.strip() and position != 'Unknown':
+                # Only use if we don't already have position data from draft
+                if numeric_player_id not in position_lookup:
+                    normalized_position = position.split(',')[0] if ',' in position else position
+                    position_lookup[numeric_player_id] = normalized_position
+
             team = roster.get('nfl_team')
-            if not (isinstance(team, str) and team):
-                continue
-            pid = str(roster['player_id']).split('.p.')[-1]
-            when = (league_season.get(roster['league_id'], 0), int(roster['week']))
-            if when >= team_seen.get(pid, (-1, -1)):
-                team_seen[pid], team_lookup[pid] = when, team
-        
+            if isinstance(team, str) and team:
+                when = (league_season.get(roster['league_id'], 0), int(roster['week']))
+                if when >= team_seen.get(numeric_player_id, (-1, -1)):
+                    team_seen[numeric_player_id], team_lookup[numeric_player_id] = when, team
+
+        logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
+
         # Collect unique players from every source that names one.
         #
         # Transactions and draft picks alone were not enough: a player who
@@ -2608,6 +2600,13 @@ class EdwEtlProcessor:
                             :playoff_start_week, :championship_week, :total_weeks, 
                             :is_current_season, :season_status)
                     ON CONFLICT (season_year) DO UPDATE SET
+                        -- The week fields too, as the incremental path does: an
+                        -- in-progress season's length changes as it is played,
+                        -- and keeping the old row left 2026 with championship
+                        -- week 3 (0% playoff odds after week 1).
+                        playoff_start_week = EXCLUDED.playoff_start_week,
+                        championship_week = EXCLUDED.championship_week,
+                        total_weeks = EXCLUDED.total_weeks,
                         is_current_season = EXCLUDED.is_current_season,
                         season_status = EXCLUDED.season_status
                     RETURNING season_key, season_year

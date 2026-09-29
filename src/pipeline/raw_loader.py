@@ -210,6 +210,28 @@ def append_only(conn, table: str, rows: List[dict], conflict_cols: str) -> int:
     return conn.execute(count).scalar() - before
 
 
+def _keep_captured_teams(conn, league_id: str, weeks: List[int], rows: List[dict]) -> None:
+    """Keep the NFL team a roster row was first loaded with.
+
+    Yahoo only ever reports a player's CURRENT team, and a roster week is
+    delete-and-replaced whenever it is re-fetched - by the two-week reload
+    window or any repair. Without this, reloading week 1 after a week-8 trade
+    rewrote week 1 with the new team, and the draft board (which takes a
+    pick's team from his earliest rostered week) showed the wrong one for
+    good. The team captured while the week was being played is the true one.
+    """
+    if not rows or 'nfl_team' not in rows[0]:
+        return
+    held = {(r[0], r[1], r[2]): r[3] for r in conn.execute(text(
+        "SELECT week, team_id, player_id, nfl_team FROM public.rosters "
+        "WHERE league_id = :l AND week = ANY(:w) AND nfl_team IS NOT NULL"),
+        {'l': league_id, 'w': list(weeks)})}
+    for row in rows:
+        team = held.get((row.get('week'), row.get('team_id'), row.get('player_id')))
+        if team:
+            row['nfl_team'] = team
+
+
 # Time-series entities: raw-data key -> (table, week column).
 PERIOD_ENTITIES = {
     'matchups': ('matchups', 'week'),
@@ -257,6 +279,8 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
         if entity not in data:
             continue
         rows = flatten_matchups(data[entity]) if entity == 'matchups' else data[entity]
+        if entity == 'rosters':
+            _keep_captured_teams(conn, league_id, weeks, rows)
 
         by_week: Dict[int, List[dict]] = {w: [] for w in weeks}
         stray = set()

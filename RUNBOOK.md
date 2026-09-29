@@ -55,8 +55,24 @@ psql "$DB" -f src/edw_schema/add_metric_limitations.sql
 Expected counts from the 2005–2025 baseline (verified on a clean rebuild, and
 matching `deploy_complete_edw.py`'s own verification): fact_matchup 1580,
 fact_transaction 10273, fact_draft 3342, fact_player_statistics 43147,
-fact_team_performance 3160. Note fact_player_statistics grows by roughly one
-week per season after the final-week repair run (the baseline predates it).
+fact_team_performance 3160.
+
+**Then run the history backfill.** The baseline predates the 2026-09 fix: its
+player stats cover only players rostered at each season's END (2016 has 32 of
+150), it has no weekly rosters, and every championship week is missing. Reload
+every past season through the pipeline, which fetches each week's rosters and
+then that week's stats for exactly those players (~8 min of Yahoo calls per
+season, ~2.7 h for all; stops at the first failure, resumable by season):
+```bash
+.venv/bin/python scripts/incremental_load.py --database-url "$DB" --dry-run   # applies nothing; checks access
+.venv/bin/python scripts/backfill_history.py --database-url "$DB" --dry-run  # the per-season plan
+.venv/bin/python scripts/backfill_history.py --database-url "$DB"
+```
+The first incremental run also applies the migrations (e.g. 010 removes the
+week-1 stats of 2006/2007, whose seasons started in week 2). Afterwards every
+rostered player-week has exactly one stats row, raw and warehouse alike.
+Do NOT re-extract history with `scripts/full_extraction.py` instead: it still
+fetches each week's stats for today's rosters and recreates the gaps.
 
 ## Promote local → Neon
 The per-row ETL is slow over the network; dump the built warehouse and restore instead.
@@ -151,8 +167,10 @@ python scripts/incremental_load.py                  # load it
 python scripts/incremental_load.py --season 2007 --weeks 15 16   # repair
 python scripts/incremental_load.py --season 2019 --stats-only    # stats repair
 ```
-`.github/workflows/weekly-data-extraction.yml` invokes it Wednesdays 10:00 UTC
-in-season, plus a monthly heartbeat (token keepalive + repo-activity commit
+`.github/workflows/weekly-data-extraction.yml` invokes it Tuesdays 08:00
+America/Denver in-season. GitHub cron is UTC-only, so it schedules both
+14:00 and 15:00 UTC and `--require-local-hour 8 --local-tz America/Denver` lets
+exactly one through across DST. Plus a monthly heartbeat (token keepalive + repo-activity commit
 against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
 `DATABASE_URL`, `YAHOO_CLIENT_KEY`, `YAHOO_CLIENT_SECRET`, `YAHOO_REFRESH_TOKEN`.
 Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)

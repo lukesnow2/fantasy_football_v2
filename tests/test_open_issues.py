@@ -151,3 +151,14 @@ def test_standings_rank_is_record_then_points():
     assert rank['a'] == 4                       # 2-1 but fewer points
     assert rank['d'] == 5                       # most points, worst record
     assert rank['x'] == 1                       # ranked within its own week
+
+
+def test_backfill_plan_starts_each_season_at_its_own_week():
+    """2006 and 2007 began in week 2; asking for week 1 is refused."""
+    from scripts.backfill_history import season_plan
+    rows = [('2007', '175.l.658531', '2', '16'), ('2005', '124.l.109785', '1', '17'),
+            ('2016', '359.l.696366', None, '16')]
+    assert season_plan(rows) == [(2005, '124.l.109785', 1, 17),
+                                 (2007, '175.l.658531', 2, 16),
+                                 (2016, '359.l.696366', 1, 16)]
+    assert season_plan(rows, only={2016}) == [(2016, '359.l.696366', 1, 16)]

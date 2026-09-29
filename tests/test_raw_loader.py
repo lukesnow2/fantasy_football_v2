@@ -38,7 +38,7 @@ CREATE TABLE public.matchups (matchup_id text, league_id text, week bigint,
 CREATE TABLE public.rosters (roster_id text, league_id text, team_id text,
   week bigint, player_id text, player_name text, position text, status text,
   is_starter boolean, projected_points text, actual_points text,
-  extracted_at timestamp);
+  extracted_at timestamp, nfl_team text);
 CREATE TABLE public.statistics (stat_id text, league_id text, player_id text,
   player_name text, position_type text, season_year bigint, week_number bigint,
   weekly_fantasy_points double precision, game_code text, extracted_at timestamp);
@@ -617,3 +617,35 @@ def test_real_consolation_games_are_left_alone(state):
                               "WHERE league_id = :l AND is_consolation"),
                          {'l': OLD_L}).scalar()
     assert n == 3
+
+
+def test_reloading_a_week_keeps_the_team_it_was_played_with(state):
+    """Yahoo reports only a player's current team. Reloading week 1 after a
+    trade used to rewrite week 1 with the new team, and the draft board -
+    which reads a pick's earliest rostered week - showed it permanently."""
+    def rows(team):
+        r = roster_row(NEW_L, 1, '7')
+        r['nfl_team'] = team
+        return {'rosters': [r]}
+
+    with state.engine.begin() as conn:
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [1], rows('NYJ'))
+    with state.engine.begin() as conn:                    # traded, then reloaded
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [1], rows('DAL'))
+    with state.engine.connect() as conn:
+        team = conn.execute(text(
+            "SELECT nfl_team FROM public.rosters WHERE league_id = :l AND week = 1"),
+            {'l': NEW_L}).scalar()
+    assert team == 'NYJ'
+
+
+def test_a_week_first_loaded_without_a_team_takes_one(state):
+    with state.engine.begin() as conn:
+        r = roster_row(NEW_L, 2, '7'); r['nfl_team'] = None
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [2], {'rosters': [r]})
+        r = roster_row(NEW_L, 2, '7'); r['nfl_team'] = 'KC'
+        raw_loader.load_delta(conn, state, NEW_L, SEASON, [2], {'rosters': [r]})
+        team = conn.execute(text(
+            "SELECT nfl_team FROM public.rosters WHERE league_id = :l AND week = 2"),
+            {'l': NEW_L}).scalar()
+    assert team == 'KC'
