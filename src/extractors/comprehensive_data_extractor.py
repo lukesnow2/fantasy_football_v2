@@ -150,6 +150,11 @@ class ExtractedRoster:
     projected_points: Optional[float]
     actual_points: Optional[float]
     extracted_at: datetime = datetime.now()
+    # The player's NFL team as Yahoo reports it when the roster is fetched.
+    # For a past season Yahoo returns the player's CURRENT team (2017 Aaron
+    # Rodgers comes back as Pittsburgh), so the loader keeps this only for the
+    # season being played; see extract_scope's caller.
+    nfl_team: Optional[str] = None
 
 @dataclass
 class ExtractedMatchup:
@@ -981,7 +986,9 @@ class YahooFantasyExtractor:
             projected_points = None
             actual_points = None
             
+            team_abbr = player_data.get('editorial_team_abbr')
             return ExtractedRoster(
+                nfl_team=str(team_abbr).upper() if team_abbr else None,
                 roster_id=f"{league_id}_{team_id}_{week}_{player_id}",
                 league_id=league_id,
                 team_id=team_id,

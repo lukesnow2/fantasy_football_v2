@@ -141,7 +141,7 @@
 								<div class="font-bold text-white text-sm mb-1 truncate" title={pick.playerName}>
 									{pick.playerName}
 								</div>
-								<div class="text-xs opacity-75 mb-1">{pick.primaryPosition} • {pick.nflTeam}</div>
+								<div class="text-xs opacity-75 mb-1">{pick.primaryPosition}{pick.nflTeam && pick.nflTeam !== 'Unknown' ? ` • ${pick.nflTeam}` : ''}</div>
 								<div class="text-xs text-slate-300 truncate" title={pick.managerName}>
 									{pick.managerName}
 								</div>
@@ -176,7 +176,7 @@
 				<div class="space-y-4">
 					<div class="text-center">
 						<div class="text-lg font-bold text-white mb-1">{selectedPick.playerName}</div>
-						<div class="text-sm text-slate-400">{selectedPick.primaryPosition} • {selectedPick.nflTeam}</div>
+						<div class="text-sm text-slate-400">{selectedPick.primaryPosition}{selectedPick.nflTeam && selectedPick.nflTeam !== 'Unknown' ? ` • ${selectedPick.nflTeam}` : ''}</div>
 						<div class="text-sm text-blue-400">{selectedPick.managerName} ({selectedPick.teamName})</div>
 					</div>
 					

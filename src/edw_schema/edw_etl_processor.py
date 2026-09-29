@@ -101,8 +101,13 @@ class EdwEtlProcessor:
         },
 
         'matchups': {
+            # mart_weekly_power_rankings and mart_manager_h2h are built from
+            # fact_matchup but were listed under no raw table, so only a full
+            # rebuild ever refreshed them: the weekly load never produced a
+            # 2026 power ranking, and the site kept showing 2025's.
             'triggers_refresh': ['dim_season', 'dim_week', 'dim_league', 'dim_team',
                                  'fact_matchup', 'mart_league_summary',
+                                 'mart_weekly_power_rankings', 'mart_manager_h2h',
                                  'vw_league_competitiveness'],
             'refresh_type': 'WEEKLY',  # Full refresh for current week
             'depends_on': 'operational_matchups'
@@ -552,7 +557,22 @@ class EdwEtlProcessor:
                     start_week = max(set(config['start_weeks']), key=config['start_weeks'].count)
                 if config.get('end_weeks'):
                     end_week = max(set(config['end_weeks']), key=config['end_weeks'].count)
-                
+
+                # A season with no championship game yet is still being
+                # played, so the weeks loaded so far say nothing about its
+                # length. The fallbacks above then read "3 weeks loaded" as a
+                # 3-week season - championship week 3, playoffs from week 1 -
+                # and every consumer treated 2026 as over after week 2 (the
+                # power rankings showed 0% playoff odds for a 3-0 team). Use
+                # the league's configured end week instead.
+                if not metrics.get('championship_weeks') and config.get('end_weeks'):
+                    end_week = int(end_week)
+                    total_weeks = end_week - int(start_week or 1) + 1
+                    championship_week = end_week
+                    if not metrics.get('playoff_weeks'):
+                        # Three-round bracket, as every season since 2022.
+                        playoff_start_week = max(1, end_week - 2)
+
                 seasons[season_year] = {
                     'season_year': season_year,
                     'season_start_date': date(season_year, 9, 1),  # NFL season typically starts early September
@@ -560,8 +580,10 @@ class EdwEtlProcessor:
                     'playoff_start_week': playoff_start_week,
                     'championship_week': championship_week,
                     'total_weeks': total_weeks,
-                    'is_current_season': season_year == datetime.now().year,
-                    'season_status': 'completed' if season_year < datetime.now().year else 'active'
+                    # The season runs Sept-Jan: in January the current season
+                    # is last calendar year's, and it is not over yet.
+                    'is_current_season': season_year == self._current_season_year(),
+                    'season_status': 'completed' if season_year < self._current_season_year() else 'active'
                 }
         
         logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
@@ -905,6 +927,11 @@ class EdwEtlProcessor:
         
         return transformed
     
+    @staticmethod
+    def _current_season_year(now=None) -> int:
+        now = now or datetime.now()
+        return now.year - 1 if now.month <= 7 else now.year
+
     def transform_players(self) -> List[Dict]:
         """Transform players from transaction and draft data with position lookup"""
         transformed = []
@@ -943,6 +970,23 @@ class EdwEtlProcessor:
                     position_lookup[numeric_player_id] = normalized_position
         
         logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
+
+        # Each player's current NFL team: the team on his most recent roster
+        # row that carries one. Only seasons loaded live record a team (Yahoo
+        # returns today's team for past seasons), so this is the latest team
+        # actually observed, or 'Unknown'. Season-specific teams live on
+        # fact_roster; this is the dimension's "current" value.
+        league_season = {l['league_id']: int(l['season'])
+                         for l in self.data.get('leagues', []) if l.get('season')}
+        team_lookup, team_seen = {}, {}
+        for roster in self.data.get('rosters', []):
+            team = roster.get('nfl_team')
+            if not (isinstance(team, str) and team):
+                continue
+            pid = str(roster['player_id']).split('.p.')[-1]
+            when = (league_season.get(roster['league_id'], 0), int(roster['week']))
+            if when >= team_seen.get(pid, (-1, -1)):
+                team_seen[pid], team_lookup[pid] = when, team
         
         # Collect unique players from every source that names one.
         #
@@ -970,7 +1014,7 @@ class EdwEtlProcessor:
                 'player_name': player_name or f'Player {player_id}',
                 'primary_position': position,
                 'eligible_positions': [position] if position != 'Unknown' else [],
-                'nfl_team': 'Unknown',
+                'nfl_team': team_lookup.get(player_id, 'Unknown'),
                 'jersey_number': None,
                 'rookie_year': None,
                 'is_active': True,
@@ -1197,7 +1241,10 @@ class EdwEtlProcessor:
                 'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
                 'acquisition_type': acquisition_info['type'],  # Now from transactions/drafts
                 'acquisition_date': acquisition_info['date'],  # Now from transactions/drafts
-                'acquisition_cost': acquisition_info['cost']   # Now from transactions/drafts (FAAB)
+                'acquisition_cost': acquisition_info['cost'],  # Now from transactions/drafts (FAAB)
+                # The NFL team that week; NULL for seasons not loaded live
+                # (Yahoo only knows a player's current team).
+                'nfl_team': roster.get('nfl_team') if isinstance(roster.get('nfl_team'), str) and roster.get('nfl_team') else None
             })
         
         logger.info(f"📋 Transformed {len(facts)} roster facts from {len(rosters_data)} roster records")
@@ -2599,7 +2646,8 @@ class EdwEtlProcessor:
                             :rookie_year, :is_active, :valid_from, :valid_to)
                     ON CONFLICT (player_id) DO UPDATE SET
                         player_name = EXCLUDED.player_name,
-                        primary_position = EXCLUDED.primary_position
+                        primary_position = EXCLUDED.primary_position,
+                        nfl_team = EXCLUDED.nfl_team
                     RETURNING player_key, player_id
                 """), player)
                 

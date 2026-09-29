@@ -3,6 +3,10 @@ import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
+// nflTeam is the team the player was on in THAT league-season (his earliest
+// rostered week), from edw.fact_roster - not dim_player's single current value,
+// which would put 2017 Aaron Rodgers on Pittsburgh. Seasons before live loading
+// have no team (Yahoo only reports current teams), so it is null there.
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const season = url.searchParams.get('season') || 'all';
@@ -29,7 +33,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				dp.player_name,
 				dp.primary_position,
 				dp.eligible_positions,
-				dp.nfl_team,
+				(SELECT fr.nfl_team FROM edw.fact_roster fr JOIN edw.dim_week fw ON fw.week_key = fr.week_key WHERE fr.player_key = fd.player_key AND fr.league_key = fd.league_key AND fr.nfl_team IS NOT NULL ORDER BY fw.week_number LIMIT 1) AS nfl_team,
 				dp.jersey_number,
 				dp.rookie_year,
 				dl.league_name,
@@ -305,7 +309,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					dt.team_name,
 					dp.player_name,
 					dp.primary_position,
-					dp.nfl_team,
+					(SELECT fr.nfl_team FROM edw.fact_roster fr JOIN edw.dim_week fw ON fw.week_key = fr.week_key WHERE fr.player_key = fd.player_key AND fr.league_key = fd.league_key AND fr.nfl_team IS NOT NULL ORDER BY fw.week_number LIMIT 1) AS nfl_team,
 					dl.num_teams
 				FROM edw.fact_draft fd
 				JOIN edw.dim_manager dm ON fd.manager_key = dm.manager_key AND dm.include_in_analysis = true

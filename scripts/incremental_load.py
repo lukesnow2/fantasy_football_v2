@@ -494,6 +494,42 @@ def run(args) -> int:
         state.close()
 
 
+def scrub_historical_teams(data, season, now=None) -> None:
+    """Drop the NFL team from roster rows unless `season` is being played.
+
+    Yahoo reports a player's CURRENT team, not the one he played for in a past
+    season (2005 Peyton Manning comes back as Denver), so a historical load
+    records no team rather than a wrong one.
+    """
+    if season != current_season_year(now):
+        for row in data.get('rosters', []):
+            row['nfl_team'] = None
+
+
+def repair_unpublished(state, stale, refresh, publish=None) -> None:
+    """Publish raw-complete periods a previous run loaded but could not.
+
+    Recorded in the run ledger like any other run. It used to run before a
+    ledger row existed, so when it failed - as 2006's week 1 did, failing
+    2007, 2008 and 2009 in turn - pipeline_runs showed nothing at all and
+    the only trace was the process log.
+    """
+    publish = publish or pub.publish
+    logger.info("Reconciliation: %d raw-complete period(s) unpublished "
+                "(raw_version > edw_version) - repairing EDW first", len(stale))
+    run_id = state.start_run(stale[0][1])
+    periods = [list(p) for p in stale]
+    try:
+        publish(state, stale, refresh)
+    except Exception as e:
+        state.finish_run(run_id, 'failed',
+                         row_counts={'repair': 'republish', 'periods': periods},
+                         error=f"republishing unpublished periods: {e}"[:2000])
+        raise
+    state.finish_run(run_id, 'success', weeks_loaded=[],
+                     row_counts={'repair': 'republish', 'periods': periods})
+
+
 def _run_locked(args, state) -> int:
     # A dry run reports; it does not prepare. Creating the pipeline tables
     # and indexes here made --dry-run write to a database it promised to
@@ -518,10 +554,8 @@ def _run_locked(args, state) -> int:
     #    site cannot see yet need EDW work only - no Yahoo calls.
     stale = state.unpublished_raw()
     if stale and not args.dry_run:
-        logger.info("Reconciliation: %d raw-complete period(s) unpublished "
-                    "(raw_version > edw_version) - repairing EDW first", len(stale))
-        pub.publish(state, stale,
-                    make_edw_refresh(args.database_url, ALL_OPERATIONAL_TABLES))
+        repair_unpublished(state, stale,
+                           make_edw_refresh(args.database_url, ALL_OPERATIONAL_TABLES))
 
     # 2. Authenticate and resolve scope.
     extractor = YahooFantasyExtractor()
@@ -610,6 +644,7 @@ def _run_locked(args, state) -> int:
         }]
         data = extract_scope(extractor, league_id, weeks, args.stats_only,
                              is_new, league_info_rows)
+        scrub_historical_teams(data, season)
 
         # 5. One transaction: the full raw delta + period flags.
         with state.engine.begin() as conn:

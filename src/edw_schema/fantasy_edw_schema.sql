@@ -189,6 +189,7 @@ CREATE TABLE fact_roster (
     -- Performance
     weekly_points DECIMAL(8,2),
     projected_points DECIMAL(8,2),
+    nfl_team VARCHAR(10),          -- that week; NULL for seasons not loaded live (migration 009)
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     

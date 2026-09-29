@@ -8,7 +8,9 @@
 	let draftData: any = null;
 	let specificSeasonDraft: any = null;
 	let loading = true;
-	let loadingDrafts = false;
+	// Starts true: the server renders this page before onMount fetches the data,
+	// and 'No draft data available' showed until the scripts ran.
+	let loadingDrafts = true;
 	let selectedSeason = 'all';
 
 	onMount(async () => {
