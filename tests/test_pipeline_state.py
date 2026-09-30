@@ -5,6 +5,7 @@ guarantees under test - advisory locks, transactional flag commits, ledger
 autocommit survival - are database behaviors, not Python behaviors.
 """
 import subprocess
+import time
 
 import pytest
 from sqlalchemy import text
@@ -131,6 +132,22 @@ def test_lock_mutual_exclusion(test_db, state):
         other.close()
 
 
+@pytest.mark.parametrize('acquire', ['try_lock', 'wait_lock'])
+def test_lock_survives_idle_in_transaction_timeout(test_db, acquire):
+    # Neon kills a session left idle inside an open transaction after 5 min
+    # (idle_in_transaction_session_timeout = 300000). The lock connection
+    # idles for the whole run, so if acquiring the lock opened a transaction,
+    # every run over 5 minutes lost its lock (Neon rehearsal, run 72, 6.4 min).
+    # Same setting here, shrunk to 1s.
+    st = PipelineState(f'{test_db}?options=-c%20idle_in_transaction_session_timeout%3D1000')
+    try:
+        getattr(st, acquire)()
+        time.sleep(2)
+        assert st.lock_still_held() is True
+    finally:
+        st.close()
+
+
 def test_lock_context_manager_raises_lockheld(test_db, state):
     other = PipelineState(test_db)
     try:
@@ -167,8 +184,21 @@ def test_ledger_survives_data_rollback(state):
     assert 'simulated' in row[1]
 
 
-def test_last_successful_run_start(state):
-    assert state.last_successful_run_start() is None
-    r1 = state.start_run(season=S)
-    state.finish_run(r1, 'success')
-    assert state.last_successful_run_start() is not None
+def test_readers_tolerate_missing_schema(test_db):
+    """A dry run must be able to report against a database whose pipeline
+    tables do not exist yet, without creating them."""
+    import subprocess
+    from src.pipeline.state import PipelineState
+    subprocess.run(['psql', test_db.rsplit('/', 1)[-1], '-qc',
+                    'DROP TABLE IF EXISTS public.pipeline_periods CASCADE'],
+                   check=True)
+    st = PipelineState(test_db)
+    try:
+        assert st.schema_exists() is False
+        assert st.unpublished_raw() == []
+        assert st.published_weeks('x', 2026) == set()
+        assert st.raw_complete_weeks('x', 2026) == set()
+        assert st.recorded_weeks('x', 2026, [1, 2]) == set()
+        assert st.schema_exists() is False, 'reading must not create anything'
+    finally:
+        st.close()

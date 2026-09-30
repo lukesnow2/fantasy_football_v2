@@ -101,8 +101,13 @@ class EdwEtlProcessor:
         },
 
         'matchups': {
+            # mart_weekly_power_rankings and mart_manager_h2h are built from
+            # fact_matchup but were listed under no raw table, so only a full
+            # rebuild ever refreshed them: the weekly load never produced a
+            # 2026 power ranking, and the site kept showing 2025's.
             'triggers_refresh': ['dim_season', 'dim_week', 'dim_league', 'dim_team',
                                  'fact_matchup', 'mart_league_summary',
+                                 'mart_weekly_power_rankings', 'mart_manager_h2h',
                                  'vw_league_competitiveness'],
             'refresh_type': 'WEEKLY',  # Full refresh for current week
             'depends_on': 'operational_matchups'
@@ -552,7 +557,22 @@ class EdwEtlProcessor:
                     start_week = max(set(config['start_weeks']), key=config['start_weeks'].count)
                 if config.get('end_weeks'):
                     end_week = max(set(config['end_weeks']), key=config['end_weeks'].count)
-                
+
+                # A season with no championship game yet is still being
+                # played, so the weeks loaded so far say nothing about its
+                # length. The fallbacks above then read "3 weeks loaded" as a
+                # 3-week season - championship week 3, playoffs from week 1 -
+                # and every consumer treated 2026 as over after week 2 (the
+                # power rankings showed 0% playoff odds for a 3-0 team). Use
+                # the league's configured end week instead.
+                if not metrics.get('championship_weeks') and config.get('end_weeks'):
+                    end_week = int(end_week)
+                    total_weeks = end_week - int(start_week or 1) + 1
+                    championship_week = end_week
+                    if not metrics.get('playoff_weeks'):
+                        # Three-round bracket, as every season since 2022.
+                        playoff_start_week = max(1, end_week - 2)
+
                 seasons[season_year] = {
                     'season_year': season_year,
                     'season_start_date': date(season_year, 9, 1),  # NFL season typically starts early September
@@ -560,8 +580,10 @@ class EdwEtlProcessor:
                     'playoff_start_week': playoff_start_week,
                     'championship_week': championship_week,
                     'total_weeks': total_weeks,
-                    'is_current_season': season_year == datetime.now().year,
-                    'season_status': 'completed' if season_year < datetime.now().year else 'active'
+                    # The season runs Sept-Jan: in January the current season
+                    # is last calendar year's, and it is not over yet.
+                    'is_current_season': season_year == self._current_season_year(),
+                    'season_status': 'completed' if season_year < self._current_season_year() else 'active'
                 }
         
         logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
@@ -905,6 +927,11 @@ class EdwEtlProcessor:
         
         return transformed
     
+    @staticmethod
+    def _current_season_year(now=None) -> int:
+        now = now or datetime.now()
+        return now.year - 1 if now.month <= 7 else now.year
+
     def transform_players(self) -> List[Dict]:
         """Transform players from transaction and draft data with position lookup"""
         transformed = []
@@ -925,80 +952,82 @@ class EdwEtlProcessor:
                 normalized_position = position.split(',')[0] if ',' in position else position
                 position_lookup[player_id] = normalized_position
         
-        # Extract position data from rosters (fallback for players not in draft)
+        # Rosters give a fallback position for players not in the draft and
+        # each player's current NFL team: the team on his most recent roster
+        # row that carries one. Only seasons loaded live record a team (Yahoo
+        # returns today's team for past seasons), so this is the latest team
+        # actually observed, or 'Unknown'. Season-specific teams live on
+        # fact_roster; this is the dimension's "current" value.
+        league_season = {l['league_id']: int(l['season'])
+                         for l in self.data.get('leagues', []) if l.get('season')}
+        team_lookup, team_seen = {}, {}
         for roster in self.data.get('rosters', []):
-            raw_player_id = roster['player_id']
-            
-            # Extract numeric player ID from Yahoo format  
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
-                
+            raw_player_id = str(roster['player_id'])
+            numeric_player_id = raw_player_id.split('.p.')[-1] if '.p.' in raw_player_id else raw_player_id
+
             position = roster.get('position')
             if position and position.strip() and position != 'Unknown':
                 # Only use if we don't already have position data from draft
                 if numeric_player_id not in position_lookup:
                     normalized_position = position.split(',')[0] if ',' in position else position
                     position_lookup[numeric_player_id] = normalized_position
-        
+
+            team = roster.get('nfl_team')
+            if isinstance(team, str) and team:
+                when = (league_season.get(roster['league_id'], 0), int(roster['week']))
+                if when >= team_seen.get(numeric_player_id, (-1, -1)):
+                    team_seen[numeric_player_id], team_lookup[numeric_player_id] = when, team
+
         logger.info(f"🏈 Built position lookup for {len(position_lookup)} players")
-        
-        # Collect unique players from all sources
+
+        # Collect unique players from every source that names one.
+        #
+        # Transactions and draft picks alone were not enough: a player who
+        # reaches a roster through a transaction the pipeline did not load
+        # (or one Yahoo never exposes) had no dim_player row, and every fact
+        # keyed on him - his weekly stats and his roster rows - was silently
+        # dropped at the dimension lookup. Tyler Shough and Terrance Ferguson
+        # (2026 week 3) vanished from the warehouse this way. Rosters and
+        # statistics now contribute too; sources are read in the old order so
+        # an existing player's name is taken from the same place as before.
         unique_players = {}
-        
-        # Extract players from transactions (most comprehensive player list)
+
+        def numeric(raw_player_id) -> str:
+            # "124.p.5994" -> "5994"
+            raw = str(raw_player_id)
+            return raw.split('.p.')[-1] if '.p.' in raw else raw
+
+        def add(player_id, player_name):
+            if not player_id or player_id in unique_players:
+                return
+            position = position_lookup.get(player_id, 'Unknown')
+            unique_players[player_id] = {
+                'player_id': player_id,
+                'player_name': player_name or f'Player {player_id}',
+                'primary_position': position,
+                'eligible_positions': [position] if position != 'Unknown' else [],
+                'nfl_team': team_lookup.get(player_id, 'Unknown'),
+                'jersey_number': None,
+                'rookie_year': None,
+                'is_active': True,
+                'valid_from': date.today(),
+                'valid_to': None
+            }
+
         for transaction in self.data.get('transactions', []):
-            raw_player_id = transaction['player_id']
-            
-            # Extract numeric player ID from Yahoo format (e.g., "124.p.5994" -> "5994")
-            if '.p.' in raw_player_id:
-                numeric_player_id = raw_player_id.split('.p.')[-1]
-            else:
-                numeric_player_id = raw_player_id
-            
-            if numeric_player_id not in unique_players:
-                # Use position lookup to get position data
-                position = position_lookup.get(numeric_player_id, 'Unknown')
-                
-                unique_players[numeric_player_id] = {
-                    'player_id': numeric_player_id,
-                    'player_name': transaction.get('player_name', f'Player {numeric_player_id}'),
-                    'primary_position': position,
-                    'eligible_positions': [position] if position != 'Unknown' else [],
-                    'nfl_team': 'Unknown',
-                    'jersey_number': None,
-                    'rookie_year': None,
-                    'is_active': True,
-                    'valid_from': date.today(),
-                    'valid_to': None
-                }
-        
-        # Extract players from draft picks (ensure we have all drafted players)
+            add(numeric(transaction['player_id']), transaction.get('player_name'))
         for draft_pick in self.data.get('draft_picks', []):
-            player_id = draft_pick['player_id']
-            
-            if player_id not in unique_players:
-                position = position_lookup.get(player_id, 'Unknown')
-                
-                unique_players[player_id] = {
-                    'player_id': player_id,
-                    'player_name': draft_pick.get('player_name', f'Player {player_id}'),
-                    'primary_position': position,
-                    'eligible_positions': [position] if position != 'Unknown' else [],
-                    'nfl_team': 'Unknown',
-                    'jersey_number': None,
-                    'rookie_year': None,
-                    'is_active': True,
-                    'valid_from': date.today(),
-                    'valid_to': None
-                }
-        
+            add(numeric(draft_pick['player_id']), draft_pick.get('player_name'))
+        for roster in self.data.get('rosters', []):
+            add(numeric(roster['player_id']), roster.get('player_name'))
+        for stat in self.data.get('statistics', []):
+            add(numeric(stat['player_id']), stat.get('player_name'))
+
         transformed = list(unique_players.values())
         
         # Count how many players have position data
         players_with_positions = sum(1 for player in transformed if player['primary_position'] != 'Unknown')
-        logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions and draft data")
+        logger.info(f"🏈 Extracted {len(transformed)} unique players from transactions, drafts, rosters and statistics")
         logger.info(f"🏈 {players_with_positions} players have position data ({players_with_positions/len(transformed)*100:.1f}%)")
         
         return transformed
@@ -1204,7 +1233,10 @@ class EdwEtlProcessor:
                 'projected_points': float(roster.get('projected_points', 0)) if roster.get('projected_points') is not None else None,
                 'acquisition_type': acquisition_info['type'],  # Now from transactions/drafts
                 'acquisition_date': acquisition_info['date'],  # Now from transactions/drafts
-                'acquisition_cost': acquisition_info['cost']   # Now from transactions/drafts (FAAB)
+                'acquisition_cost': acquisition_info['cost'],  # Now from transactions/drafts (FAAB)
+                # The NFL team that week; NULL for seasons not loaded live
+                # (Yahoo only knows a player's current team).
+                'nfl_team': roster.get('nfl_team') if isinstance(roster.get('nfl_team'), str) and roster.get('nfl_team') else None
             })
         
         logger.info(f"📋 Transformed {len(facts)} roster facts from {len(rosters_data)} roster records")
@@ -2521,8 +2553,36 @@ class EdwEtlProcessor:
                 
                 prev_points = fact['weekly_points']
         
+        self._assign_standings_ranks(facts)
+
         logger.info(f"✅ Weekly rankings and playoff probabilities calculated for {len(weekly_groups)} league-week combinations")
         return facts
+
+    @staticmethod
+    def _assign_standings_ranks(facts: List[Dict]) -> None:
+        """Set season_rank: each team's place in the standings after that week.
+
+        Win percentage first, then points scored (weekly_points here is the
+        running average, which orders the same as points-for within a
+        league-week because every team has played the same number of games).
+        season_rank used to be written as NULL for every row of every season,
+        so the power-rankings playoff-odds model could never tell a team in
+        playoff position from one outside it, and its cutoff fell back to a
+        fixed 0.6 win percentage: every 2-1 team came out at 69%.
+        """
+        groups: Dict[tuple, List[Dict]] = {}
+        for fact in facts:
+            groups.setdefault((fact['league_key'], fact['week_key']), []).append(fact)
+        for group in groups.values():
+            ordered = sorted(group, key=lambda f: (f['win_percentage'] or 0.0,
+                                                    f['weekly_points'] or 0.0),
+                             reverse=True)
+            rank, previous = 0, None
+            for position, fact in enumerate(ordered, start=1):
+                key = (fact['win_percentage'] or 0.0, fact['weekly_points'] or 0.0)
+                if key != previous:
+                    rank, previous = position, key
+                fact['season_rank'] = rank
     
     def load_dimensions(self) -> bool:
         """Load all dimension tables"""
@@ -2540,6 +2600,13 @@ class EdwEtlProcessor:
                             :playoff_start_week, :championship_week, :total_weeks, 
                             :is_current_season, :season_status)
                     ON CONFLICT (season_year) DO UPDATE SET
+                        -- The week fields too, as the incremental path does: an
+                        -- in-progress season's length changes as it is played,
+                        -- and keeping the old row left 2026 with championship
+                        -- week 3 (0% playoff odds after week 1).
+                        playoff_start_week = EXCLUDED.playoff_start_week,
+                        championship_week = EXCLUDED.championship_week,
+                        total_weeks = EXCLUDED.total_weeks,
                         is_current_season = EXCLUDED.is_current_season,
                         season_status = EXCLUDED.season_status
                     RETURNING season_key, season_year
@@ -2572,12 +2639,20 @@ class EdwEtlProcessor:
             leagues = self.transform_leagues()
             for league in leagues:
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams, 
-                                          league_type, scoring_type, draft_type, 
+                    INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams,
+                                          league_type, scoring_type, draft_type,
                                           is_active, valid_from, valid_to)
-                    VALUES (:league_id, :league_name, :season_year, :num_teams, 
+                    VALUES (:league_id, :league_name, :season_year, :num_teams,
                             :league_type, :scoring_type, :draft_type,
                             :is_active, :valid_from, :valid_to)
+                    ON CONFLICT (league_id, season_year) DO UPDATE SET
+                        league_name = EXCLUDED.league_name,
+                        num_teams = EXCLUDED.num_teams,
+                        league_type = EXCLUDED.league_type,
+                        scoring_type = EXCLUDED.scoring_type,
+                        draft_type = EXCLUDED.draft_type,
+                        is_active = EXCLUDED.is_active,
+                        valid_to = EXCLUDED.valid_to
                     RETURNING league_key, league_id
                 """), league)
                 
@@ -2598,7 +2673,8 @@ class EdwEtlProcessor:
                             :rookie_year, :is_active, :valid_from, :valid_to)
                     ON CONFLICT (player_id) DO UPDATE SET
                         player_name = EXCLUDED.player_name,
-                        primary_position = EXCLUDED.primary_position
+                        primary_position = EXCLUDED.primary_position,
+                        nfl_team = EXCLUDED.nfl_team
                     RETURNING player_key, player_id
                 """), player)
                 
@@ -2607,24 +2683,49 @@ class EdwEtlProcessor:
             
             logger.info(f"  ✅ Players: {len(players)} processed")
             
-            # Load managers
-            # Load managers (truncate first to eliminate duplicates from consolidation)
+            # Load managers.
+            #
+            # This used to TRUNCATE dim_manager RESTART IDENTITY CASCADE first,
+            # "to eliminate duplicates from consolidation". Two things were
+            # wrong with that. CASCADE empties every table with a foreign key
+            # to dim_manager - verified against the restored key graph, that is
+            # dim_team, fact_draft, fact_matchup, fact_roster,
+            # fact_team_performance, fact_transaction, and mart_weekly_power_
+            # rankings through dim_team: seven tables, the bulk of the
+            # warehouse. And RESTART IDENTITY reassigns every manager_key, so
+            # any surviving child row would point at a different manager. It
+            # only ever "worked" because the same run happened to rebuild
+            # everything the cascade destroyed - and it was inert before
+            # migrations 005/007 restored the foreign keys, which is precisely
+            # what gave it teeth.
+            #
+            # dim_manager has UNIQUE (manager_name), so consolidation
+            # duplicates cannot arise from an upsert in the first place. Keys
+            # stay stable and children keep resolving.
             managers = self.transform_managers()
-            
-            # Truncate manager table to ensure clean consolidation
-            logger.info(f"🗑️ Truncating dim_manager to eliminate duplicates from consolidation...")
-            self.session.execute(text("TRUNCATE TABLE edw.dim_manager RESTART IDENTITY CASCADE"))
-            
+
             for manager in managers:
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_manager (manager_name, manager_id, first_season_year, 
+                    INSERT INTO edw.dim_manager (manager_name, manager_id, first_season_year,
                                            last_season_year, total_seasons, total_leagues,
-                                           is_current, include_in_analysis, email, 
+                                           is_current, include_in_analysis, email,
                                            display_name, profile_image_url, is_active)
-                    VALUES (:manager_name, :manager_id, :first_season_year, 
+                    VALUES (:manager_name, :manager_id, :first_season_year,
                             :last_season_year, :total_seasons, :total_leagues,
                             :is_current, :include_in_analysis, :email,
                             :display_name, :profile_image_url, :is_active)
+                    ON CONFLICT (manager_name) DO UPDATE SET
+                        manager_id = EXCLUDED.manager_id,
+                        first_season_year = EXCLUDED.first_season_year,
+                        last_season_year = EXCLUDED.last_season_year,
+                        total_seasons = EXCLUDED.total_seasons,
+                        total_leagues = EXCLUDED.total_leagues,
+                        is_current = EXCLUDED.is_current,
+                        include_in_analysis = EXCLUDED.include_in_analysis,
+                        email = EXCLUDED.email,
+                        display_name = EXCLUDED.display_name,
+                        profile_image_url = EXCLUDED.profile_image_url,
+                        is_active = EXCLUDED.is_active
                     RETURNING manager_key, manager_name
                 """), manager)
                 
@@ -2641,10 +2742,18 @@ class EdwEtlProcessor:
                 team['league_key'] = league_key
                 
                 result = self.session.execute(text("""
-                    INSERT INTO edw.dim_team (team_id, league_key, team_name, manager_name, 
+                    INSERT INTO edw.dim_team (team_id, league_key, team_name, manager_name,
                                         manager_id, team_logo_url, is_active, valid_from, valid_to)
-                    VALUES (:team_id, :league_key, :team_name, :manager_name, 
+                    VALUES (:team_id, :league_key, :team_name, :manager_name,
                             :manager_id, :team_logo_url, :is_active, :valid_from, :valid_to)
+                    ON CONFLICT (team_id) DO UPDATE SET
+                        league_key = EXCLUDED.league_key,
+                        team_name = EXCLUDED.team_name,
+                        manager_name = EXCLUDED.manager_name,
+                        manager_id = EXCLUDED.manager_id,
+                        team_logo_url = EXCLUDED.team_logo_url,
+                        is_active = EXCLUDED.is_active,
+                        valid_to = EXCLUDED.valid_to
                     RETURNING team_key, team_id
                 """), team)
                 
@@ -3252,6 +3361,71 @@ class EdwEtlProcessor:
         
         return True
     
+    @staticmethod
+    def _batch_upsert(conn, table: str, columns: List[str], conflict: str,
+                      update_cols: List[str], df, page_size: int = 1000,
+                      extra_set: Optional[List[str]] = None) -> int:
+        """Upsert a DataFrame in batched multi-row statements.
+
+        One statement per row costs one network round trip per row. That is
+        invisible against a local database and ruinous against a hosted one:
+        publishing ~57,000 event rows to Neon took over half an hour and blew
+        the workflow's 30-minute budget, because each upsert waited on
+        us-east-1. execute_values sends them in pages instead, turning tens of
+        thousands of round trips into tens.
+
+        Semantics are unchanged: same target columns, same ON CONFLICT key,
+        same DO UPDATE set.
+        """
+        from psycopg2.extras import execute_values
+
+        if df is None or df.empty:
+            return 0
+
+        # Reindex so tuple order always matches `columns`, and make missing
+        # columns explicit NULLs rather than a silent KeyError.
+        frame = df.reindex(columns=columns)
+
+        # One statement per row tolerated a repeated business key (the last
+        # write won); a single multi-row ON CONFLICT DO UPDATE raises
+        # "cannot affect row a second time" and takes the whole refresh down
+        # with it. Keep the old semantics by collapsing duplicates here.
+        key_cols = [c.strip().strip('"') for c in conflict.split(',')]
+        if all(c in frame.columns for c in key_cols):
+            before = len(frame)
+            frame = frame.drop_duplicates(subset=key_cols, keep='last')
+            if len(frame) != before:
+                logger.warning(
+                    "%s: collapsed %d row(s) sharing a business key (%s)",
+                    table, before - len(frame), conflict)
+
+        rows = [tuple(None if pd.isna(v) else v for v in rec)
+                for rec in frame.itertuples(index=False, name=None)]
+
+        col_list = ', '.join(f'"{c}"' for c in columns)
+        set_parts = [f'"{c}" = EXCLUDED."{c}"' for c in update_cols]
+        # Expressions EXCLUDED cannot carry, e.g. updated_at = CURRENT_TIMESTAMP.
+        set_parts.extend(extra_set or [])
+        sets = ', '.join(set_parts)
+        sql = (f'INSERT INTO edw.{table} ({col_list}) VALUES %s '
+               f'ON CONFLICT ({conflict}) DO UPDATE SET {sets}')
+
+        # The batch runs on the raw DBAPI cursor, which SQLAlchemy does not
+        # see. If SQLAlchemy has no transaction of its own, its later
+        # commit() is a no-op and every row written here is rolled back when
+        # the connection returns to the pool - silently, with the upsert
+        # still reporting success. Opening the transaction explicitly makes
+        # the caller's commit cover this work.
+        if not conn.in_transaction():
+            conn.begin()
+
+        cursor = conn.connection.cursor()
+        try:
+            execute_values(cursor, sql, rows, page_size=page_size)
+        finally:
+            cursor.close()
+        return len(rows)
+
     def load_fact_table(self, table_name: str, data: List[Dict]) -> bool:
         """Load data into fact table with proper incremental loading strategy"""
         try:
@@ -3315,21 +3489,40 @@ class EdwEtlProcessor:
                     logger.info(f"🔄 Using incremental loading strategy for {table_name}")
                     
                     if table_name in ['fact_roster', 'fact_matchup', 'fact_team_performance']:
-                        # Weekly refresh tables: delete current week data and insert new
-                        if 'week_key' in df.columns or 'season_year' in df.columns:
-                            if 'week_key' in df.columns:
-                                week_keys = df['week_key'].unique()
-                                delete_condition = f"week_key IN ({','.join(map(str, week_keys))})"
-                            else:
-                                # Use current season for deletion
-                                current_season = df['season_year'].max()
-                                delete_condition = f"season_year = {current_season}"
-                            
-                            logger.info(f"🗑️ Deleting existing records where {delete_condition}")
-                            result = conn.execute(text(f"DELETE FROM edw.{table_name} WHERE {delete_condition}"))
-                            deleted_count = result.rowcount
-                            logger.info(f"  ✅ Deleted {deleted_count} existing records")
-                        
+                        # Weekly refresh tables: delete this league's week, then insert.
+                        #
+                        # Scoped by league AND week. dim_week is a GLOBAL
+                        # (season_year, week_number) dimension - exactly one row
+                        # per season-week, shared by every league in that season -
+                        # so deleting on week_key alone wipes that week for every
+                        # league of record in the season. This is the same
+                        # unscoped-week delete that would have destroyed 20 years
+                        # of public.* history, one level up in the warehouse. It
+                        # is dormant only because exactly one league per season is
+                        # of record today; is_league_of_record auto-admits every
+                        # league from FUTURE_SEASON_THRESHOLD on, and the raw data
+                        # already carries seasons with two league ids.
+                        if 'week_key' not in df.columns or 'league_key' not in df.columns:
+                            # The previous fallback deleted a whole season
+                            # (season_year = N) and reinserted only what this
+                            # frame happened to carry. Refuse instead: an
+                            # unscoped delete is never the safe default.
+                            raise RuntimeError(
+                                f"{table_name}: refusing a weekly refresh without "
+                                f"both week_key and league_key (have: "
+                                f"{sorted(df.columns)}) - the delete could not be "
+                                "scoped to this league's week.")
+
+                        week_keys = ','.join(str(int(k)) for k in df['week_key'].unique())
+                        league_keys = ','.join(str(int(k)) for k in df['league_key'].unique())
+                        delete_condition = (f"week_key IN ({week_keys}) "
+                                            f"AND league_key IN ({league_keys})")
+
+                        logger.info(f"🗑️ Deleting existing records where {delete_condition}")
+                        result = conn.execute(text(f"DELETE FROM edw.{table_name} WHERE {delete_condition}"))
+                        deleted_count = result.rowcount
+                        logger.info(f"  ✅ Deleted {deleted_count} existing records")
+
                         # Insert new data
                         logger.info(f"⚡ Inserting {len(df)} new records...")
                         df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
@@ -3344,82 +3537,54 @@ class EdwEtlProcessor:
                         logger.info(f"🔄 Using business-key UPSERT for event table {table_name}")
 
                         if table_name == 'fact_player_statistics':
-                            logger.info(f"🔄 Using UPSERT strategy for {table_name}")
-                            # Convert DataFrame to records for individual upsert
-                            for _, row in df.iterrows():
-                                upsert_sql = text("""
-                                    INSERT INTO edw.fact_player_statistics 
-                                    (league_key, player_key, season_year, week_number, weekly_fantasy_points, position_type, 
-                                     position_rank, league_rank, points_above_replacement, source_stat_id, game_code)
-                                    VALUES (:league_key, :player_key, :season_year, :week_number, :weekly_fantasy_points, :position_type,
-                                            :position_rank, :league_rank, :points_above_replacement, :source_stat_id, :game_code)
-                                    ON CONFLICT (league_key, player_key, season_year, week_number) 
-                                    DO UPDATE SET
-                                        weekly_fantasy_points = EXCLUDED.weekly_fantasy_points,
-                                        position_type = EXCLUDED.position_type,
-                                        position_rank = EXCLUDED.position_rank,
-                                        league_rank = EXCLUDED.league_rank,
-                                        points_above_replacement = EXCLUDED.points_above_replacement,
-                                        source_stat_id = EXCLUDED.source_stat_id,
-                                        updated_at = CURRENT_TIMESTAMP
-                                """)
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} statistics records")
+                            n = self._batch_upsert(
+                                conn, 'fact_player_statistics',
+                                ['league_key', 'player_key', 'season_year',
+                                 'week_number', 'weekly_fantasy_points',
+                                 'position_type', 'position_rank', 'league_rank',
+                                 'points_above_replacement', 'source_stat_id',
+                                 'game_code'],
+                                'league_key, player_key, season_year, week_number',
+                                ['weekly_fantasy_points', 'position_type',
+                                 'position_rank', 'league_rank',
+                                 'points_above_replacement', 'source_stat_id'],
+                                df,
+                                extra_set=['updated_at = CURRENT_TIMESTAMP'])
+                            logger.info(f"✅ Upserted {n} statistics records")
 
                         elif table_name == 'fact_draft':
-                            upsert_sql = text("""
-                                INSERT INTO edw.fact_draft
-                                (league_key, team_key, manager_key, player_key, season_year,
-                                 overall_pick, round_number, pick_in_round, draft_type, draft_cost,
-                                 is_keeper_pick, season_points, fantasy_games_played, points_per_week)
-                                VALUES (:league_key, :team_key, :manager_key, :player_key, :season_year,
-                                        :overall_pick, :round_number, :pick_in_round, :draft_type, :draft_cost,
-                                        :is_keeper_pick, :season_points, :fantasy_games_played, :points_per_week)
-                                ON CONFLICT (league_key, season_year, overall_pick)
-                                DO UPDATE SET
-                                    team_key = EXCLUDED.team_key,
-                                    manager_key = EXCLUDED.manager_key,
-                                    player_key = EXCLUDED.player_key,
-                                    round_number = EXCLUDED.round_number,
-                                    pick_in_round = EXCLUDED.pick_in_round,
-                                    draft_type = EXCLUDED.draft_type,
-                                    draft_cost = EXCLUDED.draft_cost,
-                                    is_keeper_pick = EXCLUDED.is_keeper_pick,
-                                    season_points = EXCLUDED.season_points,
-                                    fantasy_games_played = EXCLUDED.fantasy_games_played,
-                                    points_per_week = EXCLUDED.points_per_week
-                            """)
-                            for _, row in df.iterrows():
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} draft records")
+                            n = self._batch_upsert(
+                                conn, 'fact_draft',
+                                ['league_key', 'team_key', 'manager_key',
+                                 'player_key', 'season_year', 'overall_pick',
+                                 'round_number', 'pick_in_round', 'draft_type',
+                                 'draft_cost', 'is_keeper_pick', 'season_points',
+                                 'fantasy_games_played', 'points_per_week'],
+                                'league_key, season_year, overall_pick',
+                                ['team_key', 'manager_key', 'player_key',
+                                 'round_number', 'pick_in_round', 'draft_type',
+                                 'draft_cost', 'is_keeper_pick', 'season_points',
+                                 'fantasy_games_played', 'points_per_week'],
+                                df)
+                            logger.info(f"✅ Upserted {n} draft records")
 
                         elif table_name == 'fact_transaction':
-                            upsert_sql = text("""
-                                INSERT INTO edw.fact_transaction
-                                (source_transaction_id, league_key, season_year, transaction_type,
-                                 transaction_date, transaction_week, player_key, from_team_key, to_team_key,
-                                 from_manager_key, to_manager_key, faab_bid, trade_group_id, transaction_status)
-                                VALUES (:source_transaction_id, :league_key, :season_year, :transaction_type,
-                                        :transaction_date, :transaction_week, :player_key, :from_team_key, :to_team_key,
-                                        :from_manager_key, :to_manager_key, :faab_bid, :trade_group_id, :transaction_status)
-                                ON CONFLICT (source_transaction_id, player_key)
-                                DO UPDATE SET
-                                    league_key = EXCLUDED.league_key,
-                                    season_year = EXCLUDED.season_year,
-                                    transaction_type = EXCLUDED.transaction_type,
-                                    transaction_date = EXCLUDED.transaction_date,
-                                    transaction_week = EXCLUDED.transaction_week,
-                                    from_team_key = EXCLUDED.from_team_key,
-                                    to_team_key = EXCLUDED.to_team_key,
-                                    from_manager_key = EXCLUDED.from_manager_key,
-                                    to_manager_key = EXCLUDED.to_manager_key,
-                                    faab_bid = EXCLUDED.faab_bid,
-                                    trade_group_id = EXCLUDED.trade_group_id,
-                                    transaction_status = EXCLUDED.transaction_status
-                            """)
-                            for _, row in df.iterrows():
-                                conn.execute(upsert_sql, row.to_dict())
-                            logger.info(f"✅ Upserted {len(df)} transaction records")
+                            n = self._batch_upsert(
+                                conn, 'fact_transaction',
+                                ['source_transaction_id', 'league_key',
+                                 'season_year', 'transaction_type',
+                                 'transaction_date', 'transaction_week',
+                                 'player_key', 'from_team_key', 'to_team_key',
+                                 'from_manager_key', 'to_manager_key', 'faab_bid',
+                                 'trade_group_id', 'transaction_status'],
+                                'source_transaction_id, player_key',
+                                ['league_key', 'season_year', 'transaction_type',
+                                 'transaction_date', 'transaction_week',
+                                 'from_team_key', 'to_team_key',
+                                 'from_manager_key', 'to_manager_key', 'faab_bid',
+                                 'trade_group_id', 'transaction_status'],
+                                df)
+                            logger.info(f"✅ Upserted {n} transaction records")
 
                         else:
                             df.to_sql(table_name, conn, schema='edw', if_exists='append', index=False)
@@ -5588,15 +5753,67 @@ class EdwEtlProcessor:
                     AND am.matchup_week <= aw.week_number
                 GROUP BY aw.team_key, aw.league_key, aw.week_key
             ),
+            playoff_games AS (
+                SELECT fm.league_key, dw.week_number, fm.team1_key, fm.team2_key, fm.is_championship
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+                WHERE fm.is_playoffs
+            ),
+            finalists AS (
+                SELECT pg.league_key, pg.week_number, t.team_key
+                FROM playoff_games pg
+                CROSS JOIN LATERAL (VALUES (pg.team1_key), (pg.team2_key)) AS t(team_key)
+                WHERE pg.is_championship
+            ),
+            semifinalists AS (
+                -- The finalists plus whoever they played the week before.
+                SELECT f.league_key, f.week_number, f.team_key FROM finalists f
+                UNION
+                SELECT f.league_key, f.week_number,
+                       CASE WHEN pg.team1_key = f.team_key THEN pg.team2_key ELSE pg.team1_key END
+                FROM finalists f
+                JOIN playoff_games pg ON pg.league_key = f.league_key
+                    AND pg.week_number = f.week_number - 1
+                    AND f.team_key IN (pg.team1_key, pg.team2_key)
+            ),
+            bracket_teams AS (
+                -- ...plus whoever the semifinalists played the week before
+                -- that, if it was a playoff week (a quarterfinal; teams on a
+                -- bye have no game there).
+                SELECT sf.league_key, sf.team_key FROM semifinalists sf
+                UNION
+                SELECT sf.league_key,
+                       CASE WHEN pg.team1_key = sf.team_key THEN pg.team2_key ELSE pg.team1_key END
+                FROM semifinalists sf
+                JOIN playoff_games pg ON pg.league_key = sf.league_key
+                    AND pg.week_number = sf.week_number - 2
+                    AND sf.team_key IN (pg.team1_key, pg.team2_key)
+            ),
+            bracket_sizes AS (
+                -- Traced back from the final rather than read from round
+                -- labels: 2005-2007 labels are unreliable (Yahoo marks every
+                -- playoff game consolation, and 2007's consolation games carry
+                -- semifinal flags), and counting labels gave 2007 an 8-team
+                -- bracket where Yahoo's settings say 4. 6 in every other
+                -- season. This used to be a hardcoded 6 for all.
+                SELECT league_key, count(DISTINCT team_key) AS bracket_teams
+                FROM bracket_teams GROUP BY league_key
+            ),
             league_settings AS (
-                -- League settings for playoff odds calculation (10-team league, 6 playoff spots)
                 SELECT 
                     dl.league_key,
                     dl.season_year,
                     dl.num_teams,
-                    -- Your league structure: 10 teams, 6 playoff spots
-                    6 as playoff_spots
+                    -- A season still being played has no bracket yet: use the
+                    -- most recent completed season's size.
+                    COALESCE(
+                        bs.bracket_teams,
+                        (SELECT b2.bracket_teams FROM bracket_sizes b2
+                         JOIN edw.dim_league d2 ON d2.league_key = b2.league_key
+                         ORDER BY d2.season_year DESC LIMIT 1),
+                        6) as playoff_spots
                 FROM edw.dim_league dl
+                LEFT JOIN bracket_sizes bs ON bs.league_key = dl.league_key
             ),
             cumulative_records AS (
                 -- Calculate cumulative wins/losses/ties through each week
@@ -5628,22 +5845,22 @@ class EdwEtlProcessor:
                 GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
             ),
             playoff_cutoff_teams AS (
-                -- Get 6th place team's win percentage for games back calculation
+                -- Win percentage of the team holding the LAST playoff spot, for
+                -- games back. (Was a hardcoded 6th place.) With a tie at the
+                -- cutoff, the best record at or below it.
                 SELECT 
                     ws.league_key,
                     ws.week_key,
-                    -- Use win percentage of 6th place team (handles ties better than raw wins)
-                    MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END) as sixth_place_win_pct,
-                    -- If no exact 6th place team, use the team closest to 6th place
                     COALESCE(
-                        MAX(CASE WHEN ws.season_rank = 6 THEN ws.win_percentage ELSE NULL END),
-                        MAX(CASE WHEN ws.season_rank <= 6 THEN ws.win_percentage ELSE NULL END)
+                        MAX(CASE WHEN ws.season_rank = ws.playoff_spots THEN ws.win_percentage ELSE NULL END),
+                        MIN(CASE WHEN ws.season_rank <= ws.playoff_spots THEN ws.win_percentage ELSE NULL END)
                     ) as playoff_cutoff_win_pct
                 FROM (
                     SELECT 
                         ftp.league_key,
                         ftp.week_key,
                         ftp.season_rank,
+                        ls.playoff_spots,
                         -- Calculate win percentage from cumulative records
                         CASE 
                             WHEN COALESCE(cr.games_played, 0) > 0 THEN
@@ -5651,10 +5868,11 @@ class EdwEtlProcessor:
                             ELSE 0.0
                         END as win_percentage
                     FROM edw.fact_team_performance ftp
+                    JOIN league_settings ls ON ls.league_key = ftp.league_key
+                        AND ls.season_year = ftp.season_year
                     LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
                         AND ftp.league_key = cr.league_key 
                         AND ftp.week_key = cr.week_key
-                    WHERE ftp.season_rank <= 8  -- Only look at teams reasonably close to playoffs
                 ) ws
                 GROUP BY ws.league_key, ws.week_key
             ),
@@ -5677,6 +5895,10 @@ class EdwEtlProcessor:
                     ftp.points_for,
                     ftp.points_against,
                     ftp.season_rank,
+                    -- Season-to-date scoring (running average; every team in a
+                    -- league-week has played the same number of games, so it
+                    -- orders the same as total points for).
+                    ftp.weekly_points as season_avg_points,
                     ftp.playoff_probability,
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
@@ -5798,8 +6020,12 @@ class EdwEtlProcessor:
                     COALESCE(mm.biggest_win_margin, 0) as biggest_win_margin,
                     COALESCE(mm.biggest_loss_margin, 0) as biggest_loss_margin,
                     ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.power_score DESC) as power_rank,
-                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.win_percentage DESC, pc.points_for DESC) as record_rank,
-                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.points_for DESC) as points_rank
+                    -- The standings order, the same one the playoff odds use
+                    -- (season_rank). Both columns broke ties, or ranked outright,
+                    -- on THIS WEEK's points: a 1-2 team with the league's
+                    -- second-most points showed points rank 10 after one low week.
+                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.season_rank, pc.season_avg_points DESC) as record_rank,
+                    ROW_NUMBER() OVER (PARTITION BY pc.league_key, pc.week_key ORDER BY pc.season_avg_points DESC) as points_rank
                 FROM power_calculations pc
                 LEFT JOIN matchup_margins mm ON pc.team_key = mm.team_key 
                     AND pc.league_key = mm.league_key 

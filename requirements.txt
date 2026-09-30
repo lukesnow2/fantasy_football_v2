@@ -1,13 +1,23 @@
-yahoo_fantasy_api>=2.12.3
-yahoo_oauth>=2.0.0
-requests>=2.25.0
-requests-oauthlib>=1.3.0
-python-dotenv>=0.19.0
-sqlalchemy>=1.4.0
+# Upper bounds stop at the next release that could change behaviour. The
+# weekly GitHub job installs these fresh on every run, so an open-ended range
+# lets an upstream release change production unattended: SQLAlchemy 2.1 made
+# psycopg 3 the default PostgreSQL driver, and every connection failed with
+# "No module named 'psycopg'" (CI, 2026-09-29) - the first Tuesday run would
+# have too. Raise a bound deliberately, after the suite passes on the new
+# version.
+yahoo_fantasy_api>=2.12.3,<2.13   # we call yhandler internals and parse roster fields
+yahoo_oauth>=2.1.1,<3
+objectpath>=0.6.1,<0.7            # transaction parsing (see _fetch_transactions)
+requests>=2.25.0,<3
+requests-oauthlib>=1.3.0,<3
+python-dotenv>=0.19.0,<2
+sqlalchemy>=2.0,<2.1              # 2.1 switches postgresql:// to psycopg 3
+psycopg2-binary>=2.9.0,<3         # execute_values and raw-cursor migrations rely on it
+pandas>=2.0.0,<3                  # 3.0 changes string dtype and copy semantics
+pytest>=8.0,<10
+
+# Not used by the pipeline (Heroku-era leftovers: the old Procfile app).
 schedule>=1.2.0
 apscheduler>=3.9.0
-psycopg2-binary>=2.9.0
-pandas>=2.0.0
 flask>=2.3.0
 gunicorn>=20.1.0
-pytest>=8.0
