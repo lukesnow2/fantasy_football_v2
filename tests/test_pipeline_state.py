@@ -5,6 +5,7 @@ guarantees under test - advisory locks, transactional flag commits, ledger
 autocommit survival - are database behaviors, not Python behaviors.
 """
 import subprocess
+import time
 
 import pytest
 from sqlalchemy import text
@@ -138,7 +139,6 @@ def test_lock_survives_idle_in_transaction_timeout(test_db, acquire):
     # idles for the whole run, so if acquiring the lock opened a transaction,
     # every run over 5 minutes lost its lock (Neon rehearsal, run 72, 6.4 min).
     # Same setting here, shrunk to 1s.
-    import time
     st = PipelineState(f'{test_db}?options=-c%20idle_in_transaction_session_timeout%3D1000')
     try:
         getattr(st, acquire)()

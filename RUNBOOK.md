@@ -92,10 +92,13 @@ It copies raw `public.*` + `public.pipeline_*` + `edw` + `meta_data`, re-adds
 both `app -> edw.dim_manager` FKs (dropping `edw` removes them), and refuses to
 start if the source is mid-run or has unpublished periods, if the target's
 `edw.dim_manager` keys differ from the source's (`app.*` stores them), or if a
-pipeline run holds the target's lock. It needs a PostgreSQL 18 client
-(`brew install postgresql@18`; `PG_BIN` overrides the path): Neon runs PG18.
-A brand-new target first needs `ALTER DATABASE <db> SET search_path TO app, edw, public`
-and the app schema (`cd web && DATABASE_URL=... npm run db:migrate`).
+pipeline run holds the target's lock. The source's pipeline lock is held from
+the checks through both dumps, so no run can commit mid-copy. It needs a
+PostgreSQL 18 client (`brew install postgresql@18`; `PG_BIN` overrides the
+path): Neon runs PG18. For a brand-new target: `ALTER DATABASE <db> SET
+search_path TO app, edw, public`, then promote, THEN `cd web &&
+DATABASE_URL=... npm run db:migrate` plus the two seeds - the app migration
+declares FKs into `edw.dim_manager`, so it can't run before the warehouse exists.
 
 Before promoting production, rehearse: restore a dump of production into
 `neondb_rehearsal` (`pg_dump -Fc` / `pg_restore --no-owner --no-privileges`,
@@ -202,7 +205,7 @@ successful run lands within 8 days in-season. Run ledger: `public.pipeline_runs`
 - **SSL**: app/drizzle disable SSL for `localhost`, require it for remote (Neon). Set automatically by host detection.
 - **Manager attribution**: some teams have Yahoo-private (`--hidden--`) names and are mapped by team_id in `edw_etl_processor.get_manager_name_by_team_id`. Add new ones there.
 - **Neon kills sessions idle inside a transaction after 5 minutes** (`idle_in_transaction_session_timeout`); local Postgres has no limit, so dev can't catch it. Never hold a connection in an open transaction across slow work (Yahoo calls, the EDW refresh). The pipeline lock connection is AUTOCOMMIT for this reason (`PipelineState._lock_connection`).
-- **PostgreSQL client version**: Neon is PG18; use `/usr/local/opt/postgresql@18/bin` for `pg_dump`/`psql` against it (the default 14 client can't dump a newer server).
+- **PostgreSQL client version**: Neon is PG18; use `$(brew --prefix postgresql@18)/bin` for `pg_dump`/`psql` against it (the default 14 client can't dump a newer server).
 - **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `src/utils/fix_championship_flags.py`.
 
 ## Owner / config
