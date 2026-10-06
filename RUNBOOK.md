@@ -197,14 +197,33 @@ against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
 not the `-pooler` host Vercel uses: the session advisory lock and per-session
 settings don't survive transaction pooling.
 Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)
-runs from OUTSIDE GitHub Actions (e.g. laptop cron) and files an issue when no
-successful run lands within 8 days in-season. Run ledger: `public.pipeline_runs`.
+runs from OUTSIDE GitHub Actions and files an issue when no successful run has
+finished within 6.5 days in-season. Run ledger: `public.pipeline_runs`.
+
+### Dead-man's check on Luke's Mac
+- LaunchAgent `~/Library/LaunchAgents/com.theleague.staleness-check.plist`:
+  Wednesdays 09:00 local (`StartCalendarInterval` Weekday 3, Hour 9), runs
+  `~/.local/bin/the-league-staleness-check` (`--max-age-days 6.5`); log in
+  `~/Library/Logs/the-league-staleness-check.log`. A missed time (Mac asleep)
+  runs at the next wake.
+- macOS privacy protection (TCC) blocks background jobs from reading
+  `~/Desktop`, where the repo lives. So the wrapper runs a **copy** of the
+  script from `~/.local/share/the-league-staleness/` with its own venv
+  (SQLAlchemy 2.0.x + psycopg2-binary), and reads the production connection
+  string (Neon **direct** host) from `~/.config/the-league/database_url` (0600).
+  After changing `scripts/staleness_check.py`, re-copy it:
+  `cp scripts/staleness_check.py ~/.local/share/the-league-staleness/`.
+- `gh` is pinned to lukesnow2 (`GH_TOKEN=$(gh auth token --user lukesnow2)`):
+  the active `gh` account drifts back to luke-priora, which is read-only.
+- Test: `launchctl kickstart gui/$(id -u)/com.theleague.staleness-check`, then
+  tail the log.
 
 ## Gotchas
 - **Don't run `drizzle-kit push` without `schemaFilter: ['app']`** — it defaults to managing only `public` and will DROP the pipeline's raw tables.
 - **SSL**: app/drizzle disable SSL for `localhost`, require it for remote (Neon). Set automatically by host detection.
 - **Manager attribution**: some teams have Yahoo-private (`--hidden--`) names and are mapped by team_id in `edw_etl_processor.get_manager_name_by_team_id`. Add new ones there.
 - **Neon kills sessions idle inside a transaction after 5 minutes** (`idle_in_transaction_session_timeout`); local Postgres has no limit, so dev can't catch it. Never hold a connection in an open transaction across slow work (Yahoo calls, the EDW refresh). The pipeline lock connection is AUTOCOMMIT for this reason (`PipelineState._lock_connection`).
+- **A re-enabled workflow may not run on schedule**: after GitHub auto-disabled the weekly workflow and it was re-enabled (2026-09-16), it read "active" but no scheduled run fired for three weeks. Pushing a change to the workflow file on `main` re-registers the schedule. Manual `workflow_dispatch` runs are unaffected, so they don't prove the schedule works.
 - **PostgreSQL client version**: Neon is PG18; use `$(brew --prefix postgresql@18)/bin` for `pg_dump`/`psql` against it (the default 14 client can't dump a newer server).
 - **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `src/utils/fix_championship_flags.py`.
 
