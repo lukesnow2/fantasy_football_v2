@@ -31,6 +31,11 @@
 name: Weekly Data Pipeline
 
 on:
+  # Re-enabling a workflow GitHub auto-disabled for inactivity does not always
+  # re-register its schedule: after the 2026-09-16 re-enable it showed
+  # "active" but no scheduled run fired (9/22, 9/29, the Oct 1 heartbeat,
+  # 10/6). A push that changes this file on main re-registers it. If scheduled
+  # runs stop again while the workflow reads "active", re-save this file.
   schedule:
     - cron: '0 14 * 9,10,11,12,1 2'   # Tuesdays Sep-Jan, 08:00 MDT
     - cron: '0 15 * 9,10,11,12,1 2'   # Tuesdays Sep-Jan, 08:00 MST
