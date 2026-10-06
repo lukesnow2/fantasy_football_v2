@@ -21,6 +21,8 @@ from typing import Dict, List, Optional
 
 from sqlalchemy import text
 
+from src.utils.batch_sql import insert_batched, last_per_key, upsert_set
+
 logger = logging.getLogger(__name__)
 
 # Unique indexes that make idempotency a database guarantee. Created
@@ -142,25 +144,29 @@ def flatten_matchups(matchups_data: List[dict]) -> List[dict]:
 # ---------------------------------------------------------------------------
 
 def _insert_rows(conn, table: str, rows: List[dict], conflict_clause: str):
+    """Batched INSERT of dict rows; columns are the first row's keys.
+
+    A row missing one of those keys raises KeyError, as a missing bind
+    parameter did when this ran one statement per row.
+    """
     if not rows:
         return 0
     cols = list(rows[0].keys())
-    col_list = ', '.join(f'"{c}"' for c in cols)
-    placeholders = ', '.join(f':{c}' for c in cols)
-    stmt = text(f'INSERT INTO public.{table} ({col_list}) '
-                f'VALUES ({placeholders}) {conflict_clause}')
-    conn.execute(stmt, rows)
-    return len(rows)
+    return insert_batched(conn, f'public.{table}', cols,
+                          [tuple(row[c] for c in cols) for row in rows],
+                          conflict_clause)
 
 
 def upsert_dimension(conn, table: str, key_col: str, rows: List[dict],
                      update_cols: List[str]) -> int:
     if not rows:
         return 0
-    sets = ', '.join(f'"{c}" = EXCLUDED."{c}"' for c in update_cols
-                     if c in rows[0])
+    sets = upsert_set([c for c in update_cols if c in rows[0]])
     clause = f'ON CONFLICT ({key_col}) DO UPDATE SET {sets}'
-    return _insert_rows(conn, table, rows, clause)
+    _insert_rows(conn, table, last_per_key(rows, [key_col], table), clause)
+    # Rows offered, as before batching: the ledger and refresh triggers read
+    # this count, and collapsing a repeated key must not change it.
+    return len(rows)
 
 
 def replace_period_rows(conn, table: str, week_col: str, league_id: str,

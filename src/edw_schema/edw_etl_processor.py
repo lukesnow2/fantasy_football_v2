@@ -16,6 +16,8 @@ from sqlalchemy.orm import sessionmaker
 from dataclasses import dataclass
 import hashlib
 
+from src.utils.batch_sql import insert_batched, last_per_key, upsert_set
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -32,6 +34,61 @@ class ETLStats:
     def __post_init__(self):
         if self.errors is None:
             self.errors = []
+
+# Dimension upserts: (columns, ON CONFLICT key, columns updated on conflict,
+# extra SET expressions). Written as one batched INSERT per table - one
+# statement per record cost a network round trip each, ~3 minutes of a weekly
+# run against Neon. valid_from is deliberately never updated.
+DIMENSION_UPSERTS = {
+    'dim_season': (
+        ['season_year', 'season_start_date', 'season_end_date', 'playoff_start_week',
+         'championship_week', 'total_weeks', 'is_current_season', 'season_status'],
+        'season_year',
+        ['season_start_date', 'season_end_date', 'playoff_start_week',
+         'championship_week', 'total_weeks', 'is_current_season', 'season_status'],
+        None),
+    'dim_league': (
+        ['league_id', 'league_name', 'season_year', 'num_teams', 'league_type',
+         'scoring_type', 'draft_type', 'is_active', 'valid_from', 'valid_to'],
+        'league_id, season_year',
+        ['league_name', 'num_teams', 'league_type', 'scoring_type', 'draft_type',
+         'is_active', 'valid_to'],
+        None),
+    'dim_team': (
+        ['team_id', 'league_key', 'team_name', 'manager_name', 'manager_id',
+         'team_logo_url', 'is_active', 'valid_from', 'valid_to'],
+        'team_id',
+        ['league_key', 'team_name', 'manager_name', 'manager_id', 'team_logo_url',
+         'is_active', 'valid_to'],
+        None),
+    'dim_player': (
+        ['player_id', 'player_name', 'primary_position', 'eligible_positions',
+         'nfl_team', 'jersey_number', 'rookie_year', 'is_active', 'valid_from',
+         'valid_to'],
+        'player_id',
+        ['player_name', 'primary_position', 'eligible_positions', 'nfl_team',
+         'jersey_number', 'rookie_year', 'is_active', 'valid_to'],
+        None),
+    'dim_week': (
+        ['season_year', 'week_number', 'week_type', 'week_start_date',
+         'week_end_date', 'is_current_week'],
+        'season_year, week_number',
+        ['week_type', 'week_start_date', 'week_end_date', 'is_current_week'],
+        None),
+    # Column list must match transform_managers' records and the actual table;
+    # an earlier version named columns that exist in neither and failed on
+    # every run once it was reachable.
+    'dim_manager': (
+        ['manager_name', 'manager_id', 'first_season_year', 'last_season_year',
+         'total_seasons', 'total_leagues', 'is_current', 'include_in_analysis',
+         'email', 'display_name', 'profile_image_url', 'is_active'],
+        'manager_name',
+        ['manager_id', 'first_season_year', 'last_season_year', 'total_seasons',
+         'total_leagues', 'is_current', 'include_in_analysis', 'email',
+         'display_name', 'profile_image_url', 'is_active'],
+        ['updated_at = CURRENT_TIMESTAMP']),
+}
+
 
 class EdwEtlProcessor:
     """
@@ -3090,144 +3147,19 @@ class EdwEtlProcessor:
                 # Implement proper upsert logic for incremental updates
                 logger.info(f"🔄 Using upsert strategy for {table_name}")
                 
-                if table_name == 'dim_season':
-                    for record in data:
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_season (season_year, season_start_date, season_end_date, 
-                                                  playoff_start_week, championship_week, total_weeks, 
-                                                  is_current_season, season_status)
-                            VALUES (:season_year, :season_start_date, :season_end_date, 
-                                   :playoff_start_week, :championship_week, :total_weeks,
-                                   :is_current_season, :season_status)
-                            ON CONFLICT (season_year) DO UPDATE SET
-                                season_start_date = EXCLUDED.season_start_date,
-                                season_end_date = EXCLUDED.season_end_date,
-                                playoff_start_week = EXCLUDED.playoff_start_week,
-                                championship_week = EXCLUDED.championship_week,
-                                total_weeks = EXCLUDED.total_weeks,
-                                is_current_season = EXCLUDED.is_current_season,
-                                season_status = EXCLUDED.season_status
-                        """), record)
-                        
-                elif table_name == 'dim_league':
-                    for record in data:
-                        # Use proper upsert with ON CONFLICT instead of manual check
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams, 
-                                                  league_type, scoring_type, draft_type, is_active, 
-                                                  valid_from, valid_to)
-                            VALUES (:league_id, :league_name, :season_year, :num_teams,
-                                   :league_type, :scoring_type, :draft_type, :is_active,
-                                   :valid_from, :valid_to)
-                            ON CONFLICT (league_id, season_year) DO UPDATE SET
-                                league_name = EXCLUDED.league_name,
-                                num_teams = EXCLUDED.num_teams,
-                                league_type = EXCLUDED.league_type,
-                                scoring_type = EXCLUDED.scoring_type,
-                                draft_type = EXCLUDED.draft_type,
-                                is_active = EXCLUDED.is_active,
-                                valid_to = EXCLUDED.valid_to
-                        """), record)
-                        
-                elif table_name == 'dim_team':
-                    for record in data:
-                        # Get the league_key for this specific league_id
-                        league_result = conn.execute(text("""
-                            SELECT league_key FROM edw.dim_league WHERE league_id = :league_id LIMIT 1
-                        """), {"league_id": record['league_id']})
-                        league_row = league_result.fetchone()
-                        
-                        if not league_row:
-                            logger.warning(f"⚠️ League {record['league_id']} not found in edw.dim_league, skipping team {record['team_id']}")
-                            continue
-                            
-                        league_key = league_row[0]
-                        team_data = {**record, 'league_key': league_key}
-                        del team_data['league_id']  # Remove league_id, use league_key
-                        
-                        # Use proper upsert with ON CONFLICT
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_team (team_id, league_key, team_name, manager_name, 
-                                                manager_id, team_logo_url, is_active, valid_from, valid_to)
-                            VALUES (:team_id, :league_key, :team_name, :manager_name,
-                                   :manager_id, :team_logo_url, :is_active, :valid_from, :valid_to)
-                            ON CONFLICT (team_id) DO UPDATE SET
-                                league_key = EXCLUDED.league_key,
-                                team_name = EXCLUDED.team_name,
-                                manager_name = EXCLUDED.manager_name,
-                                manager_id = EXCLUDED.manager_id,
-                                team_logo_url = EXCLUDED.team_logo_url,
-                                is_active = EXCLUDED.is_active,
-                                valid_to = EXCLUDED.valid_to
-                        """), team_data)
-                        
-                elif table_name == 'dim_player':
-                    for record in data:
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_player (player_id, player_name, primary_position, 
-                                                  eligible_positions, nfl_team, jersey_number, 
-                                                  rookie_year, is_active, valid_from, valid_to)
-                            VALUES (:player_id, :player_name, :primary_position, :eligible_positions,
-                                   :nfl_team, :jersey_number, :rookie_year, :is_active, 
-                                   :valid_from, :valid_to)
-                            ON CONFLICT (player_id) DO UPDATE SET
-                                player_name = EXCLUDED.player_name,
-                                primary_position = EXCLUDED.primary_position,
-                                eligible_positions = EXCLUDED.eligible_positions,
-                                nfl_team = EXCLUDED.nfl_team,
-                                jersey_number = EXCLUDED.jersey_number,
-                                rookie_year = EXCLUDED.rookie_year,
-                                is_active = EXCLUDED.is_active,
-                                valid_to = EXCLUDED.valid_to
-                        """), record)
-                        
-                elif table_name == 'dim_week':
-                    for record in data:
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_week (season_year, week_number, week_type, 
-                                                week_start_date, week_end_date, is_current_week)
-                            VALUES (:season_year, :week_number, :week_type, 
-                                   :week_start_date, :week_end_date, :is_current_week)
-                            ON CONFLICT (season_year, week_number) DO UPDATE SET
-                                week_type = EXCLUDED.week_type,
-                                week_start_date = EXCLUDED.week_start_date,
-                                week_end_date = EXCLUDED.week_end_date,
-                                is_current_week = EXCLUDED.is_current_week
-                        """), record)
-                        
-                elif table_name == 'dim_manager':
-                    # Column list must match transform_managers' records and the
-                    # actual table; the previous version named columns that exist
-                    # in neither (first_active_season, valid_from, valid_to) and
-                    # failed on every run once it was reachable.
-                    for record in data:
-                        conn.execute(text("""
-                            INSERT INTO edw.dim_manager (manager_name, manager_id,
-                                                   first_season_year, last_season_year,
-                                                   total_seasons, total_leagues,
-                                                   is_current, include_in_analysis,
-                                                   email, display_name,
-                                                   profile_image_url, is_active)
-                            VALUES (:manager_name, :manager_id,
-                                    :first_season_year, :last_season_year,
-                                    :total_seasons, :total_leagues,
-                                    :is_current, :include_in_analysis,
-                                    :email, :display_name,
-                                    :profile_image_url, :is_active)
-                            ON CONFLICT (manager_name) DO UPDATE SET
-                                manager_id = EXCLUDED.manager_id,
-                                first_season_year = EXCLUDED.first_season_year,
-                                last_season_year = EXCLUDED.last_season_year,
-                                total_seasons = EXCLUDED.total_seasons,
-                                total_leagues = EXCLUDED.total_leagues,
-                                is_current = EXCLUDED.is_current,
-                                include_in_analysis = EXCLUDED.include_in_analysis,
-                                email = EXCLUDED.email,
-                                display_name = EXCLUDED.display_name,
-                                profile_image_url = EXCLUDED.profile_image_url,
-                                is_active = EXCLUDED.is_active,
-                                updated_at = CURRENT_TIMESTAMP
-                        """), record)
+                spec = DIMENSION_UPSERTS.get(table_name)
+                if spec is not None:
+                    records = data
+                    if table_name == 'dim_team':
+                        records = self._teams_with_league_keys(conn, data)
+                    columns, conflict, update_cols, extra_set = spec
+                    key_cols = [c.strip() for c in conflict.split(',')]
+                    insert_batched(
+                        conn, f'edw.{table_name}', columns,
+                        [tuple(r[c] for c in columns)
+                         for r in last_per_key(records, key_cols, table_name)],
+                        f'ON CONFLICT ({conflict}) DO UPDATE SET '
+                        f'{upsert_set(update_cols, extra_set)}')
                         
                 else:
                     logger.warning(f"⚠️ No upsert logic defined for {table_name}")
@@ -3244,6 +3176,27 @@ class EdwEtlProcessor:
             logger.error(f"❌ Failed to load {table_name}: {e}")
             return False
     
+    @staticmethod
+    def _teams_with_league_keys(conn, data: List[Dict]) -> List[Dict]:
+        """dim_team records with league_id swapped for dim_league's league_key.
+
+        One lookup for all leagues instead of one query per team. Teams whose
+        league is not in edw.dim_league are skipped with a warning, as before.
+        """
+        league_keys = dict(conn.execute(text(
+            "SELECT DISTINCT ON (league_id) league_id, league_key "
+            "FROM edw.dim_league ORDER BY league_id, league_key")).fetchall())
+        teams = []
+        for record in data:
+            league_key = league_keys.get(record['league_id'])
+            if league_key is None:
+                logger.warning(f"⚠️ League {record['league_id']} not found in edw.dim_league, skipping team {record['team_id']}")
+                continue
+            team = {**record, 'league_key': league_key}
+            del team['league_id']
+            teams.append(team)
+        return teams
+
     def process_fact_table(self, table_name: str) -> bool:
         """Process fact table with transformation and loading"""
         try:
@@ -3377,8 +3330,6 @@ class EdwEtlProcessor:
         Semantics are unchanged: same target columns, same ON CONFLICT key,
         same DO UPDATE set.
         """
-        from psycopg2.extras import execute_values
-
         if df is None or df.empty:
             return 0
 
@@ -3402,29 +3353,10 @@ class EdwEtlProcessor:
         rows = [tuple(None if pd.isna(v) else v for v in rec)
                 for rec in frame.itertuples(index=False, name=None)]
 
-        col_list = ', '.join(f'"{c}"' for c in columns)
-        set_parts = [f'"{c}" = EXCLUDED."{c}"' for c in update_cols]
-        # Expressions EXCLUDED cannot carry, e.g. updated_at = CURRENT_TIMESTAMP.
-        set_parts.extend(extra_set or [])
-        sets = ', '.join(set_parts)
-        sql = (f'INSERT INTO edw.{table} ({col_list}) VALUES %s '
-               f'ON CONFLICT ({conflict}) DO UPDATE SET {sets}')
-
-        # The batch runs on the raw DBAPI cursor, which SQLAlchemy does not
-        # see. If SQLAlchemy has no transaction of its own, its later
-        # commit() is a no-op and every row written here is rolled back when
-        # the connection returns to the pool - silently, with the upsert
-        # still reporting success. Opening the transaction explicitly makes
-        # the caller's commit cover this work.
-        if not conn.in_transaction():
-            conn.begin()
-
-        cursor = conn.connection.cursor()
-        try:
-            execute_values(cursor, sql, rows, page_size=page_size)
-        finally:
-            cursor.close()
-        return len(rows)
+        return insert_batched(
+            conn, f'edw.{table}', columns, rows,
+            f'ON CONFLICT ({conflict}) DO UPDATE SET {upsert_set(update_cols, extra_set)}',
+            page_size=page_size)
 
     def load_fact_table(self, table_name: str, data: List[Dict]) -> bool:
         """Load data into fact table with proper incremental loading strategy"""
