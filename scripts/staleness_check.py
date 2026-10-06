@@ -16,11 +16,15 @@ with a message if gh is unavailable, for hosts that alert on exit code).
 
 Usage:
     DATABASE_URL=postgres://... python scripts/staleness_check.py
-    python scripts/staleness_check.py --max-age-days 8 --repo lukesnow2/fantasy_football_v2
+    python scripts/staleness_check.py --max-age-days 6.5 --repo lukesnow2/fantasy_football_v2
 
-Example launchd/cron (weekly, Fridays 9am - two days after the Wednesday
-load should have landed):
-    0 9 * * 5  cd ~/Desktop/the-league && DATABASE_URL=... .venv/bin/python scripts/staleness_check.py
+Schedule it weekly, the morning after the Tuesday 08:00 America/Denver load:
+Wednesdays 09:00 with --max-age-days 6.5. A healthy check sees a run ~1 day
+old; one missed Tuesday makes it ~8, or ~7 when the last good run was a
+manual Wednesday run (a 7.5-day threshold missed exactly that on
+2026-10-06). The deployed launchd job is described in RUNBOOK.md; note that
+macOS won't let launchd/cron jobs read ~/Desktop, so it runs a copy of this
+script from outside the repo.
 """
 import argparse
 import os
