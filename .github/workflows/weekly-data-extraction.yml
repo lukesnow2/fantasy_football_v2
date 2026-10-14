@@ -12,7 +12,8 @@
 #     daylight saving, so both candidate hours are scheduled (14:00 UTC =
 #     08:00 MDT, 15:00 UTC = 08:00 MST) and --require-local-hour lets
 #     exactly one through; the other exits in seconds having touched
-#     nothing. Completeness comes from each week's own Yahoo scoreboard
+#     nothing. The gate judges which entry fired (github.event.schedule),
+#     not the clock when the run starts, so a run GitHub delays still loads. Completeness comes from each week's own Yahoo scoreboard
 #     status, not from current_week, so a finished week is never read as
 #     in-progress just because Yahoo has not advanced the season pointer
 #     yet. Stat corrections land Tue-Thu and are picked up by the rolling
@@ -118,12 +119,17 @@ jobs:
         if: github.event_name != 'schedule' || github.event.schedule != '0 15 1 * *'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # The cron entry that triggered this run (empty for manual runs).
+          # Passed as env, not in ARGS: it contains spaces and ARGS is split.
+          SCHEDULED_CRON: ${{ github.event.schedule }}
         run: |
           ARGS=""
           if [ -n "${{ inputs.season }}" ]; then ARGS="$ARGS --season ${{ inputs.season }}"; fi
           if [ -n "${{ inputs.weeks }}" ]; then ARGS="$ARGS --weeks ${{ inputs.weeks }}"; fi
           if [ "${{ inputs.stats_only }}" = "true" ]; then ARGS="$ARGS --stats-only"; fi
           # Only the scheduled pair is DST-gated; a manual dispatch runs now.
+          # The gate judges the slot SCHEDULED_CRON names, not the start-up
+          # clock: GitHub can start a scheduled run hours late (2026-10-13).
           if [ "${{ github.event_name }}" = "schedule" ]; then
             ARGS="$ARGS --require-local-hour 8 --local-tz America/Denver"
           fi
