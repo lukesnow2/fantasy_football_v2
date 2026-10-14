@@ -190,7 +190,11 @@ python scripts/incremental_load.py --season 2019 --stats-only    # stats repair
 `.github/workflows/weekly-data-extraction.yml` invokes it Tuesdays 08:00
 America/Denver in-season. GitHub cron is UTC-only, so it schedules both
 14:00 and 15:00 UTC and `--require-local-hour 8 --local-tz America/Denver` lets
-exactly one through across DST. Plus a monthly heartbeat (token keepalive + repo-activity commit
+exactly one through across DST. The gate judges the cron entry that fired
+(`SCHEDULED_CRON`, from `github.event.schedule`), not the clock when the run
+starts: GitHub can start scheduled runs hours late (both 2026-10-13 runs
+started after 13:00 Mountain and, under the old wall-clock gate, both
+skipped). The run log says which slot it judged ("Scheduled slot ..."). Plus a monthly heartbeat (token keepalive + repo-activity commit
 against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
 `DATABASE_URL`, `YAHOO_CLIENT_KEY`, `YAHOO_CLIENT_SECRET`, `YAHOO_REFRESH_TOKEN`.
 `DATABASE_URL` must be Neon's **direct** host (as in `web/.env.production.local`),

@@ -27,7 +27,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,12 +71,59 @@ def local_hour_matches(hour, tz_name, now=None):
 
     GitHub cron only speaks UTC and does not follow daylight saving, so a
     fixed UTC time drifts an hour against Mountain Time mid-season. The
-    workflow schedules both candidate UTC hours and this gate lets exactly
+    workflow schedules both candidate UTC hours and the gate lets exactly
     the right one through, keeping the real-world slot fixed year-round.
+
+    Wall-clock only: a scheduled run should be judged by the slot it was
+    scheduled for (scheduled_slot_matches), because GitHub can start it
+    hours late.
     """
     tz = ZoneInfo(tz_name)
     now = now.astimezone(tz) if now else datetime.now(tz)
     return now.hour == hour
+
+
+def scheduled_slot_matches(cron, hour, tz_name, now=None):
+    """True when the cron entry that triggered this run means `hour` local.
+
+    Judges the SCHEDULED slot, not the clock at start-up. GitHub starts
+    scheduled runs late under load - on 2026-10-13 both Tuesday entries
+    (14:00 and 15:00 UTC) started after 13:00 Mountain, each read the
+    wall-clock hour as "not 08:00", took itself for the off-DST twin and
+    exited, and nothing loaded. The slot is the most recent occurrence of
+    the entry's UTC minute and hour at or before `now` (up to a day late),
+    and its offset in `tz_name` on that date decides.
+    """
+    fields = cron.split()
+    if len(fields) != 5 or not (fields[0].isdigit() and fields[1].isdigit()):
+        raise ValueError(f"expected a cron entry with a fixed minute and hour, got {cron!r}")
+    utc = ZoneInfo('UTC')
+    now = now.astimezone(utc) if now else datetime.now(utc)
+    slot = now.replace(hour=int(fields[1]), minute=int(fields[0]),
+                       second=0, microsecond=0)
+    if slot > now:
+        slot -= timedelta(days=1)
+    return slot.astimezone(ZoneInfo(tz_name)).hour == hour
+
+
+def schedule_gate(hour, tz_name, scheduled_cron=None, now=None):
+    """(should_run, message) for a run gated to `hour` local time.
+
+    With the cron entry that triggered the run, judge that entry's slot
+    (scheduled_slot_matches); without one, the clock (local_hour_matches).
+    Raises ValueError for a cron entry whose slot can't be determined.
+    """
+    if scheduled_cron:
+        if scheduled_slot_matches(scheduled_cron, hour, tz_name, now):
+            return True, (f"Scheduled slot {scheduled_cron!r} is {hour:02d}:00 "
+                          f"in {tz_name} - loading.")
+        return False, (f"Scheduled slot {scheduled_cron!r} is not {hour:02d}:00 "
+                       f"in {tz_name} - this is the off-DST twin of the scheduled "
+                       f"run. Exiting cleanly.")
+    if local_hour_matches(hour, tz_name, now):
+        return True, f"It is {hour:02d}:00 in {tz_name} - loading."
+    return False, (f"Not {hour:02d}:00 in {tz_name} - this is the off-DST twin "
+                   f"of the scheduled run. Exiting cleanly.")
 
 
 def parse_args(argv=None):
@@ -110,6 +157,11 @@ def parse_args(argv=None):
     p.add_argument('--local-tz', default='America/Denver',
                    help='Timezone for --require-local-hour '
                         '(default America/Denver)')
+    p.add_argument('--scheduled-cron', default=os.getenv('SCHEDULED_CRON') or None,
+                   help='The cron entry that triggered this run (default: '
+                        '$SCHEDULED_CRON). With --require-local-hour, judge '
+                        'that entry\'s slot instead of the start-up clock, so '
+                        'a run GitHub starts late still loads')
     return p.parse_args(argv)
 
 
@@ -441,12 +493,16 @@ def run(args) -> int:
         return 2
 
     # Cheapest gate first: costs no database connection and no Yahoo call.
-    if args.require_local_hour is not None and not local_hour_matches(
-            args.require_local_hour, args.local_tz):
-        logger.info("Not %02d:00 in %s - this is the off-DST twin of the "
-                    "scheduled run. Exiting cleanly.",
-                    args.require_local_hour, args.local_tz)
-        return 0
+    if args.require_local_hour is not None:
+        try:
+            should_run, message = schedule_gate(
+                args.require_local_hour, args.local_tz, args.scheduled_cron)
+        except ValueError as e:
+            logger.error("Cannot apply the schedule gate: %s", e)
+            return 2
+        logger.info(message)
+        if not should_run:
+            return 0
 
     if not (args.force or args.season or args.weeks or is_fantasy_season()):
         logger.info("Outside the fantasy season window (Aug 18 - Jan 18); "
