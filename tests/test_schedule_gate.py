@@ -115,11 +115,17 @@ def test_scheduled_cron_comes_from_the_environment(monkeypatch):
 
 
 def _entries_for_today():
-    """(on-slot entry, off-DST twin) for today's Denver UTC offset."""
-    offset_hours = int(datetime.now(ZoneInfo(DENVER)).utcoffset().total_seconds() // 3600)
-    on_hour = 8 - offset_hours                     # 14 in MDT, 15 in MST
-    twin_hour = 15 if on_hour == 14 else 14
-    return (f'0 {on_hour} * 9,10,11,12,1 2', f'0 {twin_hour} * 9,10,11,12,1 2')
+    """(on-slot entry, off-DST twin) as the gate will judge them right now.
+
+    Chosen by the slot the gate evaluates (the latest occurrence of each
+    entry's UTC hour), not by today's offset: on the morning daylight saving
+    starts or ends, before 14:00 UTC, that slot is yesterday's and carries
+    yesterday's offset. scheduled_slot_matches is tested on its own above.
+    """
+    on_slot = [e for e in (MDT_ENTRY, MST_ENTRY) if scheduled_slot_matches(e, 8, DENVER)]
+    assert len(on_slot) == 1, on_slot
+    twin = MST_ENTRY if on_slot[0] == MDT_ENTRY else MDT_ENTRY
+    return on_slot[0], twin
 
 
 def test_run_exits_cleanly_for_the_twin_before_touching_the_database(monkeypatch, caplog):
