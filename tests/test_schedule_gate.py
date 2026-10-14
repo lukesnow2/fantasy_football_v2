@@ -4,12 +4,13 @@ GitHub cron is UTC-only and does not follow daylight saving, so the workflow
 schedules both candidate hours (14:00 and 15:00 UTC) and this gate admits
 exactly one. Without it the run drifts to 07:00 or 09:00 local each November.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from scripts.incremental_load import local_hour_matches
+from scripts.incremental_load import (
+    local_hour_matches, parse_args, run, schedule_gate, scheduled_slot_matches)
 
 UTC = ZoneInfo('UTC')
 DENVER = 'America/Denver'
@@ -62,10 +63,6 @@ def test_gate_is_timezone_aware_not_utc_offset_math():
 # clock: GitHub can start them hours late. On 2026-10-13 both entries started
 # after 13:00 Mountain, the wall-clock gate skipped both, and nothing loaded.
 
-from datetime import timedelta  # noqa: E402
-
-from scripts.incremental_load import parse_args, scheduled_slot_matches  # noqa: E402
-
 MDT_ENTRY = '0 14 * 9,10,11,12,1 2'   # 08:00 while daylight saving is on
 MST_ENTRY = '0 15 * 9,10,11,12,1 2'   # 08:00 after it ends
 
@@ -115,3 +112,53 @@ def test_scheduled_cron_comes_from_the_environment(monkeypatch):
     assert parse_args([]).scheduled_cron == MDT_ENTRY
     monkeypatch.setenv('SCHEDULED_CRON', '')   # manual runs: empty
     assert parse_args([]).scheduled_cron is None
+
+
+def _entries_for_today():
+    """(on-slot entry, off-DST twin) for today's Denver UTC offset."""
+    offset_hours = int(datetime.now(ZoneInfo(DENVER)).utcoffset().total_seconds() // 3600)
+    on_hour = 8 - offset_hours                     # 14 in MDT, 15 in MST
+    twin_hour = 15 if on_hour == 14 else 14
+    return (f'0 {on_hour} * 9,10,11,12,1 2', f'0 {twin_hour} * 9,10,11,12,1 2')
+
+
+def test_run_exits_cleanly_for_the_twin_before_touching_the_database(monkeypatch, caplog):
+    # Judged by the entry that fired, whatever the clock says now. The URL
+    # points nowhere: reaching the database would fail, not return 0.
+    _, twin = _entries_for_today()
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable')
+    monkeypatch.setenv('SCHEDULED_CRON', twin)
+    with caplog.at_level('INFO'):
+        assert run(parse_args(['--require-local-hour', '8'])) == 0
+    assert 'off-DST twin' in caplog.text and twin in caplog.text
+
+
+def test_run_refuses_a_cron_entry_it_cannot_judge(monkeypatch, caplog):
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable')
+    monkeypatch.setenv('SCHEDULED_CRON', '0 */2 * * 2')
+    assert run(parse_args(['--require-local-hour', '8'])) == 2
+    assert 'Cannot apply the schedule gate' in caplog.text
+
+
+def test_gate_uses_the_slot_when_given_and_the_clock_otherwise():
+    late = datetime(2026, 10, 13, 19, 59, tzinfo=UTC)          # 13:59 Mountain
+    assert schedule_gate(8, DENVER, MDT_ENTRY, late)[0] is True
+    assert schedule_gate(8, DENVER, None, late)[0] is False     # wall clock
+    assert 'Scheduled slot' in schedule_gate(8, DENVER, MST_ENTRY, late)[1]
+    assert schedule_gate(8, DENVER, None, late)[1].startswith('Not 08:00')
+
+
+def test_run_proceeds_for_the_on_slot_entry_whatever_the_clock(monkeypatch, caplog):
+    # The case the wall-clock gate got wrong: the right entry, started late.
+    # Past the gate the run goes on to the (unreachable) database, so it must
+    # not come back as the gate's clean 0.
+    on_slot, _ = _entries_for_today()
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable')
+    monkeypatch.setenv('SCHEDULED_CRON', on_slot)
+    with caplog.at_level('INFO'):
+        try:
+            rc = run(parse_args(['--require-local-hour', '8', '--force']))
+        except Exception:
+            rc = 'raised past the gate'
+    assert rc != 0
+    assert f"Scheduled slot {on_slot!r} is 08:00" in caplog.text

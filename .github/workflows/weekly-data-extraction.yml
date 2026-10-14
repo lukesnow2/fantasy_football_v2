@@ -13,7 +13,8 @@
 #     08:00 MDT, 15:00 UTC = 08:00 MST) and --require-local-hour lets
 #     exactly one through; the other exits in seconds having touched
 #     nothing. The gate judges which entry fired (github.event.schedule),
-#     not the clock when the run starts, so a run GitHub delays still loads. Completeness comes from each week's own Yahoo scoreboard
+#     not the clock when the run starts, so a run GitHub delays still
+#     loads. Completeness comes from each week's own Yahoo scoreboard
 #     status, not from current_week, so a finished week is never read as
 #     in-progress just because Yahoo has not advanced the season pointer
 #     yet. Stat corrections land Tue-Thu and are picked up by the rolling

@@ -106,6 +106,26 @@ def scheduled_slot_matches(cron, hour, tz_name, now=None):
     return slot.astimezone(ZoneInfo(tz_name)).hour == hour
 
 
+def schedule_gate(hour, tz_name, scheduled_cron=None, now=None):
+    """(should_run, message) for a run gated to `hour` local time.
+
+    With the cron entry that triggered the run, judge that entry's slot
+    (scheduled_slot_matches); without one, the clock (local_hour_matches).
+    Raises ValueError for a cron entry whose slot can't be determined.
+    """
+    if scheduled_cron:
+        if scheduled_slot_matches(scheduled_cron, hour, tz_name, now):
+            return True, (f"Scheduled slot {scheduled_cron!r} is {hour:02d}:00 "
+                          f"in {tz_name} - loading.")
+        return False, (f"Scheduled slot {scheduled_cron!r} is not {hour:02d}:00 "
+                       f"in {tz_name} - this is the off-DST twin of the scheduled "
+                       f"run. Exiting cleanly.")
+    if local_hour_matches(hour, tz_name, now):
+        return True, f"It is {hour:02d}:00 in {tz_name} - loading."
+    return False, (f"Not {hour:02d}:00 in {tz_name} - this is the off-DST twin "
+                   f"of the scheduled run. Exiting cleanly.")
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -474,20 +494,15 @@ def run(args) -> int:
 
     # Cheapest gate first: costs no database connection and no Yahoo call.
     if args.require_local_hour is not None:
-        if args.scheduled_cron:
-            on_slot = scheduled_slot_matches(
-                args.scheduled_cron, args.require_local_hour, args.local_tz)
-        else:
-            on_slot = local_hour_matches(args.require_local_hour, args.local_tz)
-        if not on_slot:
-            logger.info("Scheduled slot %s is not %02d:00 in %s - this is the "
-                        "off-DST twin of the scheduled run. Exiting cleanly.",
-                        args.scheduled_cron or 'now', args.require_local_hour,
-                        args.local_tz)
+        try:
+            should_run, message = schedule_gate(
+                args.require_local_hour, args.local_tz, args.scheduled_cron)
+        except ValueError as e:
+            logger.error("Cannot apply the schedule gate: %s", e)
+            return 2
+        logger.info(message)
+        if not should_run:
             return 0
-        if args.scheduled_cron:
-            logger.info("Scheduled slot %s is %02d:00 in %s - loading.",
-                        args.scheduled_cron, args.require_local_hour, args.local_tz)
 
     if not (args.force or args.season or args.weeks or is_fantasy_season()):
         logger.info("Outside the fantasy season window (Aug 18 - Jan 18); "
