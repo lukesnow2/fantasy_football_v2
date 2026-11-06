@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { Trophy, ChevronDown, Info } from 'lucide-svelte';
-	import type { OddsResult, TeamOdds as EngineTeamOdds } from '$lib/playoff-odds';
+	import {
+		compareSeeding,
+		type OddsResult,
+		type TeamOdds as EngineTeamOdds
+	} from '$lib/playoff-odds';
 
 	/**
 	 * Simulated playoff odds for the This Season page. Replaces a "Playoff
@@ -69,9 +73,7 @@
 	// Final seeding, once the regular season is over: wins, then points for.
 	const seeds = $derived.by(() => {
 		if (!data?.teams) return [];
-		return [...data.teams].sort(
-			(a, b) => b.wins + b.ties / 2 - (a.wins + a.ties / 2) || b.pointsFor - a.pointsFor
-		);
+		return [...data.teams].sort(compareSeeding);
 	});
 
 	// Remaining-schedule difficulty ranked within the league (1 = toughest).

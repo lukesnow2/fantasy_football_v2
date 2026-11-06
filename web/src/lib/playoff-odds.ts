@@ -331,6 +331,20 @@ function completeRoundRobin(
 	return fallback;
 }
 
+// ------------------------------------------------------------------- seeding
+
+/**
+ * The league's seeding order: wins (ties as half), then points for. It
+ * reproduces the real playoff field in every season 2010-2025. The standings
+ * and the final field use this; the simulation sorts by the same two keys.
+ */
+export function compareSeeding(
+	a: { wins: number; ties: number; pointsFor: number },
+	b: { wins: number; ties: number; pointsFor: number }
+): number {
+	return b.wins + b.ties / 2 - (a.wins + a.ties / 2) || b.pointsFor - a.pointsFor;
+}
+
 // ------------------------------------------------------------------- bracket
 
 /**

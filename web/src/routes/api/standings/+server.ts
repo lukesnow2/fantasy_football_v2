@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { getLeagueFormat } from '$lib/server/league-format';
+import { compareSeeding } from '$lib/playoff-odds';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
@@ -27,10 +28,12 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// 2. Regular-season totals per team. fact_team_performance stores a row
 		// per week, playoff and consolation weeks included: summing them all
-		// counted bracket games in the record (7 of 10 teams in 2025), so the
-		// sum stops at the season's own regular-season length.
-		const format = await getLeagueFormat(targetSeason);
-		const standingsRows = await db.execute(sql`
+		// counted bracket games in the record (7 of 10 teams in 2025). Bracket
+		// weeks are dropped by the games' own flags rather than a week cutoff,
+		// which would be a guess until the season's format is stored.
+		const [format, standingsRows] = await Promise.all([
+			getLeagueFormat(targetSeason),
+			db.execute(sql`
 			SELECT
 				dt.team_key                  AS team_key,
 				dt.team_name                 AS team_name,
@@ -45,11 +48,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			FROM edw.fact_team_performance ftp
 			JOIN edw.dim_team dt   ON ftp.team_key = dt.team_key
 			JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
-			JOIN edw.dim_week dw   ON ftp.week_key = dw.week_key
 			WHERE ftp.season_year = ${targetSeason}
-			  AND dw.week_number <= ${format.regularSeasonWeeks}
+			  AND NOT EXISTS (
+				SELECT 1 FROM edw.fact_matchup fm
+				WHERE fm.league_key = ftp.league_key
+				  AND fm.week_key = ftp.week_key
+				  AND (fm.is_playoffs OR fm.is_consolation)
+			  )
 			GROUP BY dt.team_key, dt.team_name, dt.manager_name, dl.league_name
-		`);
+		`)
+		]);
 
 		const standings = standingsRows.map((r: any) => {
 			const wins = Number(r.wins) || 0;
@@ -77,13 +85,10 @@ export const GET: RequestHandler = async ({ url }) => {
 		});
 
 		// Regular-season ordering (used as-is for in-progress seasons, and as the
-		// fallback rank for any team not placed in a bracket): wins (ties as
-		// half), then points for - the league's seeding, which reproduces the
-		// real playoff field every season 2010-2025. Point differential broke
-		// ties here before, so this table could disagree with the playoff odds.
-		standings.sort(
-			(a, b) => b.wins + b.ties / 2 - (a.wins + a.ties / 2) || b.pointsFor - a.pointsFor
-		);
+		// fallback rank for any team not placed in a bracket): the league's
+		// seeding, shared with the playoff odds. Point differential broke ties
+		// here before, so this table could disagree with the odds.
+		standings.sort(compareSeeding);
 		standings.forEach((t, i) => (t.seasonRank = i + 1));
 
 		if (standings.length === 0) {

@@ -2235,7 +2235,16 @@ class EdwEtlProcessor:
         league's own playoff games show, else the defaults. Always per league:
         the old lookup took the earliest playoff week across every season
         loaded, so with history present it put 2026's playoffs in week 14.
+
+        Cached per league for the run: the fact build asks once per league-week,
+        and the answer only depends on data loaded before it.
         """
+        cache = self.__dict__.setdefault('_league_formats', {})
+        if league_id not in cache:
+            cache[league_id] = self._resolve_league_format(league_id)
+        return dict(cache[league_id])
+
+    def _resolve_league_format(self, league_id: str) -> Dict[str, int]:
         league = next((l for l in (self.data or {}).get('leagues', [])
                        if l.get('league_id') == league_id), {})
         start = _positive_int(league.get('playoff_start_week'))

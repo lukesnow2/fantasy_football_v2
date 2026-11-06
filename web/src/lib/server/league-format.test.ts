@@ -61,6 +61,13 @@ describe('tradeDeadlinePassed', () => {
 		expect(tradeDeadlinePassed(format, new Date('2026-11-23T12:00:00Z'))).toBe(true);
 	});
 
+	it('is still the deadline day on the evening of it in the US', () => {
+		// 8pm Pacific on the 22nd is already the 23rd in UTC.
+		expect(tradeDeadlinePassed(format, new Date('2026-11-23T04:00:00Z'))).toBe(false);
+		// And it has passed by early morning Pacific on the 23rd.
+		expect(tradeDeadlinePassed(format, new Date('2026-11-23T09:00:00Z'))).toBe(true);
+	});
+
 	it("doesn't claim either way when the deadline isn't known", () => {
 		expect(tradeDeadlinePassed(resolveLeagueFormat(2026, undefined, 14))).toBeNull();
 	});

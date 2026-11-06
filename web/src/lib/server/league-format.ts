@@ -65,8 +65,17 @@ export function tradeDeadlinePassed(
 	today: Date = new Date()
 ): boolean | null {
 	if (!format.tradeEndDate) return null;
-	// The deadline day itself is still open for trades.
-	return today.toISOString().slice(0, 10) > format.tradeEndDate;
+	// Yahoo's deadline is a US calendar date and the day itself is still open.
+	// Compare against the date in the westernmost US zone, so it's never
+	// called passed while it's still the deadline day anywhere in the league
+	// (UTC rolls over at 5pm Pacific).
+	const localDate = new Intl.DateTimeFormat('en-CA', {
+		timeZone: 'America/Los_Angeles',
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit'
+	}).format(today);
+	return localDate > format.tradeEndDate;
 }
 
 export async function getLeagueFormat(season: number): Promise<LeagueFormat> {

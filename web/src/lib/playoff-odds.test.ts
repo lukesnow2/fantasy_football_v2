@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	bracketSlots,
+	compareSeeding,
 	buildSchedule,
 	gamesFingerprint,
 	rng,
@@ -250,5 +251,15 @@ describe('bracket', () => {
 		expect(sum((t) => t.titleOdds)).toBeCloseTo(1, 6);
 		// Only playoff teams can win it.
 		for (const t of res.teams) expect(t.titleOdds).toBeLessThanOrEqual(t.playoffOdds + 1e-9);
+	});
+});
+
+describe('compareSeeding', () => {
+	it('orders by wins with ties as half, then points for', () => {
+		const t = (wins: number, ties: number, pointsFor: number) => ({ wins, ties, pointsFor });
+		const sorted = [t(7, 0, 1500), t(7, 1, 1400), t(8, 0, 1300), t(7, 0, 1600)].sort(
+			compareSeeding
+		);
+		expect(sorted).toEqual([t(8, 0, 1300), t(7, 1, 1400), t(7, 0, 1600), t(7, 0, 1500)]);
 	});
 });
