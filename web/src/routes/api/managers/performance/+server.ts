@@ -27,18 +27,47 @@ function num(value: unknown): number | null {
  * A season is in progress until its championship game is in fact_matchup.
  * Wins are regular-season only, like the expected wins they are compared with.
  * With `manager`, only that manager's seasons are read. `latestSeason` is the
- * league's most recent season, so the luck card can show it between seasons.
+ * latest season the power rankings have ranked, so the luck card can show it
+ * between seasons. Not dim_league's latest: the new season's league is loaded
+ * at the draft, weeks before a game, and every manager would have read
+ * "Didn't play" until week 1 was ranked.
+ *
+ * Once a playoff game is in (`bracketSet`), the regular season is over and the
+ * team's bracket place (`madePlayoffs`) replaces its week-14 playoff odds. The
+ * place comes from the final regular-season standings (record_rank within the
+ * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
+ * playoff game, so the top seeds, on a first-round bye, would read "missed"
+ * for a week. The standings rule matches the real bracket for every team
+ * 2012-2025 (earlier ranks skip hidden managers, but only a live season uses it).
  */
 async function loadLuckBySeason(
 	manager: string | null
 ): Promise<{ byManager: Map<string, SeasonLuck[]>; latestSeason: number | null }> {
-	const [latest] = Array.from(
-		await db.execute(sql`SELECT MAX(season_year) AS season_year FROM edw.dim_league`)
-	) as any[];
-	const rows = Array.from(
-		await db.execute(sql`
+	const [latestResult, luckResult] = await Promise.all([
+		db.execute(sql`
+			SELECT MAX(l.season_year) AS season_year
+			FROM edw.mart_weekly_power_rankings p
+			JOIN edw.dim_league l ON l.league_key = p.league_key
+		`),
+		db.execute(sql`
 			WITH finished AS (
 				SELECT DISTINCT league_key FROM edw.fact_matchup WHERE is_championship
+			),
+			bracketed AS (
+				SELECT DISTINCT league_key FROM edw.fact_matchup WHERE is_playoffs
+			),
+			-- Bracket size, from the latest finished season (6 since 2008).
+			spots AS (
+				SELECT COUNT(DISTINCT v.team_key) AS n
+				FROM edw.fact_matchup fm
+				CROSS JOIN LATERAL (VALUES (fm.team1_key), (fm.team2_key)) AS v(team_key)
+				WHERE fm.is_playoffs AND NOT fm.is_consolation
+				  AND fm.league_key = (
+					SELECT c.league_key FROM edw.fact_matchup c
+					JOIN edw.dim_league cl ON cl.league_key = c.league_key
+					WHERE c.is_championship
+					ORDER BY cl.season_year DESC LIMIT 1
+				  )
 			),
 			latest AS (
 				SELECT
@@ -47,7 +76,7 @@ async function loadLuckBySeason(
 					p.team_key     AS team_key,
 					w.week_number  AS week_number,
 					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
-					p.league_key,
+					p.record_rank, p.league_key,
 					ROW_NUMBER() OVER (
 						PARTITION BY p.league_key, p.team_key ORDER BY w.week_number DESC
 					) AS rn
@@ -62,13 +91,18 @@ async function loadLuckBySeason(
 				latest.manager_name, latest.season_year, latest.team_key, latest.week_number,
 				latest.wins, latest.ties, latest.pythagorean_wins, latest.luck_factor,
 				latest.playoff_odds,
-				finished.league_key IS NULL AS in_progress
+				finished.league_key IS NULL AS in_progress,
+				bracketed.league_key IS NOT NULL AS bracket_set,
+				COALESCE(latest.record_rank <= (SELECT n FROM spots), false) AS made_playoffs
 			FROM latest
 			LEFT JOIN finished ON finished.league_key = latest.league_key
+			LEFT JOIN bracketed ON bracketed.league_key = latest.league_key
 			WHERE latest.rn = 1
 			ORDER BY latest.manager_name, latest.season_year
 		`)
-	) as any[];
+	]);
+	const [latest] = Array.from(latestResult) as any[];
+	const rows = Array.from(luckResult) as any[];
 
 	const byManager = new Map<string, SeasonLuck[]>();
 	for (const r of rows) {
@@ -83,7 +117,9 @@ async function loadLuckBySeason(
 			pythagoreanWins: num(r.pythagoreanWins),
 			luckFactor: num(r.luckFactor),
 			playoffOdds: num(r.playoffOdds),
-			inProgress: Boolean(r.inProgress)
+			inProgress: Boolean(r.inProgress),
+			bracketSet: Boolean(r.bracketSet),
+			madePlayoffs: Boolean(r.madePlayoffs)
 		});
 		byManager.set(name, list);
 	}
@@ -279,7 +315,13 @@ export const GET: RequestHandler = async ({ url }) => {
 						NOT EXISTS (
 							SELECT 1 FROM edw.fact_matchup fm
 							WHERE fm.is_championship AND fm.league_key = MAX(tp.league_key)
-						)                                           AS in_progress
+						)                                           AS in_progress,
+						-- A playoff game is in: the bracket is set, so made_playoffs
+						-- is final even while the season is still being played.
+						EXISTS (
+							SELECT 1 FROM edw.fact_matchup fm
+							WHERE fm.is_playoffs AND fm.league_key = MAX(tp.league_key)
+						)                                           AS bracket_set
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
 					JOIN edw.dim_team dt ON dt.team_key = tp.team_key
@@ -298,10 +340,14 @@ export const GET: RequestHandler = async ({ url }) => {
 					return {
 						...row,
 						inProgress: Boolean(row.inProgress),
+						bracketSet: Boolean(row.bracketSet),
 						regularSeasonWins: l ? l.wins + 0.5 * l.ties : null,
 						pythagoreanWins: l?.pythagoreanWins ?? null,
 						luckFactor: l?.luckFactor ?? null,
-						playoffOdds: row.inProgress && l ? l.playoffOdds : null,
+						playoffOdds: row.inProgress && !row.bracketSet && l ? l.playoffOdds : null,
+						// Live playoffs: the standings place, not is_playoff_team, which
+						// misses top seeds on a first-round bye (see loadLuckBySeason).
+						madePlayoffs: row.inProgress && row.bracketSet && l ? l.madePlayoffs : row.madePlayoffs,
 						throughWeek: l?.weekNumber ?? null
 					};
 				});

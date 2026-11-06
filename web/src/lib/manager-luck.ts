@@ -14,6 +14,9 @@ export type SeasonLuck = {
 	luckFactor: number | null;
 	playoffOdds: number | null;
 	inProgress: boolean;
+	/** A playoff game has been played: the regular season, and the bracket, are settled. */
+	bracketSet: boolean;
+	madePlayoffs: boolean;
 };
 
 export type CurrentSeasonLuck = {
@@ -24,8 +27,14 @@ export type CurrentSeasonLuck = {
 	regularSeasonWins: number;
 	pythagoreanWins: number | null;
 	luckFactor: number | null;
-	/** Only while the season is being played, and only for a single team. */
+	/**
+	 * Only during the regular season, and only for a single team. Once the
+	 * bracket is set the odds are stale (they are week 14's), so they give way
+	 * to inPlayoffs.
+	 */
 	playoffOdds: number | null;
+	/** Whether the bracket includes this team, once it is set; otherwise null. */
+	inPlayoffs: boolean | null;
 };
 
 /**
@@ -65,6 +74,7 @@ function currentSeason(
 	const total = (f: (s: SeasonLuck) => number | null) =>
 		rows.some((s) => f(s) == null) ? null : rows.reduce((acc, s) => acc + (f(s) as number), 0);
 	const final = live.length === 0;
+	const bracketSet = rows.every((s) => s.bracketSet);
 	return {
 		seasonYear: rows[0].seasonYear,
 		throughWeek: Math.max(...rows.map((s) => s.weekNumber)),
@@ -72,6 +82,7 @@ function currentSeason(
 		regularSeasonWins: (total((s) => s.wins) as number) + 0.5 * (total((s) => s.ties) as number),
 		pythagoreanWins: total((s) => s.pythagoreanWins),
 		luckFactor: total((s) => s.luckFactor),
-		playoffOdds: !final && rows.length === 1 ? rows[0].playoffOdds : null
+		playoffOdds: !final && !bracketSet && rows.length === 1 ? rows[0].playoffOdds : null,
+		inPlayoffs: !final && bracketSet ? rows.some((s) => s.madePlayoffs) : null
 	};
 }

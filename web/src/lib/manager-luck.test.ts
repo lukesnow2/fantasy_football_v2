@@ -12,13 +12,21 @@ function season(seasonYear: number, over: Partial<SeasonLuck> = {}): SeasonLuck 
 		luckFactor: 1,
 		playoffOdds: 0.9,
 		inProgress: false,
+		bracketSet: true,
+		madePlayoffs: false,
 		...over
 	};
 }
 
 describe('summarizeLuck', () => {
 	it('uses the season being played, with its playoff odds', () => {
-		const live = season(2026, { inProgress: true, weekNumber: 9, wins: 4, playoffOdds: 0.38 });
+		const live = season(2026, {
+			inProgress: true,
+			bracketSet: false,
+			weekNumber: 9,
+			wins: 4,
+			playoffOdds: 0.38
+		});
 		const s = summarizeLuck([season(2025), live], 2026);
 		expect(s.currentSeason).toMatchObject({
 			seasonYear: 2026,
@@ -55,6 +63,7 @@ describe('summarizeLuck', () => {
 		const a = season(2026, {
 			teamKey: 1,
 			inProgress: true,
+			bracketSet: false,
 			wins: 3,
 			pythagoreanWins: 2.5,
 			luckFactor: 0.5
@@ -62,6 +71,7 @@ describe('summarizeLuck', () => {
 		const b = season(2026, {
 			teamKey: 2,
 			inProgress: true,
+			bracketSet: false,
 			wins: 1,
 			ties: 1,
 			pythagoreanWins: 2,
@@ -82,5 +92,21 @@ describe('summarizeLuck', () => {
 		);
 		expect(s.luckSeasons).toBe(2);
 		expect(s.careerLuckFactor).toBe(3);
+	});
+
+	it('in the playoffs, gives the bracket place instead of stale odds', () => {
+		const inBracket = season(2026, { inProgress: true, bracketSet: true, madePlayoffs: true });
+		expect(summarizeLuck([inBracket], 2026).currentSeason).toMatchObject({
+			final: false,
+			playoffOdds: null,
+			inPlayoffs: true
+		});
+		const missed = season(2026, { inProgress: true, bracketSet: true, madePlayoffs: false });
+		expect(summarizeLuck([missed], 2026).currentSeason?.inPlayoffs).toBe(false);
+	});
+
+	it('during the regular season there is no bracket place yet', () => {
+		const live = season(2026, { inProgress: true, bracketSet: false });
+		expect(summarizeLuck([live], 2026).currentSeason?.inPlayoffs).toBeNull();
 	});
 });

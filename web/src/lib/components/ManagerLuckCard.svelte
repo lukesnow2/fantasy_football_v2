@@ -92,7 +92,16 @@
 						>{formatLuck(current.luckFactor)} W</span
 					>
 				</div>
-				{#if !current.final}
+				{#if current.inPlayoffs != null}
+					<div class="flex justify-between">
+						<span class="text-slate-400">Playoffs</span>
+						<span
+							class="font-bold tabular-nums {current.inPlayoffs ? 'text-blue-400' : 'text-red-400'}"
+						>
+							{current.inPlayoffs ? 'In the bracket' : 'Missed'}
+						</span>
+					</div>
+				{:else if !current.final}
 					<div class="flex justify-between">
 						<span class="text-slate-400">
 							<MetricHelp
@@ -117,7 +126,7 @@
 					{manager?.latestSeason ?? 'This season'}
 				</div>
 				<div class="text-sm text-slate-400">
-					{manager?.latestSeason ? `Didn't play in ${manager.latestSeason}.` : 'No season yet.'}
+					{manager?.latestSeason ? `Didn't play in ${manager.latestSeason}.` : 'Not available.'}
 				</div>
 			{/if}
 		</div>

@@ -70,6 +70,10 @@
 	function getSeasonOutcome(season: any, champYears: number[]): string {
 		if (wonTitle(season, champYears)) return '🏆 Champion';
 		if (season.inProgress) {
+			// Playoffs under way: the bracket is set, so say where the team stands.
+			if (season.bracketSet) {
+				return season.madePlayoffs ? '🔥 Playoffs · in progress' : '📉 Missed Playoffs';
+			}
 			return season.playoffOdds != null
 				? `⏳ In progress · ${Math.round(season.playoffOdds * 100)}% playoff odds`
 				: '⏳ In progress';
@@ -80,7 +84,7 @@
 
 	function getSeasonOutcomeColor(season: any, champYears: number[]): string {
 		if (wonTitle(season, champYears)) return 'text-amber-400';
-		if (season.inProgress) return 'text-slate-300';
+		if (season.inProgress && !season.bracketSet) return 'text-slate-300';
 		if (season.madePlayoffs) return 'text-blue-400';
 		return 'text-red-400';
 	}
