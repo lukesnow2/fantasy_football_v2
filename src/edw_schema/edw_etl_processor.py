@@ -4859,7 +4859,11 @@ class EdwEtlProcessor:
             "199.l.42364.t.3": "Bobby",
             "222.l.222935.t.6": "Bobby",
             "257.l.89145.t.4": "Bobby",
-            "199.l.42364.t.9": "Bobby",
+            # 2008 El Fuego! (t.9) was mapped to Bobby too, giving him two teams
+            # that season. Owner-identified 2026-11 as Jesse Brown: of the three
+            # it could have been, Trevor (t.4) and Cody Benbow (t.8) already
+            # hold 2008 teams under their own Yahoo names.
+            "199.l.42364.t.9": "Jesse Brown",
             # 2005 league 124.l.109785 hidden teams (owner-identified)
             "124.l.109785.t.1": "Trevor",        # Fire Fire
             "124.l.109785.t.5": "Jesse Brown",   # Mcbumdabums
