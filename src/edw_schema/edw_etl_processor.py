@@ -35,13 +35,19 @@ class ETLStats:
         if self.errors is None:
             self.errors = []
 
-# The playoff format is only replaced by a known value: raw rows for seasons
+# The season format is only replaced by a known value: raw rows for seasons
 # extracted before migration 011 carry NULLs, and re-publishing one must not
 # wipe what the migration backfilled from its bracket.
+LEAGUE_FORMAT_COLUMNS = ('end_week', 'playoff_start_week', 'num_playoff_teams', 'trade_end_date')
 LEAGUE_FORMAT_SET = [
-    f'{c} = COALESCE(EXCLUDED.{c}, dim_league.{c})'
-    for c in ('end_week', 'playoff_start_week', 'num_playoff_teams')
+    f'{c} = COALESCE(EXCLUDED.{c}, dim_league.{c})' for c in LEAGUE_FORMAT_COLUMNS
 ]
+
+# Used only when a league's format is neither stored nor visible in its games
+# (a season in progress loaded before migration 011): the league's format
+# since 2022.
+DEFAULT_PLAYOFF_TEAMS = 6
+DEFAULT_PLAYOFF_START_WEEK = 15
 
 
 def _positive_int(value) -> Optional[int]:
@@ -67,8 +73,8 @@ DIMENSION_UPSERTS = {
         None),
     'dim_league': (
         ['league_id', 'league_name', 'season_year', 'num_teams', 'league_type',
-         'scoring_type', 'draft_type', 'end_week', 'playoff_start_week',
-         'num_playoff_teams', 'is_active', 'valid_from', 'valid_to'],
+         'scoring_type', 'draft_type', *LEAGUE_FORMAT_COLUMNS,
+         'is_active', 'valid_from', 'valid_to'],
         'league_id, season_year',
         ['league_name', 'num_teams', 'league_type', 'scoring_type', 'draft_type',
          'is_active', 'valid_to'],
@@ -753,15 +759,6 @@ class EdwEtlProcessor:
         
         return list(weeks.values())
     
-    def classify_week_type(self, week_number: int) -> str:
-        """Classify week type based on week number (legacy - use classify_week_type_for_season)"""
-        if week_number <= 14:
-            return 'regular'
-        elif week_number <= 16:
-            return 'playoffs'
-        else:
-            return 'championship'
-    
     def classify_week_type_for_season(self, season_year: int, week_number: int, 
                                     playoff_start_week: int = None, championship_week: int = None) -> str:
         """Classify week type based on actual season data"""
@@ -960,6 +957,7 @@ class EdwEtlProcessor:
                 'end_week': _positive_int(league.get('end_week')),
                 'playoff_start_week': _positive_int(league.get('playoff_start_week')),
                 'num_playoff_teams': _positive_int(league.get('num_playoff_teams')),
+                'trade_end_date': league.get('trade_end_date') or None,
                 'is_active': True,
                 'valid_from': datetime.now(),
                 'valid_to': datetime(9999, 12, 31)
@@ -2230,8 +2228,37 @@ class EdwEtlProcessor:
             logger.debug(f"Could not calculate draft value score for player {player_id}: {e}")
             return None
     
-    def _calculate_playoff_probability(self, win_percentage: float, current_rank: int, 
-                                     total_teams: int, current_week: int, weekly_points: float) -> float:
+    def league_format(self, league_id: str) -> Dict[str, int]:
+        """Playoff start week and bracket size for one league-season.
+
+        Yahoo's settings when they were captured (migration 011), else what the
+        league's own playoff games show, else the defaults. Always per league:
+        the old lookup took the earliest playoff week across every season
+        loaded, so with history present it put 2026's playoffs in week 14.
+        """
+        league = next((l for l in (self.data or {}).get('leagues', [])
+                       if l.get('league_id') == league_id), {})
+        start = _positive_int(league.get('playoff_start_week'))
+        teams = _positive_int(league.get('num_playoff_teams'))
+        if start is None or teams is None:
+            games = [m for m in (self.data or {}).get('matchups', [])
+                     if m.get('league_id') == league_id
+                     and m.get('is_playoffs') and not m.get('is_consolation')]
+            if start is None and games:
+                start = min(int(m['week']) for m in games)
+            if teams is None and games:
+                teams = len({t for m in games
+                             for t in (m.get('team1_id'), m.get('team2_id')) if t}) or None
+        if start is None:
+            end = _positive_int(league.get('end_week'))
+            start = max(1, end - 2) if end else DEFAULT_PLAYOFF_START_WEEK
+        return {'playoff_start_week': start,
+                'num_playoff_teams': teams or DEFAULT_PLAYOFF_TEAMS}
+
+    def _calculate_playoff_probability(self, win_percentage: float, current_rank: int,
+                                     total_teams: int, current_week: int, weekly_points: float,
+                                     playoff_teams: int = DEFAULT_PLAYOFF_TEAMS,
+                                     playoff_start_week: int = DEFAULT_PLAYOFF_START_WEEK) -> float:
         """
         Calculate playoff probability based on multiple factors.
         
@@ -2246,12 +2273,10 @@ class EdwEtlProcessor:
             if not all([win_percentage is not None, current_rank, total_teams]):
                 return 0.0
             
-            # Standard fantasy football assumptions
-            playoff_teams = max(4, total_teams // 3)  # Typically 4-6 teams make playoffs
-            
-            # Determine playoff start week from actual data
-            playoff_start_week = self._get_playoff_start_week()
-            
+            # The league's own format (league_format), not a rule of thumb:
+            # max(4, teams // 3) gave this ten-team, six-spot league four spots.
+            playoff_teams = min(playoff_teams, total_teams)
+
             if current_week is None:
                 # Better fallback: use a conservative mid-season estimate
                 # This affects the "weeks remaining" calculation for probability
@@ -2321,70 +2346,6 @@ class EdwEtlProcessor:
         except Exception as e:
             logger.debug(f"Could not calculate playoff probability: {e}")
             return 0.0
-    
-    def _get_playoff_start_week(self) -> int:
-        """
-        Determine when playoffs start based on actual matchup data.
-        
-        Logic:
-        1. Look for first week where matchup_type != 'regular'
-        2. If no playoff data found, use current/future rule: week 15 (week 14 is last regular season)
-        3. Playoffs are always 3 weeks long, so can work backwards from season end
-        """
-        try:
-            # Look through matchup data to find playoff start
-            playoff_weeks = set()
-            season_end_weeks = {}  # Track the last week for each season
-            
-            for matchup in self.data.get('matchups', []):
-                # Get season from league data
-                season_year = None
-                for league in self.data.get('leagues', []):
-                    if league['league_id'] == matchup['league_id']:
-                        season_year = int(league['season'])
-                        break
-                
-                if not season_year:
-                    continue
-                
-                week_num = matchup['week']
-                
-                # Track the highest week number for each season (season end)
-                if season_year not in season_end_weeks:
-                    season_end_weeks[season_year] = week_num
-                else:
-                    season_end_weeks[season_year] = max(season_end_weeks[season_year], week_num)
-                
-                # Look for non-regular matchups (playoffs)
-                matchup_type = matchup.get('matchup_type', 'regular')
-                is_playoffs = matchup.get('is_playoffs', False)
-                
-                if matchup_type != 'regular' or is_playoffs:
-                    playoff_weeks.add(week_num)
-            
-            # Determine playoff start week
-            if playoff_weeks:
-                # Use the earliest playoff week found in data
-                playoff_start_week = min(playoff_weeks)
-                logger.debug(f"📊 Detected playoff start week: {playoff_start_week} from matchup data")
-                return playoff_start_week
-            elif season_end_weeks:
-                # Work backwards: playoffs are 3 weeks, so playoff start = season_end - 2
-                max_season_end = max(season_end_weeks.values())
-                playoff_start_week = max_season_end - 2  # 3-week playoffs
-                logger.debug(f"📊 Calculated playoff start week: {playoff_start_week} (working backwards from week {max_season_end})")
-                return playoff_start_week
-            else:
-                # Current/future default: 17-week season with 3-week playoffs
-                # Regular season ends week 14, playoffs start week 15
-                playoff_start_week = 15
-                logger.debug(f"📊 Using default playoff start week: {playoff_start_week} (current/future seasons)")
-                return playoff_start_week
-                
-        except Exception as e:
-            logger.debug(f"Could not determine playoff start week: {e}")
-            # Safe default for current/future seasons
-            return 15
     
     def transform_fact_team_performance(self) -> List[Dict]:
         """Transform team performance data from matchups and rosters"""
@@ -2597,12 +2558,18 @@ class EdwEtlProcessor:
             weekly_groups[group_key].append((i, fact))
         
         # Calculate weekly rank and playoff probability within each group
+        league_ids_by_key = {key: lid for lid, key in
+                             self.dim_mappings.get('league_keys', {}).items()}
         for group_key, group_facts in weekly_groups.items():
             # Sort by weekly points (descending - highest points gets rank 1)
             sorted_facts = sorted(group_facts, key=lambda x: x[1]['weekly_points'], reverse=True)
             
             # Get league and week info for playoff probability calculation
             league_key, week_key = group_key
+            league_id = league_ids_by_key.get(league_key)
+            fmt = (self.league_format(league_id) if league_id else
+                   {'playoff_start_week': DEFAULT_PLAYOFF_START_WEEK,
+                    'num_playoff_teams': DEFAULT_PLAYOFF_TEAMS})
             total_teams = len(group_facts)
             
             # Get current week number for remaining weeks calculation
@@ -2635,7 +2602,9 @@ class EdwEtlProcessor:
                     current_rank,
                     total_teams,
                     current_week,
-                    fact['weekly_points']
+                    fact['weekly_points'],
+                    playoff_teams=fmt['num_playoff_teams'],
+                    playoff_start_week=fmt['playoff_start_week'],
                 )
                 facts[fact_index]['playoff_probability'] = playoff_prob
                 
@@ -2730,11 +2699,11 @@ class EdwEtlProcessor:
                     INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams,
                                           league_type, scoring_type, draft_type,
                                           end_week, playoff_start_week, num_playoff_teams,
-                                          is_active, valid_from, valid_to)
+                                          trade_end_date, is_active, valid_from, valid_to)
                     VALUES (:league_id, :league_name, :season_year, :num_teams,
                             :league_type, :scoring_type, :draft_type,
                             :end_week, :playoff_start_week, :num_playoff_teams,
-                            :is_active, :valid_from, :valid_to)
+                            :trade_end_date, :is_active, :valid_from, :valid_to)
                     ON CONFLICT (league_id, season_year) DO UPDATE SET
                         league_name = EXCLUDED.league_name,
                         num_teams = EXCLUDED.num_teams,
@@ -5770,9 +5739,12 @@ class EdwEtlProcessor:
                     dl.league_key,
                     dl.season_year,
                     dl.num_teams,
-                    -- A season still being played has no bracket yet: use the
-                    -- most recent completed season's size.
+                    dl.playoff_start_week,
+                    -- Yahoo's setting (migration 011); else the season's own
+                    -- bracket; a season still being played without settings
+                    -- has neither, so the most recent completed season's size.
                     COALESCE(
+                        dl.num_playoff_teams,
                         bs.bracket_teams,
                         (SELECT b2.bracket_teams FROM bracket_sizes b2
                          JOIN edw.dim_league d2 ON d2.league_key = b2.league_key
@@ -5884,9 +5856,12 @@ class EdwEtlProcessor:
                                    ELSE 0.0
                                END) * COALESCE(cr.games_played, 0), 1)
                     ) as games_back_from_playoffs,
-                    -- Calculate weeks remaining using actual season data
-                    GREATEST(0, 
-                        COALESCE(ds.championship_week, 16) - 1 - dw.week_number
+                    -- Regular-season weeks left: the race for a spot ends the
+                    -- week before the playoffs start. This used to count to the
+                    -- semifinal (championship week - 1), two weeks too many
+                    -- since 2022.
+                    GREATEST(0,
+                        COALESCE(ls.playoff_start_week, ds.playoff_start_week, 15) - 1 - dw.week_number
                     ) as weeks_remaining
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key

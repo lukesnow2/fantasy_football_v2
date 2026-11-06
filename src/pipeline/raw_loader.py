@@ -39,10 +39,11 @@ CONSTRAINT_DDL = [
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_draft_picks_id ON public.draft_picks (draft_pick_id)",
 ]
 
-# end_week and the playoff format are refreshed on every load: a commissioner
-# can change them before the playoffs, and the odds and season records read them.
+# end_week and the season format are refreshed on every load: a commissioner
+# can change them mid-season, and the odds, standings and status read them.
 LEAGUE_UPDATE_COLS = ['name', 'current_week', 'end_week', 'draft_status',
-                      'playoff_start_week', 'num_playoff_teams', 'extracted_at']
+                      'playoff_start_week', 'num_playoff_teams', 'trade_end_date',
+                      'extracted_at']
 TEAM_UPDATE_COLS = ['name', 'manager_name', 'wins', 'losses', 'ties',
                     'points_for', 'points_against', 'playoff_seed',
                     'waiver_priority', 'faab_balance', 'extracted_at']

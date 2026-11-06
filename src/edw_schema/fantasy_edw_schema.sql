@@ -46,6 +46,7 @@ CREATE TABLE dim_league (
     end_week INTEGER,              -- last week of the season, playoffs included
     playoff_start_week INTEGER,    -- regular season is the weeks before this
     num_playoff_teams INTEGER,
+    trade_end_date DATE,           -- trade deadline; NULL for seasons before migration 011
     is_active BOOLEAN DEFAULT TRUE,
     valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,

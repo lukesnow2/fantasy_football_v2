@@ -47,12 +47,13 @@ logger = logging.getLogger(__name__)
 logging.getLogger('yahoo_oauth').setLevel(logging.INFO)
 
 
-def playoff_settings(settings: Dict[str, Any]) -> Dict[str, Optional[int]]:
-    """The league's playoff format from Yahoo's settings, as integers.
+def season_format(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """The league's season format from Yahoo's settings, typed.
 
-    Yahoo returns these as strings ('15', '6'). A league that doesn't use
-    playoffs, or a settings payload without them, yields None rather than a
-    guess: downstream treats None as "not known" and keeps what it has.
+    Yahoo returns these as strings ('15', '6', '2026-11-22'). Anything missing
+    or malformed, and the playoff fields of a league that doesn't use playoffs,
+    come back None rather than as a guess: downstream treats None as "not
+    known" and keeps what it has.
     """
     def as_int(key: str) -> Optional[int]:
         try:
@@ -61,10 +62,19 @@ def playoff_settings(settings: Dict[str, Any]) -> Dict[str, Optional[int]]:
             return None
         return value if value > 0 else None
 
-    if str(settings.get('uses_playoff', '1')) == '0':
-        return {'playoff_start_week': None, 'num_playoff_teams': None}
-    return {'playoff_start_week': as_int('playoff_start_week'),
-            'num_playoff_teams': as_int('num_playoff_teams')}
+    def as_date(key: str) -> Optional[str]:
+        value = str(settings.get(key) or '')
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date().isoformat()
+        except ValueError:
+            return None
+
+    uses_playoff = str(settings.get('uses_playoff', '1')) != '0'
+    return {
+        'playoff_start_week': as_int('playoff_start_week') if uses_playoff else None,
+        'num_playoff_teams': as_int('num_playoff_teams') if uses_playoff else None,
+        'trade_end_date': as_date('trade_end_date'),
+    }
 
 
 def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
@@ -138,6 +148,7 @@ class ExtractedLeague:
     extracted_at: datetime = datetime.now()
     playoff_start_week: Optional[int] = None
     num_playoff_teams: Optional[int] = None
+    trade_end_date: Optional[str] = None
 
 @dataclass
 class ExtractedTeam:
@@ -645,7 +656,7 @@ class YahooFantasyExtractor:
                             'is_cash_league': settings.get('is_cash_league', False),
                             'url': settings.get('url', ''),
                             'logo_url': settings.get('logo_url', None),
-                            **playoff_settings(settings),
+                            **season_format(settings),
                         })
                         logger.info(f"  ✅ Added league: {league_name} ({settings.get('season', 'Unknown')}) - {draft_status}")
                         
@@ -685,6 +696,7 @@ class YahooFantasyExtractor:
             logo_url=league_info['logo_url'],
             playoff_start_week=league_info.get('playoff_start_week'),
             num_playoff_teams=league_info.get('num_playoff_teams'),
+            trade_end_date=league_info.get('trade_end_date'),
         )
     
     def extract_teams_for_league(self, league_id: str) -> List[ExtractedTeam]:

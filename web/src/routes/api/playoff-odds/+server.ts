@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
+import { getLeagueFormat } from '$lib/server/league-format';
 import {
 	gamesFingerprint,
 	simulatePlayoffOdds,
@@ -12,11 +13,6 @@ import type { RequestHandler } from './$types';
 /** Rows come back camel-cased with numerics as strings; read them loosely. */
 type Row = Record<string, unknown>;
 
-const positive = (value: unknown): number | null => {
-	const n = Number(value);
-	return Number.isInteger(n) && n > 0 ? n : null;
-};
-
 /**
  * Simulated playoff odds for one season (default: the latest).
  *
@@ -24,12 +20,8 @@ const positive = (value: unknown): number | null => {
  * weeks before the latest one, so the widget can show how each team's odds
  * moved with last week's results.
  *
- * The playoff format comes from the league's Yahoo settings, stored on
- * dim_league since migration 011: the regular season is the weeks before
- * playoff_start_week, and num_playoff_teams sets the bracket. Until a season's
- * settings are stored (the migration backfills finished seasons; the current
- * one fills on its next load) the format is inferred instead: the length of
- * the most recent season with a playoff game, and six teams.
+ * The regular-season length and bracket size come from the season's stored
+ * Yahoo settings (getLeagueFormat), inferred only until they're stored.
  */
 
 const SIMS = 10000;
@@ -56,7 +48,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			season = parsed;
 		}
 
-		const [matchupRows, teamRowsRaw, lengthRowsRaw, formatRowsRaw] = await Promise.all([
+		const [matchupRows, teamRowsRaw, format] = await Promise.all([
 			db.execute(sql`
 				SELECT dw.week_number AS week,
 				       fm.team1_key AS a, fm.team2_key AS b,
@@ -73,34 +65,10 @@ export const GET: RequestHandler = async ({ url }) => {
 				JOIN edw.dim_league dl ON dl.league_key = dt.league_key
 				WHERE dl.season_year = ${season}
 			`),
-			db.execute(sql`
-				SELECT MAX(dw.week_number) AS weeks
-				FROM edw.fact_matchup fm
-				JOIN edw.dim_week dw ON dw.week_key = fm.week_key
-				WHERE fm.season_year = (
-					SELECT MAX(season_year) FROM edw.fact_matchup
-					WHERE is_playoffs AND season_year <= ${season}
-				)
-				AND NOT fm.is_playoffs AND NOT fm.is_consolation
-			`),
-			// Read through to_jsonb so this still runs against a warehouse the
-			// pipeline hasn't migrated yet (the web app can deploy first): a
-			// missing column reads as null instead of failing the query.
-			db.execute(sql`
-				SELECT to_jsonb(dl) ->> 'playoff_start_week' AS playoff_start_week,
-				       to_jsonb(dl) ->> 'num_playoff_teams'  AS num_playoff_teams
-				FROM edw.dim_league dl
-				WHERE dl.season_year = ${season}
-				ORDER BY dl.league_key DESC
-				LIMIT 1
-			`)
+			getLeagueFormat(season)
 		]);
 		const rows = Array.from(matchupRows) as Row[];
 		const teamRows = Array.from(teamRowsRaw) as Row[];
-		const lengthRows = Array.from(lengthRowsRaw) as Row[];
-		const format = (Array.from(formatRowsRaw) as Row[])[0];
-		const storedStart = positive(format?.playoffStartWeek);
-		const storedTeams = positive(format?.numPlayoffTeams);
 
 		const games: PlayedGame[] = rows
 			.filter((r) => !r.po && !r.cons && r.sa != null && r.sb != null)
@@ -133,7 +101,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			managerName: named.get(teamKey)?.managerName ?? null
 		}));
 
-		if (teams.length < 6) {
+		if (teams.length < Math.max(2, format.playoffTeams)) {
 			return json({
 				season,
 				available: false,
@@ -142,12 +110,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		const playedWeeks = games.reduce((m, g) => Math.max(m, g.week), 0);
-		const regularSeasonWeeks = Math.max(
-			storedStart ? storedStart - 1 : Number(lengthRows[0]?.weeks) || 14,
-			playedWeeks
-		);
-		const playoffTeams = storedTeams ?? 6;
-		const formatSource = storedStart && storedTeams ? 'league-settings' : 'inferred';
+		const regularSeasonWeeks = Math.max(format.regularSeasonWeeks, playedWeeks);
+		const { playoffTeams, source: formatSource } = format;
 
 		const keys = teams.map((t) => t.teamKey);
 		const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${gamesFingerprint(games)}`;

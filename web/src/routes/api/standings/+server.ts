@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { getLeagueFormat } from '$lib/server/league-format';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
@@ -24,7 +25,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			targetSeason = parsed;
 		}
 
-		// 2. Season totals per team (fact_team_performance stores per-week rows; sum them).
+		// 2. Regular-season totals per team. fact_team_performance stores a row
+		// per week, playoff and consolation weeks included: summing them all
+		// counted bracket games in the record (7 of 10 teams in 2025), so the
+		// sum stops at the season's own regular-season length.
+		const format = await getLeagueFormat(targetSeason);
 		const standingsRows = await db.execute(sql`
 			SELECT
 				dt.team_key                  AS team_key,
@@ -40,7 +45,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			FROM edw.fact_team_performance ftp
 			JOIN edw.dim_team dt   ON ftp.team_key = dt.team_key
 			JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+			JOIN edw.dim_week dw   ON ftp.week_key = dw.week_key
 			WHERE ftp.season_year = ${targetSeason}
+			  AND dw.week_number <= ${format.regularSeasonWeeks}
 			GROUP BY dt.team_key, dt.team_name, dt.manager_name, dl.league_name
 		`);
 
@@ -70,9 +77,12 @@ export const GET: RequestHandler = async ({ url }) => {
 		});
 
 		// Regular-season ordering (used as-is for in-progress seasons, and as the
-		// fallback rank for any team not placed in a bracket).
+		// fallback rank for any team not placed in a bracket): wins (ties as
+		// half), then points for - the league's seeding, which reproduces the
+		// real playoff field every season 2010-2025. Point differential broke
+		// ties here before, so this table could disagree with the playoff odds.
 		standings.sort(
-			(a, b) => b.wins - a.wins || a.losses - b.losses || b.pointDifferential - a.pointDifferential
+			(a, b) => b.wins + b.ties / 2 - (a.wins + a.ties / 2) || b.pointsFor - a.pointsFor
 		);
 		standings.forEach((t, i) => (t.seasonRank = i + 1));
 
@@ -80,6 +90,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			return json({
 				standings: [],
 				season: targetSeason,
+				playoffTeams: format.playoffTeams,
+				regularSeasonWeeks: format.regularSeasonWeeks,
 				currentWeek: 0,
 				isSeasonComplete: false,
 				isFinalStandings: false,
@@ -137,12 +149,16 @@ export const GET: RequestHandler = async ({ url }) => {
 				const loser = loserOf(g);
 				if (!placements.has(loser)) placements.set(loser, { rank: rank++, tier: 'Quarterfinalist' });
 			}
-			// Consolation bracket (7-10)
+			// Consolation bracket: the places after the playoff field, down to last.
+			const lastRank = standings.length;
 			const lastPlace = consolationGames.find((g: any) => g.isLastPlaceGame);
 			if (lastPlace?.winnerTeamKey) {
 				const loser = loserOf(lastPlace);
-				placements.set(loser, { rank: 10, tier: 'Consolation 4th (Last Place)' });
-				placements.set(Number(lastPlace.winnerTeamKey), { rank: 9, tier: 'Consolation 3rd' });
+				placements.set(loser, { rank: lastRank, tier: 'Consolation 4th (Last Place)' });
+				placements.set(Number(lastPlace.winnerTeamKey), {
+					rank: lastRank - 1,
+					tier: 'Consolation 3rd'
+				});
 				lastPlaceGameLoser = { teamKey: loser };
 
 				const finalWeek = Math.max(...consolationGames.map((g: any) => Number(g.weekKey)));
@@ -150,8 +166,14 @@ export const GET: RequestHandler = async ({ url }) => {
 					(g: any) => Number(g.weekKey) === finalWeek && !g.isLastPlaceGame
 				);
 				if (consChamp?.winnerTeamKey) {
-					placements.set(Number(consChamp.winnerTeamKey), { rank: 7, tier: 'Consolation Winner' });
-					placements.set(loserOf(consChamp), { rank: 8, tier: 'Consolation Runner-up' });
+					placements.set(Number(consChamp.winnerTeamKey), {
+						rank: format.playoffTeams + 1,
+						tier: 'Consolation Winner'
+					});
+					placements.set(loserOf(consChamp), {
+						rank: format.playoffTeams + 2,
+						tier: 'Consolation Runner-up'
+					});
 				}
 			}
 		}
@@ -221,6 +243,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		return json({
 			standings: standingsWithStats,
 			season: targetSeason,
+			playoffTeams: format.playoffTeams,
+			regularSeasonWeeks: format.regularSeasonWeeks,
 			currentWeek,
 			isSeasonComplete: seasonComplete,
 			isFinalStandings: seasonComplete,

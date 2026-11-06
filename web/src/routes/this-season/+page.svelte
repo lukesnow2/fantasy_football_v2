@@ -18,6 +18,19 @@
 	let isSeasonComplete = false;
 	let lastPlaceGameLoser: any = null;
 	let leagueOverview: any = {};
+	// The season's playoff field size, from its stored league settings.
+	let playoffTeams = 6;
+
+	// Status from the season's real format (overview API), not weeks 17/14/10:
+	// the playoffs start after the stored regular season, and the trade deadline
+	// is Yahoo's date. An unknown deadline isn't claimed either way.
+	$: seasonStatus = leagueOverview.isSeasonComplete
+		? 'Season Complete'
+		: leagueOverview.playoffStatus === 'Playoffs'
+			? 'Playoffs are heating up'
+			: leagueOverview.tradeDeadlineStatus === 'Passed'
+				? 'Trade deadline passed'
+				: 'Regular season in progress';
 	// Power rankings are their own mart, not a reordering of the standings — the
 	// preview used to render `standings.slice(0, 4)` under a "Power Rankings" heading.
 	let powerRankings: any[] = [];
@@ -45,6 +58,7 @@
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();
 				standings = standingsData.standings;
+				playoffTeams = standingsData.playoffTeams ?? playoffTeams;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
 				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
@@ -90,13 +104,7 @@
 		<div class="text-slate-300 font-medium">
 			Week {currentWeek} <span class="text-slate-500">•</span>
 			<span class="text-slate-400">
-				{currentWeek >= 17
-					? 'Season Complete'
-					: currentWeek >= 14
-						? 'Playoffs are heating up'
-						: currentWeek >= 10
-							? 'Trade deadline passed'
-							: 'Regular season in progress'}
+				{seasonStatus}
 			</span>
 		</div>
 		<a
@@ -232,7 +240,7 @@
 									📋 Final Standings (Consolation Bracket)
 								</h3>
 								<div class="space-y-2">
-									{#each standings.filter(team => team.rank > 6).sort((a, b) => a.rank - b.rank) as team}
+									{#each standings.filter(team => team.rank > playoffTeams).sort((a, b) => a.rank - b.rank) as team}
 										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
 											<div class="flex items-center space-x-4">
 												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
@@ -263,16 +271,16 @@
 						<div class="space-y-2">
 							{#each standings as team}
 								<div class="flex items-center justify-between p-4 rounded-lg 
-									{team.rank <= 6 ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
+									{team.rank <= playoffTeams ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
 									<div class="flex items-center space-x-4">
 										<div class="text-2xl font-bold 
-											{team.rank <= 6 ? 'text-green-400' : 'text-slate-400'}">
+											{team.rank <= playoffTeams ? 'text-green-400' : 'text-slate-400'}">
 											{team.rank}
 										</div>
 										<div>
 											<div class="font-semibold text-white">{team.teamName}</div>
 											<div class="text-slate-400 text-sm">{team.managerName}</div>
-											{#if team.rank <= 6}
+											{#if team.rank <= playoffTeams}
 												<div class="text-xs text-green-300 font-medium">Playoff Position</div>
 											{/if}
 										</div>

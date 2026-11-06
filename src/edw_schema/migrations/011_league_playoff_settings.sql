@@ -10,12 +10,14 @@
 --   end_week            last week of the fantasy season, playoffs included
 --   playoff_start_week  first playoff week; the regular season is the weeks before it
 --   num_playoff_teams   teams in the championship bracket
+--   trade_end_date      the trade deadline (was assumed to pass after week 10)
 --
 -- Going forward the incremental load captures these from Yahoo's settings.
 -- Finished seasons are backfilled here from the games actually played, which
--- the brackets already record (is_playoffs). The backfill never overwrites a
--- value Yahoo supplied, and the ETL's upsert never overwrites a stored value
--- with a missing one, so re-publishing an old season keeps it.
+-- the brackets already record (is_playoffs). The trade deadline can't be
+-- recovered from the games, so past seasons keep it NULL. The backfill never
+-- overwrites a value Yahoo supplied, and the ETL's upsert never overwrites a
+-- stored value with a missing one, so re-publishing an old season keeps it.
 --
 -- Idempotent: safe to re-run.
 
@@ -23,10 +25,12 @@ BEGIN;
 
 ALTER TABLE public.leagues  ADD COLUMN IF NOT EXISTS playoff_start_week INTEGER;
 ALTER TABLE public.leagues  ADD COLUMN IF NOT EXISTS num_playoff_teams INTEGER;
+ALTER TABLE public.leagues  ADD COLUMN IF NOT EXISTS trade_end_date DATE;
 
 ALTER TABLE edw.dim_league  ADD COLUMN IF NOT EXISTS end_week INTEGER;
 ALTER TABLE edw.dim_league  ADD COLUMN IF NOT EXISTS playoff_start_week INTEGER;
 ALTER TABLE edw.dim_league  ADD COLUMN IF NOT EXISTS num_playoff_teams INTEGER;
+ALTER TABLE edw.dim_league  ADD COLUMN IF NOT EXISTS trade_end_date DATE;
 
 WITH games AS (
     SELECT fm.league_key, dw.week_number AS week, fm.is_playoffs,
