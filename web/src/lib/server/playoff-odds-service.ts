@@ -60,7 +60,12 @@ export async function latestSeason(): Promise<number> {
 	return Number((rows[0] as Row | undefined)?.season) || new Date().getFullYear();
 }
 
-export async function getSeasonOdds(season: number): Promise<SeasonOdds> {
+/**
+ * `throughWeek` simulates the season as it stood after that week, for pages
+ * that show a past week (power rankings): only games up to it count, and the
+ * movement compares it with the week before. Omitted, it is the latest week.
+ */
+export async function getSeasonOdds(season: number, throughWeek?: number): Promise<SeasonOdds> {
 	const [matchupRows, teamRowsRaw, format] = await Promise.all([
 		db.execute(sql`
 			SELECT dw.week_number AS week,
@@ -83,8 +88,9 @@ export async function getSeasonOdds(season: number): Promise<SeasonOdds> {
 	const rows = Array.from(matchupRows) as Row[];
 	const teamRows = Array.from(teamRowsRaw) as Row[];
 
+	const asOf = (week: number) => throughWeek == null || week <= throughWeek;
 	const games: PlayedGame[] = rows
-		.filter((r) => !r.po && !r.cons && r.sa != null && r.sb != null)
+		.filter((r) => !r.po && !r.cons && r.sa != null && r.sb != null && asOf(Number(r.week)))
 		.map((r) => ({
 			week: Number(r.week),
 			teamA: Number(r.a),
@@ -92,7 +98,7 @@ export async function getSeasonOdds(season: number): Promise<SeasonOdds> {
 			scoreA: Number(r.sa),
 			scoreB: Number(r.sb)
 		}));
-	const postseasonStarted = rows.some((r) => r.po || r.cons);
+	const postseasonStarted = throughWeek == null && rows.some((r) => r.po || r.cons);
 
 	// Games define who is in the league once there are any; dim_team only
 	// supplies names. A team missing from dim_team keeps its games (and its
