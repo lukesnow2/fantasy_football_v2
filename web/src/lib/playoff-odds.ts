@@ -480,10 +480,13 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	let weeksIdx = remainingWeeks.map((w) => toIdx(schedule.get(w) ?? []));
 	tallySchedule(schedule, 1 / draws);
 
+	// Scores of the last game played, written in place: this runs ~600k times
+	// per simulation, so it avoids allocating a result object each call.
+	let sa = 0;
+	let sb = 0;
 	const play = (a: number, b: number) => {
-		const sa = level[a] + noiseSd[a] * gauss();
-		const sb = level[b] + noiseSd[b] * gauss();
-		return { sa, sb };
+		sa = level[a] + noiseSd[a] * gauss();
+		sb = level[b] + noiseSd[b] * gauss();
 	};
 	const step = () => {
 		for (let i = 0; i < n; i++) level[i] += driftSd * gauss();
@@ -503,7 +506,7 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		for (const week of weeksIdx) {
 			step();
 			for (const [a, b] of week) {
-				const { sa, sb } = play(a, b);
+				play(a, b);
 				simPf[a] += sa;
 				simPf[b] += sb;
 				if (sa > sb) simW[a]++;
@@ -520,7 +523,7 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		if (playoffTeams === 6 && byes === 2 && n >= 6) {
 			const seed = order;
 			const game = (a: number, b: number) => {
-				const { sa, sb } = play(a, b);
+				play(a, b);
 				return sa >= sb ? a : b;
 			};
 			step();

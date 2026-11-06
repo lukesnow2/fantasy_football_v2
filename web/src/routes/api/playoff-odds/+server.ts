@@ -21,8 +21,25 @@ type Row = Record<string, unknown>;
 
 const SIMS = 10000;
 
-// Odds only change when a week lands, so cache by season and data shape.
-const cache = new Map<string, unknown>();
+/**
+ * Simulations are cached by a fingerprint of every game's score, so a reloaded
+ * week with a stat correction recomputes even though the game count is the
+ * same. Names are joined per request, so a team rename shows immediately.
+ */
+const cache = new Map<string, { now: OddsResult; prev: OddsResult | null }>();
+
+function fingerprint(games: PlayedGame[]): string {
+	// FNV-1a over the games in a fixed order.
+	const lines = games.map((g) => `${g.week}:${g.teamA}:${g.teamB}:${g.scoreA}:${g.scoreB}`).sort();
+	let h = 0x811c9dc5;
+	for (const line of lines) {
+		for (let i = 0; i < line.length; i++) {
+			h ^= line.charCodeAt(i);
+			h = Math.imul(h, 0x01000193);
+		}
+	}
+	return `${games.length}:${(h >>> 0).toString(36)}`;
+}
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
@@ -39,8 +56,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			season = parsed;
 		}
 
-		const rows = Array.from(
-			await db.execute(sql`
+		const [matchupRows, teamRowsRaw, lengthRowsRaw] = await Promise.all([
+			db.execute(sql`
 				SELECT dw.week_number AS week,
 				       fm.team1_key AS a, fm.team2_key AS b,
 				       fm.team1_points AS sa, fm.team2_points AS sb,
@@ -48,8 +65,28 @@ export const GET: RequestHandler = async ({ url }) => {
 				FROM edw.fact_matchup fm
 				JOIN edw.dim_week dw ON dw.week_key = fm.week_key
 				WHERE fm.season_year = ${season}
+			`),
+			db.execute(sql`
+				SELECT DISTINCT dt.team_key AS team_key, dt.team_name AS team_name,
+				       dt.manager_name AS manager_name
+				FROM edw.dim_team dt
+				JOIN edw.dim_league dl ON dl.league_key = dt.league_key
+				WHERE dl.season_year = ${season}
+			`),
+			db.execute(sql`
+				SELECT MAX(dw.week_number) AS weeks
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+				WHERE fm.season_year = (
+					SELECT MAX(season_year) FROM edw.fact_matchup
+					WHERE is_playoffs AND season_year <= ${season}
+				)
+				AND NOT fm.is_playoffs AND NOT fm.is_consolation
 			`)
-		) as Row[];
+		]);
+		const rows = Array.from(matchupRows) as Row[];
+		const teamRows = Array.from(teamRowsRaw) as Row[];
+		const lengthRows = Array.from(lengthRowsRaw) as Row[];
 
 		const games: PlayedGame[] = rows
 			.filter((r) => !r.po && !r.cons && r.sa != null && r.sb != null)
@@ -62,15 +99,6 @@ export const GET: RequestHandler = async ({ url }) => {
 			}));
 		const postseasonStarted = rows.some((r) => r.po || r.cons);
 
-		const teamRows = Array.from(
-			await db.execute(sql`
-				SELECT DISTINCT dt.team_key AS team_key, dt.team_name AS team_name,
-				       dt.manager_name AS manager_name
-				FROM edw.dim_team dt
-				JOIN edw.dim_league dl ON dl.league_key = dt.league_key
-				WHERE dl.season_year = ${season}
-			`)
-		) as Row[];
 		const inGames = new Set(games.flatMap((g) => [g.teamA, g.teamB]));
 		const teams = teamRows
 			.map((r) => ({
@@ -89,36 +117,30 @@ export const GET: RequestHandler = async ({ url }) => {
 			});
 		}
 
-		const lengthRows = Array.from(
-			await db.execute(sql`
-				SELECT MAX(dw.week_number) AS weeks
-				FROM edw.fact_matchup fm
-				JOIN edw.dim_week dw ON dw.week_key = fm.week_key
-				WHERE fm.season_year = (
-					SELECT MAX(season_year) FROM edw.fact_matchup
-					WHERE is_playoffs AND season_year <= ${season}
-				)
-				AND NOT fm.is_playoffs AND NOT fm.is_consolation
-			`)
-		) as Row[];
 		const playedWeeks = games.reduce((m, g) => Math.max(m, g.week), 0);
 		const regularSeasonWeeks = Math.max(Number(lengthRows[0]?.weeks) || 14, playedWeeks);
 
-		const key = `${season}:${games.length}:${playedWeeks}:${regularSeasonWeeks}`;
-		if (cache.has(key)) return json(cache.get(key));
-
 		const keys = teams.map((t) => t.teamKey);
-		const run = (through: number): OddsResult =>
-			simulatePlayoffOdds({
-				teamKeys: keys,
-				games: games.filter((g) => g.week <= through),
-				regularSeasonWeeks,
-				sims: SIMS,
-				seed: season * 100 + through
-			});
-
-		const now = run(playedWeeks);
-		const prev = playedWeeks > 0 ? run(playedWeeks - 1) : null;
+		const key = `${season}:${regularSeasonWeeks}:${keys.join(',')}:${fingerprint(games)}`;
+		let sims = cache.get(key);
+		if (!sims) {
+			// One seed for both runs, so the week-over-week change reflects last
+			// week's results rather than two independent draws of sampling noise.
+			const seed = season * 100 + playedWeeks;
+			const run = (through: number): OddsResult =>
+				simulatePlayoffOdds({
+					teamKeys: keys,
+					games: games.filter((g) => g.week <= through),
+					regularSeasonWeeks,
+					sims: SIMS,
+					seed
+				});
+			sims = { now: run(playedWeeks), prev: playedWeeks > 0 ? run(playedWeeks - 1) : null };
+			// Superseded fingerprints are never read again; keep the map small.
+			if (cache.size >= 32) cache.clear();
+			cache.set(key, sims);
+		}
+		const { now, prev } = sims;
 		const prevOdds = new Map(prev?.teams.map((t) => [t.teamKey, t.playoffOdds]) ?? []);
 		const info = new Map(teams.map((t) => [t.teamKey, t]));
 
@@ -142,7 +164,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				previousOdds: prev ? (prevOdds.get(t.teamKey) ?? null) : null
 			}))
 		};
-		cache.set(key, body);
 		return json(body);
 	} catch (error) {
 		console.error('Playoff odds API error:', error);

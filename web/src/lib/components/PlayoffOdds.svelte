@@ -121,7 +121,8 @@
 	function delta(t: TeamOdds): number | null {
 		if (metric !== 'playoffOdds' || t.previousOdds == null) return null;
 		const d = Math.round((t.playoffOdds - t.previousOdds) * 100);
-		return d === 0 ? null : d;
+		// A point either way is within the simulation's sampling noise.
+		return Math.abs(d) < 2 ? null : d;
 	}
 
 	const record = (t: TeamOdds) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ''}`;
@@ -208,7 +209,7 @@
 						aria-expanded={open === t.teamKey}
 						onclick={() => (open = open === t.teamKey ? null : t.teamKey)}
 					>
-						<div class="flex items-center justify-between gap-2">
+						<span class="flex items-center justify-between gap-2">
 							<span class="flex min-w-0 items-baseline gap-1.5">
 								<span class="truncate text-sm {t.eliminated ? 'text-slate-500' : 'text-white'}"
 									>{t.teamName}</span
@@ -245,13 +246,13 @@
 										: ''}"
 								/>
 							</span>
-						</div>
-						<div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-700/50">
-							<div
-								class="h-full rounded-full {tone(p)} transition-[width] duration-500"
+						</span>
+						<span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-700/50">
+							<span
+								class="block h-full rounded-full {tone(p)} transition-[width] duration-500"
 								style="width: {Math.max(p * 100, p > 0 ? 1.5 : 0)}%"
-							></div>
-						</div>
+							></span>
+						</span>
 					</button>
 
 					{#if open === t.teamKey}
