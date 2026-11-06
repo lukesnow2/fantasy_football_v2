@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
+import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
 
 /**
  * Postgres `numeric` arrives over the wire as a string, so every average, rate
@@ -16,18 +17,6 @@ function num(value: unknown): number | null {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-type SeasonLuck = {
-	seasonYear: number;
-	teamKey: number;
-	weekNumber: number;
-	wins: number;
-	ties: number;
-	pythagoreanWins: number | null;
-	luckFactor: number | null;
-	playoffOdds: number | null;
-	inProgress: boolean;
-};
-
 /**
  * Each manager's expected (Pythagorean) wins and luck, one row per season,
  * taken from the power rankings' latest ranked week of that season: the final
@@ -37,9 +26,15 @@ type SeasonLuck = {
  *
  * A season is in progress until its championship game is in fact_matchup.
  * Wins are regular-season only, like the expected wins they are compared with.
- * With `manager`, only that manager's seasons are read.
+ * With `manager`, only that manager's seasons are read. `latestSeason` is the
+ * league's most recent season, so the luck card can show it between seasons.
  */
-async function loadLuckBySeason(manager: string | null): Promise<Map<string, SeasonLuck[]>> {
+async function loadLuckBySeason(
+	manager: string | null
+): Promise<{ byManager: Map<string, SeasonLuck[]>; latestSeason: number | null }> {
+	const [latest] = Array.from(
+		await db.execute(sql`SELECT MAX(season_year) AS season_year FROM edw.dim_league`)
+	) as any[];
 	const rows = Array.from(
 		await db.execute(sql`
 			WITH finished AS (
@@ -92,46 +87,7 @@ async function loadLuckBySeason(manager: string | null): Promise<Map<string, Sea
 		});
 		byManager.set(name, list);
 	}
-	return byManager;
-}
-
-/** Career and current-season expected wins and luck for one manager. */
-function summarizeLuck(seasons: SeasonLuck[]) {
-	const scored = seasons.filter((s) => s.pythagoreanWins != null && s.luckFactor != null);
-	// Usually one row; a manager running two teams this season gets their
-	// totals added, and no single playoff odds (each team has its own).
-	const live = seasons.filter((s) => s.inProgress);
-	const liveTotal = (f: (s: SeasonLuck) => number | null) =>
-		live.some((s) => f(s) == null) ? null : live.reduce((acc, s) => acc + (f(s) as number), 0);
-	const current = live.length
-		? {
-				...live[0],
-				wins: liveTotal((s) => s.wins) as number,
-				ties: liveTotal((s) => s.ties) as number,
-				pythagoreanWins: liveTotal((s) => s.pythagoreanWins),
-				luckFactor: liveTotal((s) => s.luckFactor),
-				playoffOdds: live.length === 1 ? live[0].playoffOdds : null
-			}
-		: null;
-	const sum = (f: (s: SeasonLuck) => number) =>
-		scored.length ? scored.reduce((acc, s) => acc + f(s), 0) : null;
-	return {
-		careerRegularSeasonWins: sum((s) => s.wins + 0.5 * s.ties),
-		careerPythagoreanWins: sum((s) => s.pythagoreanWins as number),
-		careerLuckFactor: sum((s) => s.luckFactor as number),
-		// Seasons, not teams: a manager who ran two teams in a year played one season.
-		luckSeasons: new Set(scored.map((s) => s.seasonYear)).size,
-		currentSeason: current
-			? {
-					seasonYear: current.seasonYear,
-					throughWeek: current.weekNumber,
-					regularSeasonWins: current.wins + 0.5 * current.ties,
-					pythagoreanWins: current.pythagoreanWins,
-					luckFactor: current.luckFactor,
-					playoffOdds: current.playoffOdds
-				}
-			: null
-	};
+	return { byManager, latestSeason: num(latest?.seasonYear) };
 }
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -181,8 +137,9 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Optional like the sections below: a failure here blanks the luck
 		// figures, it does not take the whole profile down with it.
 		let luck = new Map<string, SeasonLuck[]>();
+		let latestSeason: number | null = null;
 		try {
-			luck = await loadLuckBySeason(manager);
+			({ byManager: luck, latestSeason } = await loadLuckBySeason(manager));
 		} catch (luckError) {
 			console.error('[managers/performance] luck query failed:', luckError);
 		}
@@ -214,7 +171,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			avgTransactionsPerSeason: num(mgr.avg_transactions_per_season ?? mgr.avgTransactionsPerSeason),
 			// Starter points per FAAB dollar; null for a manager who never paid for a claim.
 			faabEfficiencyRating: num(mgr.faab_efficiency_rating ?? mgr.faabEfficiencyRating),
-			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? []),
+			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
 			seasonConsistencyScore: num(mgr.season_consistency_score ?? mgr.seasonConsistencyScore),
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,

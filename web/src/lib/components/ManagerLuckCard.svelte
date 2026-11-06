@@ -74,7 +74,7 @@
 		<div class="space-y-2 rounded-lg bg-slate-900/30 p-4">
 			{#if current}
 				<div class="text-xs tracking-wide text-slate-400 uppercase">
-					{current.seasonYear} · through week {current.throughWeek}
+					{current.seasonYear} · {current.final ? 'final' : `through week ${current.throughWeek}`}
 				</div>
 				<div class="flex justify-between">
 					<span class="text-slate-400">Wins</span>
@@ -92,25 +92,33 @@
 						>{formatLuck(current.luckFactor)} W</span
 					>
 				</div>
-				<div class="flex justify-between">
-					<span class="text-slate-400">
-						<MetricHelp
-							metricId="playoff_probability"
-							position="left"
-							theme="dark"
-							className="text-slate-400"
-							showIcon={false}
-						>
-							Playoff odds
-						</MetricHelp>
-					</span>
-					<span class="font-bold text-blue-400 tabular-nums">
-						{current.playoffOdds == null ? '—' : `${Math.round(current.playoffOdds * 100)}%`}
-					</span>
-				</div>
+				{#if !current.final}
+					<div class="flex justify-between">
+						<span class="text-slate-400">
+							<MetricHelp
+								metricId="playoff_probability"
+								position="left"
+								theme="dark"
+								className="text-slate-400"
+								showIcon={false}
+							>
+								Playoff odds
+							</MetricHelp>
+						</span>
+						<span class="font-bold text-blue-400 tabular-nums">
+							{current.playoffOdds == null ? '—' : `${Math.round(current.playoffOdds * 100)}%`}
+						</span>
+					</div>
+				{/if}
 			{:else}
-				<div class="text-xs tracking-wide text-slate-400 uppercase">This season</div>
-				<div class="text-sm text-slate-400">Not playing a season in progress.</div>
+				<!-- Between seasons this is the season just ended; a manager who
+				     left the league gets this line, not their own last season. -->
+				<div class="text-xs tracking-wide text-slate-400 uppercase">
+					{manager?.latestSeason ?? 'This season'}
+				</div>
+				<div class="text-sm text-slate-400">
+					{manager?.latestSeason ? `Didn't play in ${manager.latestSeason}.` : 'No season yet.'}
+				</div>
 			{/if}
 		</div>
 	</div>
