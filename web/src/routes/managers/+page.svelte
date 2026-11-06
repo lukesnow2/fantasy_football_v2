@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Trophy, Target, TrendingUp, Award, User, Crown, BarChart3, Calendar, Users } from 'lucide-svelte';
+	import { Target, TrendingUp, Award, Crown, Users } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
@@ -128,7 +128,7 @@
 						<ManagerProfilePicture 
 								managerName={currentManager.managerName}
 							size="medium"
-							className="ring-2 ring-slate-600"
+							className="ring-2 ring-slate-600 shrink-0"
 						/>
 						{/if}
 						
@@ -140,13 +140,14 @@
 									<span class="ml-3">{getChampionshipBadge(currentManager.totalChampionships)}</span>
 								{/if}
 							</h1>
-																			<div class="flex items-center gap-4">
+							<div class="flex flex-wrap items-center gap-x-4 gap-y-2">
 								<span class="px-3 py-1 rounded-full text-sm font-semibold border {getTierColor(currentManager.tierClassification)}">
 									{currentManager.tierClassification}
 								</span>
-								<span class="text-slate-400">
-									{currentManager.firstSeason} - {currentManager.lastSeason}
-								</span>
+								<span class="text-slate-400">{currentManager.firstSeason} – {currentManager.lastSeason}</span>
+								{#each getManagerAchievements(currentManager.managerName) as achievement}
+									<span class="px-2 py-0.5 bg-amber-400/10 text-amber-300 rounded-md border border-amber-400/20 text-xs font-medium">{achievement}</span>
+								{/each}
 							</div>
 						</div>
 					</div>
@@ -170,210 +171,149 @@
 				</div>
 			</div>
 
-			<!-- Main Stats Grid -->
-			<div class="flex-1 p-4 sm:p-8 overflow-y-auto">
-				<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-					
-					<!-- Left Column: Core Stats -->
-					<div class="lg:col-span-2 space-y-6">
-						
-						<!-- League Tenure & Impact -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
-								<BarChart3 class="w-5 h-5 text-blue-400 mr-2" />
-								League Tenure & Impact
-							</h3>
-							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6">
-								<div class="text-center">
-									<div class="text-3xl font-bold text-purple-400">{currentManager.totalSeasons}</div>
-									<div class="text-slate-400 font-medium">Seasons</div>
-								</div>
-								<div class="text-center">
-									<div class="text-3xl font-bold text-blue-400">{currentManager.playoffAppearances || 0}</div>
-									<div class="text-slate-400 font-medium">Playoffs</div>
-								</div>
-								<div class="text-center">
-									<div class="text-3xl font-bold text-amber-400">{currentManager.totalChampionships || 0}</div>
-									<div class="text-slate-400 font-medium">Championships</div>
-								</div>
-								<div class="text-center">
-									<div class="text-3xl font-bold text-green-400">{currentManager.totalTransactions || 0}</div>
-									<div class="text-slate-400 font-medium">Transactions</div>
-								</div>
+			<!-- Body. Ordered by what a visitor asks first: the headline numbers,
+			     then how this manager's record compares with their scoring (career
+			     and this season), then four equal cards. It used to be a 2:1 split
+			     whose narrow right column ran ~900px past the left one, leaving a
+			     block of empty space beside it, and repeated three of its own stats
+			     in a "Career Highlights" card. -->
+			<div class="flex-1 space-y-6 overflow-y-auto p-4 sm:p-8">
+				<!-- Headline numbers -->
+				<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+					{#each [
+						{ label: 'Seasons', value: currentManager.totalSeasons ?? '—' },
+						{ label: 'Playoffs', value: currentManager.playoffAppearances ?? 0 },
+						{ label: 'Championships', value: currentManager.totalChampionships ?? 0, accent: 'text-amber-400' },
+						{ label: 'Points / game', value: currentManager.avgPointsPerGame != null ? currentManager.avgPointsPerGame.toFixed(1) : '—', help: 'points_per_week' },
+						{ label: 'Career points', value: currentManager.totalPointsScored != null ? Math.round(currentManager.totalPointsScored).toLocaleString() : '—' },
+						{ label: 'Playoff win %', value: currentManager.playoffWinPercentage != null ? `${(currentManager.playoffWinPercentage * 100).toFixed(1)}%` : '—' }
+					] as stat}
+						<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-3">
+							<div class="text-2xl font-bold tabular-nums {stat.accent ?? 'text-white'}">{stat.value}</div>
+							<div class="text-xs text-slate-400">
+								{#if stat.help}
+									<MetricHelp metricId={stat.help} position="bottom" theme="dark" className="text-slate-400" showIcon={false}>{stat.label}</MetricHelp>
+								{:else}
+									{stat.label}
+								{/if}
 							</div>
 						</div>
-
-						<!-- Performance Metrics -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
-								<Target class="w-5 h-5 text-green-400 mr-2" />
-								Scoring Performance
-							</h3>
-							<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-								<div class="text-center">
-									<div class="text-2xl font-bold text-blue-400">{parseFloat(currentManager.avgPointsFor || 0).toFixed(1)}</div>
-									<div class="text-slate-400 text-sm">Avg Points/Season</div>
-								</div>
-								<div class="text-center">
-									<div class="text-2xl font-bold text-green-400">{parseFloat(currentManager.avgPointsPerGame || 0).toFixed(1)}</div>
-									<div class="text-slate-400 text-sm">
-										<MetricHelp metricId="points_per_week" position="top" theme="dark" className="text-slate-400" showIcon={false}>
-											Avg Points/Game
-										</MetricHelp>
-									</div>
-								</div>
-								<div class="text-center">
-									<div class="text-2xl font-bold text-purple-400">{parseFloat(currentManager.totalPointsScored || 0).toLocaleString()}</div>
-									<div class="text-slate-400 text-sm">Career Points</div>
-								</div>
-							</div>
-						</div>
-
-						<!-- League Rankings -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-xl font-bold text-white mb-4 flex items-center">
-								<Crown class="w-5 h-5 text-amber-400 mr-2" />
-								League Rankings
-							</h3>
-							<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-amber-400">#{currentManager.championshipRank}</div>
-									<div class="text-slate-400 text-sm">Championships</div>
-								</div>
-								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-blue-400">#{currentManager.winPctRank}</div>
-									<div class="text-slate-400 text-sm">Win Rate</div>
-								</div>
-								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-green-400">#{currentManager.scoringRank}</div>
-									<div class="text-slate-400 text-sm">Scoring</div>
-								</div>
-								<div class="text-center p-4 bg-slate-900/30 rounded-lg">
-									<div class="text-xl font-bold text-purple-400">#{currentManager.playoffRank}</div>
-									<div class="text-slate-400 text-sm">Playoffs</div>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Right Column: Additional Stats -->
-					<div class="space-y-6">
-						
-						<!-- Season Performance Range -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
-								<TrendingUp class="w-5 h-5 text-green-400 mr-2" />
-								Career Range
-							</h3>
-							<div class="space-y-4">
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Best Season</span>
-									<span class="text-lg font-bold text-green-400">{currentManager.bestSeasonRecord || 'N/A'}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Worst Season</span>
-									<span class="text-lg font-bold text-red-400">{currentManager.worstSeasonRecord || 'N/A'}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Best Draft Year</span>
-									<span class="text-lg font-bold text-blue-400">{currentManager.bestDraftYear || 'N/A'}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Worst Draft Year</span>
-									<span class="text-lg font-bold text-amber-400">{currentManager.worstDraftYear || 'N/A'}</span>
-								</div>
-							</div>
-						</div>
-
-						<!-- Advanced Metrics -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
-								<TrendingUp class="w-5 h-5 text-purple-400 mr-2" />
-								Advanced Metrics
-							</h3>
-							<div class="space-y-4">
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">
-										<MetricHelp metricId="draft_value_score" position="left" theme="dark" className="text-slate-400" showIcon={false}>
-											Draft Grade
-										</MetricHelp>
-									</span>
-									<span class="text-lg font-bold text-green-400">{parseFloat(currentManager.avgDraftGrade || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">
-										<MetricHelp metricId="faab_efficiency_rating" position="left" theme="dark" className="text-slate-400" showIcon={false}>
-											FAAB Efficiency
-										</MetricHelp>
-									</span>
-									<!-- Starter points per FAAB dollar. A dash, not 0.0, for a manager
-									     who never paid for a claim (the league has used FAAB since 2022). -->
-									<span class="text-lg font-bold text-blue-400">
-										{#if currentManager.faabEfficiencyRating != null}
-											{currentManager.faabEfficiencyRating.toFixed(2)}<span class="ml-1 text-xs font-medium text-slate-400">pts/$</span>
-										{:else}—{/if}
-									</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">
-										<MetricHelp metricId="season_consistency_score" position="left" theme="dark" className="text-slate-400" showIcon={false}>
-											Consistency Score
-										</MetricHelp>
-									</span>
-									<span class="text-lg font-bold text-purple-400">{parseFloat(currentManager.seasonConsistencyScore || 0).toFixed(1)}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Avg Transactions</span>
-									<span class="text-lg font-bold text-amber-400">{parseFloat(currentManager.avgTransactionsPerSeason || 0).toFixed(1)}</span>
-								</div>
-							</div>
-						</div>
-
-						<ManagerLuckCard manager={currentManager} stacked />
-
-						<!-- Career Highlights -->
-						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-							<h3 class="text-lg font-bold text-white mb-4 flex items-center">
-								<Award class="w-5 h-5 text-yellow-400 mr-2" />
-								Career Highlights
-							</h3>
-							<div class="space-y-3">
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Best Season</span>
-									<span class="text-sm font-bold text-green-400">{currentManager.bestSeasonRecord || 'N/A'}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Best Draft Year</span>
-									<span class="text-sm font-bold text-blue-400">{currentManager.bestDraftYear || 'N/A'}</span>
-								</div>
-								<div class="flex justify-between items-center">
-									<span class="text-slate-400">Total Transactions</span>
-									<span class="text-sm font-bold text-purple-400">{currentManager.totalTransactions || 0}</span>
-								</div>
-							</div>
-						</div>
-
-						<!-- Achievements -->
-						{#if currentManager}
-							{@const achievements = getManagerAchievements(currentManager.managerName)}
-							{#if achievements.length > 0}
-								<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">
-									<h3 class="text-lg font-bold text-white mb-4">Achievements</h3>
-									<div class="flex flex-wrap gap-2">
-										{#each achievements as achievement}
-											<span class="px-2 py-1 bg-amber-400/10 text-amber-400 rounded-md border border-amber-400/20 text-xs font-medium">
-												{achievement}
-											</span>
-										{/each}
-									</div>
-								</div>
-							{/if}
-						{/if}
-					</div>
+					{/each}
 				</div>
 
-				<!-- View Full Profile Button -->
-				<div class="text-center mt-8">
+				<ManagerLuckCard manager={currentManager} />
+
+				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+					<!-- League Rankings -->
+					<section class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+						<h3 class="mb-4 flex items-center text-lg font-bold text-white">
+							<Crown class="mr-2 h-5 w-5 text-amber-400" />
+							League Rankings
+						</h3>
+						<div class="grid grid-cols-2 gap-3">
+							{#each [
+								{ label: 'Championships', rank: currentManager.championshipRank },
+								{ label: 'Win rate', rank: currentManager.winPctRank },
+								{ label: 'Scoring', rank: currentManager.scoringRank },
+								{ label: 'Playoff win rate', rank: currentManager.playoffRank }
+							] as r}
+								<div class="rounded-lg bg-slate-900/30 px-4 py-3">
+									<div class="text-xl font-bold text-white tabular-nums">#{r.rank}</div>
+									<div class="text-sm text-slate-400">{r.label}</div>
+								</div>
+							{/each}
+						</div>
+					</section>
+
+					<!-- Seasons -->
+					<section class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+						<h3 class="mb-4 flex items-center text-lg font-bold text-white">
+							<TrendingUp class="mr-2 h-5 w-5 text-green-400" />
+							Seasons
+						</h3>
+						<dl class="space-y-3">
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Best season</dt>
+								<dd class="font-bold text-green-400 tabular-nums">{currentManager.bestSeasonRecord || '—'}</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Worst season</dt>
+								<dd class="font-bold text-red-400 tabular-nums">{currentManager.worstSeasonRecord || '—'}</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Avg points / season</dt>
+								<dd class="font-bold text-white tabular-nums">{currentManager.avgPointsFor != null ? currentManager.avgPointsFor.toFixed(1) : '—'}</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<!-- A standard deviation of season win %, so lower is steadier;
+								     three places, since every manager sits between .11 and .19
+								     (it showed "0.2" at one place). -->
+								<dt class="text-slate-400">
+									<MetricHelp metricId="season_consistency_score" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+										Year-to-year swing
+									</MetricHelp>
+								</dt>
+								<dd class="font-bold text-white tabular-nums">
+									{currentManager.seasonConsistencyScore != null ? `±${currentManager.seasonConsistencyScore.toFixed(3).replace(/^0/, '')}` : '—'}
+								</dd>
+							</div>
+						</dl>
+					</section>
+
+					<!-- Waiver Wire -->
+					<section class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+						<h3 class="mb-4 flex items-center text-lg font-bold text-white">
+							<Target class="mr-2 h-5 w-5 text-blue-400" />
+							Waiver Wire
+						</h3>
+						<dl class="space-y-3">
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">
+									<MetricHelp metricId="faab_efficiency_rating" position="left" theme="dark" className="text-slate-400" showIcon={false}>
+										FAAB efficiency
+									</MetricHelp>
+								</dt>
+								<!-- Starter points per FAAB dollar. A dash, not 0.0, for a manager
+								     who never paid for a claim (the league has used FAAB since 2022). -->
+								<dd class="font-bold text-white tabular-nums">
+									{#if currentManager.faabEfficiencyRating != null}
+										{currentManager.faabEfficiencyRating.toFixed(2)}<span class="ml-1 text-xs font-medium text-slate-400">pts/$</span>
+									{:else}—{/if}
+								</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Transactions / season</dt>
+								<dd class="font-bold text-white tabular-nums">{currentManager.avgTransactionsPerSeason != null ? currentManager.avgTransactionsPerSeason.toFixed(1) : '—'}</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Total transactions</dt>
+								<dd class="font-bold text-white tabular-nums">{currentManager.totalTransactions ?? '—'}</dd>
+							</div>
+						</dl>
+					</section>
+
+					<!-- Draft. "Draft Grade" used to sit here: it was the average overall
+					     pick number (75-83 for everyone), which says nothing about drafting. -->
+					<section class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
+						<h3 class="mb-4 flex items-center text-lg font-bold text-white">
+							<Award class="mr-2 h-5 w-5 text-purple-400" />
+							Draft
+						</h3>
+						<dl class="space-y-3">
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Best pick's season</dt>
+								<dd class="font-bold text-green-400 tabular-nums">{currentManager.bestDraftYear || '—'}</dd>
+							</div>
+							<div class="flex items-center justify-between gap-4">
+								<dt class="text-slate-400">Worst pick's season</dt>
+								<dd class="font-bold text-red-400 tabular-nums">{currentManager.worstDraftYear || '—'}</dd>
+							</div>
+						</dl>
+						<p class="mt-4 text-xs text-slate-500">The seasons of this manager's single highest- and lowest-scoring draft picks.</p>
+					</section>
+				</div>
+
+				<div class="text-center">
 					<!-- An anchor rather than window.location.href: the latter forced a
 					     full page reload in the middle of an SPA, which reads as a stall. -->
 					<a
