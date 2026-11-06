@@ -29,6 +29,7 @@ from sqlalchemy import text
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from scripts.incremental_load import league_for_season  # noqa: E402
 from src.extractors.comprehensive_data_extractor import YahooFantasyExtractor  # noqa: E402
 from src.pipeline import raw_loader  # noqa: E402
 from src.pipeline.state import LockHeld, PipelineState  # noqa: E402
@@ -60,12 +61,13 @@ def main(argv=None) -> int:
             logger.error("Could not take the pipeline lock")
             return 1
         try:
+            # Leagues of record only: five seasons hold extra league ids the
+            # warehouse excludes, and fetching those costs Yahoo calls and
+            # can abort the run for no gain.
             with state.engine.connect() as conn:
-                leagues = conn.execute(text(
-                    "SELECT season::int, league_id FROM public.leagues "
-                    "ORDER BY season::int")).fetchall()
-            if args.seasons:
-                leagues = [r for r in leagues if r[0] in set(args.seasons)]
+                seasons = args.seasons or [r[0] for r in conn.execute(text(
+                    "SELECT DISTINCT season::int FROM public.leagues ORDER BY 1"))]
+                leagues = [(s, league_for_season(conn, s)) for s in sorted(seasons)]
 
             extractor = YahooFantasyExtractor()
             if not extractor.authenticate():
@@ -77,14 +79,13 @@ def main(argv=None) -> int:
                         extractor.extract_transactions_for_league(league_id)]
                 offered = sum(1 for r in rows if r['faab_bid'] is not None)
                 with state.engine.begin() as conn:
-                    before = conn.execute(COUNT_BIDS, {'l': league_id}).scalar()
-                    new_rows = raw_loader.append_only(
+                    changed = raw_loader.append_only(
                         conn, 'transactions', rows, 'transaction_id, player_id',
                         fill_missing=('faab_bid',))
                     after = conn.execute(COUNT_BIDS, {'l': league_id}).scalar()
-                logger.info("%s %s: Yahoo has %d bids, %d filled, %d held in all, "
-                            "%d new transactions", season, league_id, offered,
-                            after - before, after, new_rows)
+                logger.info("%s %s: Yahoo has %d bids, %d held in all; %d rows "
+                            "changed (bids filled or transactions new)",
+                            season, league_id, offered, after, changed)
         finally:
             lock.__exit__(None, None, None)
     finally:

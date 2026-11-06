@@ -4,6 +4,7 @@
 	// over by /api/managers/performance, so the two pages always agree.
 	import { Dices } from 'lucide-svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import { formatLuck, getLuckColor } from '$lib/utils/managerUtils';
 
 	export let manager: any;
 	// Stack career over this season, for narrow columns.
@@ -11,20 +12,8 @@
 
 	$: current = manager?.currentSeason ?? null;
 
-	function signed(value: number | null | undefined, digits = 1): string {
-		if (value == null) return '—';
-		const fixed = value.toFixed(digits);
-		return value > 0 ? `+${fixed}` : fixed;
-	}
-
 	function fixed(value: number | null | undefined, digits = 1): string {
 		return value == null ? '—' : value.toFixed(digits);
-	}
-
-	// Within half a win either way is a record that matches the scoring.
-	function luckColor(value: number | null | undefined): string {
-		if (value == null || Math.abs(value) < 0.5) return 'text-slate-200';
-		return value > 0 ? 'text-green-400' : 'text-red-400';
 	}
 </script>
 
@@ -76,8 +65,8 @@
 						Luck
 					</MetricHelp>
 				</span>
-				<span class="font-bold tabular-nums {luckColor(manager?.careerLuckFactor)}">
-					{signed(manager?.careerLuckFactor)} W
+				<span class="font-bold tabular-nums {getLuckColor(manager?.careerLuckFactor)}">
+					{formatLuck(manager?.careerLuckFactor)} W
 				</span>
 			</div>
 		</div>
@@ -99,8 +88,8 @@
 				</div>
 				<div class="flex justify-between">
 					<span class="text-slate-400">Luck</span>
-					<span class="font-bold tabular-nums {luckColor(current.luckFactor)}"
-						>{signed(current.luckFactor)} W</span
+					<span class="font-bold tabular-nums {getLuckColor(current.luckFactor)}"
+						>{formatLuck(current.luckFactor)} W</span
 					>
 				</div>
 				<div class="flex justify-between">

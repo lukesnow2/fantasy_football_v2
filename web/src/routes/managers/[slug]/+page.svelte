@@ -4,6 +4,7 @@
 	import { Crown, Trophy, TrendingUp, Users, Target, Calendar, BarChart3, Award, ArrowLeft } from 'lucide-svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import ManagerLuckCard from '$lib/components/ManagerLuckCard.svelte';
+	import { formatLuck, getLuckColor } from '$lib/utils/managerUtils';
 
 	let managerData: any = null;
 	let loading = true;
@@ -78,15 +79,6 @@
 		return 'text-red-400';
 	}
 
-	function signed(value: number | null | undefined): string {
-		if (value == null) return '—';
-		return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
-	}
-
-	function luckColor(value: number | null | undefined): string {
-		if (value == null || Math.abs(value) < 0.5) return 'text-slate-300';
-		return value > 0 ? 'text-green-400' : 'text-red-400';
-	}
 
 	// Get manager's main data
 	$: manager = managerData?.data?.performance?.[0];
@@ -351,8 +343,8 @@
 												? `${season.regularSeasonWins} / ${season.pythagoreanWins.toFixed(1)}`
 												: '—'}
 										</td>
-										<td class="text-center py-3 px-4 tabular-nums {luckColor(season.luckFactor)}">
-											{signed(season.luckFactor)}
+										<td class="text-center py-3 px-4 tabular-nums {getLuckColor(season.luckFactor)}">
+											{formatLuck(season.luckFactor)}
 										</td>
 										<td class="text-center py-3 px-4 {getSeasonOutcomeColor(season, championshipSeasons)}">
 											{getSeasonOutcome(season, championshipSeasons)}

@@ -202,7 +202,7 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
 
 def append_only(conn, table: str, rows: List[dict], conflict_cols: str,
                 fill_missing: tuple = ()) -> int:
-    """Insert rows not already held; returns how many were actually new.
+    """Insert rows not already held; returns how many rows changed.
 
     Callers pass Yahoo's full list every run, so the number of rows offered
     says nothing - the run ledger and the EDW refresh triggers need the
@@ -211,27 +211,35 @@ def append_only(conn, table: str, rows: List[dict], conflict_cols: str,
 
     fill_missing names columns a held row may have stored as NULL that a
     later fetch can supply. Such a column is filled in place, never
-    overwritten once set. Transactions need it for faab_bid: until
-    2026-11 the parser looked for the bid on each player instead of on
-    the transaction, so every claim loaded before then holds NULL.
+    overwritten once set, and a filled row counts as changed: the EDW
+    refresh only re-reads a table whose count is non-zero, so a run that
+    only filled bids would otherwise never publish them. Transactions need
+    it for faab_bid: until 2026-11 the parser looked for the bid on each
+    player instead of on the transaction, so every claim loaded before
+    then holds NULL.
     """
     if not rows:
         return 0
-    count = text(f'SELECT count(*) FROM public.{table}')
-    before = conn.execute(count).scalar()
-    if fill_missing:
-        held = f'public.{table}'
-        sets = ', '.join(f'{c} = COALESCE({held}.{c}, EXCLUDED.{c})'
-                         for c in fill_missing)
-        gaps = ' OR '.join(f'({held}.{c} IS NULL AND EXCLUDED.{c} IS NOT NULL)'
-                           for c in fill_missing)
-        conflict = f'ON CONFLICT ({conflict_cols}) DO UPDATE SET {sets} WHERE {gaps}'
-        # DO UPDATE refuses a key twice in one statement; DO NOTHING didn't care.
-        rows = last_per_key(rows, [c.strip() for c in conflict_cols.split(',')], table)
-    else:
-        conflict = f'ON CONFLICT ({conflict_cols}) DO NOTHING'
-    _insert_rows(conn, table, rows, conflict)
-    return conn.execute(count).scalar() - before
+    if not fill_missing:
+        count = text(f'SELECT count(*) FROM public.{table}')
+        before = conn.execute(count).scalar()
+        _insert_rows(conn, table, rows, f'ON CONFLICT ({conflict_cols}) DO NOTHING')
+        return conn.execute(count).scalar() - before
+
+    held = f'public.{table}'
+    sets = ', '.join(f'{c} = COALESCE({held}.{c}, EXCLUDED.{c})' for c in fill_missing)
+    gaps = ' OR '.join(f'({held}.{c} IS NULL AND EXCLUDED.{c} IS NOT NULL)'
+                       for c in fill_missing)
+    # DO UPDATE refuses a key twice in one statement; DO NOTHING didn't care.
+    rows = last_per_key(rows, [c.strip() for c in conflict_cols.split(',')], table)
+    cols = list(rows[0].keys())
+    # RETURNING yields one row per insert or fill and none for a row skipped
+    # by the WHERE, so its length is exactly the rows that changed.
+    returned = insert_batched(
+        conn, held, cols, [tuple(row[c] for c in cols) for row in rows],
+        f'ON CONFLICT ({conflict_cols}) DO UPDATE SET {sets} WHERE {gaps} RETURNING 1',
+        fetch=True)
+    return len(returned)
 
 
 def _keep_captured_teams(conn, league_id: str, weeks: List[int], rows: List[dict]) -> None:

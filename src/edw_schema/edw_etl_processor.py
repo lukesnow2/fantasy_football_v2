@@ -5213,9 +5213,7 @@ class EdwEtlProcessor:
             transaction_stats AS (
                 SELECT 
                     dm.manager_name,
-                    COUNT(ft.transaction_key) as total_transactions,
-                    AVG(ft.faab_bid) as avg_faab_bid,
-                    SUM(ft.faab_bid) as total_faab_spent
+                    COUNT(ft.transaction_key) as total_transactions
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
                 WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
@@ -5266,6 +5264,12 @@ class EdwEtlProcessor:
                 WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
+            -- A season is over once its championship game is in. The one
+            -- still being played must not set a best or worst record (a 0-3
+            -- start is nobody's worst season) or move the consistency spread.
+            completed_seasons AS (
+                SELECT DISTINCT season_year FROM edw.fact_matchup WHERE is_championship
+            ),
             manager_aggregates AS (
                 SELECT 
                     ms.manager_name,
@@ -5289,7 +5293,8 @@ class EdwEtlProcessor:
                     COALESCE(ps.playoff_seasons, 0) as playoff_appearances,
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
-                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency,
+                    STDDEV(CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
+                                THEN ms.season_wins::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
                     (SELECT fd.season_year 
                      FROM edw.fact_draft fd 
                      JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
@@ -5305,11 +5310,13 @@ class EdwEtlProcessor:
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
+                       AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
                      ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
                      LIMIT 1) as best_season_record,
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
+                       AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
                      ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
                      LIMIT 1) as worst_season_record
                 FROM manager_stats ms

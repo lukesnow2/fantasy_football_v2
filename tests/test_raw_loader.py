@@ -218,8 +218,10 @@ def test_transactions_fill_missing_faab_bid(state):
     """A claim stored without its bid gets it from a later fetch, once.
 
     Every claim loaded before the 2026-11 parser fix holds faab_bid NULL;
-    re-offering Yahoo's list must fill it without counting a new row, and a
-    bid already held must never be overwritten.
+    re-offering Yahoo's list must fill it, and the fill must count as a
+    change (the EDW refresh skips a table whose count is 0, so a bid-only
+    run would never publish). A bid already held is never overwritten, and
+    re-offering it changes nothing.
     """
     def tx(bid):
         return [{
@@ -240,12 +242,15 @@ def test_transactions_fill_missing_faab_bid(state):
     assert held_bid() is None
 
     delta['transactions'] = tx(14.0)
-    assert load(state, NEW_L, 1, delta=delta)['transactions'] == 0
+    assert load(state, NEW_L, 1, delta=delta)['transactions'] == 1
     assert held_bid() == 14.0
 
     delta['transactions'] = tx(99.0)
-    load(state, NEW_L, 1, delta=delta)
+    assert load(state, NEW_L, 1, delta=delta)['transactions'] == 0
     assert held_bid() == 14.0
+    with state.engine.connect() as conn:
+        assert conn.execute(text(
+            "SELECT count(*) FROM public.transactions WHERE transaction_id = 'tx2'")).scalar() == 1
 
 
 # ------------------------------------------------------- playoff brackets

@@ -36,11 +36,15 @@ type SeasonLuck = {
  *
  * A season is in progress until its championship game is in fact_matchup.
  * Wins are regular-season only, like the expected wins they are compared with.
+ * With `manager`, only that manager's seasons are read.
  */
-async function loadLuckBySeason(): Promise<Map<string, SeasonLuck[]>> {
+async function loadLuckBySeason(manager: string | null): Promise<Map<string, SeasonLuck[]>> {
 	const rows = Array.from(
 		await db.execute(sql`
-			WITH latest AS (
+			WITH finished AS (
+				SELECT DISTINCT league_key FROM edw.fact_matchup WHERE is_championship
+			),
+			latest AS (
 				SELECT
 					t.manager_name AS manager_name,
 					l.season_year  AS season_year,
@@ -55,17 +59,17 @@ async function loadLuckBySeason(): Promise<Map<string, SeasonLuck[]>> {
 				JOIN edw.dim_team t   ON t.team_key   = p.team_key
 				JOIN edw.dim_league l ON l.league_key = p.league_key
 				WHERE t.manager_name IS NOT NULL
+				${manager ? sql`AND t.manager_name = ${manager}` : sql``}
 			)
 			SELECT
-				manager_name, season_year, week_number, wins, ties,
-				pythagorean_wins, luck_factor, playoff_odds,
-				NOT EXISTS (
-					SELECT 1 FROM edw.fact_matchup fm
-					WHERE fm.league_key = latest.league_key AND fm.is_championship
-				) AS in_progress
+				latest.manager_name, latest.season_year, latest.week_number,
+				latest.wins, latest.ties, latest.pythagorean_wins, latest.luck_factor,
+				latest.playoff_odds,
+				finished.league_key IS NULL AS in_progress
 			FROM latest
-			WHERE rn = 1
-			ORDER BY manager_name, season_year
+			LEFT JOIN finished ON finished.league_key = latest.league_key
+			WHERE latest.rn = 1
+			ORDER BY latest.manager_name, latest.season_year
 		`)
 	) as any[];
 
@@ -156,7 +160,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY career_win_percentage DESC, championships_won DESC
 		`);
 		const managerStats = Array.from(statsResult);
-		const luck = await loadLuckBySeason();
+		// Optional like the sections below: a failure here blanks the luck
+		// figures, it does not take the whole profile down with it.
+		let luck = new Map<string, SeasonLuck[]>();
+		try {
+			luck = await loadLuckBySeason(manager);
+		} catch (luckError) {
+			console.error('[managers/performance] luck query failed:', luckError);
+		}
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({

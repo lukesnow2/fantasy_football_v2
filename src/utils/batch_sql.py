@@ -31,19 +31,21 @@ def last_per_key(rows: List[dict], key_cols: Sequence[str], table: str) -> List[
 
 def insert_batched(conn, table: str, columns: Sequence[str],
                    rows: Iterable[Sequence], suffix: str = '',
-                   page_size: int = 1000) -> int:
+                   page_size: int = 1000, fetch: bool = False):
     """INSERT INTO <table> (<columns>) VALUES ... <suffix>, in pages.
 
     `table` is schema-qualified; `rows` are value tuples in `columns` order,
     passed to psycopg2 unchanged (as the one-row-at-a-time statements did);
     `suffix` is the ON CONFLICT clause, if any. Runs on the caller's
-    SQLAlchemy connection and transaction. Returns the number of rows sent.
+    SQLAlchemy connection and transaction. Returns the number of rows sent,
+    or with fetch=True (for a suffix ending in RETURNING) every returned row
+    across all pages.
     """
     from psycopg2.extras import execute_values
 
     rows = list(rows)
     if not rows:
-        return 0
+        return [] if fetch else 0
     col_list = ', '.join(f'"{c}"' for c in columns)
     sql = f'INSERT INTO {table} ({col_list}) VALUES %s {suffix}'.rstrip()
 
@@ -56,10 +58,10 @@ def insert_batched(conn, table: str, columns: Sequence[str],
         conn.begin()
     cursor = conn.connection.cursor()
     try:
-        execute_values(cursor, sql, rows, page_size=page_size)
+        returned = execute_values(cursor, sql, rows, page_size=page_size, fetch=fetch)
     finally:
         cursor.close()
-    return len(rows)
+    return returned if fetch else len(rows)
 
 
 def upsert_set(update_cols: Sequence[str], extra: Optional[List[str]] = None) -> str:
