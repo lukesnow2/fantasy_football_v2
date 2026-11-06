@@ -1234,6 +1234,14 @@ class YahooFantasyExtractor:
                                                         source_team_id = trans_data_section.get('source_team_key')
                                                         destination_team_id = trans_data_section.get('destination_team_key')
                                                         faab_bid = trans_data_section.get('faab_bid')
+                                                        # Yahoo carries the bid on the transaction,
+                                                        # not on each player. It belongs to the
+                                                        # player claimed, never the one dropped.
+                                                        if (faab_bid is None
+                                                                and trans_data_section.get('type') == 'add'):
+                                                            faab_bid = trans_data.get('faab_bid')
+                                                        if faab_bid is not None:
+                                                            faab_bid = float(faab_bid)
                                             
                                             # Handle trade-specific fields
                                             if trans_type_parsed == 'trade':

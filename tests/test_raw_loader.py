@@ -214,6 +214,40 @@ def test_transactions_append_only_dedupe(state):
     assert n == 1
 
 
+def test_transactions_fill_missing_faab_bid(state):
+    """A claim stored without its bid gets it from a later fetch, once.
+
+    Every claim loaded before the 2026-11 parser fix holds faab_bid NULL;
+    re-offering Yahoo's list must fill it without counting a new row, and a
+    bid already held must never be overwritten.
+    """
+    def tx(bid):
+        return [{
+            'transaction_id': 'tx2', 'league_id': NEW_L, 'type': 'add',
+            'timestamp': NOW, 'player_id': 'p8', 'player_name': 'P8',
+            'source_team_id': None, 'destination_team_id': f'{NEW_L}.t.1',
+            'faab_bid': bid, 'status': 'successful', 'extracted_at': NOW}]
+
+    def held_bid():
+        with state.engine.connect() as conn:
+            return conn.execute(text(
+                "SELECT faab_bid FROM public.transactions "
+                "WHERE transaction_id = 'tx2'")).scalar()
+
+    delta = week_delta(NEW_L, 1)
+    delta['transactions'] = tx(None)
+    assert load(state, NEW_L, 1, delta=delta)['transactions'] == 1
+    assert held_bid() is None
+
+    delta['transactions'] = tx(14.0)
+    assert load(state, NEW_L, 1, delta=delta)['transactions'] == 0
+    assert held_bid() == 14.0
+
+    delta['transactions'] = tx(99.0)
+    load(state, NEW_L, 1, delta=delta)
+    assert held_bid() == 14.0
+
+
 # ------------------------------------------------------- playoff brackets
 
 def seed_bracket(state, league, rounds):
