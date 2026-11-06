@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import ChatPreview from '$lib/components/chat/ChatPreview.svelte';
+	import PlayoffOdds from '$lib/components/PlayoffOdds.svelte';
 	import { YAHOO_LEAGUE_URL } from '$lib/config/league';
 	
 	// Real data from API
@@ -17,6 +18,19 @@
 	let isSeasonComplete = false;
 	let lastPlaceGameLoser: any = null;
 	let leagueOverview: any = {};
+	// The season's playoff field size, from its stored league settings.
+	let playoffTeams = 6;
+
+	// Status from the season's real format (overview API), not weeks 17/14/10:
+	// the playoffs start after the stored regular season, and the trade deadline
+	// is Yahoo's date. An unknown deadline isn't claimed either way.
+	$: seasonStatus = leagueOverview.isSeasonComplete
+		? 'Season Complete'
+		: leagueOverview.playoffStatus === 'Playoffs'
+			? 'Playoffs are heating up'
+			: leagueOverview.tradeDeadlineStatus === 'Passed'
+				? 'Trade deadline passed'
+				: 'Regular season in progress';
 	// Power rankings are their own mart, not a reordering of the standings — the
 	// preview used to render `standings.slice(0, 4)` under a "Power Rankings" heading.
 	let powerRankings: any[] = [];
@@ -26,71 +40,6 @@
 	$: user = $page.data.user;
 	$: authenticatedManager = $page.data.authenticatedManager;
 	
-	// Computed playoff picture data
-	$: playoffPicture = calculatePlayoffPicture(standings, currentWeek);
-	
-	function calculatePlayoffPicture(teams: any[], week: number) {
-		if (!teams || teams.length === 0) {
-			return {
-				clinched: 0,
-				fighting: 0,
-				eliminated: 0,
-				playoffTeams: [],
-				eliminatedTeams: [],
-				seasonPhase: 'regular'
-			};
-		}
-		
-		const totalTeams = teams.length;
-		const playoffSpots = 6; // Based on your constitution
-		const currentWeek = week;
-		const playoffStartWeek = 14; // Based on your constitution
-		
-		// Determine season phase
-		let seasonPhase = 'regular';
-		if (currentWeek >= playoffStartWeek) {
-			seasonPhase = 'playoffs';
-		}
-		if (currentWeek >= 17) { // Championship week
-			seasonPhase = 'completed';
-		}
-		
-		// Calculate playoff status
-		const playoffTeams = teams.filter(team => team.rank <= playoffSpots);
-		const eliminatedTeams = teams.filter(team => team.rank > playoffSpots);
-		
-		// For regular season: calculate clinched vs fighting
-		let clinched = 0;
-		let fighting = 0;
-		
-		if (seasonPhase === 'regular') {
-			// Teams with high win percentage likely clinched
-			clinched = playoffTeams.filter(team => {
-				const winPct = parseFloat(team.winPercentage);
-				return winPct >= 0.700; // 70% win rate or higher
-			}).length;
-			
-			fighting = playoffSpots - clinched;
-		} else if (seasonPhase === 'playoffs') {
-			clinched = playoffSpots; // All playoff spots determined
-			fighting = 0;
-		} else {
-			// Season completed
-			clinched = totalTeams;
-			fighting = 0;
-		}
-		
-		return {
-			clinched,
-			fighting,
-			eliminated: eliminatedTeams.length,
-			playoffTeams,
-			eliminatedTeams,
-			seasonPhase,
-			currentWeek
-		};
-	}
-
 	onMount(async () => {
 		try {
 			console.log('This Season page loading - calling standings API...');
@@ -109,6 +58,7 @@
 			if (standingsResponse.ok) {
 				const standingsData = await standingsResponse.json();
 				standings = standingsData.standings;
+				playoffTeams = standingsData.playoffTeams ?? playoffTeams;
 				isFinalStandings = standingsData.isFinalStandings || false;
 				isSeasonComplete = standingsData.isSeasonComplete || false;
 				lastPlaceGameLoser = standingsData.lastPlaceGameLoser || null;
@@ -154,13 +104,7 @@
 		<div class="text-slate-300 font-medium">
 			Week {currentWeek} <span class="text-slate-500">•</span>
 			<span class="text-slate-400">
-				{currentWeek >= 17
-					? 'Season Complete'
-					: currentWeek >= 14
-						? 'Playoffs are heating up'
-						: currentWeek >= 10
-							? 'Trade deadline passed'
-							: 'Regular season in progress'}
+				{seasonStatus}
 			</span>
 		</div>
 		<a
@@ -296,7 +240,7 @@
 									📋 Final Standings (Consolation Bracket)
 								</h3>
 								<div class="space-y-2">
-									{#each standings.filter(team => team.rank > 6).sort((a, b) => a.rank - b.rank) as team}
+									{#each standings.filter(team => team.rank > playoffTeams).sort((a, b) => a.rank - b.rank) as team}
 										<div class="flex items-center justify-between p-3 rounded-lg bg-slate-600/30">
 											<div class="flex items-center space-x-4">
 												<div class="text-xl font-bold text-slate-400">{team.rank}</div>
@@ -327,16 +271,16 @@
 						<div class="space-y-2">
 							{#each standings as team}
 								<div class="flex items-center justify-between p-4 rounded-lg 
-									{team.rank <= 6 ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
+									{team.rank <= playoffTeams ? 'bg-green-500/10 border border-green-500/20' : 'bg-slate-700/30'}">
 									<div class="flex items-center space-x-4">
 										<div class="text-2xl font-bold 
-											{team.rank <= 6 ? 'text-green-400' : 'text-slate-400'}">
+											{team.rank <= playoffTeams ? 'text-green-400' : 'text-slate-400'}">
 											{team.rank}
 										</div>
 										<div>
 											<div class="font-semibold text-white">{team.teamName}</div>
 											<div class="text-slate-400 text-sm">{team.managerName}</div>
-											{#if team.rank <= 6}
+											{#if team.rank <= playoffTeams}
 												<div class="text-xs text-green-300 font-medium">Playoff Position</div>
 											{/if}
 										</div>
@@ -450,107 +394,7 @@
 				</a>
 			</section>
 
-			<!-- Playoff Picture -->
-			<section class="bg-gradient-to-br from-green-900/20 to-amber-900/20 rounded-xl p-6 border border-green-500/20">
-				<h2 class="text-xl font-bold text-white mb-4 flex items-center">
-					<Trophy class="w-5 h-5 text-amber-400 mr-3" />
-					{playoffPicture.seasonPhase === 'completed' ? 'Final Standings' : 
-					 playoffPicture.seasonPhase === 'playoffs' ? 'Playoff Bracket' : 'Playoff Picture'}
-				</h2>
-				
-				{#if playoffPicture.seasonPhase === 'regular'}
-					<div class="space-y-2 text-sm">
-						<div class="flex justify-between">
-							<span class="text-slate-300">Clinched:</span>
-							<span class="text-green-400 font-medium">{playoffPicture.clinched} teams</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Fighting for spots:</span>
-							<span class="text-amber-400 font-medium">{playoffPicture.fighting} teams</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Eliminated:</span>
-							<span class="text-red-400 font-medium">{playoffPicture.eliminated} teams</span>
-						</div>
-					</div>
-					
-					{#if playoffPicture.playoffTeams.length > 0}
-						<div class="mt-4 pt-3 border-t border-green-500/20">
-							<div class="text-xs text-slate-400 mb-2">Playoff Teams:</div>
-							<div class="space-y-1">
-								{#each playoffPicture.playoffTeams.slice(0, 3) as team}
-									<div class="text-xs text-white">#{team.rank} {team.teamName}</div>
-								{/each}
-								{#if playoffPicture.playoffTeams.length > 3}
-									<div class="text-xs text-slate-400">+{playoffPicture.playoffTeams.length - 3} more</div>
-								{/if}
-							</div>
-						</div>
-					{/if}
-				{:else if playoffPicture.seasonPhase === 'playoffs'}
-					<div class="space-y-2 text-sm">
-						<div class="flex justify-between">
-							<span class="text-slate-300">Playoff Teams:</span>
-							<span class="text-green-400 font-medium">{playoffPicture.playoffTeams.length} teams</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Eliminated:</span>
-							<span class="text-red-400 font-medium">{playoffPicture.eliminatedTeams.length} teams</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Current Week:</span>
-							<span class="text-amber-400 font-medium">Week {playoffPicture.currentWeek}</span>
-						</div>
-					</div>
-					
-					<div class="mt-4 pt-3 border-t border-green-500/20">
-						<div class="text-xs text-slate-400 mb-2">Playoff Bracket:</div>
-						<div class="space-y-1">
-							{#each playoffPicture.playoffTeams.slice(0, 4) as team}
-								<div class="text-xs text-white">#{team.rank} {team.teamName}</div>
-							{/each}
-						</div>
-					</div>
-				{:else}
-					<!-- Season Completed - Show Final Standings -->
-					<div class="space-y-2 text-sm">
-						<div class="flex justify-between">
-							<span class="text-slate-300">Champion:</span>
-							<span class="text-amber-400 font-medium">{standings[0]?.teamName || 'TBD'}</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Runner-up:</span>
-							<span class="text-slate-400 font-medium">{standings[1]?.teamName || 'TBD'}</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">3rd Place:</span>
-							<span class="text-orange-400 font-medium">{standings[2]?.teamName || 'TBD'}</span>
-						</div>
-						<div class="flex justify-between">
-							<span class="text-slate-300">Consolation Winner:</span>
-							<span class="text-blue-400 font-medium">{standings[6]?.teamName || 'TBD'}</span>
-						</div>
-					</div>
-					
-					<div class="mt-4 pt-3 border-t border-green-500/20">
-						<div class="text-xs text-slate-400 mb-2">Playoff Rankings:</div>
-						<div class="space-y-1">
-							{#each standings.slice(0, 6) as team, i}
-								<div class="text-xs text-white">#{i + 1} {team.teamName}</div>
-							{/each}
-						</div>
-					</div>
-					
-					<div class="mt-3 pt-3 border-t border-slate-500/20">
-						<div class="text-xs text-slate-400 mb-2">Consolation Rankings:</div>
-						<div class="space-y-1">
-							{#each standings.filter(team => team.rank > 6).slice(0, 4) as team, i}
-								<div class="text-xs text-white">#{team.rank} {team.teamName}</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</section>
+			<PlayoffOdds />
 		</div>
 	</div>
 </div>

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { getLeagueFormat, tradeDeadlinePassed, type LeagueFormat } from '$lib/server/league-format';
 import { dimLeague, dimManager, factTransaction, factMatchup, factTeamPerformance } from '$lib/server/db/schema';
 import { count, countDistinct, max, min, eq } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
@@ -85,11 +86,18 @@ export const GET: RequestHandler = async () => {
 		const biggestRivalry = rivalryRow ? `${rivalryRow.managerAName} vs ${rivalryRow.managerBName}` : 'Analyzing...';
 
 		// Get current season data directly from database
-		let currentSeasonData = {
+		let currentSeasonData: {
+			currentWeek: number;
+			isSeasonComplete: boolean;
+			playoffStatus: string;
+			tradeDeadlineStatus: 'Passed' | 'Active' | 'Unknown';
+			format: LeagueFormat | null;
+		} = {
 			currentWeek: 1,
 			isSeasonComplete: false,
 			playoffStatus: 'Regular Season',
-			tradeDeadlineStatus: 'Active'
+			tradeDeadlineStatus: 'Unknown',
+			format: null
 		};
 
 		try {
@@ -120,11 +128,22 @@ export const GET: RequestHandler = async () => {
 			const championshipCount = parseInt(championshipResult[0]?.championshipCount?.toString() || '0');
 			const isSeasonComplete = championshipCount > 0;
 			
+			// The season's real format, not weeks 14 and 10: currentWeek is the
+			// last completed week, so the playoffs are on once the whole regular
+			// season has been played.
+			const format = await getLeagueFormat(latestSeason);
+			const deadlinePassed = tradeDeadlinePassed(format);
 			currentSeasonData = {
-				currentWeek: currentWeek,
-				isSeasonComplete: isSeasonComplete,
-				playoffStatus: isSeasonComplete ? 'Championship Decided' : (currentWeek >= 14 ? 'Playoffs' : 'Regular Season'),
-				tradeDeadlineStatus: currentWeek >= 10 ? 'Passed' : 'Active'
+				currentWeek,
+				isSeasonComplete,
+				playoffStatus: isSeasonComplete
+					? 'Championship Decided'
+					: currentWeek >= format.regularSeasonWeeks
+						? 'Playoffs'
+						: 'Regular Season',
+				tradeDeadlineStatus:
+					deadlinePassed === null ? 'Unknown' : deadlinePassed ? 'Passed' : 'Active',
+				format
 			};
 		} catch (error) {
 			console.warn('Could not fetch current season data from database:', error);
@@ -148,8 +167,10 @@ export const GET: RequestHandler = async () => {
 			biggestRivalry,
 			// Current season data
 			currentWeek: currentSeasonData.currentWeek,
+			isSeasonComplete: currentSeasonData.isSeasonComplete,
 			playoffStatus: currentSeasonData.playoffStatus,
-			tradeDeadlineStatus: currentSeasonData.tradeDeadlineStatus
+			tradeDeadlineStatus: currentSeasonData.tradeDeadlineStatus,
+			format: currentSeasonData.format
 		};
 
 		return json({

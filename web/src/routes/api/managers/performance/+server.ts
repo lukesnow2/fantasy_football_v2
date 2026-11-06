@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
+import { getSeasonOdds } from '$lib/server/playoff-odds-service';
 
 /**
  * Postgres `numeric` arrives over the wire as a string, so every average, rate
@@ -45,16 +46,20 @@ const leagueState = sql`
  * at the draft, weeks before a game, and every manager would have read
  * "Didn't play" until week 1 was ranked.
  *
+ * Playoff odds for a season still being played are the This Season widget's
+ * simulation (getSeasonOdds), not the power rankings' rank-and-games-back
+ * formula, so a team's odds are the same number everywhere on the site.
+ *
  * Once a playoff game is in (`bracketSet`), the regular season is over and the
  * team's bracket place (`madePlayoffs`) replaces its week-14 playoff odds. The
  * place comes from the final regular-season standings (record_rank within the
  * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
  * playoff game, so the top seeds, on a first-round bye, would read "missed"
- * for a week. The standings rule, with each finished league's own bracket size,
- * matches the real bracket for every team 2005-2025. The rankings cover every
- * team in a league-week; should a week ever
- * rank fewer teams than the league has, the ranks below are off and the flag
- * is used instead.
+ * for a week. With each league's own bracket size (its stored setting, else
+ * what its finished bracket held), the standings rule matches the real bracket
+ * for every team 2005-2025. The rankings cover every team in a league-week;
+ * should a week ever rank fewer teams than the league has, the ranks below are
+ * off and the flag is used instead.
  */
 async function loadLuckBySeason(
 	manager: string | null
@@ -74,8 +79,9 @@ async function loadLuckBySeason(
 				FROM edw.mart_weekly_power_rankings
 				GROUP BY league_key, week_key
 			),
-			-- Bracket size of each finished league: by the championship every
-			-- bracket team has played. It varied (all 8 teams in 2007, 6 since).
+			-- Bracket size when the league's own setting isn't stored (migration
+			-- 011). A finished league's is what it played: by the championship
+			-- every bracket team has played. It varied (all 8 teams in 2007).
 			bracket AS (
 				SELECT fm.league_key, COUNT(DISTINCT v.team_key) AS n
 				FROM edw.fact_matchup fm
@@ -87,7 +93,7 @@ async function loadLuckBySeason(
 				GROUP BY fm.league_key
 			),
 			-- A league still in its playoffs uses the latest finished season's
-			-- size: its first-round byes have not played yet.
+			-- size (6 since 2008): its first-round byes have not played yet.
 			spots AS (
 				SELECT b.n FROM bracket b
 				JOIN edw.dim_league bl ON bl.league_key = b.league_key
@@ -101,6 +107,8 @@ async function loadLuckBySeason(
 					w.week_number  AS week_number,
 					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
 					p.record_rank, p.league_key, p.week_key, l.num_teams,
+					-- to_jsonb: still runs against a warehouse not yet migrated.
+					(to_jsonb(l) ->> 'num_playoff_teams')::int AS stored_spots,
 					ROW_NUMBER() OVER (
 						PARTITION BY p.league_key, p.team_key ORDER BY w.week_number DESC
 					) AS rn
@@ -119,7 +127,10 @@ async function loadLuckBySeason(
 				COALESCE(ls.bracketed, false) AS bracket_set,
 				CASE
 					WHEN ranked.n = latest.num_teams
-						THEN COALESCE(latest.record_rank <= COALESCE(bracket.n, (SELECT n FROM spots)), false)
+						THEN COALESCE(
+							latest.record_rank
+								<= COALESCE(latest.stored_spots, bracket.n, (SELECT n FROM spots)),
+							false)
 					ELSE EXISTS (
 						SELECT 1 FROM edw.fact_team_performance ftp
 						WHERE ftp.team_key = latest.team_key AND ftp.is_playoff_team
@@ -155,6 +166,31 @@ async function loadLuckBySeason(
 			madePlayoffs: Boolean(r.madePlayoffs)
 		});
 		byManager.set(name, list);
+	}
+
+	// Live odds from the simulation, one run per season still being played
+	// (normally just the current one; cached across requests).
+	const live = new Set(
+		[...byManager.values()]
+			.flat()
+			.filter((s) => s.inProgress && !s.bracketSet)
+			.map((s) => s.seasonYear)
+	);
+	for (const season of live) {
+		let odds = new Map<number, number>();
+		try {
+			const result = await getSeasonOdds(season);
+			if (result.available) odds = new Map(result.teams.map((t) => [t.teamKey, t.playoffOdds]));
+		} catch (error) {
+			// No number rather than the formula's: two disagreeing odds is worse
+			// than a dash on the card.
+			console.error('[managers/performance] playoff odds unavailable:', error);
+		}
+		for (const s of [...byManager.values()].flat()) {
+			if (s.seasonYear === season && s.inProgress && !s.bracketSet) {
+				s.playoffOdds = odds.get(s.teamKey) ?? null;
+			}
+		}
 	}
 	return { byManager, latestSeason: num(latest?.seasonYear) };
 }
@@ -237,7 +273,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			bestDraftYear: num(mgr.best_draft_year ?? mgr.bestDraftYear),
 			worstDraftYear: num(mgr.worst_draft_year ?? mgr.worstDraftYear),
 			totalTransactions: num(mgr.total_transactions ?? mgr.totalTransactions),
-			avgTransactionsPerSeason: num(mgr.avg_transactions_per_season ?? mgr.avgTransactionsPerSeason),
+			avgTransactionsPerSeason: num(
+				mgr.avg_transactions_per_season ?? mgr.avgTransactionsPerSeason
+			),
 			// Starter points per FAAB dollar; null for a manager who never paid for a claim.
 			faabEfficiencyRating: num(mgr.faab_efficiency_rating ?? mgr.faabEfficiencyRating),
 			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
@@ -245,19 +283,23 @@ export const GET: RequestHandler = async ({ url }) => {
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,
 			// Tier classification based on performance
-			tierClassification: (mgr.manager_name || mgr.managerName) === 'Bobby' ? 'League Alum' : (() => {
-				const championships = parseInt(mgr.total_championships || mgr.totalChampionships) || 0;
-				const winPct = parseFloat(mgr.win_percentage || mgr.winPercentage) || 0;
-				
-				if (championships >= 3) return 'League Legend';
-				if (championships >= 2) return 'Dynasty Builder';
-				if (championships >= 1 && winPct >= 0.60) return 'Championship Elite';
-				if (championships >= 1) return 'Champion';
-				if (winPct >= 0.65) return 'Elite Competitor';
-				if (winPct >= 0.55) return 'Playoff Contender';
-				if (winPct >= 0.45) return 'League Regular';
-				return 'Rebuilding';
-			})()
+			tierClassification:
+				(mgr.manager_name || mgr.managerName) === 'Bobby'
+					? 'League Alum'
+					: (() => {
+							const championships =
+								parseInt(mgr.total_championships || mgr.totalChampionships) || 0;
+							const winPct = parseFloat(mgr.win_percentage || mgr.winPercentage) || 0;
+
+							if (championships >= 3) return 'League Legend';
+							if (championships >= 2) return 'Dynasty Builder';
+							if (championships >= 1 && winPct >= 0.6) return 'Championship Elite';
+							if (championships >= 1) return 'Champion';
+							if (winPct >= 0.65) return 'Elite Competitor';
+							if (winPct >= 0.55) return 'Playoff Contender';
+							if (winPct >= 0.45) return 'League Regular';
+							return 'Rebuilding';
+						})()
 		}));
 
 		// Competition ranking: a manager's rank is one more than the number of
@@ -293,27 +335,49 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Get achievements based on computed stats with camelCase field names
 		const achievements = selected.map((mgr: any) => ({
 			managerName: mgr.managerName,
-			championshipAchievement: (mgr.totalChampionships || 0) >= 3 ? 'Dynasty Builder' : 
-										(mgr.totalChampionships || 0) >= 2 ? 'Repeat Champion' : 
-										(mgr.totalChampionships || 0) >= 1 ? 'Champion' : null,
-			consistencyAchievement: (mgr.winPercentage || 0) >= 0.70 ? 'Dominance' : 
-									(mgr.winPercentage || 0) >= 0.60 ? 'Consistent Winner' : 
-									(mgr.winPercentage || 0) >= 0.50 ? 'Above Average' : null,
+			championshipAchievement:
+				(mgr.totalChampionships || 0) >= 3
+					? 'Dynasty Builder'
+					: (mgr.totalChampionships || 0) >= 2
+						? 'Repeat Champion'
+						: (mgr.totalChampionships || 0) >= 1
+							? 'Champion'
+							: null,
+			consistencyAchievement:
+				(mgr.winPercentage || 0) >= 0.7
+					? 'Dominance'
+					: (mgr.winPercentage || 0) >= 0.6
+						? 'Consistent Winner'
+						: (mgr.winPercentage || 0) >= 0.5
+							? 'Above Average'
+							: null,
 			// Thresholds of 130/120 are per-game numbers. They were being compared
 			// against avgPointsFor (points per *season*, ~1800), so every manager
 			// in league history qualified as an Offensive Powerhouse.
-			scoringAchievement: (mgr.avgPointsPerGame || 0) >= 130 ? 'Offensive Powerhouse' :
-								(mgr.avgPointsPerGame || 0) >= 120 ? 'High Scorer' : null,
-			longevityAchievement: (mgr.totalSeasons || 0) >= 15 ? 'League Veteran' : 
-								  (mgr.totalSeasons || 0) >= 10 ? 'Long Timer' : 
-								  (mgr.totalSeasons || 0) >= 5 ? 'Established' : 'Newcomer',
+			scoringAchievement:
+				(mgr.avgPointsPerGame || 0) >= 130
+					? 'Offensive Powerhouse'
+					: (mgr.avgPointsPerGame || 0) >= 120
+						? 'High Scorer'
+						: null,
+			longevityAchievement:
+				(mgr.totalSeasons || 0) >= 15
+					? 'League Veteran'
+					: (mgr.totalSeasons || 0) >= 10
+						? 'Long Timer'
+						: (mgr.totalSeasons || 0) >= 5
+							? 'Established'
+							: 'Newcomer',
 			allAchievements: [
 				(mgr.totalChampionships || 0) >= 1 ? 'Champion' : null,
-				(mgr.winPercentage || 0) >= 0.60 ? 'Consistent Winner' : null,
+				(mgr.winPercentage || 0) >= 0.6 ? 'Consistent Winner' : null,
 				(mgr.avgPointsPerGame || 0) >= 120 ? 'High Scorer' : null,
-				(mgr.totalSeasons || 0) >= 10 ? 'Long Timer' : 
-				(mgr.totalSeasons || 0) >= 5 ? 'Established' : 'Newcomer'
-			].filter(a => a !== null)
+				(mgr.totalSeasons || 0) >= 10
+					? 'Long Timer'
+					: (mgr.totalSeasons || 0) >= 5
+						? 'Established'
+						: 'Newcomer'
+			].filter((a) => a !== null)
 		}));
 
 		data.achievements = achievements;
@@ -360,9 +424,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				// Expected wins, luck and (for a season still being played) playoff
 				// odds, from the power rankings' last ranked week of each season, so
 				// this page and the power rankings never disagree.
-				const byTeam = new Map(
-					(luck.get(manager ?? '') ?? []).map((l) => [l.teamKey, l])
-				);
+				const byTeam = new Map((luck.get(manager ?? '') ?? []).map((l) => [l.teamKey, l]));
 				data.seasons = Array.from(seasonsResult).map((row: any) => {
 					const l = byTeam.get(Number(row.teamKey));
 					return {
@@ -416,11 +478,23 @@ export const GET: RequestHandler = async ({ url }) => {
 						CASE WHEN fm.manager1_key = dm.manager_key THEN fm.team1_key ELSE fm.team2_key END,
 						dw.week_number
 				`);
-				let longestWin = 0, longestLoss = 0, curWin = 0, curLoss = 0;
+				let longestWin = 0,
+					longestLoss = 0,
+					curWin = 0,
+					curLoss = 0;
 				for (const g of Array.from(gamesResult) as any[]) {
-					if (g.result === 'W') { curWin++; curLoss = 0; if (curWin > longestWin) longestWin = curWin; }
-					else if (g.result === 'L') { curLoss++; curWin = 0; if (curLoss > longestLoss) longestLoss = curLoss; }
-					else { curWin = 0; curLoss = 0; }
+					if (g.result === 'W') {
+						curWin++;
+						curLoss = 0;
+						if (curWin > longestWin) longestWin = curWin;
+					} else if (g.result === 'L') {
+						curLoss++;
+						curWin = 0;
+						if (curLoss > longestLoss) longestLoss = curLoss;
+					} else {
+						curWin = 0;
+						curLoss = 0;
+					}
 				}
 				data.streaks = {
 					longestWinStreak: longestWin,
@@ -502,12 +576,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			data,
 			meta: data.meta
 		});
-
 	} catch (error) {
 		console.error('Manager performance API error:', error);
 		return json(
-			{ error: 'Failed to fetch manager performance data', details: error instanceof Error ? error.message : 'Unknown error' },
+			{
+				error: 'Failed to fetch manager performance data',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			},
 			{ status: 500 }
 		);
 	}
-}; 
+};

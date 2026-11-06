@@ -72,6 +72,7 @@ const PUBLIC_PREFIXES = [
 	'/api/standings',
 	'/api/managers',
 	'/api/power-rankings',
+	'/api/playoff-odds',
 	'/api/hall-of-fame',
 	'/api/head-to-head',
 	'/api/record-book',
