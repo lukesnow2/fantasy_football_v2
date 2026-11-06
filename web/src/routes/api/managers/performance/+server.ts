@@ -18,6 +18,19 @@ function num(value: unknown): number | null {
 }
 
 /**
+ * Each league's state, one grouped pass over fact_matchup: finished once its
+ * championship game is in, bracketed once any playoff game is. Shared by the
+ * luck rows and Season History so the two cannot disagree about a season.
+ */
+const leagueState = sql`
+	SELECT league_key,
+		bool_or(is_championship) AS finished,
+		bool_or(is_playoffs)     AS bracketed
+	FROM edw.fact_matchup
+	GROUP BY league_key
+`;
+
+/**
  * Each manager's expected (Pythagorean) wins and luck, one row per season,
  * taken from the power rankings' latest ranked week of that season: the final
  * regular-season standing once it is over, this week's while it is still
@@ -38,7 +51,9 @@ function num(value: unknown): number | null {
  * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
  * playoff game, so the top seeds, on a first-round bye, would read "missed"
  * for a week. The standings rule matches the real bracket for every team
- * 2012-2025 (earlier ranks skip hidden managers, but only a live season uses it).
+ * 2012-2025, the seasons the rankings cover every team. They skip teams whose
+ * manager is outside the ETL's analysis list (2010-2011 here, or a manager new
+ * to the league), which shifts every rank below; then the flag is used instead.
  */
 async function loadLuckBySeason(
 	manager: string | null
@@ -50,11 +65,13 @@ async function loadLuckBySeason(
 			JOIN edw.dim_league l ON l.league_key = p.league_key
 		`),
 		db.execute(sql`
-			WITH finished AS (
-				SELECT DISTINCT league_key FROM edw.fact_matchup WHERE is_championship
-			),
-			bracketed AS (
-				SELECT DISTINCT league_key FROM edw.fact_matchup WHERE is_playoffs
+			WITH league_state AS (${leagueState}),
+			-- Teams ranked each week: equal to the league's size only when no
+			-- team was left out of the power rankings.
+			ranked AS (
+				SELECT league_key, week_key, COUNT(*) AS n
+				FROM edw.mart_weekly_power_rankings
+				GROUP BY league_key, week_key
 			),
 			-- Bracket size, from the latest finished season (6 since 2008).
 			spots AS (
@@ -76,7 +93,7 @@ async function loadLuckBySeason(
 					p.team_key     AS team_key,
 					w.week_number  AS week_number,
 					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
-					p.record_rank, p.league_key,
+					p.record_rank, p.league_key, p.week_key, l.num_teams,
 					ROW_NUMBER() OVER (
 						PARTITION BY p.league_key, p.team_key ORDER BY w.week_number DESC
 					) AS rn
@@ -91,12 +108,20 @@ async function loadLuckBySeason(
 				latest.manager_name, latest.season_year, latest.team_key, latest.week_number,
 				latest.wins, latest.ties, latest.pythagorean_wins, latest.luck_factor,
 				latest.playoff_odds,
-				finished.league_key IS NULL AS in_progress,
-				bracketed.league_key IS NOT NULL AS bracket_set,
-				COALESCE(latest.record_rank <= (SELECT n FROM spots), false) AS made_playoffs
+				NOT COALESCE(ls.finished, false) AS in_progress,
+				COALESCE(ls.bracketed, false) AS bracket_set,
+				CASE
+					WHEN ranked.n = latest.num_teams
+						THEN COALESCE(latest.record_rank <= (SELECT n FROM spots), false)
+					ELSE EXISTS (
+						SELECT 1 FROM edw.fact_team_performance ftp
+						WHERE ftp.team_key = latest.team_key AND ftp.is_playoff_team
+					)
+				END AS made_playoffs
 			FROM latest
-			LEFT JOIN finished ON finished.league_key = latest.league_key
-			LEFT JOIN bracketed ON bracketed.league_key = latest.league_key
+			LEFT JOIN league_state ls ON ls.league_key = latest.league_key
+			LEFT JOIN ranked ON ranked.league_key = latest.league_key
+				AND ranked.week_key = latest.week_key
 			WHERE latest.rn = 1
 			ORDER BY latest.manager_name, latest.season_year
 		`)
@@ -293,6 +318,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				// (Justin in 2007, Bobby in 2008); grouping by year alone merged
 				// them into one 30-game season.
 				const seasonsResult = await db.execute(sql`
+					WITH league_state AS (${leagueState})
 					SELECT
 						tp.season_year                              AS season_year,
 						tp.team_key                                 AS team_key,
@@ -312,19 +338,13 @@ export const GET: RequestHandler = async ({ url }) => {
 						)                                           AS is_champion,
 						-- From the league, not the luck rows: those are optional, and
 						-- without them the season read "Missed Playoffs" again.
-						NOT EXISTS (
-							SELECT 1 FROM edw.fact_matchup fm
-							WHERE fm.is_championship AND fm.league_key = MAX(tp.league_key)
-						)                                           AS in_progress,
-						-- A playoff game is in: the bracket is set, so made_playoffs
-						-- is final even while the season is still being played.
-						EXISTS (
-							SELECT 1 FROM edw.fact_matchup fm
-							WHERE fm.is_playoffs AND fm.league_key = MAX(tp.league_key)
-						)                                           AS bracket_set
+						NOT COALESCE(bool_or(ls.finished), false)   AS in_progress,
+						-- A playoff game is in: the regular season and bracket are set.
+						COALESCE(bool_or(ls.bracketed), false)      AS bracket_set
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
 					JOIN edw.dim_team dt ON dt.team_key = tp.team_key
+					LEFT JOIN league_state ls ON ls.league_key = tp.league_key
 					WHERE dm.manager_name = ${manager}
 					GROUP BY tp.season_year, tp.team_key
 					ORDER BY tp.season_year DESC, tp.team_key
