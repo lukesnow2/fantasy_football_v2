@@ -1,7 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { simulatePlayoffOdds, type OddsResult, type PlayedGame } from '$lib/playoff-odds';
+import {
+	gamesFingerprint,
+	simulatePlayoffOdds,
+	type OddsResult,
+	type PlayedGame
+} from '$lib/playoff-odds';
 import type { RequestHandler } from './$types';
 
 /** Rows come back camel-cased with numerics as strings; read them loosely. */
@@ -27,19 +32,6 @@ const SIMS = 10000;
  * same. Names are joined per request, so a team rename shows immediately.
  */
 const cache = new Map<string, { now: OddsResult; prev: OddsResult | null }>();
-
-function fingerprint(games: PlayedGame[]): string {
-	// FNV-1a over the games in a fixed order.
-	const lines = games.map((g) => `${g.week}:${g.teamA}:${g.teamB}:${g.scoreA}:${g.scoreB}`).sort();
-	let h = 0x811c9dc5;
-	for (const line of lines) {
-		for (let i = 0; i < line.length; i++) {
-			h ^= line.charCodeAt(i);
-			h = Math.imul(h, 0x01000193);
-		}
-	}
-	return `${games.length}:${(h >>> 0).toString(36)}`;
-}
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
@@ -121,11 +113,12 @@ export const GET: RequestHandler = async ({ url }) => {
 		const regularSeasonWeeks = Math.max(Number(lengthRows[0]?.weeks) || 14, playedWeeks);
 
 		const keys = teams.map((t) => t.teamKey);
-		const key = `${season}:${regularSeasonWeeks}:${keys.join(',')}:${fingerprint(games)}`;
+		const key = `${season}:${regularSeasonWeeks}:${keys.join(',')}:${gamesFingerprint(games)}`;
 		let sims = cache.get(key);
 		if (!sims) {
-			// One seed for both runs, so the week-over-week change reflects last
-			// week's results rather than two independent draws of sampling noise.
+			// One seed for both runs: the engine draws each week's randomness from
+			// its own stream, so the two runs share draws for every week both
+			// simulate and the change mostly reflects last week's results.
 			const seed = season * 100 + playedWeeks;
 			const run = (through: number): OddsResult =>
 				simulatePlayoffOdds({
@@ -155,6 +148,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			regularSeasonWeeks,
 			phase: postseasonStarted || playedWeeks >= regularSeasonWeeks ? 'postseason' : 'regular',
 			sims: now.sims,
+			playoffTeams: now.playoffTeams,
+			byes: now.byes,
 			leagueAverage: now.leagueAverage,
 			teams: now.teams.map((t) => ({
 				...t,

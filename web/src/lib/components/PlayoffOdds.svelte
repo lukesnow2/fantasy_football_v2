@@ -40,6 +40,8 @@
 		regularSeasonWeeks: number;
 		phase: 'regular' | 'postseason';
 		sims: number;
+		playoffTeams: number;
+		byes: number;
 		leagueAverage: number;
 		teams: TeamOdds[];
 	}
@@ -50,7 +52,6 @@
 		{ id: 'byeOdds', label: 'Bye' },
 		{ id: 'titleOdds', label: 'Title' }
 	];
-	const PLAYOFF_SPOTS = 6;
 
 	let data = $state<OddsResponse | null>(null);
 	let loading = $state(true);
@@ -159,19 +160,20 @@
 		<div class="space-y-1.5">
 			{#each seeds as t, i (t.teamKey)}
 				<div
-					class="flex items-center justify-between text-sm {i < PLAYOFF_SPOTS
+					class="flex items-center justify-between text-sm {i < data.playoffTeams
 						? 'text-white'
 						: 'text-slate-500'}"
 				>
 					<span class="flex min-w-0 items-center gap-2">
 						<span class="w-5 text-right text-slate-400 tabular-nums">{i + 1}</span>
 						<span class="truncate">{t.teamName}</span>
-						{#if i < 2}<span class="text-[10px] tracking-wide text-amber-300 uppercase">bye</span
+						{#if i < data.byes}<span class="text-[10px] tracking-wide text-amber-300 uppercase"
+								>bye</span
 							>{/if}
 					</span>
 					<span class="shrink-0 text-slate-400 tabular-nums">{record(t)}</span>
 				</div>
-				{#if i === PLAYOFF_SPOTS - 1}
+				{#if i === data.playoffTeams - 1}
 					<div class="my-2 border-t border-dashed border-slate-600"></div>
 				{/if}
 			{/each}
@@ -201,7 +203,7 @@
 		<ul class="space-y-1">
 			{#each sorted as t, i (t.teamKey)}
 				{@const p = t[metric]}
-				{@const locked = metric === 'playoffOdds' && (t.clinched || t.eliminated)}
+				{@const locked = t.eliminated || (metric === 'playoffOdds' && t.clinched)}
 				{@const d = delta(t)}
 				<li>
 					<button
@@ -314,7 +316,7 @@
 						</dl>
 					{/if}
 				</li>
-				{#if metric === 'playoffOdds' && i === PLAYOFF_SPOTS - 1}
+				{#if metric === 'playoffOdds' && i === data.playoffTeams - 1}
 					<li class="flex items-center gap-2 py-1" aria-hidden="true">
 						<span class="flex-1 border-t border-dashed border-slate-600"></span>
 						<span class="text-[10px] tracking-wide text-slate-500 uppercase">Projected cut</span>

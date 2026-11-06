@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildSchedule, rng, simulatePlayoffOdds, type PlayedGame } from './playoff-odds';
+import {
+	buildSchedule,
+	gamesFingerprint,
+	rng,
+	simulatePlayoffOdds,
+	unknownCycleWeeks,
+	type PlayedGame
+} from './playoff-odds';
 
 const TEAMS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -178,5 +185,35 @@ describe('simulatePlayoffOdds', () => {
 			seed: 9
 		});
 		expect(a.teams).toEqual(b.teams);
+	});
+});
+
+describe('unknownCycleWeeks', () => {
+	it('treats a played rematch week as knowing its first-cycle twin', () => {
+		// Ten teams: weeks 10-14 are rematches of 1-5.
+		expect(unknownCycleWeeks(10, 14, [1, 2, 3])).toEqual([4, 5, 6, 7, 8, 9]);
+		expect(unknownCycleWeeks(10, 14, [10, 11])).toEqual([3, 4, 5, 6, 7, 8, 9]);
+		expect(unknownCycleWeeks(10, 14, [1, 2, 3, 4, 5, 6, 7, 8, 9])).toEqual([]);
+	});
+
+	it('only asks for weeks the season actually has', () => {
+		expect(unknownCycleWeeks(10, 6, [1, 2])).toEqual([3, 4, 5, 6]);
+	});
+});
+
+describe('gamesFingerprint', () => {
+	const games = season(4, (t, w) => 100 + t + w);
+
+	it('ignores game order', () => {
+		expect(gamesFingerprint([...games].reverse())).toBe(gamesFingerprint(games));
+	});
+
+	it('changes when a single score is corrected', () => {
+		const corrected = games.map((g, i) => (i === 7 ? { ...g, scoreA: g.scoreA + 0.1 } : g));
+		expect(gamesFingerprint(corrected)).not.toBe(gamesFingerprint(games));
+	});
+
+	it('changes when a game is added', () => {
+		expect(gamesFingerprint(games.slice(1))).not.toBe(gamesFingerprint(games));
 	});
 });

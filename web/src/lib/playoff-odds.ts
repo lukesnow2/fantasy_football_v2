@@ -109,8 +109,31 @@ export interface TeamOdds {
 export interface OddsResult {
 	throughWeek: number;
 	sims: number;
+	/** The format that was simulated, so callers can draw the cut line from it. */
+	playoffTeams: number;
+	byes: number;
 	leagueAverage: number;
 	teams: TeamOdds[];
+}
+
+/**
+ * A short fingerprint of every game and score, independent of order. Results
+ * cached under it go stale the moment any score changes (a stat correction
+ * reloads a week with the same games and different points).
+ */
+export function gamesFingerprint(games: PlayedGame[]): string {
+	const lines = games.map((g) => `${g.week}:${g.teamA}:${g.teamB}:${g.scoreA}:${g.scoreB}`).sort();
+	// FNV-1a.
+	let h = 0x811c9dc5;
+	for (const line of lines) {
+		for (let i = 0; i < line.length; i++) {
+			h ^= line.charCodeAt(i);
+			h = Math.imul(h, 0x01000193);
+		}
+		h ^= 0x0a;
+		h = Math.imul(h, 0x01000193);
+	}
+	return `${games.length}:${(h >>> 0).toString(36)}`;
 }
 
 // ---------------------------------------------------------------- randomness
@@ -125,6 +148,14 @@ export function rng(seed: number): () => number {
 		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
 		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 	};
+}
+
+/** Seed for one simulated season's draws for one week (week 0: starting levels). */
+function streamSeed(seed: number, sim: number, week: number): number {
+	let h = seed >>> 0;
+	h = Math.imul(h ^ sim, 0x9e3779b1);
+	h = Math.imul(h ^ week, 0x85ebca77);
+	return (h ^ (h >>> 16)) >>> 0;
 }
 
 function gaussian(rand: () => number): () => number {
@@ -150,6 +181,24 @@ function gaussian(rand: () => number): () => number {
 type Pairing = [number, number];
 
 const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+
+/**
+ * First-cycle weeks (1 .. teams-1, capped at the season length) whose
+ * pairings are unknown: neither the week nor any of its rematch weeks has
+ * been played. These are the weeks a schedule has to be drawn for.
+ */
+export function unknownCycleWeeks(
+	teamCount: number,
+	regularSeasonWeeks: number,
+	playedWeeks: Iterable<number>
+): number[] {
+	const cycle = teamCount - 1;
+	const known = new Set<number>();
+	for (const w of playedWeeks) known.add(((w - 1) % cycle) + 1);
+	const out: number[] = [];
+	for (let w = 1; w <= Math.min(cycle, regularSeasonWeeks); w++) if (!known.has(w)) out.push(w);
+	return out;
+}
 
 /**
  * Every regular-season week's pairings. Known weeks come from the games;
@@ -179,8 +228,7 @@ export function buildSchedule(
 		if (!firstCycle.has(c)) firstCycle.set(c, pairs);
 	}
 
-	const missing: number[] = [];
-	for (let w = 1; w <= cycle; w++) if (!firstCycle.has(w)) missing.push(w);
+	const missing = unknownCycleWeeks(teamKeys.length, regularSeasonWeeks, known.keys());
 
 	if (missing.length > 0) {
 		const met = new Set<string>();
@@ -432,18 +480,20 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	const pooledNoise = Math.sqrt(noiseSd.reduce((s, x) => s + x * x, 0) / n);
 	const driftSd = p.drift * pooledNoise;
 
-	const rand = rng(opts.seed ?? 20261106);
-	const gauss = gaussian(rand);
+	const seed = opts.seed ?? 20261106;
+	// Schedule draws get their own stream. Score draws come from one stream per
+	// (simulated season, week), so two runs with the same seed see identical
+	// randomness for every week both simulate: comparing this week's odds with
+	// last week's then measures last week's results, not sampling noise.
+	const rand = rng(seed);
+	let gauss = gaussian(rng(0));
+	const useStream = (sim: number, week: number) => {
+		gauss = gaussian(rng(streamSeed(seed, sim, week)));
+	};
 
 	// The schedule only varies when first-cycle weeks are unplayed. Redraw it
 	// every so often so the odds average over the possible schedules.
-	const playedWeeks = new Set(games.map((g) => g.week));
-	const cycle = n - 1;
-	const scheduleUncertain = [...Array(Math.min(cycle, R)).keys()].some((i) => {
-		const w = i + 1;
-		for (let x = w; x <= R; x += cycle) if (playedWeeks.has(x)) return false;
-		return true;
-	});
+	const scheduleUncertain = unknownCycleWeeks(n, R, new Set(games.map((g) => g.week))).length > 0;
 	const toIdx = (pairs: Pairing[]) =>
 		pairs.map(([a, b]) => [idx.get(a)!, idx.get(b)!] as [number, number]);
 	let schedule = buildSchedule(keys, games, R, rand);
@@ -498,14 +548,16 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 			weeksIdx = remainingWeeks.map((w) => toIdx(schedule.get(w) ?? []));
 			tallySchedule(schedule, 1 / draws);
 		}
+		useStream(s, 0);
 		for (let i = 0; i < n; i++) {
 			level[i] = mean[i] + meanSd[i] * gauss();
 			simW[i] = wins[i] + 0.5 * ties[i];
 			simPf[i] = pf[i];
 		}
-		for (const week of weeksIdx) {
+		for (let wi = 0; wi < weeksIdx.length; wi++) {
+			useStream(s, remainingWeeks[wi]);
 			step();
-			for (const [a, b] of week) {
+			for (const [a, b] of weeksIdx[wi]) {
 				play(a, b);
 				simPf[a] += sa;
 				simPf[b] += sb;
@@ -521,17 +573,20 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		top[order[0]]++;
 
 		if (playoffTeams === 6 && byes === 2 && n >= 6) {
-			const seed = order;
+			const bracket = order;
 			const game = (a: number, b: number) => {
 				play(a, b);
 				return sa >= sb ? a : b;
 			};
+			useStream(s, R + 1);
 			step();
-			const w45 = game(seed[3], seed[4]);
-			const w36 = game(seed[2], seed[5]);
+			const w45 = game(bracket[3], bracket[4]);
+			const w36 = game(bracket[2], bracket[5]);
+			useStream(s, R + 2);
 			step();
-			const f1 = game(seed[0], w45);
-			const f2 = game(seed[1], w36);
+			const f1 = game(bracket[0], w45);
+			const f2 = game(bracket[1], w36);
+			useStream(s, R + 3);
 			step();
 			title[game(f1, f2)]++;
 		}
@@ -572,5 +627,5 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	});
 	teams.sort((a, b) => b.playoffOdds - a.playoffOdds || b.projectedWins - a.projectedWins);
 
-	return { throughWeek, sims, leagueAverage, teams };
+	return { throughWeek, sims, playoffTeams, byes, leagueAverage, teams };
 }
