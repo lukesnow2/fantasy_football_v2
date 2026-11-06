@@ -78,7 +78,28 @@ export function tradeDeadlinePassed(
 	return localDate > format.tradeEndDate;
 }
 
-export async function getLeagueFormat(season: number): Promise<LeagueFormat> {
+/**
+ * The This Season page alone asks for a season's format three times per load
+ * (standings, overview, odds), and it only changes when the weekly pipeline
+ * runs. Five minutes keeps it fresh after a load without a query per caller.
+ * The promise is cached, so concurrent callers share one lookup; a failed
+ * lookup is dropped rather than cached.
+ */
+const FORMAT_TTL_MS = 5 * 60 * 1000;
+const formatCache = new Map<number, { at: number; format: Promise<LeagueFormat> }>();
+
+export function getLeagueFormat(season: number): Promise<LeagueFormat> {
+	const hit = formatCache.get(season);
+	if (hit && Date.now() - hit.at < FORMAT_TTL_MS) return hit.format;
+	const format = loadLeagueFormat(season);
+	formatCache.set(season, { at: Date.now(), format });
+	format.catch(() => {
+		if (formatCache.get(season)?.format === format) formatCache.delete(season);
+	});
+	return format;
+}
+
+async function loadLeagueFormat(season: number): Promise<LeagueFormat> {
 	const [storedRows, inferredRows] = await Promise.all([
 		// Read through to_jsonb so this still runs against a warehouse the
 		// pipeline hasn't migrated yet: a missing column reads as null.
