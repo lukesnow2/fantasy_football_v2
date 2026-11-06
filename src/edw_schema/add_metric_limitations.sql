@@ -72,6 +72,40 @@ UPDATE meta_data.metric_definitions SET
     excellent_value_threshold = 60.0000
 WHERE metric_id = 'competitiveness_index';
 
+-- faab_efficiency_rating was career points ÷ FAAB spent, and read 0 for
+-- everyone because no bid had ever been stored (the parser looked for it on
+-- the player, not the transaction). Rebuilt 2026-11 on bids reconciled to
+-- Yahoo: for every team-season 2022-2026, bids + remaining balance = $100.
+-- Observed across the 10 managers who have bid: 0.21-3.13.
+UPDATE meta_data.metric_definitions SET
+    short_description = 'Starter points produced by FAAB pickups, per FAAB dollar spent',
+    detailed_description = 'For every waiver claim a manager paid for, the fantasy points that player scored while in that manager''s starting lineup, from the week of the claim until the same team claimed him again. Divided by the dollars spent. Bench weeks earn nothing: the question is what the money put in the lineup.',
+    calculation_formula = 'Σ Starter Points from Paid Claims ÷ Σ FAAB Dollars Spent',
+    example_calculation = '$40 on a back who started 6 weeks for 72 points and $10 on a receiver who never started: (72 + 0) ÷ (40 + 10) = 1.44 points per dollar',
+    interpretation_guide = 'Higher is better. Across this league (FAAB since 2022) it runs 0.21 to 3.13 with most managers near 1.5-2.1: above 2.5 is sharp bidding, below 1.0 is money left on the bench or the waiver wire.',
+    typical_range = '0.00-3.50',
+    good_value_threshold = 2.0000,
+    excellent_value_threshold = 2.5000,
+    display_format = 'decimal_2'
+WHERE metric_id = 'faab_efficiency_rating';
+
+-- pythagorean_wins used a fixed exponent of 2. Fitted to this league's
+-- completed regular seasons the exponent is 6.26 (6.54 for 2005-15, 5.91 for
+-- 2016-25), cutting the miss against actual wins from 1.69 to 1.07 a season.
+-- At 2, luck correlated +0.77 with a team's share of points scored (good
+-- teams always read lucky); at the fitted exponent the correlation is 0.00.
+UPDATE meta_data.metric_definitions SET
+    detailed_description = 'Estimates how many regular-season games a team "should have" won from points scored and allowed alone. The exponent is fitted to this league''s own completed seasons rather than borrowed from another sport.',
+    calculation_formula = 'Points For^x ÷ (Points For^x + Points Against^x) × Games Played, with x fitted to league history (6.26 through 2025)',
+    example_calculation = 'Team with 1,700 PF, 1,600 PA, 14 games, x = 6.26: (1700^6.26 ÷ (1700^6.26 + 1600^6.26)) × 14 = 8.3 expected wins',
+    interpretation_guide = 'Compare with regular-season wins. A record more than about a game and a half from this, either way, is unusual in a single season; over a career it should come close to even.'
+WHERE metric_id = 'pythagorean_wins';
+
+UPDATE meta_data.metric_definitions SET
+    calculation_formula = 'Regular-Season Wins (ties as half) − Pythagorean Wins',
+    interpretation_guide = 'Positive is lucky, negative unlucky. One season''s standard deviation in this league is about 1.1 wins, so ±1.5 is a notable year and ±2.5 is rare. It does not persist: first-half luck predicts nothing about the second half (r = −0.04), and one season''s luck nothing about the next (r = −0.09).'
+WHERE metric_id = 'luck_factor';
+
 -- ============================================================================
 -- LIMITATIONS
 -- ============================================================================
@@ -85,7 +119,7 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'career_win_percentage';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Currently reads 0.00 for every manager in this league, because no FAAB spend is recorded in the warehouse and the calculation falls back to zero rather than to null. Even with spend data the numerator is a manager''s entire career point total, not the points produced by the players actually bought with FAAB, so the metric rewards spending little more than it rewards spending well.'
+'Credits the whole of a player''s starting production to the claim, with no allowance for who would otherwise have started, so it rewards claims that filled an empty slot as much as genuine upgrades. A player dropped and later re-added for free still credits the original paid claim. $0 claims are excluded because a rate per zero dollars is undefined, so a manager who wins players for nothing gets no credit here. Only 2022 onward: the league did not use FAAB before then.'
 WHERE metric_id = 'faab_efficiency_rating';
 
 UPDATE meta_data.metric_definitions SET limitations =
@@ -105,11 +139,11 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'point_spread_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Uses a fixed exponent of 2. Fantasy football scoring is usually fitted nearer 2.4, so this compresses the spread between lucky and unlucky teams. When a team has no recorded points the value silently falls back to actual wins, which makes luck factor read exactly zero instead of unknown. It also assumes points scored and points allowed are independent, which head-to-head scheduling breaks.'
+'The exponent is one number for the whole league across twenty years, refitted only when a season finishes. It describes a season well (it is fitted to describe) but predicts badly: from the first seven weeks, Pythagorean win percentage at 6.26 forecasts the rest of the season worse than a plain .500 guess, because early-season scoring is noisy. It assumes points scored and allowed are independent, which head-to-head scheduling breaks.'
 WHERE metric_id = 'pythagorean_wins';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Inherits every assumption in Pythagorean wins, including the fixed exponent and the fallback that manufactures a spurious zero. Over a fourteen game season the noise is about the size of the effect, so a single season''s luck factor is not evidence of anything.'
+'Measures only the gap between a record and its points; schedule luck (whom you drew in your best and worst weeks) and points luck (opponents having big weeks) are mixed together. Over a fourteen game season the spread is about one win, so a single season''s value is weak evidence; a career total is more telling.'
 WHERE metric_id = 'luck_factor';
 
 UPDATE meta_data.metric_definitions SET limitations =
@@ -137,7 +171,7 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'consistency_rating';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Not a simulation. It is a weighted blend of current rank, games back and weeks remaining, so it does not know the specific remaining schedule, tiebreakers, or who is on which roster. The weights are fixed rather than fitted to what actually happened in past seasons.'
+'Not a simulation and not fitted. It is a hand-set ladder of rank, games back and week number. Backtested on 2005-2025 (2007 excluded, its bracket labels are unreliable) it beats simple baselines (Brier 0.159, against 0.213 for "in a playoff spot today") but is badly calibrated in the middle: teams given 40-50% made it 26% of the time, 70-80% made it 55%, 80-90% made it 73%. Odds across a league add to about 7.1 playoff spots in week 1 when there are 6, and do not settle to 0% or 100% by the final regular week.'
 WHERE metric_id = 'playoff_probability';
 
 UPDATE meta_data.metric_definitions SET limitations =

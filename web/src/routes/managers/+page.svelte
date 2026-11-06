@@ -4,6 +4,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import ManagerLuckCard from '$lib/components/ManagerLuckCard.svelte';
 	import { getTierColor, getWinPercentageColor, getChampionshipBadge, getInitials } from '$lib/utils/managerUtils';
 
 	export let data;
@@ -305,7 +306,13 @@
 											FAAB Efficiency
 										</MetricHelp>
 									</span>
-									<span class="text-lg font-bold text-blue-400">{parseFloat(currentManager.faabEfficiencyRating || 0).toFixed(1)}</span>
+									<!-- Starter points per FAAB dollar. A dash, not 0.0, for a manager
+									     who never paid for a claim (the league has used FAAB since 2022). -->
+									<span class="text-lg font-bold text-blue-400">
+										{#if currentManager.faabEfficiencyRating != null}
+											{currentManager.faabEfficiencyRating.toFixed(2)}<span class="ml-1 text-xs font-medium text-slate-400">pts/$</span>
+										{:else}—{/if}
+									</span>
 								</div>
 								<div class="flex justify-between items-center">
 									<span class="text-slate-400">
@@ -321,6 +328,8 @@
 								</div>
 							</div>
 						</div>
+
+						<ManagerLuckCard manager={currentManager} stacked />
 
 						<!-- Career Highlights -->
 						<div class="bg-slate-800/40 rounded-xl p-6 border border-slate-700/50">

@@ -22,7 +22,31 @@ from src.utils.batch_sql import insert_batched, last_per_key, upsert_set
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Below this many completed team-seasons the fit is too noisy to trust; fall
+# back to the textbook exponent (what every season used before the fit).
+MIN_TEAM_SEASONS_FOR_FIT = 30
+DEFAULT_PYTHAGOREAN_EXPONENT = 2.0
+
+
+def fit_pythagorean_exponent(team_seasons) -> float:
+    """Exponent x minimising the squared miss of games * PF^x / (PF^x + PA^x)
+    against actual wins (ties as half), over (games, wins, pf, pa) rows.
+
+    Grid search to 0.01 over 1-15: the error curve is smooth and single-
+    bottomed, and a few hundred team-seasons make this instant.
+    """
+    rows = [r for r in team_seasons if r[0] > 0 and r[2] > 0 and r[3] > 0]
+    if len(rows) < MIN_TEAM_SEASONS_FOR_FIT:
+        return DEFAULT_PYTHAGOREAN_EXPONENT
+
+    def sse(x):
+        return sum((w - n * pf ** x / (pf ** x + pa ** x)) ** 2 for n, w, pf, pa in rows)
+
+    return min((sse(x / 100), x / 100) for x in range(100, 1501))[1]
+
+
 @dataclass
+
 class ETLStats:
     """Track ETL processing statistics"""
     records_processed: int = 0
@@ -195,9 +219,10 @@ class EdwEtlProcessor:
             'depends_on': 'operational_matchups'
         },
         'transactions': {
+            # mart_manager_performance: FAAB efficiency reads the bids.
             'triggers_refresh': ['dim_player', 'dim_team', 'dim_manager',
                                  'fact_transaction', 'mart_player_value',
-                                 'vw_trade_analysis'],
+                                 'mart_manager_performance', 'vw_trade_analysis'],
             'refresh_type': 'APPEND',  # Only new transactions
             'depends_on': 'operational_transactions'
         },
@@ -215,8 +240,10 @@ class EdwEtlProcessor:
             'depends_on': 'operational_statistics'
         },
         'rosters': {
+            # mart_manager_performance: FAAB efficiency reads starter points.
             'triggers_refresh': ['dim_season', 'dim_week', 'dim_player', 'dim_team',
-                                 'fact_roster', 'fact_team_performance'],
+                                 'fact_roster', 'fact_team_performance',
+                                 'mart_manager_performance'],
             'refresh_type': 'WEEKLY',
             'depends_on': 'operational_rosters'
         }
@@ -1582,8 +1609,10 @@ class EdwEtlProcessor:
 
         # Build set of league of record IDs for efficient lookup
         league_of_record_ids = set()
+        league_seasons = {}
         for league in self.data.get('leagues', []):
             season_year = int(league['season'])
+            league_seasons[league['league_id']] = season_year
             if self.is_league_of_record(league['league_id'], season_year):
                 league_of_record_ids.add(league['league_id'])
 
@@ -1655,16 +1684,11 @@ class EdwEtlProcessor:
                 logger.warning(f"⚠️ Could not parse timestamp for transaction: {transaction.get('timestamp')}")
                 continue
             
-            # Extract season from the timestamp (assume NFL season starts in September)
-            season_year = transaction_date.year
-            if transaction_date.month >= 9:  # September or later = current NFL season
-                season_year = transaction_date.year
-            else:  # January-August = previous NFL season
-                season_year = transaction_date.year - 1
-            
-            # Ensure we don't assign transactions to seasons before our earliest league (2005)
-            if season_year < 2005:
-                season_year = 2005
+            # The league's season, not the calendar: a claim made before the
+            # September opener belongs to the season it was made for. Reading
+            # it off the date filed every late-August waiver under the
+            # previous season.
+            season_year = league_seasons[transaction['league_id']]
             
             # Find transaction week using preloaded week data
             transaction_week = self.get_week_from_preloaded_data(transaction_date, season_year, week_lookup)
@@ -4847,7 +4871,11 @@ class EdwEtlProcessor:
             "199.l.42364.t.3": "Bobby",
             "222.l.222935.t.6": "Bobby",
             "257.l.89145.t.4": "Bobby",
-            "199.l.42364.t.9": "Bobby",
+            # 2008 El Fuego! (t.9) was mapped to Bobby too, giving him two teams
+            # that season. Owner-identified 2026-11 as Jesse Brown: of the three
+            # it could have been, Trevor (t.4) and Cody Benbow (t.8) already
+            # hold 2008 teams under their own Yahoo names.
+            "199.l.42364.t.9": "Jesse Brown",
             # 2005 league 124.l.109785 hidden teams (owner-identified)
             "124.l.109785.t.1": "Trevor",        # Fire Fire
             "124.l.109785.t.5": "Jesse Brown",   # Mcbumdabums
@@ -5163,10 +5191,15 @@ class EdwEtlProcessor:
             
             # Comprehensive manager performance query with all metrics
             sql = """
+            -- One row per TEAM-season, not per manager-season: a manager can
+            -- run two teams in one season (Justin in 2007, by Yahoo's own
+            -- names; Bobby in 2008 by the team_id map), and grouping by
+            -- season added them together into a 30-game "15-15-0" season.
             WITH manager_stats AS (
                 SELECT 
                     dt.manager_name,
                     dl.season_year,
+                    dt.team_key,
                     SUM(CASE WHEN fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as season_wins,
                     SUM(CASE WHEN fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as season_losses,
                     SUM(CASE WHEN fm.is_tie = TRUE THEN 1 ELSE 0 END) as season_ties,
@@ -5184,7 +5217,7 @@ class EdwEtlProcessor:
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
                 WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
-                GROUP BY dt.manager_name, dl.season_year
+                GROUP BY dt.manager_name, dl.season_year, dt.team_key
             ),
             playoff_stats AS (
                 SELECT 
@@ -5201,12 +5234,45 @@ class EdwEtlProcessor:
             transaction_stats AS (
                 SELECT 
                     dm.manager_name,
-                    COUNT(ft.transaction_key) as total_transactions,
-                    AVG(ft.faab_bid) as avg_faab_bid,
-                    SUM(ft.faab_bid) as total_faab_spent
+                    COUNT(ft.transaction_key) as total_transactions
                 FROM edw.dim_manager dm
                 JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
                 WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
+                GROUP BY dm.manager_name
+            ),
+            -- FAAB efficiency: starter points each paid claim produced for
+            -- the team that won it, per FAAB dollar. A claim earns from its
+            -- week until that team claims the same player again, so a player
+            -- bought twice is never counted twice. Bench weeks earn nothing:
+            -- the question is what the money put in the lineup. $0 claims
+            -- are left out - they cost nothing, so they have no rate.
+            faab_claims AS (
+                SELECT
+                    ft.to_manager_key, ft.to_team_key, ft.player_key,
+                    ft.transaction_week AS claim_week, ft.faab_bid,
+                    LEAD(ft.transaction_week) OVER (
+                        PARTITION BY ft.to_team_key, ft.player_key
+                        ORDER BY ft.transaction_date, ft.transaction_key) AS next_claim_week
+                FROM edw.fact_transaction ft
+                WHERE ft.faab_bid > 0 AND ft.to_team_key IS NOT NULL
+            ),
+            faab_stats AS (
+                SELECT
+                    dm.manager_name,
+                    SUM(fc.faab_bid) AS faab_spent,
+                    SUM(COALESCE((
+                        SELECT SUM(fr.weekly_points)
+                        FROM edw.fact_roster fr
+                        JOIN edw.dim_week dw ON dw.week_key = fr.week_key
+                        WHERE fr.team_key = fc.to_team_key
+                          AND fr.player_key = fc.player_key
+                          AND fr.is_starter
+                          AND dw.week_number >= fc.claim_week
+                          AND (fc.next_claim_week IS NULL OR dw.week_number < fc.next_claim_week)
+                    ), 0)) AS faab_starter_points
+                FROM faab_claims fc
+                JOIN edw.dim_manager dm ON dm.manager_key = fc.to_manager_key
+                WHERE dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
             ),
             draft_stats AS (
@@ -5218,6 +5284,12 @@ class EdwEtlProcessor:
                 JOIN edw.fact_draft fd ON dm.manager_key = fd.manager_key
                 WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
                 GROUP BY dm.manager_name
+            ),
+            -- A season is over once its championship game is in. The one
+            -- still being played must not set a best or worst record (a 0-3
+            -- start is nobody's worst season) or move the consistency spread.
+            completed_seasons AS (
+                SELECT DISTINCT season_year FROM edw.fact_matchup WHERE is_championship
             ),
             manager_aggregates AS (
                 SELECT 
@@ -5236,13 +5308,16 @@ class EdwEtlProcessor:
                     SUM(ms.season_ties) as total_ties,
                     SUM(ms.season_points) as total_points_scored,
                     SUM(ms.games_played) as total_games,
-                    AVG(ms.season_points) as avg_points_per_season,
+                    -- Per season, matching total_seasons: rows are per team, and a
+                    -- manager's two teams in one year are still one season.
+                    SUM(ms.season_points) / NULLIF(COUNT(DISTINCT ms.season_year), 0) as avg_points_per_season,
                     SUM(ms.championships) as championships_won,
                     SUM(ms.championship_games) as championship_appearances,
                     COALESCE(ps.playoff_seasons, 0) as playoff_appearances,
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
-                    STDDEV(ms.season_wins::decimal / NULLIF(ms.games_played, 0)) as win_consistency,
+                    STDDEV(CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
+                                THEN ms.season_wins::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
                     (SELECT fd.season_year 
                      FROM edw.fact_draft fd 
                      JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
@@ -5258,11 +5333,13 @@ class EdwEtlProcessor:
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
+                       AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
                      ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
                      LIMIT 1) as best_season_record,
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
+                       AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
                      ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
                      LIMIT 1) as worst_season_record
                 FROM manager_stats ms
@@ -5308,10 +5385,11 @@ class EdwEtlProcessor:
                     THEN ROUND(COALESCE(ts.total_transactions, 0)::decimal / ma.total_seasons, 2)
                     ELSE 0
                 END as avg_transactions_per_season,
-                CASE 
-                    WHEN COALESCE(ts.total_faab_spent, 0) > 0 
-                    THEN ROUND(ma.total_points_scored / ts.total_faab_spent, 4)
-                    ELSE 0
+                -- NULL, not 0, for a manager who never paid for a claim:
+                -- no spend is no rate, and 0 read as "wasted every dollar".
+                CASE
+                    WHEN fs.faab_spent > 0
+                    THEN ROUND(fs.faab_starter_points / fs.faab_spent, 4)
                 END as faab_efficiency_rating,
                 COALESCE(ROUND(ma.win_consistency, 4), 0) as season_consistency_score,
                 ma.best_season_record,
@@ -5319,6 +5397,7 @@ class EdwEtlProcessor:
             FROM manager_aggregates ma
             LEFT JOIN transaction_stats ts ON ma.manager_name = ts.manager_name
             LEFT JOIN draft_stats ds ON ma.manager_name = ds.manager_name
+            LEFT JOIN faab_stats fs ON ma.manager_name = fs.manager_name
             WHERE ma.total_seasons >= 1
             ORDER BY ma.total_seasons DESC, career_win_percentage DESC
             """
@@ -5568,6 +5647,42 @@ class EdwEtlProcessor:
         logger.info(f"🏪 Generated {len(marts)} player value records")
         return marts
 
+    def pythagorean_exponent(self, conn) -> float:
+        """The Pythagorean exponent that best fits this league's history.
+
+        Fitted on every completed season's regular-season totals (a season is
+        complete once its championship game is in fact_matchup), so it moves
+        only when a season ends. Through 2025 it is 6.26 (6.54 for 2005-15,
+        5.91 for 2016-25); at 2 the expected-wins miss was 1.69 wins a
+        season against 1.07.
+        """
+        rows = conn.execute(text("""
+            WITH games AS (
+                SELECT fm.league_key, fm.team1_key AS team_key,
+                       fm.team1_points AS pf, fm.team2_points AS pa,
+                       CASE WHEN fm.is_tie THEN 0.5
+                            WHEN fm.winner_team_key = fm.team1_key THEN 1 ELSE 0 END AS w
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+                WHERE dw.week_type = 'regular'
+                UNION ALL
+                SELECT fm.league_key, fm.team2_key, fm.team2_points, fm.team1_points,
+                       CASE WHEN fm.is_tie THEN 0.5
+                            WHEN fm.winner_team_key = fm.team2_key THEN 1 ELSE 0 END
+                FROM edw.fact_matchup fm
+                JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+                WHERE dw.week_type = 'regular'
+            )
+            SELECT COUNT(*), SUM(w), SUM(pf), SUM(pa)
+            FROM games
+            WHERE league_key IN (SELECT league_key FROM edw.fact_matchup WHERE is_championship)
+            GROUP BY league_key, team_key
+        """)).fetchall()
+        exponent = fit_pythagorean_exponent(
+            [(int(n), float(w), float(pf), float(pa)) for n, w, pf, pa in rows])
+        logger.info(f"📐 Pythagorean exponent {exponent} (fitted on {len(rows)} team-seasons)")
+        return exponent
+
     def transform_mart_weekly_power_rankings(self) -> List[Dict]:
         """Transform data for mart_weekly_power_rankings"""
         marts = []
@@ -5599,6 +5714,7 @@ class EdwEtlProcessor:
                     fm.team1_points as team_points,
                     fm.team2_points as opponent_points,
                     CASE WHEN fm.winner_team_key = fm.team1_key THEN 1 ELSE 0 END as team_won,
+                    CASE WHEN fm.is_tie THEN 1 ELSE 0 END as team_tied,
                     dw.week_number,
                     dw.week_number as matchup_week
                 FROM edw.fact_matchup fm
@@ -5616,6 +5732,7 @@ class EdwEtlProcessor:
                     fm.team2_points as team_points,
                     fm.team1_points as opponent_points,
                     CASE WHEN fm.winner_team_key = fm.team2_key THEN 1 ELSE 0 END as team_won,
+                    CASE WHEN fm.is_tie THEN 1 ELSE 0 END as team_tied,
                     dw.week_number,
                     dw.week_number as matchup_week
                 FROM edw.fact_matchup fm
@@ -5643,12 +5760,16 @@ class EdwEtlProcessor:
                     SUM(am.team_points) as total_points_for,
                     SUM(am.opponent_points) as total_points_against,
                     COUNT(*) as games_played,
-                    -- Pythagorean expectation formula: (PF^2) / (PF^2 + PA^2) * Games
-                    CASE 
+                    -- Pythagorean expectation: PF^x / (PF^x + PA^x) * games, with
+                    -- x fitted to this league's completed seasons (see
+                    -- fit_pythagorean_exponent) rather than a fixed 2. At 2,
+                    -- luck correlated +0.77 with a team's scoring share: good
+                    -- teams always read lucky. No points means no estimate -
+                    -- NULL, not the actual wins, which forged a luck of zero.
+                    CASE
                         WHEN SUM(am.team_points) > 0 AND SUM(am.opponent_points) > 0 THEN
-                            (POWER(SUM(am.team_points), 2) / 
-                             (POWER(SUM(am.team_points), 2) + POWER(SUM(am.opponent_points), 2))) * COUNT(*)
-                        ELSE SUM(am.team_won)  -- Fallback to actual wins if no points
+                            (POWER(SUM(am.team_points), :pyth_exp) /
+                             (POWER(SUM(am.team_points), :pyth_exp) + POWER(SUM(am.opponent_points), :pyth_exp))) * COUNT(*)
                     END as pythagorean_wins
                 FROM (
                     SELECT DISTINCT 
@@ -5770,8 +5891,9 @@ class EdwEtlProcessor:
                     aw.week_key,
                     aw.season_year,
                     SUM(am.team_won) as cumulative_wins,
-                    SUM(CASE WHEN am.team_won = 0 THEN 1 ELSE 0 END) as cumulative_losses,
-                    0 as cumulative_ties,  -- No ties in current data
+                    SUM(CASE WHEN am.team_won = 0 AND am.team_tied = 0 THEN 1 ELSE 0 END) as cumulative_losses,
+                    -- There are ties (4 games through 2025); a tie was a loss here.
+                    SUM(am.team_tied) as cumulative_ties,
                     COUNT(*) as games_played
                 FROM (
                     SELECT DISTINCT 
@@ -5851,7 +5973,7 @@ class EdwEtlProcessor:
                     -- Use actual SOS and pythagorean wins from corrected calculations
                     COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
                     COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(COALESCE(cr.games_played, 1), 0)) as recent_form_score,
-                    COALESCE(tsap.pythagorean_wins, COALESCE(cr.cumulative_wins, 0)) as pythagorean_wins,
+                    tsap.pythagorean_wins,
                     -- Previous rank for rank change calculation
                     LAG(ftp.season_rank) OVER (PARTITION BY ftp.team_key, ftp.league_key ORDER BY dw.week_number) as prev_rank,
                     ls.playoff_spots,
@@ -5901,7 +6023,7 @@ class EdwEtlProcessor:
                      (ws.recent_form_score / NULLIF(MAX(ws.recent_form_score) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.2 +
                      (1.0 - COALESCE(ws.strength_of_schedule, 0.5)) * 0.1) as power_score,
                     -- Luck factor (actual cumulative wins vs expected wins based on matchups)
-                    ws.wins - ws.pythagorean_wins as luck_factor,
+                    ws.wins + 0.5 * ws.ties - ws.pythagorean_wins as luck_factor,
                     -- Rank change from previous week
                     COALESCE(ws.prev_rank - ws.season_rank, 0) as rank_change,
                     -- Improved playoff probability based on rank, games back, and realistic scenarios
@@ -6006,7 +6128,8 @@ class EdwEtlProcessor:
             ORDER BY rp.league_key, rp.week_key, rp.power_rank
             """
             
-            result = conn.execute(text(sql))
+            pyth_exp = self.pythagorean_exponent(conn)
+            result = conn.execute(text(sql), {'pyth_exp': pyth_exp})
             rows = result.fetchall()
             
             for row in rows:

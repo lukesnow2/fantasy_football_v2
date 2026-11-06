@@ -63,3 +63,16 @@ export function getChampionshipBadge(championships: number): string {
 	if (championships === 1) return '👑';
 	return '';
 } 
+
+/** Wins above or below expectation, signed to one decimal: "+1.4", "-0.6", "—". */
+export function formatLuck(value: number | null | undefined): string {
+	if (value == null) return '—';
+	const fixed = value.toFixed(1);
+	return value > 0 ? `+${fixed}` : fixed;
+}
+
+/** Luck colour: within half a win either way is a record that matches its scoring. */
+export function getLuckColor(value: number | null | undefined): string {
+	if (value == null || Math.abs(value) < 0.5) return 'text-slate-200';
+	return value > 0 ? 'text-green-400' : 'text-red-400';
+}

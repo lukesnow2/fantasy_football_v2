@@ -204,20 +204,46 @@ def replace_period_rows(conn, table: str, week_col: str, league_id: str,
     return {'deleted': deleted, 'inserted': inserted}
 
 
-def append_only(conn, table: str, rows: List[dict], conflict_cols: str) -> int:
-    """Insert rows not already held; returns how many were actually new.
+def append_only(conn, table: str, rows: List[dict], conflict_cols: str,
+                fill_missing: tuple = ()) -> int:
+    """Insert rows not already held; returns how many rows changed.
 
     Callers pass Yahoo's full list every run, so the number of rows offered
     says nothing - the run ledger and the EDW refresh triggers need the
     number that landed. Counted on the caller's transaction, which the
     pipeline's advisory lock keeps free of concurrent writers.
+
+    fill_missing names columns a held row may have stored as NULL that a
+    later fetch can supply. Such a column is filled in place, never
+    overwritten once set, and a filled row counts as changed: the EDW
+    refresh only re-reads a table whose count is non-zero, so a run that
+    only filled bids would otherwise never publish them. Transactions need
+    it for faab_bid: until 2026-11 the parser looked for the bid on each
+    player instead of on the transaction, so every claim loaded before
+    then holds NULL.
     """
     if not rows:
         return 0
-    count = text(f'SELECT count(*) FROM public.{table}')
-    before = conn.execute(count).scalar()
-    _insert_rows(conn, table, rows, f'ON CONFLICT ({conflict_cols}) DO NOTHING')
-    return conn.execute(count).scalar() - before
+    if not fill_missing:
+        count = text(f'SELECT count(*) FROM public.{table}')
+        before = conn.execute(count).scalar()
+        _insert_rows(conn, table, rows, f'ON CONFLICT ({conflict_cols}) DO NOTHING')
+        return conn.execute(count).scalar() - before
+
+    held = f'public.{table}'
+    sets = ', '.join(f'{c} = COALESCE({held}.{c}, EXCLUDED.{c})' for c in fill_missing)
+    gaps = ' OR '.join(f'({held}.{c} IS NULL AND EXCLUDED.{c} IS NOT NULL)'
+                       for c in fill_missing)
+    # DO UPDATE refuses a key twice in one statement; DO NOTHING didn't care.
+    rows = last_per_key(rows, [c.strip() for c in conflict_cols.split(',')], table)
+    cols = list(rows[0].keys())
+    # RETURNING yields one row per insert or fill and none for a row skipped
+    # by the WHERE, so its length is exactly the rows that changed.
+    returned = insert_batched(
+        conn, held, cols, [tuple(row[c] for c in cols) for row in rows],
+        f'ON CONFLICT ({conflict_cols}) DO UPDATE SET {sets} WHERE {gaps} RETURNING 1',
+        fetch=True)
+    return len(returned)
 
 
 def _keep_captured_teams(conn, league_id: str, weeks: List[int], rows: List[dict]) -> None:
@@ -336,7 +362,7 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     if 'transactions' in data:
         counts['transactions'] = append_only(
             conn, 'transactions', data['transactions'],
-            'transaction_id, player_id')
+            'transaction_id, player_id', fill_missing=('faab_bid',))
     if 'draft_picks' in data:
         counts['draft_picks'] = append_only(
             conn, 'draft_picks', data['draft_picks'], 'draft_pick_id')
