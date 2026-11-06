@@ -18,6 +18,7 @@ function num(value: unknown): number | null {
 
 type SeasonLuck = {
 	seasonYear: number;
+	teamKey: number;
 	weekNumber: number;
 	wins: number;
 	ties: number;
@@ -48,6 +49,7 @@ async function loadLuckBySeason(manager: string | null): Promise<Map<string, Sea
 				SELECT
 					t.manager_name AS manager_name,
 					l.season_year  AS season_year,
+					p.team_key     AS team_key,
 					w.week_number  AS week_number,
 					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
 					p.league_key,
@@ -62,7 +64,7 @@ async function loadLuckBySeason(manager: string | null): Promise<Map<string, Sea
 				${manager ? sql`AND t.manager_name = ${manager}` : sql``}
 			)
 			SELECT
-				latest.manager_name, latest.season_year, latest.week_number,
+				latest.manager_name, latest.season_year, latest.team_key, latest.week_number,
 				latest.wins, latest.ties, latest.pythagorean_wins, latest.luck_factor,
 				latest.playoff_odds,
 				finished.league_key IS NULL AS in_progress
@@ -79,6 +81,7 @@ async function loadLuckBySeason(manager: string | null): Promise<Map<string, Sea
 		const list = byManager.get(name) ?? [];
 		list.push({
 			seasonYear: Number(r.seasonYear),
+			teamKey: Number(r.teamKey),
 			weekNumber: Number(r.weekNumber),
 			wins: Number(r.wins ?? 0),
 			ties: Number(r.ties ?? 0),
@@ -102,7 +105,8 @@ function summarizeLuck(seasons: SeasonLuck[]) {
 		careerRegularSeasonWins: sum((s) => s.wins + 0.5 * s.ties),
 		careerPythagoreanWins: sum((s) => s.pythagoreanWins as number),
 		careerLuckFactor: sum((s) => s.luckFactor as number),
-		luckSeasons: scored.length,
+		// Seasons, not teams: a manager who ran two teams in a year played one season.
+		luckSeasons: new Set(scored.map((s) => s.seasonYear)).size,
 		currentSeason: current
 			? {
 					seasonYear: current.seasonYear,
@@ -278,9 +282,14 @@ export const GET: RequestHandler = async ({ url }) => {
 		// so aggregate to one row per season (the old query returned per-week rows).
 		if (analysis === 'seasons' || analysis === 'all') {
 			try {
+				// One row per team-season. A manager can run two teams in a year
+				// (Justin in 2007, Bobby in 2008); grouping by year alone merged
+				// them into one 30-game season.
 				const seasonsResult = await db.execute(sql`
 					SELECT
 						tp.season_year                              AS season_year,
+						tp.team_key                                 AS team_key,
+						MAX(dt.team_name)                           AS team_name,
 						SUM(tp.wins)                                AS wins,
 						SUM(tp.losses)                              AS losses,
 						SUM(tp.ties)                                AS ties,
@@ -289,21 +298,26 @@ export const GET: RequestHandler = async ({ url }) => {
 							ELSE 0 END                              AS win_percentage,
 						SUM(tp.points_for)                          AS points_for,
 						SUM(tp.points_against)                      AS points_against,
-						bool_or(tp.is_playoff_team)                 AS made_playoffs
+						bool_or(tp.is_playoff_team)                 AS made_playoffs,
+						EXISTS (
+							SELECT 1 FROM edw.fact_matchup fm
+							WHERE fm.is_championship AND fm.winner_team_key = tp.team_key
+						)                                           AS is_champion
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
+					JOIN edw.dim_team dt ON dt.team_key = tp.team_key
 					WHERE dm.manager_name = ${manager}
-					GROUP BY tp.season_year
-					ORDER BY tp.season_year DESC
+					GROUP BY tp.season_year, tp.team_key
+					ORDER BY tp.season_year DESC, tp.team_key
 				`);
 				// Expected wins, luck and (for a season still being played) playoff
 				// odds, from the power rankings' last ranked week of each season, so
 				// this page and the power rankings never disagree.
-				const bySeason = new Map(
-					(luck.get(manager ?? '') ?? []).map((l) => [l.seasonYear, l])
+				const byTeam = new Map(
+					(luck.get(manager ?? '') ?? []).map((l) => [l.teamKey, l])
 				);
 				data.seasons = Array.from(seasonsResult).map((row: any) => {
-					const l = bySeason.get(Number(row.seasonYear));
+					const l = byTeam.get(Number(row.teamKey));
 					return {
 						...row,
 						inProgress: l?.inProgress ?? false,
@@ -345,7 +359,11 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_week dw ON fm.week_key = dw.week_key
 					JOIN edw.dim_manager dm ON dm.manager_name = ${manager}
 					WHERE fm.manager1_key = dm.manager_key OR fm.manager2_key = dm.manager_key
-					ORDER BY fm.season_year, dw.week_number
+					-- Team within season, so a manager's two teams in one year
+					-- don't interleave week by week into one streak.
+					ORDER BY fm.season_year,
+						CASE WHEN fm.manager1_key = dm.manager_key THEN fm.team1_key ELSE fm.team2_key END,
+						dw.week_number
 				`);
 				let longestWin = 0, longestLoss = 0, curWin = 0, curLoss = 0;
 				for (const g of Array.from(gamesResult) as any[]) {

@@ -61,8 +61,14 @@
 	// A season still being played has no outcome yet: "missed the playoffs"
 	// was only ever the absence of a playoff flag, which no team has before
 	// the bracket is set.
+	// isChampion is per team: in a year a manager ran two teams, only the team
+	// that won the title is the champion. champYears is the fallback.
+	function wonTitle(season: any, champYears: number[]): boolean {
+		return season.isChampion ?? champYears.includes(Number(season.seasonYear));
+	}
+
 	function getSeasonOutcome(season: any, champYears: number[]): string {
-		if (champYears.includes(Number(season.seasonYear))) return '🏆 Champion';
+		if (wonTitle(season, champYears)) return '🏆 Champion';
 		if (season.inProgress) {
 			return season.playoffOdds != null
 				? `⏳ In progress · ${Math.round(season.playoffOdds * 100)}% playoff odds`
@@ -73,7 +79,7 @@
 	}
 
 	function getSeasonOutcomeColor(season: any, champYears: number[]): string {
-		if (champYears.includes(Number(season.seasonYear))) return 'text-amber-400';
+		if (wonTitle(season, champYears)) return 'text-amber-400';
 		if (season.inProgress) return 'text-slate-300';
 		if (season.madePlayoffs) return 'text-blue-400';
 		return 'text-red-400';
@@ -330,7 +336,10 @@
 							<tbody>
 								{#each seasons as season}
 									<tr class="border-b border-slate-700/50">
-										<td class="py-3 px-4 font-bold text-white">{season.seasonYear}</td>
+										<td class="py-3 px-4">
+											<div class="font-bold text-white">{season.seasonYear}</div>
+											{#if season.teamName}<div class="text-xs text-slate-400">{season.teamName}</div>{/if}
+										</td>
 										<td class="text-center py-3 px-4">
 											<span class="font-mono {getWinPercentageColor(season.winPercentage)}">
 												{season.wins}-{season.losses}-{season.ties}

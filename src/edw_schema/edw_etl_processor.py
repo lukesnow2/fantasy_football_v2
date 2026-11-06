@@ -5175,10 +5175,15 @@ class EdwEtlProcessor:
             
             # Comprehensive manager performance query with all metrics
             sql = """
+            -- One row per TEAM-season, not per manager-season: a manager can
+            -- run two teams in one season (Justin in 2007, by Yahoo's own
+            -- names; Bobby in 2008 by the team_id map), and grouping by
+            -- season added them together into a 30-game "15-15-0" season.
             WITH manager_stats AS (
                 SELECT 
                     dt.manager_name,
                     dl.season_year,
+                    dt.team_key,
                     SUM(CASE WHEN fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as season_wins,
                     SUM(CASE WHEN fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as season_losses,
                     SUM(CASE WHEN fm.is_tie = TRUE THEN 1 ELSE 0 END) as season_ties,
@@ -5196,7 +5201,7 @@ class EdwEtlProcessor:
                 LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
                     AND fm.season_year = dl.season_year
                 WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
-                GROUP BY dt.manager_name, dl.season_year
+                GROUP BY dt.manager_name, dl.season_year, dt.team_key
             ),
             playoff_stats AS (
                 SELECT 
