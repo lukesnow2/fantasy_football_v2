@@ -5296,7 +5296,9 @@ class EdwEtlProcessor:
                     SUM(ms.season_ties) as total_ties,
                     SUM(ms.season_points) as total_points_scored,
                     SUM(ms.games_played) as total_games,
-                    AVG(ms.season_points) as avg_points_per_season,
+                    -- Per season, matching total_seasons: rows are per team, and a
+                    -- manager's two teams in one year are still one season.
+                    SUM(ms.season_points) / NULLIF(COUNT(DISTINCT ms.season_year), 0) as avg_points_per_season,
                     SUM(ms.championships) as championships_won,
                     SUM(ms.championship_games) as championship_appearances,
                     COALESCE(ps.playoff_seasons, 0) as playoff_appearances,

@@ -98,7 +98,21 @@ async function loadLuckBySeason(manager: string | null): Promise<Map<string, Sea
 /** Career and current-season expected wins and luck for one manager. */
 function summarizeLuck(seasons: SeasonLuck[]) {
 	const scored = seasons.filter((s) => s.pythagoreanWins != null && s.luckFactor != null);
-	const current = seasons.find((s) => s.inProgress) ?? null;
+	// Usually one row; a manager running two teams this season gets their
+	// totals added, and no single playoff odds (each team has its own).
+	const live = seasons.filter((s) => s.inProgress);
+	const liveTotal = (f: (s: SeasonLuck) => number | null) =>
+		live.some((s) => f(s) == null) ? null : live.reduce((acc, s) => acc + (f(s) as number), 0);
+	const current = live.length
+		? {
+				...live[0],
+				wins: liveTotal((s) => s.wins) as number,
+				ties: liveTotal((s) => s.ties) as number,
+				pythagoreanWins: liveTotal((s) => s.pythagoreanWins),
+				luckFactor: liveTotal((s) => s.luckFactor),
+				playoffOdds: live.length === 1 ? live[0].playoffOdds : null
+			}
+		: null;
 	const sum = (f: (s: SeasonLuck) => number) =>
 		scored.length ? scored.reduce((acc, s) => acc + f(s), 0) : null;
 	return {
@@ -302,7 +316,13 @@ export const GET: RequestHandler = async ({ url }) => {
 						EXISTS (
 							SELECT 1 FROM edw.fact_matchup fm
 							WHERE fm.is_championship AND fm.winner_team_key = tp.team_key
-						)                                           AS is_champion
+						)                                           AS is_champion,
+						-- From the league, not the luck rows: those are optional, and
+						-- without them the season read "Missed Playoffs" again.
+						NOT EXISTS (
+							SELECT 1 FROM edw.fact_matchup fm
+							WHERE fm.is_championship AND fm.league_key = MAX(tp.league_key)
+						)                                           AS in_progress
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
 					JOIN edw.dim_team dt ON dt.team_key = tp.team_key
@@ -320,11 +340,11 @@ export const GET: RequestHandler = async ({ url }) => {
 					const l = byTeam.get(Number(row.teamKey));
 					return {
 						...row,
-						inProgress: l?.inProgress ?? false,
+						inProgress: Boolean(row.inProgress),
 						regularSeasonWins: l ? l.wins + 0.5 * l.ties : null,
 						pythagoreanWins: l?.pythagoreanWins ?? null,
 						luckFactor: l?.luckFactor ?? null,
-						playoffOdds: l?.inProgress ? l.playoffOdds : null,
+						playoffOdds: row.inProgress && l ? l.playoffOdds : null,
 						throughWeek: l?.weekNumber ?? null
 					};
 				});

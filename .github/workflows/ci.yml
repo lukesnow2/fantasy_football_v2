@@ -15,7 +15,8 @@ concurrency:
 
 jobs:
   pipeline-tests:
-    runs-on: ubuntu-latest
+    # Pinned with web-tests below: ubuntu-latest moves under us.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
