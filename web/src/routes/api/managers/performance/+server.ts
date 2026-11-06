@@ -51,9 +51,9 @@ const leagueState = sql`
  * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
  * playoff game, so the top seeds, on a first-round bye, would read "missed"
  * for a week. The standings rule matches the real bracket for every team
- * 2012-2025, the seasons the rankings cover every team. They skip teams whose
- * manager is outside the ETL's analysis list (2010-2011 here, or a manager new
- * to the league), which shifts every rank below; then the flag is used instead.
+ * 2012-2025. The rankings cover every team in a league-week; should a week ever
+ * rank fewer teams than the league has, the ranks below are off and the flag
+ * is used instead.
  */
 async function loadLuckBySeason(
 	manager: string | null

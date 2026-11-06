@@ -33,6 +33,12 @@ export interface PowerRankingRow {
 	teamKey: number;
 	teamName: string;
 	managerName: string | null;
+	/**
+	 * Whether /managers/{managerName} exists. The rankings cover every team, but
+	 * only managers in analysis have a profile: not Yahoo's '--hidden--'
+	 * placeholder or a short-stint early manager.
+	 */
+	managerHasProfile: boolean;
 	powerRank: number;
 	/** Positive means the team climbed since last week. Null in week 1. */
 	rankChange: number | null;
@@ -94,6 +100,7 @@ export const GET: RequestHandler = async ({ url }) => {
 						p.team_key             AS "teamKey",
 						t.team_name            AS "teamName",
 						t.manager_name         AS "managerName",
+						COALESCE(m.include_in_analysis, false) AS "managerHasProfile",
 						p.power_rank           AS "powerRank",
 						p.record_rank          AS "recordRank",
 						p.points_rank          AS "pointsRank",
@@ -114,6 +121,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_week w   ON w.week_key  = p.week_key
 					JOIN edw.dim_team t   ON t.team_key  = p.team_key
 					JOIN edw.dim_league l ON l.league_key = p.league_key
+					LEFT JOIN edw.dim_manager m ON m.manager_name = t.manager_name
 					WHERE w.season_year = ${season}
 					  AND l.season_year = ${season}
 				)
@@ -129,6 +137,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			teamKey: Number(r.teamKey),
 			teamName: String(r.teamName ?? ''),
 			managerName: r.managerName == null ? null : String(r.managerName),
+			managerHasProfile: String(r.managerHasProfile) === 'true',
 			powerRank: Number(r.powerRank),
 			// Null rather than 0 in week 1: there is no previous week to move from,
 			// and rendering a 0 there would claim the team held its rank.

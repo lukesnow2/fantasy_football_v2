@@ -265,13 +265,15 @@
 								</td>
 								<td class="px-4 py-3">
 									<div class="font-medium text-white">{row.teamName}</div>
-									{#if row.managerName}
+									{#if row.managerName && row.managerHasProfile}
 										<a
 											href="/managers/{encodeURIComponent(row.managerName)}"
 											class="text-xs text-slate-400 hover:text-amber-400"
 										>
 											{row.managerName}
 										</a>
+									{:else if row.managerName}
+										<span class="text-xs text-slate-500">{row.managerName}</span>
 									{/if}
 								</td>
 								<td class="px-4 py-3 text-slate-300 tabular-nums">{record(row)}</td>
