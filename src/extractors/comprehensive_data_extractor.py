@@ -47,6 +47,26 @@ logger = logging.getLogger(__name__)
 logging.getLogger('yahoo_oauth').setLevel(logging.INFO)
 
 
+def playoff_settings(settings: Dict[str, Any]) -> Dict[str, Optional[int]]:
+    """The league's playoff format from Yahoo's settings, as integers.
+
+    Yahoo returns these as strings ('15', '6'). A league that doesn't use
+    playoffs, or a settings payload without them, yields None rather than a
+    guess: downstream treats None as "not known" and keeps what it has.
+    """
+    def as_int(key: str) -> Optional[int]:
+        try:
+            value = int(settings.get(key))
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    if str(settings.get('uses_playoff', '1')) == '0':
+        return {'playoff_start_week': None, 'num_playoff_teams': None}
+    return {'playoff_start_week': as_int('playoff_start_week'),
+            'num_playoff_teams': as_int('num_playoff_teams')}
+
+
 def completed_weeks(current_week: int, end_week: int, is_finished) -> List[int]:
     """Weeks whose play is complete, inferred from league-level settings.
 
@@ -116,6 +136,8 @@ class ExtractedLeague:
     url: str
     logo_url: Optional[str] = None
     extracted_at: datetime = datetime.now()
+    playoff_start_week: Optional[int] = None
+    num_playoff_teams: Optional[int] = None
 
 @dataclass
 class ExtractedTeam:
@@ -622,7 +644,8 @@ class YahooFantasyExtractor:
                             'is_pro_league': settings.get('is_pro_league', False),
                             'is_cash_league': settings.get('is_cash_league', False),
                             'url': settings.get('url', ''),
-                            'logo_url': settings.get('logo_url', None)
+                            'logo_url': settings.get('logo_url', None),
+                            **playoff_settings(settings),
                         })
                         logger.info(f"  ✅ Added league: {league_name} ({settings.get('season', 'Unknown')}) - {draft_status}")
                         
@@ -659,7 +682,9 @@ class YahooFantasyExtractor:
             is_pro_league=league_info['is_pro_league'],
             is_cash_league=league_info['is_cash_league'],
             url=league_info['url'],
-            logo_url=league_info['logo_url']
+            logo_url=league_info['logo_url'],
+            playoff_start_week=league_info.get('playoff_start_week'),
+            num_playoff_teams=league_info.get('num_playoff_teams'),
         )
     
     def extract_teams_for_league(self, league_id: str) -> List[ExtractedTeam]:

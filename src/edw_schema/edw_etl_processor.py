@@ -35,6 +35,24 @@ class ETLStats:
         if self.errors is None:
             self.errors = []
 
+# The playoff format is only replaced by a known value: raw rows for seasons
+# extracted before migration 011 carry NULLs, and re-publishing one must not
+# wipe what the migration backfilled from its bracket.
+LEAGUE_FORMAT_SET = [
+    f'{c} = COALESCE(EXCLUDED.{c}, dim_league.{c})'
+    for c in ('end_week', 'playoff_start_week', 'num_playoff_teams')
+]
+
+
+def _positive_int(value) -> Optional[int]:
+    """A settings value as an int, or None if missing, blank or not positive."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
 # Dimension upserts: (columns, ON CONFLICT key, columns updated on conflict,
 # extra SET expressions). Written as one batched INSERT per table - one
 # statement per record cost a network round trip each, ~3 minutes of a weekly
@@ -49,11 +67,12 @@ DIMENSION_UPSERTS = {
         None),
     'dim_league': (
         ['league_id', 'league_name', 'season_year', 'num_teams', 'league_type',
-         'scoring_type', 'draft_type', 'is_active', 'valid_from', 'valid_to'],
+         'scoring_type', 'draft_type', 'end_week', 'playoff_start_week',
+         'num_playoff_teams', 'is_active', 'valid_from', 'valid_to'],
         'league_id, season_year',
         ['league_name', 'num_teams', 'league_type', 'scoring_type', 'draft_type',
          'is_active', 'valid_to'],
-        None),
+        LEAGUE_FORMAT_SET),
     'dim_team': (
         ['team_id', 'league_key', 'team_name', 'manager_name', 'manager_id',
          'team_logo_url', 'is_active', 'valid_from', 'valid_to'],
@@ -585,7 +604,8 @@ class EdwEtlProcessor:
                 league_configs[season_year] = {
                     'start_weeks': [],
                     'end_weeks': [],
-                    'current_weeks': []
+                    'current_weeks': [],
+                    'playoff_start_weeks': []
                 }
             
             if league.get('start_week'):
@@ -594,6 +614,9 @@ class EdwEtlProcessor:
                 league_configs[season_year]['end_weeks'].append(league['end_week'])
             if league.get('current_week'):
                 league_configs[season_year]['current_weeks'].append(league['current_week'])
+            if _positive_int(league.get('playoff_start_week')):
+                league_configs[season_year]['playoff_start_weeks'].append(
+                    _positive_int(league['playoff_start_week']))
         
         # Create final season records
         for league in self.data.get('leagues', []):
@@ -627,8 +650,13 @@ class EdwEtlProcessor:
                     total_weeks = end_week - int(start_week or 1) + 1
                     championship_week = end_week
                     if not metrics.get('playoff_weeks'):
-                        # Three-round bracket, as every season since 2022.
-                        playoff_start_week = max(1, end_week - 2)
+                        configured = config.get('playoff_start_weeks')
+                        if configured:
+                            # Yahoo's own setting (captured since migration 011).
+                            playoff_start_week = max(set(configured), key=configured.count)
+                        else:
+                            # Three-round bracket, as every season since 2022.
+                            playoff_start_week = max(1, end_week - 2)
 
                 seasons[season_year] = {
                     'season_year': season_year,
@@ -929,6 +957,9 @@ class EdwEtlProcessor:
                 'league_type': league.get('league_type', 'private'),
                 'scoring_type': 'standard',  # Default, could be extracted from settings
                 'draft_type': 'snake',  # Default, could be extracted from draft data
+                'end_week': _positive_int(league.get('end_week')),
+                'playoff_start_week': _positive_int(league.get('playoff_start_week')),
+                'num_playoff_teams': _positive_int(league.get('num_playoff_teams')),
                 'is_active': True,
                 'valid_from': datetime.now(),
                 'valid_to': datetime(9999, 12, 31)
@@ -2698,9 +2729,11 @@ class EdwEtlProcessor:
                 result = self.session.execute(text("""
                     INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams,
                                           league_type, scoring_type, draft_type,
+                                          end_week, playoff_start_week, num_playoff_teams,
                                           is_active, valid_from, valid_to)
                     VALUES (:league_id, :league_name, :season_year, :num_teams,
                             :league_type, :scoring_type, :draft_type,
+                            :end_week, :playoff_start_week, :num_playoff_teams,
                             :is_active, :valid_from, :valid_to)
                     ON CONFLICT (league_id, season_year) DO UPDATE SET
                         league_name = EXCLUDED.league_name,
@@ -2709,7 +2742,8 @@ class EdwEtlProcessor:
                         scoring_type = EXCLUDED.scoring_type,
                         draft_type = EXCLUDED.draft_type,
                         is_active = EXCLUDED.is_active,
-                        valid_to = EXCLUDED.valid_to
+                        valid_to = EXCLUDED.valid_to,
+                        """ + ',\n                        '.join(LEAGUE_FORMAT_SET) + """
                     RETURNING league_key, league_id
                 """), league)
                 

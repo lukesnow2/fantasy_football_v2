@@ -42,6 +42,10 @@ CREATE TABLE dim_league (
     league_type VARCHAR(50) NOT NULL,
     scoring_type VARCHAR(50),
     draft_type VARCHAR(50),
+    -- Playoff format from Yahoo's league settings (migration 011).
+    end_week INTEGER,              -- last week of the season, playoffs included
+    playoff_start_week INTEGER,    -- regular season is the weeks before this
+    num_playoff_teams INTEGER,
     is_active BOOLEAN DEFAULT TRUE,
     valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,

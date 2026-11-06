@@ -12,6 +12,8 @@ CREATE TABLE leagues (
     current_week INTEGER,
     start_week INTEGER,
     end_week INTEGER,
+    playoff_start_week INTEGER,
+    num_playoff_teams INTEGER,
     league_type VARCHAR(50),
     draft_status VARCHAR(50),
     is_pro_league BOOLEAN DEFAULT FALSE,

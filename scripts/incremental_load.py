@@ -33,7 +33,7 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.extractors.comprehensive_data_extractor import (  # noqa: E402
-    YahooFantasyExtractor, completed_weeks, week_is_complete)
+    YahooFantasyExtractor, completed_weeks, playoff_settings, week_is_complete)
 from src.pipeline import raw_loader, publish as pub  # noqa: E402
 from src.pipeline.state import PipelineState, LockHeld  # noqa: E402
 
@@ -697,6 +697,7 @@ def _run_locked(args, state) -> int:
             'is_cash_league': str(settings.get('is_cash_league', '0')) == '1',
             'url': settings.get('url'), 'logo_url': settings.get('logo_url') or '',
             'extracted_at': datetime.now(),
+            **playoff_settings(settings),
         }]
         data = extract_scope(extractor, league_id, weeks, args.stats_only,
                              is_new, league_info_rows)

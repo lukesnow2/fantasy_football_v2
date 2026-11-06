@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	bracketSlots,
 	buildSchedule,
 	gamesFingerprint,
 	rng,
@@ -215,5 +216,39 @@ describe('gamesFingerprint', () => {
 
 	it('changes when a game is added', () => {
 		expect(gamesFingerprint(games.slice(1))).not.toBe(gamesFingerprint(games));
+	});
+});
+
+describe('bracket', () => {
+	it('keeps the top seeds apart until the final', () => {
+		expect(bracketSlots(2)).toEqual([1, 2]);
+		expect(bracketSlots(4)).toEqual([1, 4, 2, 3]);
+		// Six teams in an eight-slot bracket: 1 and 2 face byes (7, 8), then the
+		// 4/5 and 3/6 winners. That's the league's real bracket.
+		expect(bracketSlots(8)).toEqual([1, 8, 4, 5, 2, 7, 3, 6]);
+	});
+
+	it.each([
+		[4, 0],
+		[6, 2],
+		[8, 0]
+	])('simulates a %i-team field with %i byes', (playoffTeams, byes) => {
+		const games = season(8, (t, w) => 90 + t * 3 + ((t * w) % 7) * 4);
+		const res = simulatePlayoffOdds({
+			teamKeys: TEAMS,
+			games,
+			regularSeasonWeeks: 14,
+			playoffTeams,
+			sims: 3000
+		});
+		const sum = (f: (t: (typeof res.teams)[number]) => number) =>
+			res.teams.reduce((s, t) => s + f(t), 0);
+		expect(res.playoffTeams).toBe(playoffTeams);
+		expect(res.byes).toBe(byes);
+		expect(sum((t) => t.playoffOdds)).toBeCloseTo(playoffTeams, 1);
+		expect(sum((t) => t.byeOdds)).toBeCloseTo(byes, 6);
+		expect(sum((t) => t.titleOdds)).toBeCloseTo(1, 6);
+		// Only playoff teams can win it.
+		for (const t of res.teams) expect(t.titleOdds).toBeLessThanOrEqual(t.playoffOdds + 1e-9);
 	});
 });

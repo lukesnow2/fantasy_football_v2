@@ -12,6 +12,11 @@ import type { RequestHandler } from './$types';
 /** Rows come back camel-cased with numerics as strings; read them loosely. */
 type Row = Record<string, unknown>;
 
+const positive = (value: unknown): number | null => {
+	const n = Number(value);
+	return Number.isInteger(n) && n > 0 ? n : null;
+};
+
 /**
  * Simulated playoff odds for one season (default: the latest).
  *
@@ -19,9 +24,12 @@ type Row = Record<string, unknown>;
  * weeks before the latest one, so the widget can show how each team's odds
  * moved with last week's results.
  *
- * Regular-season length isn't stored anywhere for a season in progress (the
- * warehouse only holds completed weeks), so it's taken from the most recent
- * season that has a playoff game: 14 weeks since 2022.
+ * The playoff format comes from the league's Yahoo settings, stored on
+ * dim_league since migration 011: the regular season is the weeks before
+ * playoff_start_week, and num_playoff_teams sets the bracket. Until a season's
+ * settings are stored (the migration backfills finished seasons; the current
+ * one fills on its next load) the format is inferred instead: the length of
+ * the most recent season with a playoff game, and six teams.
  */
 
 const SIMS = 10000;
@@ -48,7 +56,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			season = parsed;
 		}
 
-		const [matchupRows, teamRowsRaw, lengthRowsRaw] = await Promise.all([
+		const [matchupRows, teamRowsRaw, lengthRowsRaw, formatRowsRaw] = await Promise.all([
 			db.execute(sql`
 				SELECT dw.week_number AS week,
 				       fm.team1_key AS a, fm.team2_key AS b,
@@ -74,11 +82,25 @@ export const GET: RequestHandler = async ({ url }) => {
 					WHERE is_playoffs AND season_year <= ${season}
 				)
 				AND NOT fm.is_playoffs AND NOT fm.is_consolation
+			`),
+			// Read through to_jsonb so this still runs against a warehouse the
+			// pipeline hasn't migrated yet (the web app can deploy first): a
+			// missing column reads as null instead of failing the query.
+			db.execute(sql`
+				SELECT to_jsonb(dl) ->> 'playoff_start_week' AS playoff_start_week,
+				       to_jsonb(dl) ->> 'num_playoff_teams'  AS num_playoff_teams
+				FROM edw.dim_league dl
+				WHERE dl.season_year = ${season}
+				ORDER BY dl.league_key DESC
+				LIMIT 1
 			`)
 		]);
 		const rows = Array.from(matchupRows) as Row[];
 		const teamRows = Array.from(teamRowsRaw) as Row[];
 		const lengthRows = Array.from(lengthRowsRaw) as Row[];
+		const format = (Array.from(formatRowsRaw) as Row[])[0];
+		const storedStart = positive(format?.playoffStartWeek);
+		const storedTeams = positive(format?.numPlayoffTeams);
 
 		const games: PlayedGame[] = rows
 			.filter((r) => !r.po && !r.cons && r.sa != null && r.sb != null)
@@ -120,10 +142,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		const playedWeeks = games.reduce((m, g) => Math.max(m, g.week), 0);
-		const regularSeasonWeeks = Math.max(Number(lengthRows[0]?.weeks) || 14, playedWeeks);
+		const regularSeasonWeeks = Math.max(
+			storedStart ? storedStart - 1 : Number(lengthRows[0]?.weeks) || 14,
+			playedWeeks
+		);
+		const playoffTeams = storedTeams ?? 6;
+		const formatSource = storedStart && storedTeams ? 'league-settings' : 'inferred';
 
 		const keys = teams.map((t) => t.teamKey);
-		const key = `${season}:${regularSeasonWeeks}:${keys.join(',')}:${gamesFingerprint(games)}`;
+		const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${gamesFingerprint(games)}`;
 		let sims = cache.get(key);
 		if (!sims) {
 			// One seed for both runs: the engine draws each week's randomness from
@@ -135,6 +162,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					teamKeys: keys,
 					games: games.filter((g) => g.week <= through),
 					regularSeasonWeeks,
+					playoffTeams,
 					sims: SIMS,
 					seed
 				});
@@ -156,6 +184,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			available: true,
 			throughWeek: now.throughWeek,
 			regularSeasonWeeks,
+			formatSource,
 			phase: postseasonStarted || playedWeeks >= regularSeasonWeeks ? 'postseason' : 'regular',
 			sims: now.sims,
 			playoffTeams: now.playoffTeams,

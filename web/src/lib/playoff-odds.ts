@@ -31,9 +31,11 @@
  *
  *  5. Seeding and bracket. Final standings sort by wins, then points for, which
  *     reproduces the real playoff field in every season 2010-2025. Simulated
- *     points count toward the tiebreak. The top `playoffTeams` make it, the top
- *     `byes` skip the first round, and the bracket is fixed: 3v6 and 4v5, then 1
- *     plays the 4/5 winner and 2 plays the 3/6 winner.
+ *     points count toward the tiebreak. The top `playoffTeams` make it into a
+ *     standard single-elimination bracket: the smallest power of two that fits
+ *     them, top seeds on byes, 1 and 2 on opposite sides. For the league's six
+ *     teams that's the real bracket: 3v6 and 4v5, then 1 plays the 4/5 winner
+ *     and 2 plays the 3/6 winner.
  *
  * The parameters were chosen by backtesting every season 2008-2025 from every
  * week of the regular season (scripts/backtest-playoff-odds.ts): tuned on
@@ -73,8 +75,8 @@ export interface OddsOptions {
 	/** Completed regular-season games only. */
 	games: PlayedGame[];
 	regularSeasonWeeks: number;
+	/** Teams in the championship bracket (Yahoo's num_playoff_teams). */
 	playoffTeams?: number;
-	byes?: number;
 	sims?: number;
 	seed?: number;
 	params?: Partial<ModelParams>;
@@ -111,6 +113,7 @@ export interface OddsResult {
 	sims: number;
 	/** The format that was simulated, so callers can draw the cut line from it. */
 	playoffTeams: number;
+	/** First-round byes the bracket gives the top seeds. */
 	byes: number;
 	leagueAverage: number;
 	teams: TeamOdds[];
@@ -328,6 +331,23 @@ function completeRoundRobin(
 	return fallback;
 }
 
+// ------------------------------------------------------------------- bracket
+
+/**
+ * Seeds (1-based) in bracket order for a bracket of `size` slots, a power of
+ * two. Adjacent slots meet in round one and the halves meet in the final, so
+ * the top seeds can't meet until the end: 8 slots gives 1,8,4,5,2,7,3,6.
+ * Seeds beyond the number of playoff teams are byes.
+ */
+export function bracketSlots(size: number): number[] {
+	let slots = [1];
+	while (slots.length < size) {
+		const sum = slots.length * 2 + 1;
+		slots = slots.flatMap((seed) => [seed, sum - seed]);
+	}
+	return slots;
+}
+
 // ------------------------------------------------------------------ strength
 
 /** Per-team arrays, index-aligned with the team keys passed in. */
@@ -445,8 +465,11 @@ function lockStatus(
 
 export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	const p: ModelParams = { ...DEFAULT_PARAMS, ...opts.params };
-	const playoffTeams = opts.playoffTeams ?? 6;
-	const byes = opts.byes ?? 2;
+	const playoffTeams = Math.min(opts.playoffTeams ?? 6, opts.teamKeys.length);
+	const bracketSize = 2 ** Math.ceil(Math.log2(Math.max(playoffTeams, 2)));
+	const byes = bracketSize - playoffTeams;
+	// Each slot holds a seeding position (0-based rank) or -1 for a bye.
+	const slots = bracketSlots(bracketSize).map((seed) => (seed <= playoffTeams ? seed - 1 : -1));
 	const sims = opts.sims ?? 10000;
 	const R = opts.regularSeasonWeeks;
 	const keys = opts.teamKeys;
@@ -591,23 +614,24 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		for (let r = 0; r < byes && r < n; r++) bye[order[r]]++;
 		top[order[0]]++;
 
-		if (playoffTeams === 6 && byes === 2 && n >= 6) {
-			const bracket = order;
+		if (playoffTeams >= 2) {
 			const game = (a: number, b: number) => {
 				play(a, b);
 				return sa >= sb ? a : b;
 			};
-			useStream(s, R + 1);
-			step();
-			const w45 = game(bracket[3], bracket[4]);
-			const w36 = game(bracket[2], bracket[5]);
-			useStream(s, R + 2);
-			step();
-			const f1 = game(bracket[0], w45);
-			const f2 = game(bracket[1], w36);
-			useStream(s, R + 3);
-			step();
-			title[game(f1, f2)]++;
+			// One playoff week per round, each with its own random stream.
+			let field = slots.map((rank) => (rank < 0 ? -1 : order[rank]));
+			for (let round = 1; field.length > 1; round++) {
+				useStream(s, R + round);
+				step();
+				const next: number[] = [];
+				for (let i = 0; i < field.length; i += 2) {
+					const [a, b] = [field[i], field[i + 1]];
+					next.push(a < 0 ? b : b < 0 ? a : game(a, b));
+				}
+				field = next;
+			}
+			title[field[0]]++;
 		}
 	}
 
