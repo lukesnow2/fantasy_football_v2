@@ -210,8 +210,11 @@ class EdwEtlProcessor:
             'depends_on': 'operational_leagues'
         },
         'teams': {
+            # Teams decide dim_manager membership (is_current,
+            # include_in_analysis), so every mart that filters on it refreshes.
             'triggers_refresh': ['dim_league', 'dim_manager', 'dim_team',
-                                 'fact_team_performance', 'mart_manager_performance'],
+                                 'fact_team_performance', 'mart_manager_performance',
+                                 'mart_league_summary', 'mart_manager_h2h'],
             'refresh_type': 'INCREMENTAL',  # Only changed teams
             'depends_on': 'operational_teams'
         },
@@ -6000,7 +6003,6 @@ class EdwEtlProcessor:
                     ) as weeks_remaining
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
-                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                 JOIN edw.dim_season ds ON ftp.season_year = ds.season_year
                 JOIN league_settings ls ON ftp.league_key = ls.league_key AND ftp.season_year = ls.season_year
                 LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 

@@ -78,3 +78,13 @@ def test_no_seasons_means_no_one_is_current():
     out = derive_manager_membership([{'manager_name': 'X', 'last_season_year': None,
                                       'total_seasons': 0}])
     assert not out[0]['is_current'] and not out[0]['include_in_analysis']
+
+
+def test_a_teams_change_refreshes_every_mart_that_filters_on_membership():
+    """Teams now decide include_in_analysis, so a teams-only incremental run
+    must rebuild the marts that filter on it, not just dim_manager."""
+    from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+    triggers = EdwEtlProcessor.EDW_PROCESSING_STRATEGIES['teams']['triggers_refresh']
+    for table in ('dim_manager', 'mart_manager_performance', 'mart_league_summary',
+                  'mart_manager_h2h'):
+        assert table in triggers
