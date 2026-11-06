@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { getLeagueFormat } from '$lib/server/league-format';
+import { compareSeeding } from '$lib/playoff-odds';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
@@ -24,8 +26,14 @@ export const GET: RequestHandler = async ({ url }) => {
 			targetSeason = parsed;
 		}
 
-		// 2. Season totals per team (fact_team_performance stores per-week rows; sum them).
-		const standingsRows = await db.execute(sql`
+		// 2. Regular-season totals per team. fact_team_performance stores a row
+		// per week, playoff and consolation weeks included: summing them all
+		// counted bracket games in the record (7 of 10 teams in 2025). Bracket
+		// weeks are dropped by the games' own flags rather than a week cutoff,
+		// which would be a guess until the season's format is stored.
+		const [format, standingsRows] = await Promise.all([
+			getLeagueFormat(targetSeason),
+			db.execute(sql`
 			SELECT
 				dt.team_key                  AS team_key,
 				dt.team_name                 AS team_name,
@@ -41,8 +49,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			JOIN edw.dim_team dt   ON ftp.team_key = dt.team_key
 			JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
 			WHERE ftp.season_year = ${targetSeason}
+			  AND NOT EXISTS (
+				SELECT 1 FROM edw.fact_matchup fm
+				WHERE fm.league_key = ftp.league_key
+				  AND fm.week_key = ftp.week_key
+				  AND (fm.is_playoffs OR fm.is_consolation)
+			  )
 			GROUP BY dt.team_key, dt.team_name, dt.manager_name, dl.league_name
-		`);
+		`)
+		]);
 
 		const standings = standingsRows.map((r: any) => {
 			const wins = Number(r.wins) || 0;
@@ -70,16 +85,18 @@ export const GET: RequestHandler = async ({ url }) => {
 		});
 
 		// Regular-season ordering (used as-is for in-progress seasons, and as the
-		// fallback rank for any team not placed in a bracket).
-		standings.sort(
-			(a, b) => b.wins - a.wins || a.losses - b.losses || b.pointDifferential - a.pointDifferential
-		);
+		// fallback rank for any team not placed in a bracket): the league's
+		// seeding, shared with the playoff odds. Point differential broke ties
+		// here before, so this table could disagree with the odds.
+		standings.sort(compareSeeding);
 		standings.forEach((t, i) => (t.seasonRank = i + 1));
 
 		if (standings.length === 0) {
 			return json({
 				standings: [],
 				season: targetSeason,
+				playoffTeams: format.playoffTeams,
+				regularSeasonWeeks: format.regularSeasonWeeks,
 				currentWeek: 0,
 				isSeasonComplete: false,
 				isFinalStandings: false,
@@ -137,12 +154,16 @@ export const GET: RequestHandler = async ({ url }) => {
 				const loser = loserOf(g);
 				if (!placements.has(loser)) placements.set(loser, { rank: rank++, tier: 'Quarterfinalist' });
 			}
-			// Consolation bracket (7-10)
+			// Consolation bracket: the places after the playoff field, down to last.
+			const lastRank = standings.length;
 			const lastPlace = consolationGames.find((g: any) => g.isLastPlaceGame);
 			if (lastPlace?.winnerTeamKey) {
 				const loser = loserOf(lastPlace);
-				placements.set(loser, { rank: 10, tier: 'Consolation 4th (Last Place)' });
-				placements.set(Number(lastPlace.winnerTeamKey), { rank: 9, tier: 'Consolation 3rd' });
+				placements.set(loser, { rank: lastRank, tier: 'Consolation 4th (Last Place)' });
+				placements.set(Number(lastPlace.winnerTeamKey), {
+					rank: lastRank - 1,
+					tier: 'Consolation 3rd'
+				});
 				lastPlaceGameLoser = { teamKey: loser };
 
 				const finalWeek = Math.max(...consolationGames.map((g: any) => Number(g.weekKey)));
@@ -150,8 +171,14 @@ export const GET: RequestHandler = async ({ url }) => {
 					(g: any) => Number(g.weekKey) === finalWeek && !g.isLastPlaceGame
 				);
 				if (consChamp?.winnerTeamKey) {
-					placements.set(Number(consChamp.winnerTeamKey), { rank: 7, tier: 'Consolation Winner' });
-					placements.set(loserOf(consChamp), { rank: 8, tier: 'Consolation Runner-up' });
+					placements.set(Number(consChamp.winnerTeamKey), {
+						rank: format.playoffTeams + 1,
+						tier: 'Consolation Winner'
+					});
+					placements.set(loserOf(consChamp), {
+						rank: format.playoffTeams + 2,
+						tier: 'Consolation Runner-up'
+					});
 				}
 			}
 		}
@@ -221,6 +248,8 @@ export const GET: RequestHandler = async ({ url }) => {
 		return json({
 			standings: standingsWithStats,
 			season: targetSeason,
+			playoffTeams: format.playoffTeams,
+			regularSeasonWeeks: format.regularSeasonWeeks,
 			currentWeek,
 			isSeasonComplete: seasonComplete,
 			isFinalStandings: seasonComplete,

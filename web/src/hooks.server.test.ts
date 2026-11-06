@@ -25,6 +25,7 @@ describe('requiresAuth', () => {
 		expect(requiresAuth('/api/record-book', 'GET')).toBe(false);
 		expect(requiresAuth('/power-rankings', 'GET')).toBe(false);
 		expect(requiresAuth('/api/power-rankings', 'GET')).toBe(false);
+		expect(requiresAuth('/api/playoff-odds', 'GET')).toBe(false);
 	});
 
 	it('gates every write, including form actions on public pages', () => {
