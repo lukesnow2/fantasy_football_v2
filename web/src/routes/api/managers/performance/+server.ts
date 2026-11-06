@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
+import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
 
 /**
  * Postgres `numeric` arrives over the wire as a string, so every average, rate
@@ -16,6 +17,140 @@ function num(value: unknown): number | null {
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * Each league's state, one grouped pass over fact_matchup: finished once its
+ * championship game is in, bracketed once any playoff game is. Shared by the
+ * luck rows and Season History so the two cannot disagree about a season.
+ */
+const leagueState = sql`
+	SELECT league_key,
+		bool_or(is_championship) AS finished,
+		bool_or(is_playoffs)     AS bracketed
+	FROM edw.fact_matchup
+	GROUP BY league_key
+`;
+
+/**
+ * Each manager's expected (Pythagorean) wins and luck, one row per season,
+ * taken from the power rankings' latest ranked week of that season: the final
+ * regular-season standing once it is over, this week's while it is still
+ * being played. Reused rather than recomputed so the manager pages and the
+ * power rankings always show the same numbers.
+ *
+ * A season is in progress until its championship game is in fact_matchup.
+ * Wins are regular-season only, like the expected wins they are compared with.
+ * With `manager`, only that manager's seasons are read. `latestSeason` is the
+ * latest season the power rankings have ranked, so the luck card can show it
+ * between seasons. Not dim_league's latest: the new season's league is loaded
+ * at the draft, weeks before a game, and every manager would have read
+ * "Didn't play" until week 1 was ranked.
+ *
+ * Once a playoff game is in (`bracketSet`), the regular season is over and the
+ * team's bracket place (`madePlayoffs`) replaces its week-14 playoff odds. The
+ * place comes from the final regular-season standings (record_rank within the
+ * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
+ * playoff game, so the top seeds, on a first-round bye, would read "missed"
+ * for a week. The standings rule matches the real bracket for every team
+ * 2012-2025, the seasons the rankings cover every team. They skip teams whose
+ * manager is outside the ETL's analysis list (2010-2011 here, or a manager new
+ * to the league), which shifts every rank below; then the flag is used instead.
+ */
+async function loadLuckBySeason(
+	manager: string | null
+): Promise<{ byManager: Map<string, SeasonLuck[]>; latestSeason: number | null }> {
+	const [latestResult, luckResult] = await Promise.all([
+		db.execute(sql`
+			SELECT MAX(l.season_year) AS season_year
+			FROM edw.mart_weekly_power_rankings p
+			JOIN edw.dim_league l ON l.league_key = p.league_key
+		`),
+		db.execute(sql`
+			WITH league_state AS (${leagueState}),
+			-- Teams ranked each week: equal to the league's size only when no
+			-- team was left out of the power rankings.
+			ranked AS (
+				SELECT league_key, week_key, COUNT(*) AS n
+				FROM edw.mart_weekly_power_rankings
+				GROUP BY league_key, week_key
+			),
+			-- Bracket size, from the latest finished season (6 since 2008).
+			spots AS (
+				SELECT COUNT(DISTINCT v.team_key) AS n
+				FROM edw.fact_matchup fm
+				CROSS JOIN LATERAL (VALUES (fm.team1_key), (fm.team2_key)) AS v(team_key)
+				WHERE fm.is_playoffs AND NOT fm.is_consolation
+				  AND fm.league_key = (
+					SELECT c.league_key FROM edw.fact_matchup c
+					JOIN edw.dim_league cl ON cl.league_key = c.league_key
+					WHERE c.is_championship
+					ORDER BY cl.season_year DESC LIMIT 1
+				  )
+			),
+			latest AS (
+				SELECT
+					t.manager_name AS manager_name,
+					l.season_year  AS season_year,
+					p.team_key     AS team_key,
+					w.week_number  AS week_number,
+					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
+					p.record_rank, p.league_key, p.week_key, l.num_teams,
+					ROW_NUMBER() OVER (
+						PARTITION BY p.league_key, p.team_key ORDER BY w.week_number DESC
+					) AS rn
+				FROM edw.mart_weekly_power_rankings p
+				JOIN edw.dim_week w   ON w.week_key   = p.week_key
+				JOIN edw.dim_team t   ON t.team_key   = p.team_key
+				JOIN edw.dim_league l ON l.league_key = p.league_key
+				WHERE t.manager_name IS NOT NULL
+				${manager ? sql`AND t.manager_name = ${manager}` : sql``}
+			)
+			SELECT
+				latest.manager_name, latest.season_year, latest.team_key, latest.week_number,
+				latest.wins, latest.ties, latest.pythagorean_wins, latest.luck_factor,
+				latest.playoff_odds,
+				NOT COALESCE(ls.finished, false) AS in_progress,
+				COALESCE(ls.bracketed, false) AS bracket_set,
+				CASE
+					WHEN ranked.n = latest.num_teams
+						THEN COALESCE(latest.record_rank <= (SELECT n FROM spots), false)
+					ELSE EXISTS (
+						SELECT 1 FROM edw.fact_team_performance ftp
+						WHERE ftp.team_key = latest.team_key AND ftp.is_playoff_team
+					)
+				END AS made_playoffs
+			FROM latest
+			LEFT JOIN league_state ls ON ls.league_key = latest.league_key
+			LEFT JOIN ranked ON ranked.league_key = latest.league_key
+				AND ranked.week_key = latest.week_key
+			WHERE latest.rn = 1
+			ORDER BY latest.manager_name, latest.season_year
+		`)
+	]);
+	const [latest] = Array.from(latestResult) as any[];
+	const rows = Array.from(luckResult) as any[];
+
+	const byManager = new Map<string, SeasonLuck[]>();
+	for (const r of rows) {
+		const name = String(r.managerName);
+		const list = byManager.get(name) ?? [];
+		list.push({
+			seasonYear: Number(r.seasonYear),
+			teamKey: Number(r.teamKey),
+			weekNumber: Number(r.weekNumber),
+			wins: Number(r.wins ?? 0),
+			ties: Number(r.ties ?? 0),
+			pythagoreanWins: num(r.pythagoreanWins),
+			luckFactor: num(r.luckFactor),
+			playoffOdds: num(r.playoffOdds),
+			inProgress: Boolean(r.inProgress),
+			bracketSet: Boolean(r.bracketSet),
+			madePlayoffs: Boolean(r.madePlayoffs)
+		});
+		byManager.set(name, list);
+	}
+	return { byManager, latestSeason: num(latest?.seasonYear) };
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const manager = url.searchParams.get('manager');
@@ -23,14 +158,12 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		let data: any = {};
 
-		// Use the actual mart_manager_performance table with correct column names.
-		//
-		// Parameterized, not `sql.raw` with the query string spliced together: this
-		// endpoint is in PUBLIC_PREFIXES, so `manager` arrives unauthenticated from
-		// the URL, and it used to be concatenated straight into the WHERE clause.
-		// Exact `=` rather than `ILIKE '%…%'` too — the slug is a whole
-		// dim_manager.manager_name, and the substring form quietly matched two
-		// managers for `/managers/Gabe`.
+		// Every manager, always: the category ranks below compare a manager with
+		// the rest of the league, and filtering to the requested manager first
+		// left a field of one, so every profile read "#1" in every category.
+		// The requested manager is picked out after ranking (exact match on the
+		// whole dim_manager.manager_name, never ILIKE: `Gabe` must not match
+		// `Gabe the Younger`). `manager` is still only ever a bound parameter.
 		const statsResult = await db.execute(sql`
 			SELECT
 				manager_name,
@@ -59,10 +192,18 @@ export const GET: RequestHandler = async ({ url }) => {
 				worst_season_record
 			FROM edw.mart_manager_performance
 			WHERE manager_name IS NOT NULL
-			${manager ? sql`AND manager_name = ${manager}` : sql``}
 			ORDER BY career_win_percentage DESC, championships_won DESC
 		`);
 		const managerStats = Array.from(statsResult);
+		// Optional like the sections below: a failure here blanks the luck
+		// figures, it does not take the whole profile down with it.
+		let luck = new Map<string, SeasonLuck[]>();
+		let latestSeason: number | null = null;
+		try {
+			({ byManager: luck, latestSeason } = await loadLuckBySeason(manager));
+		} catch (luckError) {
+			console.error('[managers/performance] luck query failed:', luckError);
+		}
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
@@ -89,7 +230,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			worstDraftYear: num(mgr.worst_draft_year ?? mgr.worstDraftYear),
 			totalTransactions: num(mgr.total_transactions ?? mgr.totalTransactions),
 			avgTransactionsPerSeason: num(mgr.avg_transactions_per_season ?? mgr.avgTransactionsPerSeason),
+			// Starter points per FAAB dollar; null for a manager who never paid for a claim.
 			faabEfficiencyRating: num(mgr.faab_efficiency_rating ?? mgr.faabEfficiencyRating),
+			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
 			seasonConsistencyScore: num(mgr.season_consistency_score ?? mgr.seasonConsistencyScore),
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,
@@ -109,29 +252,38 @@ export const GET: RequestHandler = async ({ url }) => {
 			})()
 		}));
 
-		// Calculate rankings after creating enriched stats
-		const sortedByChampionships = [...enrichedStats].sort((a, b) => (Number(b.totalChampionships) || 0) - (Number(a.totalChampionships) || 0));
-		const sortedByWinPct = [...enrichedStats].sort((a, b) => (Number(b.winPercentage) || 0) - (Number(a.winPercentage) || 0));
+		// Competition ranking: a manager's rank is one more than the number of
+		// managers strictly ahead, so equal values share a rank (three managers
+		// with 3 titles are all #2) instead of being split by sort order.
+		const rankBy = (value: (m: any) => number) => (mgr: any) =>
+			1 + enrichedStats.filter((m) => (value(m) || 0) > (value(mgr) || 0)).length;
+		const championshipRank = rankBy((m) => Number(m.totalChampionships));
+		const winPctRank = rankBy((m) => Number(m.winPercentage));
 		// Scoring rank is a rate, not a volume: avgPointsFor is points *per season*,
 		// so ranking on it rewarded whoever played the most weeks rather than
 		// whoever scored the most per game.
-		const sortedByScoring = [...enrichedStats].sort((a, b) => (Number(b.avgPointsPerGame) || 0) - (Number(a.avgPointsPerGame) || 0));
-		const sortedByPlayoffs = [...enrichedStats].sort((a, b) => (Number(b.playoffWinPercentage) || 0) - (Number(a.playoffWinPercentage) || 0));
+		const scoringRank = rankBy((m) => Number(m.avgPointsPerGame));
+		const playoffRank = rankBy((m) => Number(m.playoffWinPercentage));
 
-		// Add rankings to enriched stats
+		// Add rankings to enriched stats. Overall is the query's order: career
+		// win percentage, then championships.
 		enrichedStats.forEach((mgr, index) => {
 			mgr.overallRank = index + 1;
-			mgr.championshipRank = sortedByChampionships.findIndex(m => m.managerName === mgr.managerName) + 1;
-			mgr.winPctRank = sortedByWinPct.findIndex(m => m.managerName === mgr.managerName) + 1;
-			mgr.scoringRank = sortedByScoring.findIndex(m => m.managerName === mgr.managerName) + 1;
-			mgr.playoffRank = sortedByPlayoffs.findIndex(m => m.managerName === mgr.managerName) + 1;
+			mgr.championshipRank = championshipRank(mgr);
+			mgr.winPctRank = winPctRank(mgr);
+			mgr.scoringRank = scoringRank(mgr);
+			mgr.playoffRank = playoffRank(mgr);
 		});
 
-		data.performance = enrichedStats;
-		data.rankings = enrichedStats;
+		// Ranked against the whole league above; now narrow to the one asked for.
+		const selected = manager
+			? enrichedStats.filter((m) => m.managerName === manager)
+			: enrichedStats;
+		data.performance = selected;
+		data.rankings = selected;
 
 		// Get achievements based on computed stats with camelCase field names
-		const achievements = enrichedStats.map((mgr: any) => ({
+		const achievements = selected.map((mgr: any) => ({
 			managerName: mgr.managerName,
 			championshipAchievement: (mgr.totalChampionships || 0) >= 3 ? 'Dynasty Builder' : 
 										(mgr.totalChampionships || 0) >= 2 ? 'Repeat Champion' : 
@@ -162,9 +314,15 @@ export const GET: RequestHandler = async ({ url }) => {
 		// so aggregate to one row per season (the old query returned per-week rows).
 		if (analysis === 'seasons' || analysis === 'all') {
 			try {
+				// One row per team-season. A manager can run two teams in a year
+				// (Justin in 2007, Bobby in 2008); grouping by year alone merged
+				// them into one 30-game season.
 				const seasonsResult = await db.execute(sql`
+					WITH league_state AS (${leagueState})
 					SELECT
 						tp.season_year                              AS season_year,
+						tp.team_key                                 AS team_key,
+						MAX(dt.team_name)                           AS team_name,
 						SUM(tp.wins)                                AS wins,
 						SUM(tp.losses)                              AS losses,
 						SUM(tp.ties)                                AS ties,
@@ -173,15 +331,48 @@ export const GET: RequestHandler = async ({ url }) => {
 							ELSE 0 END                              AS win_percentage,
 						SUM(tp.points_for)                          AS points_for,
 						SUM(tp.points_against)                      AS points_against,
-						bool_or(tp.is_playoff_team)                 AS made_playoffs
+						bool_or(tp.is_playoff_team)                 AS made_playoffs,
+						EXISTS (
+							SELECT 1 FROM edw.fact_matchup fm
+							WHERE fm.is_championship AND fm.winner_team_key = tp.team_key
+						)                                           AS is_champion,
+						-- From the league, not the luck rows: those are optional, and
+						-- without them the season read "Missed Playoffs" again.
+						NOT COALESCE(bool_or(ls.finished), false)   AS in_progress,
+						-- A playoff game is in: the regular season and bracket are set.
+						COALESCE(bool_or(ls.bracketed), false)      AS bracket_set
 					FROM edw.fact_team_performance tp
 					JOIN edw.dim_manager dm ON tp.manager_key = dm.manager_key
+					JOIN edw.dim_team dt ON dt.team_key = tp.team_key
+					LEFT JOIN league_state ls ON ls.league_key = tp.league_key
 					WHERE dm.manager_name = ${manager}
-					GROUP BY tp.season_year
-					ORDER BY tp.season_year DESC
+					GROUP BY tp.season_year, tp.team_key
+					ORDER BY tp.season_year DESC, tp.team_key
 				`);
-				data.seasons = Array.from(seasonsResult);
+				// Expected wins, luck and (for a season still being played) playoff
+				// odds, from the power rankings' last ranked week of each season, so
+				// this page and the power rankings never disagree.
+				const byTeam = new Map(
+					(luck.get(manager ?? '') ?? []).map((l) => [l.teamKey, l])
+				);
+				data.seasons = Array.from(seasonsResult).map((row: any) => {
+					const l = byTeam.get(Number(row.teamKey));
+					return {
+						...row,
+						inProgress: Boolean(row.inProgress),
+						bracketSet: Boolean(row.bracketSet),
+						regularSeasonWins: l ? l.wins + 0.5 * l.ties : null,
+						pythagoreanWins: l?.pythagoreanWins ?? null,
+						luckFactor: l?.luckFactor ?? null,
+						playoffOdds: row.inProgress && !row.bracketSet && l ? l.playoffOdds : null,
+						// Live playoffs: the standings place, not is_playoff_team, which
+						// misses top seeds on a first-round bye (see loadLuckBySeason).
+						madePlayoffs: row.inProgress && row.bracketSet && l ? l.madePlayoffs : row.madePlayoffs,
+						throughWeek: l?.weekNumber ?? null
+					};
+				});
 			} catch (seasonsError) {
+				console.error('[managers/performance] seasons query failed:', seasonsError);
 				data.seasons = [];
 			}
 
@@ -211,7 +402,11 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_week dw ON fm.week_key = dw.week_key
 					JOIN edw.dim_manager dm ON dm.manager_name = ${manager}
 					WHERE fm.manager1_key = dm.manager_key OR fm.manager2_key = dm.manager_key
-					ORDER BY fm.season_year, dw.week_number
+					-- Team within season, so a manager's two teams in one year
+					-- don't interleave week by week into one streak.
+					ORDER BY fm.season_year,
+						CASE WHEN fm.manager1_key = dm.manager_key THEN fm.team1_key ELSE fm.team2_key END,
+						dw.week_number
 				`);
 				let longestWin = 0, longestLoss = 0, curWin = 0, curLoss = 0;
 				for (const g of Array.from(gamesResult) as any[]) {

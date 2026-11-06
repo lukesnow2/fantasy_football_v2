@@ -3,6 +3,8 @@
 	import { onMount } from 'svelte';
 	import { Crown, Trophy, TrendingUp, Users, Target, Calendar, BarChart3, Award, ArrowLeft } from 'lucide-svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import ManagerLuckCard from '$lib/components/ManagerLuckCard.svelte';
+	import { formatLuck, getLuckColor } from '$lib/utils/managerUtils';
 
 	let managerData: any = null;
 	let loading = true;
@@ -56,17 +58,37 @@
 		return '';
 	}
 
+	// A season still being played has no outcome yet: "missed the playoffs"
+	// was only ever the absence of a playoff flag, which no team has before
+	// the bracket is set.
+	// isChampion is per team: in a year a manager ran two teams, only the team
+	// that won the title is the champion. champYears is the fallback.
+	function wonTitle(season: any, champYears: number[]): boolean {
+		return season.isChampion ?? champYears.includes(Number(season.seasonYear));
+	}
+
 	function getSeasonOutcome(season: any, champYears: number[]): string {
-		if (champYears.includes(Number(season.seasonYear))) return '🏆 Champion';
+		if (wonTitle(season, champYears)) return '🏆 Champion';
+		if (season.inProgress) {
+			// Playoffs under way: the bracket is set, so say where the team stands.
+			if (season.bracketSet) {
+				return season.madePlayoffs ? '🔥 Playoffs · in progress' : '📉 Missed Playoffs';
+			}
+			return season.playoffOdds != null
+				? `⏳ In progress · ${Math.round(season.playoffOdds * 100)}% playoff odds`
+				: '⏳ In progress';
+		}
 		if (season.madePlayoffs) return '🔥 Playoffs';
 		return '📉 Missed Playoffs';
 	}
 
 	function getSeasonOutcomeColor(season: any, champYears: number[]): string {
-		if (champYears.includes(Number(season.seasonYear))) return 'text-amber-400';
+		if (wonTitle(season, champYears)) return 'text-amber-400';
+		if (season.inProgress && !season.bracketSet) return 'text-slate-300';
 		if (season.madePlayoffs) return 'text-blue-400';
 		return 'text-red-400';
 	}
+
 
 	// Get manager's main data
 	$: manager = managerData?.data?.performance?.[0];
@@ -81,11 +103,13 @@
 		: seasons.reduce((s: number, x: any) => s + (parseFloat(x.pointsFor) || 0), 0);
 	$: careerPointsAgainst = seasons.reduce((s: number, x: any) => s + (parseFloat(x.pointsAgainst) || 0), 0);
 	$: pointDifferential = careerPointsFor - careerPointsAgainst;
-	$: bestSeasonPoints = seasons.length
-		? Math.max(...seasons.map((x: any) => parseFloat(x.pointsFor) || 0))
+	// Finished seasons only: a season three weeks old is not anyone's worst.
+	$: finishedSeasons = seasons.filter((x: any) => !x.inProgress);
+	$: bestSeasonPoints = finishedSeasons.length
+		? Math.max(...finishedSeasons.map((x: any) => parseFloat(x.pointsFor) || 0))
 		: null;
-	$: worstSeasonPoints = seasons.length
-		? Math.min(...seasons.map((x: any) => parseFloat(x.pointsFor) || 0))
+	$: worstSeasonPoints = finishedSeasons.length
+		? Math.min(...finishedSeasons.map((x: any) => parseFloat(x.pointsFor) || 0))
 		: null;
 	$: streaks = managerData?.data?.streaks ?? null;
 
@@ -287,6 +311,7 @@
 					</div>
 				</div>
 			</div>
+			<ManagerLuckCard {manager} />
 		{:else if selectedTab === 'seasons'}
 			<div class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 				<h3 class="text-xl font-bold text-white mb-6">Season-by-Season History</h3>
@@ -299,13 +324,26 @@
 									<th class="text-center py-3 px-4 text-slate-300">Record</th>
 									<th class="text-center py-3 px-4 text-slate-300">Points For</th>
 									<th class="text-center py-3 px-4 text-slate-300">Points Against</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<MetricHelp metricId="pythagorean_wins" position="bottom" theme="dark" className="text-slate-300" showIcon={false}>
+											Reg. W / Expected
+										</MetricHelp>
+									</th>
+									<th class="text-center py-3 px-4 text-slate-300">
+										<MetricHelp metricId="luck_factor" position="bottom" theme="dark" className="text-slate-300" showIcon={false}>
+											Luck
+										</MetricHelp>
+									</th>
 									<th class="text-center py-3 px-4 text-slate-300">Outcome</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each seasons as season}
 									<tr class="border-b border-slate-700/50">
-										<td class="py-3 px-4 font-bold text-white">{season.seasonYear}</td>
+										<td class="py-3 px-4">
+											<div class="font-bold text-white">{season.seasonYear}</div>
+											{#if season.teamName}<div class="text-xs text-slate-400">{season.teamName}</div>{/if}
+										</td>
 										<td class="text-center py-3 px-4">
 											<span class="font-mono {getWinPercentageColor(season.winPercentage)}">
 												{season.wins}-{season.losses}-{season.ties}
@@ -313,6 +351,14 @@
 										</td>
 										<td class="text-center py-3 px-4 text-green-400">{parseFloat(season.pointsFor).toFixed(1)}</td>
 										<td class="text-center py-3 px-4 text-red-400">{parseFloat(season.pointsAgainst).toFixed(1)}</td>
+										<td class="text-center py-3 px-4 text-slate-200 tabular-nums">
+											{season.pythagoreanWins != null
+												? `${season.regularSeasonWins} / ${season.pythagoreanWins.toFixed(1)}`
+												: '—'}
+										</td>
+										<td class="text-center py-3 px-4 tabular-nums {getLuckColor(season.luckFactor)}">
+											{formatLuck(season.luckFactor)}
+										</td>
 										<td class="text-center py-3 px-4 {getSeasonOutcomeColor(season, championshipSeasons)}">
 											{getSeasonOutcome(season, championshipSeasons)}
 										</td>
