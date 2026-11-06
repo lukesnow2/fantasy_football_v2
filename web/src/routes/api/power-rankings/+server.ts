@@ -33,6 +33,13 @@ export interface PowerRankingRow {
 	teamKey: number;
 	teamName: string;
 	managerName: string | null;
+	/**
+	 * Whether /managers/{managerName} exists, i.e. the manager has a row in
+	 * mart_manager_performance (which that page reads). The rankings cover every
+	 * team, but Yahoo's '--hidden--' placeholder and short-stint early managers
+	 * have no profile.
+	 */
+	managerHasProfile: boolean;
 	powerRank: number;
 	/** Positive means the team climbed since last week. Null in week 1. */
 	rankChange: number | null;
@@ -94,6 +101,7 @@ export const GET: RequestHandler = async ({ url }) => {
 						p.team_key             AS "teamKey",
 						t.team_name            AS "teamName",
 						t.manager_name         AS "managerName",
+						(mp.manager_name IS NOT NULL) AS "managerHasProfile",
 						p.power_rank           AS "powerRank",
 						p.record_rank          AS "recordRank",
 						p.points_rank          AS "pointsRank",
@@ -114,6 +122,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					JOIN edw.dim_week w   ON w.week_key  = p.week_key
 					JOIN edw.dim_team t   ON t.team_key  = p.team_key
 					JOIN edw.dim_league l ON l.league_key = p.league_key
+					LEFT JOIN edw.mart_manager_performance mp ON mp.manager_name = t.manager_name
 					WHERE w.season_year = ${season}
 					  AND l.season_year = ${season}
 				)
@@ -121,7 +130,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				FROM ranked
 				ORDER BY "weekNumber", "powerRank"
 			`)
-		) as Record<string, NumericLike>[];
+		) as (Record<string, NumericLike> & { managerHasProfile: boolean })[];
 
 		const all: PowerRankingRow[] = rows.map((r) => ({
 			seasonYear: Number(r.seasonYear),
@@ -129,6 +138,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			teamKey: Number(r.teamKey),
 			teamName: String(r.teamName ?? ''),
 			managerName: r.managerName == null ? null : String(r.managerName),
+			managerHasProfile: r.managerHasProfile === true,
 			powerRank: Number(r.powerRank),
 			// Null rather than 0 in week 1: there is no previous week to move from,
 			// and rendering a 0 there would claim the team held its rank.

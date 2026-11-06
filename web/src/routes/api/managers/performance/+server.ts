@@ -55,10 +55,11 @@ const leagueState = sql`
  * place comes from the final regular-season standings (record_rank within the
  * bracket size), not is_playoff_team: that flag marks teams that have PLAYED a
  * playoff game, so the top seeds, on a first-round bye, would read "missed"
- * for a week. The standings rule matches the real bracket for every team
- * 2012-2025, the seasons the rankings cover every team. They skip teams whose
- * manager is outside the ETL's analysis list (2010-2011 here, or a manager new
- * to the league), which shifts every rank below; then the flag is used instead.
+ * for a week. With each league's own bracket size (its stored setting, else
+ * what its finished bracket held), the standings rule matches the real bracket
+ * for every team 2005-2025. The rankings cover every team in a league-week;
+ * should a week ever rank fewer teams than the league has, the ranks below are
+ * off and the flag is used instead.
  */
 async function loadLuckBySeason(
 	manager: string | null
@@ -79,18 +80,24 @@ async function loadLuckBySeason(
 				GROUP BY league_key, week_key
 			),
 			-- Bracket size when the league's own setting isn't stored (migration
-			-- 011): the latest finished season's (6 since 2008).
-			spots AS (
-				SELECT COUNT(DISTINCT v.team_key) AS n
+			-- 011). A finished league's is what it played: by the championship
+			-- every bracket team has played. It varied (all 8 teams in 2007).
+			bracket AS (
+				SELECT fm.league_key, COUNT(DISTINCT v.team_key) AS n
 				FROM edw.fact_matchup fm
 				CROSS JOIN LATERAL (VALUES (fm.team1_key), (fm.team2_key)) AS v(team_key)
 				WHERE fm.is_playoffs AND NOT fm.is_consolation
-				  AND fm.league_key = (
-					SELECT c.league_key FROM edw.fact_matchup c
-					JOIN edw.dim_league cl ON cl.league_key = c.league_key
-					WHERE c.is_championship
-					ORDER BY cl.season_year DESC LIMIT 1
+				  AND fm.league_key IN (
+					SELECT c.league_key FROM edw.fact_matchup c WHERE c.is_championship
 				  )
+				GROUP BY fm.league_key
+			),
+			-- A league still in its playoffs uses the latest finished season's
+			-- size (6 since 2008): its first-round byes have not played yet.
+			spots AS (
+				SELECT b.n FROM bracket b
+				JOIN edw.dim_league bl ON bl.league_key = b.league_key
+				ORDER BY bl.season_year DESC LIMIT 1
 			),
 			latest AS (
 				SELECT
@@ -121,7 +128,8 @@ async function loadLuckBySeason(
 				CASE
 					WHEN ranked.n = latest.num_teams
 						THEN COALESCE(
-							latest.record_rank <= COALESCE(latest.stored_spots, (SELECT n FROM spots)),
+							latest.record_rank
+								<= COALESCE(latest.stored_spots, bracket.n, (SELECT n FROM spots)),
 							false)
 					ELSE EXISTS (
 						SELECT 1 FROM edw.fact_team_performance ftp
@@ -132,6 +140,7 @@ async function loadLuckBySeason(
 			LEFT JOIN league_state ls ON ls.league_key = latest.league_key
 			LEFT JOIN ranked ON ranked.league_key = latest.league_key
 				AND ranked.week_key = latest.week_key
+			LEFT JOIN bracket ON bracket.league_key = latest.league_key
 			WHERE latest.rn = 1
 			ORDER BY latest.manager_name, latest.season_year
 		`)

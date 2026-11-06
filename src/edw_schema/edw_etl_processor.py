@@ -45,6 +45,41 @@ def fit_pythagorean_exponent(team_seasons) -> float:
     return min((sse(x / 100), x / 100) for x in range(100, 1501))[1]
 
 
+# A manager who has left stays in analysis (manager pages, head-to-head, draft)
+# once they have played this many seasons of record: the league's history is
+# theirs too. Short stints (three seasons or fewer today) stay out.
+ALUMNI_MIN_SEASONS = 5
+
+
+def is_placeholder_manager(manager_name: str) -> bool:
+    """Yahoo's stand-in for a manager whose account is gone ('--hidden--',
+    '-- hidden --'). It is many people, so it is never a manager to analyze."""
+    return ''.join(c for c in (manager_name or '').lower() if c.isalpha()) == 'hidden'
+
+
+def derive_manager_membership(managers: List[Dict]) -> List[Dict]:
+    """Set is_current and include_in_analysis on dim_manager records.
+
+    is_current: has a team in the latest season of record in the data (not the
+    calendar year, so a new year with no league loaded yet changes nothing).
+    include_in_analysis: is_current, or an alumnus with ALUMNI_MIN_SEASONS
+    seasons. Placeholders are never either.
+    """
+    latest = max((m['last_season_year'] for m in managers
+                  if m.get('last_season_year') is not None), default=None)
+    for m in managers:
+        placeholder = is_placeholder_manager(m['manager_name'])
+        m['is_current'] = (not placeholder and latest is not None
+                           and m.get('last_season_year') == latest)
+        m['include_in_analysis'] = not placeholder and (
+            m['is_current'] or (m.get('total_seasons') or 0) >= ALUMNI_MIN_SEASONS)
+        if placeholder and latest is not None and m.get('last_season_year') == latest:
+            logger.warning(f"⚠️ A {latest} team has a hidden manager ('{m['manager_name']}'); "
+                           f"add its team_id to get_manager_name_by_team_id or it is left "
+                           f"out of manager analysis")
+    return managers
+
+
 @dataclass
 
 class ETLStats:
@@ -200,8 +235,11 @@ class EdwEtlProcessor:
             'depends_on': 'operational_leagues'
         },
         'teams': {
+            # Teams decide dim_manager membership (is_current,
+            # include_in_analysis), so every mart that filters on it refreshes.
             'triggers_refresh': ['dim_league', 'dim_manager', 'dim_team',
-                                 'fact_team_performance', 'mart_manager_performance'],
+                                 'fact_team_performance', 'mart_manager_performance',
+                                 'mart_league_summary', 'mart_manager_h2h'],
             'refresh_type': 'INCREMENTAL',  # Only changed teams
             'depends_on': 'operational_teams'
         },
@@ -5001,17 +5039,6 @@ class EdwEtlProcessor:
             # Convert canonical name to a stable, URL-friendly manager ID
             manager_id = canonical_name.lower().replace(' ', '_').replace("'", '').replace('.', '').replace('-', '_')
             
-            # Set is_current and include_in_analysis based on specified criteria
-            current_manager_ids = {
-                'craig', 'erik_snow', 'gabe_flores', 'gabe_the_younger', 
-                'israel', 'luke_s', 'nick', 'omar', 'trevor', 'troy_colvin'
-            }
-            
-            analysis_manager_ids = current_manager_ids | {'bobby'}  # All current managers plus Bobby
-            
-            is_current = manager_id in current_manager_ids
-            include_in_analysis = manager_id in analysis_manager_ids
-            
             # Use collected manager data or reasonable defaults
             manager_record = {
                 'manager_name': canonical_name,  # Use canonical name
@@ -5020,8 +5047,6 @@ class EdwEtlProcessor:
                 'last_season_year': last_season,
                 'total_seasons': total_seasons,
                 'total_leagues': total_leagues,
-                'is_current': is_current,  # Based on specified current managers
-                'include_in_analysis': include_in_analysis,  # Current managers + Bobby
                 'email': manager_data.get('email'),  # Email if available
                 'display_name': manager_data.get('display_name', canonical_name),  # Prefer nickname, fallback to canonical name
                 'profile_image_url': manager_data.get('profile_image_url'),  # Profile image if available
@@ -5029,8 +5054,8 @@ class EdwEtlProcessor:
             }
             
             managers.append(manager_record)
-        
-        return managers
+
+        return derive_manager_membership(managers)
 
     def transform_mart_league_summary(self) -> List[Dict]:
         """Transform data for mart_league_summary - matches current table schema"""
@@ -5996,8 +6021,6 @@ class EdwEtlProcessor:
                     ) as weeks_remaining
                 FROM edw.fact_team_performance ftp
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
-                JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
-                JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
                 JOIN edw.dim_season ds ON ftp.season_year = ds.season_year
                 JOIN league_settings ls ON ftp.league_key = ls.league_key AND ftp.season_year = ls.season_year
                 LEFT JOIN cumulative_records cr ON ftp.team_key = cr.team_key 
@@ -6011,8 +6034,11 @@ class EdwEtlProcessor:
                     AND ftp.week_key = rp.week_key
                 LEFT JOIN playoff_cutoff_teams pct ON ftp.league_key = pct.league_key 
                     AND ftp.week_key = pct.week_key
-                WHERE dw.week_type = 'regular' 
-                  AND dm.include_in_analysis = TRUE
+                -- Every team in the league-week, whoever manages it: ranks and
+                -- odds are league-relative, so dropping a team (a hidden or
+                -- departed manager) would shift everyone else's. Manager-facing
+                -- marts filter on include_in_analysis instead.
+                WHERE dw.week_type = 'regular'
             ),
             power_calculations AS (
                 SELECT 
