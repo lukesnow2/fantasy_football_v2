@@ -2,6 +2,8 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { enhance } from '$app/forms';
+	import { dev } from '$app/environment';
+	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 	import {
 		Trophy,
 		BarChart3,
@@ -30,6 +32,9 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 
 	let { data, children }: { data: LayoutData; children: any } = $props();
+
+	// Vercel Web Analytics. In dev it logs page views to the console instead of sending them.
+	injectAnalytics({ mode: dev ? 'development' : 'production' });
 
 	/**
 	 * The bar is two direct links plus three subject dropdowns.
