@@ -158,22 +158,41 @@ function streamSeed(seed: number, sim: number, week: number): number {
 	return (h ^ (h >>> 16)) >>> 0;
 }
 
-function gaussian(rand: () => number): () => number {
-	let spare: number | null = null;
-	return () => {
-		if (spare !== null) {
-			const s = spare;
-			spare = null;
+/**
+ * Standard-normal draws (Box-Muller) from a mulberry32 stream that is reseeded
+ * in place, so switching streams per simulated week allocates nothing.
+ */
+class NormalStream {
+	private state = 0;
+	private spare: number | null = null;
+
+	reseed(seed: number) {
+		this.state = seed >>> 0;
+		this.spare = null;
+	}
+
+	private uniform(): number {
+		this.state = (this.state + 0x6d2b79f5) >>> 0;
+		let t = this.state;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	}
+
+	next(): number {
+		if (this.spare !== null) {
+			const s = this.spare;
+			this.spare = null;
 			return s;
 		}
 		let u = 0;
 		let v = 0;
-		while (u === 0) u = rand();
-		while (v === 0) v = rand();
+		while (u === 0) u = this.uniform();
+		while (v === 0) v = this.uniform();
 		const mag = Math.sqrt(-2 * Math.log(u));
-		spare = mag * Math.sin(2 * Math.PI * v);
+		this.spare = mag * Math.sin(2 * Math.PI * v);
 		return mag * Math.cos(2 * Math.PI * v);
-	};
+	}
 }
 
 // ------------------------------------------------------------------ schedule
@@ -311,12 +330,14 @@ function completeRoundRobin(
 
 // ------------------------------------------------------------------ strength
 
-interface Strength {
-	mean: number;
+/** Per-team arrays, index-aligned with the team keys passed in. */
+interface Strengths {
+	mean: number[];
 	/** Posterior sd of the team's true level. */
-	meanSd: number;
+	meanSd: number[];
 	/** Week-to-week score sd. */
-	noiseSd: number;
+	noiseSd: number[];
+	leagueAverage: number;
 }
 
 function estimateStrength(
@@ -324,7 +345,7 @@ function estimateStrength(
 	games: PlayedGame[],
 	throughWeek: number,
 	p: ModelParams
-): { strengths: Map<number, Strength>; leagueAverage: number } {
+): Strengths {
 	const scores = new Map<number, { week: number; pts: number }[]>();
 	for (const k of teamKeys) scores.set(k, []);
 	for (const g of games) {
@@ -351,7 +372,7 @@ function estimateStrength(
 	const priorDof = 10;
 	const leagueVar = (ss + priorVar * priorDof) / (dof + priorDof);
 
-	const strengths = new Map<number, Strength>();
+	const out: Strengths = { mean: [], meanSd: [], noiseSd: [], leagueAverage };
 	for (const k of teamKeys) {
 		const list = scores.get(k)!;
 		let wSum = 0;
@@ -377,9 +398,11 @@ function estimateStrength(
 		const nEff = wSum > 0 ? (wSum * wSum) / w2Sum : 0;
 		const meanSd = Math.sqrt(leagueVar / (nEff + p.shrinkage));
 
-		strengths.set(k, { mean, meanSd, noiseSd: Math.sqrt(noiseVar) });
+		out.mean.push(mean);
+		out.meanSd.push(meanSd);
+		out.noiseSd.push(Math.sqrt(noiseVar));
 	}
-	return { strengths, leagueAverage };
+	return out;
 }
 
 // -------------------------------------------------------------- clinch math
@@ -473,10 +496,7 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		}
 	}
 
-	const { strengths, leagueAverage } = estimateStrength(keys, games, throughWeek, p);
-	const mean = keys.map((k) => strengths.get(k)!.mean);
-	const meanSd = keys.map((k) => strengths.get(k)!.meanSd);
-	const noiseSd = keys.map((k) => strengths.get(k)!.noiseSd);
+	const { mean, meanSd, noiseSd, leagueAverage } = estimateStrength(keys, games, throughWeek, p);
 	const pooledNoise = Math.sqrt(noiseSd.reduce((s, x) => s + x * x, 0) / n);
 	const driftSd = p.drift * pooledNoise;
 
@@ -486,10 +506,9 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	// randomness for every week both simulate: comparing this week's odds with
 	// last week's then measures last week's results, not sampling noise.
 	const rand = rng(seed);
-	let gauss = gaussian(rng(0));
-	const useStream = (sim: number, week: number) => {
-		gauss = gaussian(rng(streamSeed(seed, sim, week)));
-	};
+	const normal = new NormalStream();
+	const gauss = () => normal.next();
+	const useStream = (sim: number, week: number) => normal.reseed(streamSeed(seed, sim, week));
 
 	// The schedule only varies when first-cycle weeks are unplayed. Redraw it
 	// every so often so the odds average over the possible schedules.

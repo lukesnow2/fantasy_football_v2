@@ -91,15 +91,25 @@ export const GET: RequestHandler = async ({ url }) => {
 			}));
 		const postseasonStarted = rows.some((r) => r.po || r.cons);
 
+		// Games define who is in the league once there are any; dim_team only
+		// supplies names. A team missing from dim_team keeps its games (and its
+		// opponents keep their results) under a placeholder name.
+		const named = new Map(
+			teamRows.map((r) => [
+				Number(r.teamKey),
+				{
+					teamName: String(r.teamName ?? ''),
+					managerName: r.managerName == null ? null : String(r.managerName)
+				}
+			])
+		);
 		const inGames = new Set(games.flatMap((g) => [g.teamA, g.teamB]));
-		const teams = teamRows
-			.map((r) => ({
-				teamKey: Number(r.teamKey),
-				teamName: String(r.teamName ?? ''),
-				managerName: r.managerName == null ? null : String(r.managerName)
-			}))
-			// Once games exist, they define who is in the league.
-			.filter((t) => inGames.size === 0 || inGames.has(t.teamKey));
+		const teamKeys = [...(inGames.size > 0 ? inGames : named.keys())].sort((x, y) => x - y);
+		const teams = teamKeys.map((teamKey) => ({
+			teamKey,
+			teamName: named.get(teamKey)?.teamName ?? `Team ${teamKey}`,
+			managerName: named.get(teamKey)?.managerName ?? null
+		}));
 
 		if (teams.length < 6) {
 			return json({

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Trophy, ChevronDown, Info } from 'lucide-svelte';
+	import type { OddsResult, TeamOdds as EngineTeamOdds } from '$lib/playoff-odds';
 
 	/**
 	 * Simulated playoff odds for the This Season page. Replaces a "Playoff
@@ -7,42 +8,20 @@
 	 * The model lives in $lib/playoff-odds; this only presents it.
 	 */
 
-	interface TeamOdds {
-		teamKey: number;
+	/** What /api/playoff-odds adds to each engine row. */
+	interface TeamOdds extends EngineTeamOdds {
 		teamName: string;
 		managerName: string | null;
-		wins: number;
-		losses: number;
-		ties: number;
-		pointsFor: number;
-		allPlayWins: number;
-		allPlayLosses: number;
-		luck: number;
-		projectedPoints: number;
 		projectedPointsRank: number;
-		remainingOpponentPoints: number | null;
-		remainingGames: number;
-		projectedWins: number;
-		playoffOdds: number;
-		byeOdds: number;
-		topSeedOdds: number;
-		titleOdds: number;
-		clinched: boolean;
-		eliminated: boolean;
 		previousOdds: number | null;
 	}
 
-	interface OddsResponse {
+	interface OddsResponse extends Omit<OddsResult, 'teams'> {
 		season: number;
 		available: boolean;
 		reason?: string;
-		throughWeek: number;
 		regularSeasonWeeks: number;
 		phase: 'regular' | 'postseason';
-		sims: number;
-		playoffTeams: number;
-		byes: number;
-		leagueAverage: number;
 		teams: TeamOdds[];
 	}
 
@@ -126,6 +105,9 @@
 		return Math.abs(d) < 2 ? null : d;
 	}
 
+	// All-play records can carry a half from a tied week; rounding both sides up
+	// would add a game that wasn't played.
+	const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 	const record = (t: TeamOdds) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ''}`;
 	const signed = (x: number, digits = 1) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(digits)}`;
 </script>
@@ -138,10 +120,16 @@
 			<Trophy class="mr-3 h-5 w-5 shrink-0 text-amber-400" />
 			{data?.phase === 'postseason' ? 'Playoff Field' : 'Playoff Odds'}
 		</h2>
-		{#if data?.available && data.phase === 'regular'}
+		{#if data?.available}
+			<!-- The season is always named: through the offseason the newest season
+			     in the warehouse is last year's, and its field shouldn't pass for this year's. -->
 			<span class="pt-1 text-right text-xs leading-tight text-slate-400">
-				Through wk {data.throughWeek}<br />
-				{data.sims.toLocaleString()} sims
+				{#if data.phase === 'regular'}
+					{data.season} · wk {data.throughWeek}<br />
+					{data.sims.toLocaleString()} sims
+				{:else}
+					{data.season} season
+				{/if}
 			</span>
 		{/if}
 	</div>
@@ -179,11 +167,15 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="mb-4 flex rounded-lg bg-slate-900/40 p-0.5 text-xs font-medium" role="tablist">
+		<!-- A segmented toggle, not ARIA tabs: there's one list that re-sorts, no panels. -->
+		<div
+			class="mb-4 flex rounded-lg bg-slate-900/40 p-0.5 text-xs font-medium"
+			role="group"
+			aria-label="Odds shown"
+		>
 			{#each TABS as tab (tab.id)}
 				<button
-					role="tab"
-					aria-selected={metric === tab.id}
+					aria-pressed={metric === tab.id}
 					class="flex-1 rounded-md px-2 py-1.5 transition-colors {metric === tab.id
 						? 'bg-slate-700 text-white'
 						: 'text-slate-400 hover:text-slate-200'}"
@@ -269,7 +261,7 @@
 
 							<dt class="text-slate-400">All-play record</dt>
 							<dd class="text-right text-white tabular-nums">
-								{Math.round(t.allPlayWins)}-{Math.round(t.allPlayLosses)}
+								{halves(t.allPlayWins)}-{halves(t.allPlayLosses)}
 							</dd>
 
 							<dt class="text-slate-400">Luck</dt>
