@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { pickGrade, pickVerdict, type PickVerdict } from '$lib/draft-value';
 	import { onMount } from 'svelte';
 
 	export let draftData: any[] = [];
@@ -56,47 +57,32 @@
 		}
 	}
 
-	function getPerformanceGrade(points: number): { grade: string; color: string } {
-		if (points >= 200) return { grade: 'A+', color: 'text-green-400' };
-		if (points >= 150) return { grade: 'A', color: 'text-green-300' };
-		if (points >= 120) return { grade: 'B+', color: 'text-blue-400' };
-		if (points >= 100) return { grade: 'B', color: 'text-blue-300' };
-		if (points >= 80) return { grade: 'C+', color: 'text-yellow-400' };
-		if (points >= 60) return { grade: 'C', color: 'text-yellow-300' };
-		if (points >= 40) return { grade: 'D', color: 'text-orange-400' };
-		return { grade: 'F', color: 'text-red-400' };
-	}
+	// Grades and value icons judge a pick against what its position and round
+	// were expected to score: pickGrade / pickVerdict in $lib/draft-value, the
+	// same reading the draft page's steal and bust counts use. They used to use
+	// raw points (200+ = A+, under 40 = F) and the round's all-position average,
+	// so a round-15 kicker that was cut got a bust skull.
+	const GRADE_COLORS: Record<string, string> = {
+		'A+': 'text-green-400', A: 'text-green-300', 'B+': 'text-blue-400', B: 'text-blue-300',
+		'C+': 'text-yellow-400', C: 'text-yellow-300', D: 'text-orange-400', F: 'text-red-400'
+	};
+	const VERDICT_ICONS: Record<PickVerdict, string> = {
+		steal: '🔥', good: '⭐', fair: '✓', disappointing: '⚠️', bust: '💀'
+	};
+	const pointsOf = (pick: any) => parseFloat(pick.seasonPoints || 0);
 
-	// Average points by round for this draft, so a pick's value is judged against the
-	// round it was taken in rather than a fabricated fixed curve.
-	function computeRoundAvg(picks: any[]): Record<number, number> {
-		const totals: Record<number, { sum: number; n: number }> = {};
-		(picks || []).forEach((p: any) => {
-			const r = p.roundNumber;
-			const pts = parseFloat(p.seasonPoints || 0);
-			if (!totals[r]) totals[r] = { sum: 0, n: 0 };
-			totals[r].sum += pts;
-			totals[r].n++;
-		});
-		const avg: Record<number, number> = {};
-		for (const r in totals) avg[r] = totals[r].sum / totals[r].n;
-		return avg;
+	function getPerformanceGrade(pick: any): { grade: string; color: string } {
+		const grade = pickGrade(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		return grade ? { grade, color: GRADE_COLORS[grade] } : { grade: '—', color: 'text-slate-400' };
 	}
 
 	function getValueIndicator(pick: any): string {
-		const expected = roundAvg[pick.roundNumber] || 0;
-		const actual = parseFloat(pick.seasonPoints || 0);
-		if (expected <= 0) return '✓';
-		const ratio = actual / expected;
-		if (ratio > 1.5) return '🔥'; // Steal
-		if (ratio > 1.15) return '⭐'; // Good value
-		if (ratio > 0.85) return '✓'; // Fair
-		if (ratio > 0.5) return '⚠️'; // Disappointing
-		return '💀'; // Bust
+		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		// Nothing to judge against is shown as nothing, not as "fair".
+		return verdict ? VERDICT_ICONS[verdict] : '—';
 	}
 
 	$: draftBoard = createDraftBoard(draftData);
-	$: roundAvg = computeRoundAvg(draftData);
 </script>
 
 <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
@@ -146,8 +132,8 @@
 									{pick.managerName}
 								</div>
 								<div class="flex items-center justify-between mt-2">
-									<span class="text-xs font-bold {getPerformanceGrade(parseFloat(pick.seasonPoints || 0)).color}">
-										{getPerformanceGrade(parseFloat(pick.seasonPoints || 0)).grade}
+									<span class="text-xs font-bold {getPerformanceGrade(pick).color}">
+										{getPerformanceGrade(pick).grade}
 									</span>
 									<span class="text-sm">
 										{getValueIndicator(pick)}
@@ -187,14 +173,26 @@
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
 							<div class="text-slate-400">Season Points</div>
-							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).color}">
+							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
 								{parseFloat(selectedPick.seasonPoints || 0).toFixed(1)}
 							</div>
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
+							<div class="text-slate-400">Expected</div>
+							<div class="font-bold text-white">
+								{selectedPick.expectedPoints != null ? Number(selectedPick.expectedPoints).toFixed(1) : '—'}
+							</div>
+						</div>
+						<div class="bg-slate-700/50 p-3 rounded">
+							<div class="text-slate-400">vs expected</div>
+							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
+								{selectedPick.valueOverExpected != null ? `${selectedPick.valueOverExpected > 0 ? '+' : ''}${Number(selectedPick.valueOverExpected).toFixed(1)}` : '—'}
+							</div>
+						</div>
+						<div class="bg-slate-700/50 p-3 rounded">
 							<div class="text-slate-400">Grade</div>
-							<div class="font-bold {getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).color}">
-								{getPerformanceGrade(parseFloat(selectedPick.seasonPoints || 0)).grade}
+							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
+								{getPerformanceGrade(selectedPick).grade}
 							</div>
 						</div>
 						<div class="bg-slate-700/50 p-3 rounded">
