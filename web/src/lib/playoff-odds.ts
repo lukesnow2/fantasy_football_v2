@@ -365,7 +365,7 @@ export function bracketSlots(size: number): number[] {
 // ------------------------------------------------------------------ strength
 
 /** Per-team arrays, index-aligned with the team keys passed in. */
-interface Strengths {
+export interface Strengths {
 	mean: number[];
 	/** Posterior sd of the team's true level. */
 	meanSd: number[];
@@ -374,7 +374,7 @@ interface Strengths {
 	leagueAverage: number;
 }
 
-function estimateStrength(
+export function estimateStrength(
 	teamKeys: number[],
 	games: PlayedGame[],
 	throughWeek: number,
