@@ -242,3 +242,54 @@ def test_warehouse_replaces_fetched_leagues_and_keeps_the_rest(engine):
         assert count(conn, 'edw.dim_scoring_bonus', L26) == 0
         assert count(conn, 'edw.dim_scoring_rule', L25) == 3
         assert count(conn, 'edw.dim_scoring_bonus', L25) == 3
+
+
+# ---------------------------------------------------------------- season weeks
+
+L07, SIDE_07 = '175.l.658531', '175.l.86092'  # 2007: league of record, side league
+
+
+def _games(league, weeks, playoff_from, championship=None):
+    return [{'league_id': league, 'week': w, 'is_playoffs': w >= playoff_from,
+             'is_championship': w == championship} for w in weeks]
+
+
+def _season_2007(playoff_start_setting=None):
+    proc = EdwEtlProcessor.__new__(EdwEtlProcessor)
+    record = {'league_id': L07, 'season': '2007', 'start_week': '2', 'end_week': '16'}
+    if playoff_start_setting:
+        record['playoff_start_week'] = playoff_start_setting
+    proc.data = {
+        'leagues': [record,
+                    {'league_id': SIDE_07, 'season': '2007', 'start_week': '2', 'end_week': '16'}],
+        # The real 2007 bracket starts in week 15; the side league's in week 14.
+        'matchups': (_games(L07, range(2, 17), 15, championship=16)
+                     + _games(SIDE_07, range(2, 17), 14, championship=16)),
+    }
+    return proc
+
+
+def test_a_side_leagues_bracket_does_not_move_the_seasons_playoffs():
+    season = {s['season_year']: s for s in _season_2007().extract_seasons()}[2007]
+    assert (season['playoff_start_week'], season['championship_week']) == (15, 16)
+
+
+def test_week_14_of_2007_is_regular_season():
+    weeks = {w['week_number']: w['week_type']
+             for w in _season_2007().extract_weeks() if w['season_year'] == 2007}
+    assert (weeks[14], weeks[15], weeks[16]) == ('regular', 'playoffs', 'championship')
+
+
+def test_weeks_and_season_agree_on_the_playoff_start():
+    proc = _season_2007(playoff_start_setting=15)
+    [season] = [s for s in proc.extract_seasons() if s['season_year'] == 2007]
+    first_playoff = min(w['week_number'] for w in proc.extract_weeks()
+                        if w['season_year'] == 2007 and w['week_type'] != 'regular')
+    assert first_playoff == season['playoff_start_week'] == 15
+
+
+def test_yahoos_setting_wins_over_the_bracket_flags():
+    """Flags are inferred at load time; the setting is the league's own."""
+    proc = _season_2007(playoff_start_setting=16)
+    season = {s['season_year']: s for s in proc.extract_seasons()}[2007]
+    assert season['playoff_start_week'] == 16

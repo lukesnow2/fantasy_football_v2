@@ -641,7 +641,24 @@ class EdwEtlProcessor:
         except Exception as e:
             logger.warning(f"⚠️ Could not update metadata for {table_name}: {e}")
     
-    def extract_seasons(self) -> List[Dict]:
+    def _record_league_seasons(self) -> Dict[str, int]:
+        """league_id -> season for the leagues of record.
+
+        A season's weeks are the league of record's. Five seasons also hold a
+        side league, and pooling its games set the season's playoff start to
+        the earliest playoff week of any of them: 2007's six-team "Oakdale 2"
+        started its playoffs in week 14, so the season was recorded as
+        starting its playoffs in week 14 too, a week before the real bracket,
+        and every regular-season measure lost week 14's games.
+        """
+        seasons = {}
+        for league in self.data.get('leagues', []):
+            season = _positive_int(league.get('season'))
+            if season and self.is_league_of_record(league['league_id'], season):
+                seasons[league['league_id']] = season
+        return seasons
+
+    def extract_seasons(self, quiet: bool = False) -> List[Dict]:
         """Extract unique seasons from leagues data with derived week information"""
         seasons = {}
         
@@ -649,18 +666,14 @@ class EdwEtlProcessor:
             logger.warning("⚠️ No data available for season extraction")
             return list(seasons.values())
         
+        record_seasons = self._record_league_seasons()
+
         # Build season metrics from actual matchup data
         season_metrics = {}
         
-        # Analyze matchups to get actual week ranges and playoff info
+        # Analyze the league of record's matchups for week ranges and playoff info
         for matchup in self.data.get('matchups', []):
-            # Get season from league data
-            season_year = None
-            for league in self.data.get('leagues', []):
-                if league['league_id'] == matchup['league_id']:
-                    season_year = int(league['season'])
-                    break
-            
+            season_year = record_seasons.get(matchup['league_id'])
             if not season_year:
                 continue
             
@@ -705,6 +718,8 @@ class EdwEtlProcessor:
         # Use league configuration data as additional source
         league_configs = {}
         for league in self.data.get('leagues', []):
+            if league['league_id'] not in record_seasons:
+                continue
             season_year = int(league['season'])
             if season_year not in league_configs:
                 league_configs[season_year] = {
@@ -764,6 +779,13 @@ class EdwEtlProcessor:
                             # Three-round bracket, as every season since 2022.
                             playoff_start_week = max(1, end_week - 2)
 
+                # Yahoo's own setting is the authority whenever it is held
+                # (every season since migration 012's backfill); the bracket
+                # and the fallbacks above stand in only without it.
+                configured = config.get('playoff_start_weeks')
+                if configured:
+                    playoff_start_week = max(set(configured), key=configured.count)
+
                 seasons[season_year] = {
                     'season_year': season_year,
                     'season_start_date': date(season_year, 9, 1),  # NFL season typically starts early September
@@ -777,10 +799,11 @@ class EdwEtlProcessor:
                     'season_status': 'completed' if season_year < self._current_season_year() else 'active'
                 }
         
-        logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
-        for season_year in sorted(seasons.keys()):
-            s = seasons[season_year]
-            logger.info(f"  {season_year}: {s['total_weeks']} weeks, playoffs start week {s['playoff_start_week']}, championship week {s['championship_week']}")
+        if not quiet:
+            logger.info(f"📅 Extracted {len(seasons)} seasons with derived week information")
+            for season_year in sorted(seasons.keys()):
+                s = seasons[season_year]
+                logger.info(f"  {season_year}: {s['total_weeks']} weeks, playoffs start week {s['playoff_start_week']}, championship week {s['championship_week']}")
         
         return list(seasons.values())
     
@@ -793,40 +816,16 @@ class EdwEtlProcessor:
         for league in self.data.get('leagues', []):
             league_to_season[league['league_id']] = int(league['season'])
         
-        # Build season info for week classification (use the updated season logic)
+        # Classify weeks by the season record itself, so dim_week and
+        # dim_season can never disagree about where the playoffs begin. This
+        # used to repeat the derivation from every league's games, and
+        # 2007's side league marked week 14 as playoffs here too.
         season_playoff_starts = {}
         season_championships = {}
-        
-        # Use the same logic as extract_seasons to get playoff/championship week info
-        season_metrics = {}
-        for matchup in self.data.get('matchups', []):
-            season_year = None
-            for league in self.data.get('leagues', []):
-                if league['league_id'] == matchup['league_id']:
-                    season_year = int(league['season'])
-                    break
-            
-            if not season_year:
-                continue
-            
-            if season_year not in season_metrics:
-                season_metrics[season_year] = {
-                    'playoff_weeks': set(),
-                    'championship_weeks': set()
-                }
-            
-            if matchup.get('is_playoffs'):
-                season_metrics[season_year]['playoff_weeks'].add(matchup['week'])
-            if matchup.get('is_championship'):
-                season_metrics[season_year]['championship_weeks'].add(matchup['week'])
-        
-        # Calculate playoff/championship weeks for each season
-        for season_year, metrics in season_metrics.items():
-            if metrics['playoff_weeks']:
-                season_playoff_starts[season_year] = min(metrics['playoff_weeks'])
-            if metrics['championship_weeks']:
-                season_championships[season_year] = max(metrics['championship_weeks'])
-        
+        for season in self.extract_seasons(quiet=True):
+            season_playoff_starts[season['season_year']] = season['playoff_start_week']
+            season_championships[season['season_year']] = season['championship_week']
+
         # Extract from matchup data (has week information)
         for matchup in self.data.get('matchups', []):
             # Get season from league mapping instead of defaulting to 2024
