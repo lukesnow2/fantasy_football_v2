@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
+import { getSeasonOdds } from '$lib/server/playoff-odds-service';
 import type { RequestHandler } from './$types';
 
 /**
@@ -17,6 +18,12 @@ import type { RequestHandler } from './$types';
  *
  * The mart also only covers regular-season weeks (1-14 in recent seasons), which
  * the page surfaces explicitly rather than leaving as an unexplained gap.
+ *
+ * Playoff odds do NOT come from the mart. Its playoff_odds is a hand-set ladder
+ * of rank and games back that backtested badly (teams given 40-50% made it 26%
+ * of the time). They come from the same season simulation the This Season
+ * widget and manager pages use, run as of the selected week, so a week's odds
+ * read the same everywhere.
  */
 
 type NumericLike = string | number | null | undefined;
@@ -169,13 +176,27 @@ export const GET: RequestHandler = async ({ url }) => {
 			week = parsed;
 		}
 
+		// Simulated as of the selected week. Unavailable (too few teams loaded)
+		// or failed, the column shows a dash rather than the mart's old figures.
+		let odds = new Map<number, number>();
+		if (season != null && week != null) {
+			try {
+				const result = await getSeasonOdds(season, week);
+				if (result.available) odds = new Map(result.teams.map((t) => [t.teamKey, t.playoffOdds]));
+			} catch (oddsError) {
+				console.error('[power-rankings] playoff odds simulation failed:', oddsError);
+			}
+		}
+
 		return json({
 			season,
 			week,
 			seasons,
 			weeks,
-			rankings: all.filter((r) => r.weekNumber === week),
-			trend: all
+			rankings: all
+				.filter((r) => r.weekNumber === week)
+				.map((r) => ({ ...r, playoffOdds: odds.get(r.teamKey) ?? null })),
+			trend: all.map((r) => ({ ...r, playoffOdds: null }))
 		});
 	} catch (error) {
 		console.error('Power rankings API error:', error);

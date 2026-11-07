@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { TrendingUp, TrendingDown, Minus, Trophy, Info } from 'lucide-svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { getManagerProfilePicture, getInitials } from '$lib/utils/managerUtils';
 	import type { PowerRankingRow } from '../api/power-rankings/+server';
 
 	let loading = $state(true);
@@ -76,7 +77,11 @@
 		'#facc15', '#60a5fa', '#f472b6', '#4ade80', '#c084fc'
 	];
 
-	const CHART = { width: 900, height: 360, padTop: 16, padRight: 16, padBottom: 32, padLeft: 40 };
+	// Taller than it was (360): ten lines crossing need room between ranks, and
+	// each line now ends in its manager's picture, which needs ~50 units per rank
+	// and a right margin to sit in.
+	const CHART = { width: 960, height: 550, padTop: 28, padRight: 36, padBottom: 52, padLeft: 40 };
+	const AVATAR_R = 17;
 
 	interface TeamSeries {
 		teamKey: number;
@@ -86,6 +91,9 @@
 		points: { week: number; rank: number }[];
 		path: string;
 		finalRank: number;
+		/** Where the line ends, for the manager's picture. */
+		end: { x: number; y: number };
+		picture: string | null;
 	}
 
 	const series = $derived.by<TeamSeries[]>(() => {
@@ -122,7 +130,9 @@
 				color: '',
 				points,
 				path: points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.week)},${y(p.rank)}`).join(' '),
-				finalRank: last.powerRank
+				finalRank: last.powerRank,
+				end: { x: x(last.weekNumber), y: y(last.powerRank) },
+				picture: last.managerName ? getManagerProfilePicture(last.managerName) : null
 			};
 		});
 
@@ -307,10 +317,17 @@
 				<div class="overflow-x-auto">
 					<svg
 						viewBox="0 0 {CHART.width} {CHART.height}"
-						class="h-auto w-full min-w-[40rem]"
+						class="h-auto w-full min-w-[44rem]"
 						role="img"
 						aria-label="Line chart of each team's power rank by week"
 					>
+						<defs>
+							{#each series as s (s.teamKey)}
+								<clipPath id="pr-avatar-{s.teamKey}">
+									<circle cx={s.end.x} cy={s.end.y} r={AVATAR_R} />
+								</clipPath>
+							{/each}
+						</defs>
 						{#each chartTicks.ys as tick}
 							<line
 								x1={CHART.padLeft} y1={tick.y} x2={CHART.width - CHART.padRight} y2={tick.y}
@@ -337,6 +354,35 @@
 								stroke-linecap="round"
 								opacity={hoveredTeam === null || hoveredTeam === s.teamKey ? 1 : 0.15}
 							/>
+						{/each}
+						<!-- Each line ends in its manager's picture (initials when there is
+						     none), ringed in the line's color. Drawn after every line so no
+						     line crosses a face; hovering one highlights its line. -->
+						{#each series as s (s.teamKey)}
+							<g
+								role="presentation"
+								opacity={hoveredTeam === null || hoveredTeam === s.teamKey ? 1 : 0.3}
+								onmouseenter={() => (hoveredTeam = s.teamKey)}
+								onmouseleave={() => (hoveredTeam = null)}
+							>
+								<title>{s.teamName}{s.managerName ? ` (${s.managerName})` : ''}: #{s.finalRank}</title>
+								<circle cx={s.end.x} cy={s.end.y} r={AVATAR_R + 2} fill="#0f172a" stroke={s.color} stroke-width="2.5" />
+								{#if s.picture}
+									<image
+										href={s.picture}
+										x={s.end.x - AVATAR_R}
+										y={s.end.y - AVATAR_R}
+										width={AVATAR_R * 2}
+										height={AVATAR_R * 2}
+										preserveAspectRatio="xMidYMid slice"
+										clip-path="url(#pr-avatar-{s.teamKey})"
+									/>
+								{:else}
+									<text x={s.end.x} y={s.end.y + 4} text-anchor="middle" fill={s.color} font-size="11" font-weight="700">
+										{getInitials(s.managerName ?? s.teamName).slice(0, 2)}
+									</text>
+								{/if}
+							</g>
 						{/each}
 					</svg>
 				</div>
