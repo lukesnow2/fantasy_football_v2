@@ -1,7 +1,49 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
+import {
+	careerGrade,
+	seasonDraftScores,
+	seasonGrade,
+	spreadOf,
+	topBusts,
+	topSteals,
+	valueDraftPicks
+} from '$lib/draft-value';
 import type { RequestHandler } from './$types';
+
+/**
+ * Every pick in league history, valued against what its position and round
+ * were expected to score (see $lib/draft-value). Fitted on all managers' picks
+ * from finished seasons; the views below then show only managers in analysis.
+ */
+async function loadValuedPicks() {
+	const [pickRows, doneRows] = await Promise.all([
+		db.execute(sql`
+			SELECT fd.season_year, fd.overall_pick, fd.round_number,
+				dp.primary_position AS position, fd.season_points,
+				dp.player_name, dm.manager_name, dm.include_in_analysis
+			FROM edw.fact_draft fd
+			JOIN edw.dim_player dp ON dp.player_key = fd.player_key
+			JOIN edw.dim_manager dm ON dm.manager_key = fd.manager_key
+		`),
+		db.execute(sql`SELECT DISTINCT season_year FROM edw.fact_matchup WHERE is_championship`)
+	]);
+	const picks = (Array.from(pickRows) as any[]).map((r) => ({
+		seasonYear: Number(r.seasonYear),
+		overallPick: Number(r.overallPick),
+		roundNumber: Number(r.roundNumber),
+		position: r.position == null ? null : String(r.position),
+		seasonPoints: Number(r.seasonPoints ?? 0),
+		playerName: String(r.playerName ?? ''),
+		managerName: String(r.managerName ?? ''),
+		included: r.includeInAnalysis === true
+	}));
+	const done = new Set((Array.from(doneRows) as any[]).map((r) => Number(r.seasonYear)));
+	return { valued: valueDraftPicks(picks, done), completedSeasons: done };
+}
+
+const round1 = (v: number) => Math.round(v * 10) / 10;
 
 // nflTeam is the team the player was on in THAT league-season (his earliest
 // rostered week), from edw.fact_roster - not dim_player's single current value,
@@ -47,7 +89,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY fd.season_year DESC, fd.overall_pick ASC
 		`;
 
-		const draftResult = await db.execute(sql.raw(draftQuery));
+		const [draftResult, { valued, completedSeasons }] = await Promise.all([
+			db.execute(sql.raw(draftQuery)),
+			loadValuedPicks()
+		]);
+		// A season still being played is judged on its points so far.
+		data.seasonInProgress = season !== 'all' && !completedSeasons.has(parseInt(season));
+		const valueOf = new Map(valued.map((p) => [`${p.seasonYear}:${p.overallPick}`, p]));
+		const shown = valued.filter(
+			(p) => p.included && (season === 'all' || p.seasonYear === parseInt(season))
+		);
 		// Convert snake_case to camelCase for frontend compatibility
 		data.drafts = Array.from(draftResult).map((pick: any) => ({
 			seasonYear: pick.seasonYear || pick.season_year,
@@ -68,7 +119,17 @@ export const GET: RequestHandler = async ({ url }) => {
 			jerseyNumber: pick.jerseyNumber || pick.jersey_number,
 			rookieYear: pick.rookieYear || pick.rookie_year,
 			leagueName: pick.leagueName || pick.league_name,
-			numTeams: pick.numTeams || pick.num_teams
+			numTeams: pick.numTeams || pick.num_teams,
+			...(() => {
+				const v = valueOf.get(`${pick.seasonYear ?? pick.season_year}:${pick.overallPick ?? pick.overall_pick}`);
+				return v
+					? {
+							expectedPoints: round1(v.expectedPoints),
+							valueOverExpected: round1(v.valueOverExpected),
+							highExpectation: v.highExpectation
+						}
+					: { expectedPoints: null, valueOverExpected: null, highExpectation: false };
+			})()
 		}));
 
 		// Draft analytics
@@ -148,50 +209,30 @@ export const GET: RequestHandler = async ({ url }) => {
 				avgDraftCost: manager.avgDraftCost || manager.avg_draft_cost
 			}));
 
-			// Best and worst picks by season
-			const bestWorstQuery = `
-				WITH pick_rankings AS (
-					SELECT 
-						fd.season_year,
-						fd.overall_pick,
-						fd.round_number,
-						fd.season_points,
-						dm.manager_name,
-						dp.player_name,
-						dp.primary_position,
-						ROW_NUMBER() OVER (PARTITION BY fd.season_year ORDER BY fd.season_points DESC) as best_rank,
-						ROW_NUMBER() OVER (PARTITION BY fd.season_year ORDER BY fd.season_points ASC) as worst_rank
-					FROM edw.fact_draft fd
-					JOIN edw.dim_manager dm ON fd.manager_key = dm.manager_key AND dm.include_in_analysis = true
-					JOIN edw.dim_player dp ON fd.player_key = dp.player_key
-					WHERE fd.season_points > 0
-					${season !== 'all' ? `AND fd.season_year = ${parseInt(season)}` : ''}
-				)
-				SELECT 
-					season_year,
-					overall_pick,
-					round_number,
-					season_points,
-					manager_name,
-					player_name,
-					primary_position,
-					CASE WHEN best_rank <= 3 THEN 'best' WHEN worst_rank <= 3 THEN 'worst' END as pick_type
-				FROM pick_rankings
-				WHERE best_rank <= 3 OR worst_rank <= 3
-				ORDER BY season_year DESC, pick_type, season_points DESC
-			`;
-
-			const bestWorstResult = await db.execute(sql.raw(bestWorstQuery));
-			data.bestWorstPicks = Array.from(bestWorstResult).map((pick: any) => ({
-				seasonYear: pick.seasonYear || pick.season_year,
-				overallPick: pick.overallPick || pick.overall_pick,
-				roundNumber: pick.roundNumber || pick.round_number,
-				seasonPoints: pick.seasonPoints || pick.season_points,
-				managerName: pick.managerName || pick.manager_name,
-				playerName: pick.playerName || pick.player_name,
-				primaryPosition: pick.primaryPosition || pick.primary_position,
-				pickType: pick.pickType || pick.pick_type
-			}));
+			// Best value and biggest busts, three of each per season, judged against
+			// what each pick's position and round were expected to score. This used to
+			// rank raw season points, so the "busts" were always last-round kickers and
+			// defenses that were cut - picks nobody counted on.
+			const toCard = (pickType: 'best' | 'worst') => (p: (typeof shown)[number]) => ({
+				seasonYear: p.seasonYear,
+				overallPick: p.overallPick,
+				roundNumber: p.roundNumber,
+				seasonPoints: round1(p.seasonPoints),
+				expectedPoints: round1(p.expectedPoints),
+				valueOverExpected: round1(p.valueOverExpected),
+				managerName: p.managerName,
+				playerName: p.playerName,
+				primaryPosition: p.position,
+				pickType
+			});
+			const shownSeasons = [...new Set(shown.map((p) => p.seasonYear))].sort((a, b) => b - a);
+			data.bestWorstPicks = shownSeasons.flatMap((year) => {
+				const inSeason = shown.filter((p) => p.seasonYear === year);
+				return [
+					...topSteals(inSeason, 3).map(toCard('best')),
+					...topBusts(inSeason, 3).map(toCard('worst'))
+				];
+			});
 
 			// Position trends over time
 			const positionTrendsQuery = `
@@ -222,76 +263,85 @@ export const GET: RequestHandler = async ({ url }) => {
 				latestPositionPick: trend.latestPositionPick || trend.latest_position_pick
 			}));
 
-			// Draft Value model — value over positional replacement (VOR). For each
-			// season+position the replacement level is the median season_points of
-			// drafted players at that position; a pick's VOR is its points minus that
-			// baseline. This gives real, position-aware value (a late RB who beats the
-			// median RB is a steal) rather than ranking by raw points. Limited to the
-			// well-populated offensive positions; Unknown/IDP and pointless rows excluded.
-			const vorCte = `
-				WITH picks AS (
-					SELECT fd.season_year, fd.overall_pick, fd.round_number,
-						dp.player_name, dp.primary_position AS position,
-						fd.season_points, dm.manager_name
-					FROM edw.fact_draft fd
-					JOIN edw.dim_manager dm ON fd.manager_key = dm.manager_key AND dm.include_in_analysis = true
-					JOIN edw.dim_player dp ON fd.player_key = dp.player_key
-					WHERE fd.season_points > 0
-						AND dp.primary_position IN ('QB','RB','WR','TE','K','DEF')
-						${season !== 'all' ? `AND fd.season_year = ${parseInt(season)}` : ''}
-				),
-				baseline AS (
-					SELECT season_year, position,
-						PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY season_points) AS repl,
-						COUNT(*) AS pos_n
-					FROM picks GROUP BY season_year, position
-				),
-				scored AS (
-					SELECT p.season_year, p.overall_pick, p.round_number, p.player_name,
-						p.position, p.manager_name, p.season_points,
-						ROUND(b.repl::numeric, 1) AS replacement_points,
-						ROUND((p.season_points - b.repl)::numeric, 1) AS vor
-					FROM picks p JOIN baseline b USING (season_year, position)
-					WHERE b.pos_n >= 4
-				)`;
-
-			const valueRows = await db.execute(sql.raw(`
-				${vorCte}
-				(SELECT 'value' AS kind, * FROM scored ORDER BY vor DESC LIMIT 10)
-				UNION ALL
-				(SELECT 'bust' AS kind, * FROM scored WHERE round_number <= 5 ORDER BY vor ASC LIMIT 10)
-			`));
-			const mapVor = (r: any) => ({
-				seasonYear: r.seasonYear ?? r.season_year,
-				overallPick: r.overallPick ?? r.overall_pick,
-				roundNumber: r.roundNumber ?? r.round_number,
-				playerName: r.playerName ?? r.player_name,
-				position: r.position,
-				managerName: r.managerName ?? r.manager_name,
-				seasonPoints: r.seasonPoints ?? r.season_points,
-				replacementPoints: r.replacementPoints ?? r.replacement_points,
-				vor: r.vor
+			// Draft Value: points over expectation, the same model as above.
+			const mapValue = (p: (typeof shown)[number]) => ({
+				seasonYear: p.seasonYear,
+				overallPick: p.overallPick,
+				roundNumber: p.roundNumber,
+				playerName: p.playerName,
+				position: p.position,
+				managerName: p.managerName,
+				seasonPoints: round1(p.seasonPoints),
+				expectedPoints: round1(p.expectedPoints),
+				valueOverExpected: round1(p.valueOverExpected)
 			});
-			const allValue = Array.from(valueRows) as any[];
-
-			const managerVor = await db.execute(sql.raw(`
-				${vorCte}
-				SELECT manager_name, COUNT(*) AS picks,
-					ROUND(AVG(vor), 1) AS avg_vor, ROUND(SUM(vor), 1) AS total_vor
-				FROM scored GROUP BY manager_name HAVING COUNT(*) >= 20
-				ORDER BY avg_vor DESC
-			`));
-
+			const byManager = new Map<string, { picks: number; total: number }>();
+			for (const p of shown) {
+				const m = byManager.get(p.managerName) ?? { picks: 0, total: 0 };
+				m.picks += 1;
+				m.total += p.valueOverExpected;
+				byManager.set(p.managerName, m);
+			}
 			data.draftValue = {
-				bestValue: allValue.filter((r) => r.kind === 'value').map(mapVor),
-				biggestBusts: allValue.filter((r) => r.kind === 'bust').map(mapVor),
-				byManager: Array.from(managerVor).map((r: any) => ({
-					managerName: r.managerName ?? r.manager_name,
-					picks: Number(r.picks),
-					avgVor: r.avgVor ?? r.avg_vor,
-					totalVor: r.totalVor ?? r.total_vor
-				})),
-				methodology: 'Value over replacement: season points minus the median points of drafted players at the same position that season (QB/RB/WR/TE/K/DEF).'
+				bestValue: topSteals(shown, 10).map(mapValue),
+				biggestBusts: topBusts(shown, 10).map(mapValue),
+				byManager: [...byManager.entries()]
+					.filter(([, m]) => m.picks >= 20)
+					.map(([managerName, m]) => ({
+						managerName,
+						picks: m.picks,
+						avgValue: round1(m.total / m.picks),
+						totalValue: round1(m.total)
+					}))
+					.sort((a, b) => b.avgValue - a.avgValue),
+				methodology:
+					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks from rounds 1-8 expected to beat an average pick, so a late kicker, defense or flier that was cut doesn't count; one reached for early does."
+			};
+
+			// Manager draft grades ($lib/draft-value): a draft's points over
+			// expectation in average picks. Season grades place a score among every
+			// finished manager-season; career grades weigh the evidence (average
+			// over its standard error). History and spread use every manager's
+			// finished seasons; only managers in analysis are shown.
+			const included = new Set(valued.filter((p) => p.included).map((p) => p.managerName));
+			const scores = seasonDraftScores(valued);
+			const finished = scores.filter((x) => completedSeasons.has(x.seasonYear));
+			const history = finished.map((x) => x.score);
+			const spread = spreadOf(history);
+			data.draftGrades = {
+				bySeason: scores
+					.filter(
+						(x) =>
+							included.has(x.managerName) &&
+							(season === 'all' || x.seasonYear === parseInt(season))
+					)
+					.map((x) => ({
+						managerName: x.managerName,
+						seasonYear: x.seasonYear,
+						score: Math.round(x.score * 100) / 100,
+						picks: x.picks,
+						inProgress: !completedSeasons.has(x.seasonYear),
+						...seasonGrade(x.score, history)
+					}))
+					.sort((a, b) => b.seasonYear - a.seasonYear || b.score - a.score),
+				byManager: [...included]
+					.map((managerName) => {
+						const c = careerGrade(
+							finished.filter((x) => x.managerName === managerName).map((x) => x.score),
+							spread
+						);
+						return {
+							managerName,
+							grade: c.grade,
+							averageScore: Math.round(c.average * 100) / 100,
+							evidence: Math.round(c.z * 100) / 100,
+							seasons: c.seasons
+						};
+					})
+					.filter((m) => m.seasons > 0)
+					.sort((a, b) => b.evidence - a.evidence),
+				method:
+					"A draft's score is its picks' points over what their positions and rounds were expected to score, in average picks: +2.4 means about two and a half average picks more than its slots promised. Season grades rank a score among every finished manager-season in league history (A top 15%, B next 25%, C middle 30%, D next 20%, F bottom 10%). Career grades weigh the evidence: a manager's average season score over its standard error, so a grade above or below C means a consistent record, not one big year."
 			};
 		}
 
@@ -333,7 +383,17 @@ export const GET: RequestHandler = async ({ url }) => {
 				playerName: pick.playerName || pick.player_name,
 				primaryPosition: pick.primaryPosition || pick.primary_position,
 				nflTeam: pick.nflTeam || pick.nfl_team,
-				numTeams: pick.numTeams || pick.num_teams
+				numTeams: pick.numTeams || pick.num_teams,
+				...(() => {
+					const v = valueOf.get(`${parseInt(season)}:${pick.overallPick ?? pick.overall_pick}`);
+					return v
+						? {
+								expectedPoints: round1(v.expectedPoints),
+								valueOverExpected: round1(v.valueOverExpected),
+								highExpectation: v.highExpectation
+							}
+						: { expectedPoints: null, valueOverExpected: null, highExpectation: false };
+				})()
 			}));
 		}
 
