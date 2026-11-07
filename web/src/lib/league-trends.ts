@@ -21,6 +21,8 @@
  * season's value is noisy; the rolling mean carries the trend.
  */
 
+import { rng } from './playoff-odds';
+
 export interface RegularGame {
 	season: number;
 	teamA: number;
@@ -154,18 +156,6 @@ export function rollingMean(values: (number | null)[], window: number): (number 
 	});
 }
 
-/** A small seeded random generator (mulberry32), so simulated bands are stable. */
-export function seededRandom(seed: number): () => number {
-	let a = seed >>> 0;
-	return () => {
-		a = (a + 0x6d2b79f5) >>> 0;
-		let t = a;
-		t = Math.imul(t ^ (t >>> 15), t | 1);
-		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-	};
-}
-
 /**
  * The range of Noll-Scully ratios a league of pure coin flips produces: `teams`
  * teams, `games` games each, random pairings every week. Returns the central
@@ -177,7 +167,7 @@ export function coinFlipBand(
 	games: number,
 	{ sims = 2000, level = 0.9, seed = 7 }: { sims?: number; level?: number; seed?: number } = {}
 ): { lo: number; hi: number } {
-	const rand = seededRandom(seed + teams * 100 + games);
+	const rand = rng(seed + teams * 100 + games);
 	const order = Array.from({ length: teams }, (_, i) => i);
 	const ratios: number[] = [];
 	const luckSd = 0.5 / Math.sqrt(games);

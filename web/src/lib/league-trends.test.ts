@@ -144,4 +144,15 @@ describe('leagueEvents', () => {
 			{ season: 2008, labels: ['8-team playoff'] }
 		]);
 	});
+
+	it('ignores settings the data leaves blank, like a season still being played', () => {
+		const events = leagueEvents(
+			[
+				{ season: 2025, teams: 10, regularWeeks: 14, playoffTeams: 6 },
+				{ season: 2026, teams: 10, regularWeeks: null, playoffTeams: null }
+			],
+			null
+		);
+		expect(events).toEqual([]);
+	});
 });

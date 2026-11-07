@@ -901,7 +901,9 @@
 		// Top-three scorers band.
 		frame.append('rect').attr('x', 0).attr('width', plotW).attr('y', y(0.5)).attr('height', y(3.5) - y(0.5))
 			.attr('fill', BLUE).attr('fill-opacity', 0.07);
-		frame.append('text').attr('x', plotW - 4).attr('y', y(3.5) - 6).attr('text-anchor', 'end').attr('fill', TEXT_MUTED).style('font-size', '11px').text('Top 3');
+		// Labelled inside the band's lower-left corner, left of the first season's
+		// stem (that season's marks sit on the ranks, not the band's edge).
+		frame.append('text').attr('x', 2).attr('y', y(3.5) - 5).attr('fill', TEXT_MUTED).style('font-size', '10px').text('Top 3');
 		frame.append('g')
 			.call(d3.axisLeft(y).ticks(bottomRank).tickSize(-plotW).tickFormat((d: number) => `#${d}`))
 			.call(styleAxis)
@@ -1034,7 +1036,11 @@
 		if (animate && !reduceMotion) mp.style('opacity', 0).transition().delay(900).duration(400).style('opacity', 1);
 
 		const guide = frame.append('line').attr('stroke', TEXT_PRIMARY).attr('stroke-opacity', 0.7).style('display', 'none').style('pointer-events', 'none');
+		let focused: number | null = null;
 		const focus = (i: number | null) => {
+			// The pointer moves many times within one ridge; redo only on a change.
+			if (i === focused) return;
+			focused = i;
 			groups.forEach(({ edge }, j) => {
 				edge.attr('stroke', j === i ? TEXT_PRIMARY : BLUE).attr('stroke-width', j === i ? 2 : 1.5);
 			});
@@ -1264,8 +1270,12 @@
 		});
 
 		// Hover focuses a lane; with none hovered, the highlighted manager keeps it.
+		let focusedLane: string | null | undefined;
 		const focusLane = (manager: string | null) => {
 			const on = manager ?? (highlightManager || null);
+			// Only when the focused lane changes, not on every pointer move.
+			if (on === focusedLane) return;
+			focusedLane = on;
 			lanes.transition().duration(dur(150)).style('opacity', (m: any) => (on == null || m.manager === on ? 1 : 0.35));
 		};
 		focusLane(null);
@@ -1410,8 +1420,12 @@
 		}
 
 		// Hover focuses a line; with none hovered, the highlighted manager keeps it.
+		let focusedLine: string | null | undefined;
 		const focus = (hovered: string | null) => {
 			const manager = hovered ?? (highlightManager || null);
+			// Only when the focused line changes, not on every pointer move.
+			if (manager === focusedLine) return;
+			focusedLine = manager;
 			lines.forEach(({ m, g }) => {
 				const on = m.manager === manager;
 				g.raise();
@@ -1658,14 +1672,23 @@
 			}
 		});
 
-		// Direct labels for the three biggest layers at the right edge.
-		const last = layers.map((l: any) => l[l.length - 1]);
+		// Direct labels for the three biggest layers, at the last finished season
+		// (the season still being played is only a few weeks of points).
+		const lastDone = (() => {
+			for (let i = data2.length - 1; i >= 0; i--) if (!isLive(data2[i].seasonYear)) return i;
+			return data2.length - 1;
+		})();
+		const labelSeason = data2[lastDone].seasonYear;
+		const last = layers.map((l: any) => l[lastDone]);
 		[0, 1, 2].forEach((li) => {
 			const d = last[li];
 			const mid = (d[0] + d[1]) / 2;
 			frame.append('text').attr('x', plotW + 10).attr('y', y(mid) + 4).attr('fill', TEXT_SECONDARY).style('font-size', '11px')
 				.text(`${POSITIONS[li][0]} ${pct(d[1] - d[0])}`);
 		});
+		if (labelSeason !== data2[data2.length - 1].seasonYear) {
+			frame.append('text').attr('x', plotW + 10).attr('y', plotH).attr('fill', TEXT_MUTED).style('font-size', '10px').text(`at ${labelSeason}`);
+		}
 
 		seasonAxis(frame, x, plotH, plotW, years.length, animate);
 		shadeEra(frame, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -6, plotH);
