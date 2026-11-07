@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { topBusts, topSteals, valueDraftPicks, type DraftPickInput } from './draft-value';
+import {
+	isHit,
+	pickGrade,
+	pickVerdict,
+	topBusts,
+	topSteals,
+	valueDraftPicks,
+	type DraftPickInput
+} from './draft-value';
 
 type Pick = DraftPickInput & { name: string };
 
@@ -115,5 +123,33 @@ describe('valueDraftPicks', () => {
 		expect(qb.expectedRelative).toBeGreaterThan(1);
 		expect(qb.highExpectation).toBe(false);
 		expect(topBusts(v, 50).map((p) => p.name)).not.toContain('flier');
+	});
+});
+
+describe('pickVerdict and pickGrade', () => {
+	it('reads a pick against its expectation', () => {
+		expect(pickVerdict(160, 100, true)).toBe('steal');
+		expect(pickVerdict(120, 100, true)).toBe('good');
+		expect(pickVerdict(100, 100, true)).toBe('fair');
+		expect(pickVerdict(70, 100, true)).toBe('disappointing');
+		expect(pickVerdict(40, 100, true)).toBe('bust');
+	});
+
+	it('keeps bust and F for picks the draft counted on', () => {
+		expect(pickVerdict(5, 100, false)).toBe('disappointing');
+		expect(pickGrade(5, 100, false)).toBe('D');
+		expect(pickGrade(5, 100, true)).toBe('F');
+	});
+
+	it('half the expectation is a disappointment, not yet a bust', () => {
+		// The board and the page used to disagree exactly here.
+		expect(pickVerdict(50, 100, true)).toBe('disappointing');
+	});
+
+	it('gives no verdict without an expectation', () => {
+		expect(pickVerdict(100, null, true)).toBeNull();
+		expect(pickGrade(100, 0, true)).toBeNull();
+		expect(isHit(100, null)).toBe(false);
+		expect(isHit(80, 100)).toBe(true);
 	});
 });

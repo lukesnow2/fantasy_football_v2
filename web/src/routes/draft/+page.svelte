@@ -4,6 +4,7 @@
 	import DraftBoard from '$lib/components/DraftBoard.svelte';
 	import DraftAnalysis from '$lib/components/DraftAnalysis.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import { isHit, pickVerdict } from '$lib/draft-value';
 	
 	let draftData: any = null;
 	let specificSeasonDraft: any = null;
@@ -67,21 +68,13 @@
 			// Steals/busts/hits judged against what the pick's position and round were
 			// expected to score (expectedOf); busts only among picks expected to beat
 			// an average pick.
-			const steals = manager.picks.filter((p: any) => {
-				const expected = expectedOf(p.pick);
-				return expected > 0 && p.points > expected * 1.5;
-			}).length;
+			const verdictOf = (p: any) => pickVerdict(p.points, expectedOf(p.pick), p.pick.highExpectation);
+			const steals = manager.picks.filter((p: any) => verdictOf(p) === 'steal').length;
 
-			const busts = manager.picks.filter((p: any) => {
-				const expected = expectedOf(p.pick);
-				// Only picks the draft counted on (expected to beat an average pick).
-				return p.pick.highExpectation && expected > 0 && p.points < expected * 0.5;
-			}).length;
+			// Only picks the draft counted on can be busts (see pickVerdict).
+			const busts = manager.picks.filter((p: any) => verdictOf(p) === 'bust').length;
 
-			const hits = manager.picks.filter((p: any) => {
-				const expected = expectedOf(p.pick);
-				return expected > 0 && p.points >= expected * 0.8;
-			}).length;
+			const hits = manager.picks.filter((p: any) => isHit(p.points, expectedOf(p.pick))).length;
 			
 			const hitRate = Math.round((hits / manager.totalPicks) * 100);
 			
@@ -154,7 +147,7 @@
 				managerStats[manager] = { name: manager, steals: 0, totalValue: 0 };
 			}
 
-			if (expected > 0 && points > expected * 1.5) managerStats[manager].steals++;
+			if (pickVerdict(points, expected, pick.highExpectation) === 'steal') managerStats[manager].steals++;
 			managerStats[manager].totalValue += value;
 		});
 		
@@ -183,7 +176,7 @@
 				managerStats[manager] = { name: manager, hits: 0, total: 0 };
 			}
 
-			if (expected > 0 && points >= expected * 0.8) managerStats[manager].hits++;
+			if (isHit(points, expected)) managerStats[manager].hits++;
 			managerStats[manager].total++;
 		});
 		
@@ -445,6 +438,11 @@
 						</div>
 					{/if}
 				{:else if specificSeasonDraft?.data?.draftBoard}
+					{#if specificSeasonDraft.data.seasonInProgress}
+						<p class="mb-3 rounded-lg border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-sm text-amber-300">
+							This season is still being played: grades and icons are judged on points so far.
+						</p>
+					{/if}
 					<!-- Draft Board Recreation -->
 					<DraftBoard 
 						draftData={specificSeasonDraft.data.draftBoard}

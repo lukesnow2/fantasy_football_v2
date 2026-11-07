@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { pickGrade, pickVerdict, type PickVerdict } from '$lib/draft-value';
 	import { onMount } from 'svelte';
 
 	export let draftData: any[] = [];
@@ -57,39 +58,27 @@
 	}
 
 	// Grades and value icons judge a pick against what its position and round
-	// were expected to score ($lib/draft-value, via the API's expectedPoints).
-	// They used to use raw points (200+ = A+, under 40 = F) and the round's
-	// average across all positions, so QBs graded well by default and a
-	// round-15 kicker that was cut got a bust skull. F and the skull are kept
-	// for picks the draft counted on (highExpectation); a late flier that
-	// missed bottoms out at D and a warning.
-	function ratioOf(pick: any): number | null {
-		const expected = Number(pick.expectedPoints);
-		if (!Number.isFinite(expected) || expected <= 0) return null;
-		return parseFloat(pick.seasonPoints || 0) / expected;
-	}
+	// were expected to score: pickGrade / pickVerdict in $lib/draft-value, the
+	// same reading the draft page's steal and bust counts use. They used to use
+	// raw points (200+ = A+, under 40 = F) and the round's all-position average,
+	// so a round-15 kicker that was cut got a bust skull.
+	const GRADE_COLORS: Record<string, string> = {
+		'A+': 'text-green-400', A: 'text-green-300', 'B+': 'text-blue-400', B: 'text-blue-300',
+		'C+': 'text-yellow-400', C: 'text-yellow-300', D: 'text-orange-400', F: 'text-red-400'
+	};
+	const VERDICT_ICONS: Record<PickVerdict, string> = {
+		steal: '🔥', good: '⭐', fair: '✓', disappointing: '⚠️', bust: '💀'
+	};
+	const pointsOf = (pick: any) => parseFloat(pick.seasonPoints || 0);
 
 	function getPerformanceGrade(pick: any): { grade: string; color: string } {
-		const ratio = ratioOf(pick);
-		if (ratio == null) return { grade: '—', color: 'text-slate-400' };
-		if (ratio >= 1.6) return { grade: 'A+', color: 'text-green-400' };
-		if (ratio >= 1.3) return { grade: 'A', color: 'text-green-300' };
-		if (ratio >= 1.1) return { grade: 'B+', color: 'text-blue-400' };
-		if (ratio >= 0.95) return { grade: 'B', color: 'text-blue-300' };
-		if (ratio >= 0.8) return { grade: 'C+', color: 'text-yellow-400' };
-		if (ratio >= 0.65) return { grade: 'C', color: 'text-yellow-300' };
-		if (ratio >= 0.5 || !pick.highExpectation) return { grade: 'D', color: 'text-orange-400' };
-		return { grade: 'F', color: 'text-red-400' };
+		const grade = pickGrade(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		return grade ? { grade, color: GRADE_COLORS[grade] } : { grade: '—', color: 'text-slate-400' };
 	}
 
 	function getValueIndicator(pick: any): string {
-		const ratio = ratioOf(pick);
-		if (ratio == null) return '✓';
-		if (ratio > 1.5) return '🔥'; // Steal
-		if (ratio > 1.15) return '⭐'; // Good value
-		if (ratio > 0.85) return '✓'; // Fair
-		if (ratio > 0.5 || !pick.highExpectation) return '⚠️'; // Disappointing
-		return '💀'; // Bust: a pick the draft counted on
+		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		return verdict ? VERDICT_ICONS[verdict] : '✓';
 	}
 
 	$: draftBoard = createDraftBoard(draftData);

@@ -137,3 +137,59 @@ export function topBusts<T extends PickValue>(picks: T[], n: number): T[] {
 		.sort((a, b) => a.valueOverExpected - b.valueOverExpected)
 		.slice(0, n);
 }
+
+/**
+ * One reading of a pick against its expectation, shared by the draft board's
+ * icons and grades and the draft page's steal/bust/hit counts so they can't
+ * disagree. Ratios are points / expected points. A bust needs highExpectation:
+ * a pick the draft didn't count on that missed is only a disappointment.
+ */
+export const STEAL_RATIO = 1.5;
+export const GOOD_RATIO = 1.15;
+export const FAIR_RATIO = 0.85;
+export const HIT_RATIO = 0.8;
+export const BUST_RATIO = 0.5;
+
+export type PickVerdict = 'steal' | 'good' | 'fair' | 'disappointing' | 'bust';
+
+function ratio(points: number, expected: number | null | undefined): number | null {
+	return expected != null && expected > 0 ? points / expected : null;
+}
+
+/** Null when the pick has no expectation to judge against. */
+export function pickVerdict(
+	points: number,
+	expected: number | null | undefined,
+	highExpectation: boolean
+): PickVerdict | null {
+	const r = ratio(points, expected);
+	if (r == null) return null;
+	if (r > STEAL_RATIO) return 'steal';
+	if (r > GOOD_RATIO) return 'good';
+	if (r > FAIR_RATIO) return 'fair';
+	if (r < BUST_RATIO && highExpectation) return 'bust';
+	return 'disappointing';
+}
+
+/** Scored at least HIT_RATIO of what the slot was expected to. */
+export function isHit(points: number, expected: number | null | undefined): boolean {
+	const r = ratio(points, expected);
+	return r != null && r >= HIT_RATIO;
+}
+
+/** Letter grade against expectation. F is kept for busts; anything else bottoms out at D. */
+export function pickGrade(
+	points: number,
+	expected: number | null | undefined,
+	highExpectation: boolean
+): string | null {
+	const r = ratio(points, expected);
+	if (r == null) return null;
+	if (r >= 1.6) return 'A+';
+	if (r >= 1.3) return 'A';
+	if (r >= 1.1) return 'B+';
+	if (r >= 0.95) return 'B';
+	if (r >= 0.8) return 'C+';
+	if (r >= 0.65) return 'C';
+	return pickVerdict(points, expected, highExpectation) === 'bust' ? 'F' : 'D';
+}
