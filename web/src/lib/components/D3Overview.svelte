@@ -323,7 +323,7 @@
 			`Peak ${fmt(s, peak.val)} (${peak.year}) · low ${fmt(s, low.val)} (${low.year}) · ${pts.length}-season average ${fmt(s, avg)}`
 		];
 		if (m.id === 'balance' && headline) {
-			const beyond = done.filter((r) => r.chanceHi != null && r.nollScully > r.chanceHi);
+			const beyond = done.filter(beyondChance);
 			const lastBeyond = beyond[beyond.length - 1];
 			out.push(
 				`${beyond.length} of ${done.filter((r) => r.chanceHi != null).length} seasons${scope} spread out more than 95% of coin-flip seasons would` +
@@ -565,6 +565,15 @@
 
 	const eventNumber = (season: number) => events.findIndex((e) => e.season === season) + 1;
 
+	/** A league-change marker: a numbered circle, or a dot when space is tight. */
+	function eventMarker(g: any, season: number, r: number, compact = false) {
+		g.append('circle').attr('r', compact ? 3 : r).attr('fill', compact ? TEXT_MUTED : SURFACE).attr('stroke', TEXT_MUTED).attr('stroke-width', 1);
+		if (!compact) {
+			g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY)
+				.style('font-size', `${r + 2}px`).style('font-weight', '600').text(String(eventNumber(season)));
+		}
+	}
+
 	/**
 	 * League changes on a season axis: a faint hairline through the plot and a
 	 * numbered marker under the axis (the list under the chart says what each is).
@@ -584,11 +593,7 @@
 			back.append('line').attr('x1', cx).attr('x2', cx).attr('y1', 0).attr('y2', bottom)
 				.attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.22);
 			const m = marks.append('g').attr('transform', `translate(${cx},${bottom + (compact ? 30 : 34)})`).style('cursor', 'default');
-			m.append('circle').attr('r', compact ? 3 : 8).attr('fill', compact ? TEXT_MUTED : SURFACE).attr('stroke', TEXT_MUTED).attr('stroke-width', 1);
-			if (!compact) {
-				m.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY)
-					.style('font-size', '10px').style('font-weight', '600').text(String(eventNumber(e.season)));
-			}
+			eventMarker(m, e.season, 8, compact);
 			m.append('circle').attr('r', 13).attr('fill', 'transparent')
 				.on('pointerenter', () => {
 					showTooltip(`${e.season}: league change`, e.labels.map((label) => ({ value: label, label: '' })));
@@ -659,6 +664,8 @@
 
 	/** Within the coin-flip band: a spread luck alone could produce. */
 	const withinChance = (r: any) => r.chanceHi != null && r.nollScully != null && r.nollScully <= r.chanceHi && r.nollScully >= r.chanceLo;
+	/** Above it: records spread out more than coin flips usually manage. */
+	const beyondChance = (r: any) => r.chanceHi != null && r.nollScully != null && r.nollScully > r.chanceHi;
 
 	function drawSeries(ctx: Ctx) {
 		const { frame, metric, view, plotW, animate, from } = ctx;
@@ -759,9 +766,9 @@
 							? `M${x0},${y0}V${y1 + rr}Q${x0},${y1} ${x0 + rr},${y1}H${x0 + barW - rr}Q${x0 + barW},${y1} ${x0 + barW},${y1 + rr}V${y0}Z`
 							: `M${x0},${y0}V${y1 - rr}Q${x0},${y1} ${x0 + rr},${y1}H${x0 + barW - rr}Q${x0 + barW},${y1} ${x0 + barW},${y1 - rr}V${y0}Z`;
 					};
-					// Inside the coin-flip band a season's bar fades: emphasis on the
-					// seasons that beat luck.
-					const opacity = (r: any) => (isLive(r.seasonYear) ? 0.45 : hasChance && s === metric.series[0] && withinChance(r) ? 0.38 : 0.9);
+					// A season's bar fades unless it beat the coin-flip band: emphasis on
+					// the seasons that beat luck.
+					const opacity = (r: any) => (isLive(r.seasonYear) ? 0.45 : hasChance && s === metric.series[0] && !beyondChance(r) ? 0.38 : 0.9);
 					const bars = p.append('g').attr('transform', `translate(${off},0)`).selectAll('path').data(pts).join('path')
 						.attr('class', 'bar')
 						.attr('data-year', (r: any) => r.seasonYear)
@@ -794,7 +801,7 @@
 				}
 				// Seasons that beat the coin-flip band get a dot on the line.
 				if (hasChance && s === metric.series[0] && view === 'line') {
-					p.append('g').selectAll('circle').data(finished.filter((r) => r.chanceHi != null && !withinChance(r))).join('circle')
+					p.append('g').selectAll('circle').data(finished.filter(beyondChance)).join('circle')
 						.attr('data-year', (r: any) => r.seasonYear)
 						.attr('cx', (r: any) => x(r.seasonYear)).attr('cy', (r: any) => y(read(r, s.key)))
 						.attr('r', 0).attr('fill', s.color).attr('stroke', SURFACE).attr('stroke-width', 2)
@@ -1012,10 +1019,7 @@
 			rg.append('text').attr('x', -10).attr('y', -3).attr('text-anchor', 'end').attr('fill', TEXT_MUTED)
 				.style('font-size', '11px').style('font-variant-numeric', 'tabular-nums').text(live2 && live ? `${d.year}*` : String(d.year));
 			if (showsEvents && eventNumber(d.year)) {
-				const m = rg.append('g').attr('transform', `translate(${-margin.left + 9},-7)`);
-				m.append('circle').attr('r', 7).attr('fill', SURFACE).attr('stroke', TEXT_MUTED);
-				m.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY).style('font-size', '9px').style('font-weight', '600')
-					.text(String(eventNumber(d.year)));
+				eventMarker(rg.append('g').attr('transform', `translate(${-margin.left + 9},-7)`), d.year, 7);
 			}
 			if (animate && !reduceMotion) {
 				inner.attr('transform', 'scale(1,0)').transition().delay(from ? 120 : 60 + i * 35).duration(500).ease(d3.easeCubicOut).attr('transform', 'scale(1,1)');
@@ -1830,6 +1834,8 @@
 			if (live) out.push({ kind: 'line', color: BLUE, opacity: 0.6, label: `${live.seasonYear}*: through week ${live.throughWeek}` });
 		} else {
 			if (m.series.length > 1) for (const s of m.series) out.push({ kind: v === 'bar' && !s.overlay ? 'rect' : 'line', color: s.color, label: s.label });
+			// Bars that didn't beat the coin-flip band are faded.
+			if (v === 'bar' && m.bands?.some((b) => b.neutral)) out.push({ kind: 'rect', color: m.series[0].color, opacity: 0.38, label: 'Within what luck gives' });
 			for (const b of m.bands ?? []) {
 				out.push({ kind: 'rect', color: b.neutral ? TEXT_MUTED : m.series[0].color, opacity: b.neutral ? 0.45 : b.opacity * 2.5, label: b.label });
 			}

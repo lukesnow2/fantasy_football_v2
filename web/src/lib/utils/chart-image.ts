@@ -83,11 +83,16 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 	clone.style.fontFamily = font;
 	// Tooltips and hover marks aren't part of the picture.
 	clone.querySelectorAll('.hot').forEach((el) => el.classList.remove('hot'));
+	// The view being switched away from is still fading out; it isn't the chart.
+	clone.querySelectorAll('.frame-old').forEach((el) => el.remove());
+	// One fetch per distinct photo (a manager can appear many times).
+	const photos = new Map<string, Promise<string | null>>();
 	await Promise.all(
 		[...clone.querySelectorAll('image')].map(async (img) => {
 			const href = img.getAttribute('href');
 			if (!href || href.startsWith('data:')) return;
-			const data = await toDataUrl(href);
+			if (!photos.has(href)) photos.set(href, toDataUrl(href));
+			const data = await photos.get(href)!;
 			if (data) img.setAttribute('href', data);
 			else img.remove();
 		})
@@ -100,12 +105,25 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 		const canvas = document.createElement('canvas');
 		const ctx = canvas.getContext('2d')!;
 
-		// Measure the header first, so the canvas fits it.
+		// Measure the header and footer first, so the canvas fits them.
 		ctx.font = `12px ${font}`;
 		const subtitle = opts.subtitle ? wrap(ctx, opts.subtitle, w) : [];
-		const legend = opts.legend ?? [];
-		const headerH = 26 + subtitle.length * 17 + (legend.length ? 26 : 0) + 12;
-		const footerH = opts.footer ? 28 : 8;
+		// Legend items flow into rows no wider than the chart.
+		const legendRows: { item: LegendItem; x: number }[][] = [];
+		let lx = 0;
+		for (const item of opts.legend ?? []) {
+			const width = 20 + ctx.measureText(item.label).width;
+			if (!legendRows.length || (lx > 0 && lx + width > w)) {
+				legendRows.push([]);
+				lx = 0;
+			}
+			legendRows[legendRows.length - 1].push({ item, x: lx });
+			lx += width + 18;
+		}
+		ctx.font = `11px ${font}`;
+		const footer = opts.footer ? wrap(ctx, opts.footer, w) : [];
+		const headerH = 26 + subtitle.length * 17 + legendRows.length * 22 + (legendRows.length ? 4 : 0) + 12;
+		const footerH = footer.length ? 12 + footer.length * 15 : 8;
 		canvas.width = Math.round((w + pad * 2) * scale);
 		canvas.height = Math.round((pad + headerH + h + footerH + pad) * scale);
 		ctx.scale(scale, scale);
@@ -124,10 +142,10 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 			y += 17;
 			ctx.fillText(line, pad, y);
 		}
-		if (legend.length) {
-			y += 24;
-			let x = pad;
-			for (const item of legend) {
+		for (const row of legendRows) {
+			y += 22;
+			for (const { item, x: offset } of row) {
+				const x = pad + offset;
 				ctx.globalAlpha = item.opacity ?? 1;
 				ctx.fillStyle = item.color;
 				ctx.strokeStyle = item.color;
@@ -145,16 +163,13 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 				ctx.globalAlpha = 1;
 				ctx.fillStyle = '#cbd5e1';
 				ctx.fillText(item.label, x + 20, y);
-				x += 20 + ctx.measureText(item.label).width + 18;
 			}
 		}
 		const top = pad + headerH;
 		ctx.drawImage(chart, pad, top, w, h);
-		if (opts.footer) {
-			ctx.fillStyle = MUTED;
-			ctx.font = `11px ${font}`;
-			ctx.fillText(opts.footer, pad, top + h + 22);
-		}
+		ctx.fillStyle = MUTED;
+		ctx.font = `11px ${font}`;
+		footer.forEach((line, i) => ctx.fillText(line, pad, top + h + 22 + i * 15));
 
 		const blob: Blob = await new Promise((resolve, reject) =>
 			canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('The image could not be created.'))), 'image/png')

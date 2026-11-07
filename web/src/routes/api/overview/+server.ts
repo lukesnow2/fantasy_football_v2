@@ -18,6 +18,15 @@ import {
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
 const rows = async (q: string) => Array.from(await db.execute(sql.raw(q))) as any[];
 
+// Coin-flip bands depend only on teams and games (and a fixed seed), so they
+// are simulated once per server process, not on every request.
+const coinFlipBands = new Map<string, { lo: number; hi: number }>();
+function coinFlipBandFor(teams: number, games: number) {
+	const key = `${teams}|${games}`;
+	if (!coinFlipBands.has(key)) coinFlipBands.set(key, coinFlipBand(teams, games));
+	return coinFlipBands.get(key)!;
+}
+
 /**
  * Long-run league measures for the trends chart ($lib/league-trends): balance
  * and skill share per season, each champion's regular-season ranks, who won
@@ -154,13 +163,9 @@ async function loadTrends() {
 		};
 	});
 	// What a league of coin flips would give for each season's teams and games.
-	const bands = new Map<string, { lo: number; hi: number }>();
 	for (const s of perSeason) {
 		if (s.nollScully == null || !s.gamesPerTeam) continue;
-		const games = Math.round(s.gamesPerTeam);
-		const key = `${s.teams}|${games}`;
-		if (!bands.has(key)) bands.set(key, coinFlipBand(s.teams, games));
-		const band = bands.get(key)!;
+		const band = coinFlipBandFor(s.teams, Math.round(s.gamesPerTeam));
 		Object.assign(s, { chanceLo: band.lo, chanceHi: band.hi });
 	}
 	const rolling = rollingMean(perSeason.map((s) => s.nollScully), 5);
@@ -188,7 +193,6 @@ async function loadTrends() {
 		const allPoints = drafted.reduce((a, d) => a + Number(d.allPoints ?? 0), 0);
 		// Pairs of consecutive seasons, both inside the range.
 		const pairs = new Map([...byManagerSeason].filter(([key]) => inRange(Number(key.split('|')[1]))));
-		const balanced = seasons.filter((s: any) => s.chanceHi != null);
 		return {
 			recordPersistence: recordPersistence(pairs),
 			skillShare: skill.length ? skill.reduce((a, b) => a + b, 0) / skill.length : null,
@@ -197,12 +201,6 @@ async function loadTrends() {
 				seasons: champs.length
 			},
 			topScorerTitles: champs.filter((s) => s.champion!.pointsRank === 1).length,
-			bestRecordTitles: champs.filter((s) => s.champion!.recordRank === 1).length,
-			// Seasons whose records spread wider than 95% of coin-flip seasons.
-			beyondChance: {
-				count: balanced.filter((s: any) => s.nollScully > s.chanceHi).length,
-				seasons: balanced.length
-			},
 			draftedShare: allPoints ? draftedPoints / allPoints : null,
 			seasons: seasons.length
 		};
@@ -215,7 +213,8 @@ async function loadTrends() {
 	const played = new Map<string, number[]>();
 	for (const [key] of byManagerSeason) {
 		const [manager, season] = key.split('|');
-		played.set(manager, [...(played.get(manager) ?? []), Number(season)]);
+		if (!played.has(manager)) played.set(manager, []);
+		played.get(manager)!.push(Number(season));
 	}
 	const finalists = new Map<string, { years: number[]; finals: number[] }>();
 	const entry = (m: string) => finalists.get(m) ?? finalists.set(m, { years: [], finals: [] }).get(m)!;
@@ -248,13 +247,10 @@ async function loadTrends() {
 			faabRows[0]?.season == null ? null : Number(faabRows[0].season)
 		),
 		// Every team score by season, for the distribution view.
-		scores: Object.fromEntries(
-			[...scoreRows.reduce((m, r) => {
-				const season = Number(r.seasonYear);
-				m.set(season, [...(m.get(season) ?? []), Number(r.points)]);
-				return m;
-			}, new Map<number, number[]>())]
-		)
+		scores: scoreRows.reduce<Record<number, number[]>>((bySeason, r) => {
+			(bySeason[Number(r.seasonYear)] ??= []).push(Number(r.points));
+			return bySeason;
+		}, {})
 	};
 }
 
