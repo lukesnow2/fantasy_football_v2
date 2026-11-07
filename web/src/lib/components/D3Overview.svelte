@@ -19,6 +19,8 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { getInitials, getManagerProfilePicture } from '$lib/utils/managerUtils';
+	import { kde, quantile } from '$lib/league-trends';
+	import { saveChartImage, type LegendItem } from '$lib/utils/chart-image';
 
 	export let data: any = null;
 
@@ -29,7 +31,7 @@
 	let selectedView: ViewId = 'line';
 	let showTable = false;
 
-	type ViewId = 'line' | 'bar' | 'dots' | 'grid' | 'race' | 'stackedBar' | 'stackedArea';
+	type ViewId = 'line' | 'bar' | 'ridgeline' | 'dumbbell' | 'grid' | 'race' | 'multiples' | 'stackedBar' | 'stackedArea';
 
 	interface SeriesDef {
 		key: string;
@@ -52,7 +54,8 @@
 		views: ViewId[];
 		layout?: 'shared' | 'panels';
 		series: SeriesDef[];
-		bands?: { lo: string; hi: string; label: string; opacity: number }[];
+		/** Ranges drawn behind the series. `neutral` bands are gray and grow from the reference line. */
+		bands?: { lo: string; hi: string; label: string; opacity: number; neutral?: boolean }[];
 		refLine?: { value: number; label: string };
 		axisLabel?: string;
 		source: 'scoring' | 'trends';
@@ -85,7 +88,7 @@
 			description:
 				'Average team score per game, inside the range of real weekly scores: the darker band is the middle half of all scores that season, the lighter one the middle 80%.',
 			kind: 'series',
-			views: ['line'],
+			views: ['line', 'ridgeline'],
 			layout: 'shared',
 			series: [{ key: 'avgWeeklyScore', label: 'Average team score', unit: ' pts', decimals: 1, color: BLUE }],
 			bands: [
@@ -100,7 +103,7 @@
 			name: 'Skill vs Luck',
 			question: 'Do records spread out more than coin flips would?',
 			description:
-				"The Noll-Scully ratio: how far apart the season's records were, against how far apart they'd be if every game were a coin flip (1.0). Above 1, skill is showing through; the hover gives the share of the spread that's skill (Tango's method). One season is a small sample, so the five-season average carries the trend.",
+				"The Noll-Scully ratio: how far apart the season's records were, against how far apart they'd be if every game were a coin flip (1.0). The gray band is where 90% of simulated coin-flip seasons land, with the same teams and games; a season above it spread out more than luck usually manages. The hover gives the share of the spread that's skill (Tango's method).",
 			kind: 'series',
 			views: ['line', 'bar'],
 			layout: 'shared',
@@ -108,6 +111,7 @@
 				{ key: 'nollScully', label: 'Noll-Scully ratio', unit: '', decimals: 2, color: BLUE },
 				{ key: 'nollScullyRolling', label: 'Five-season average', unit: '', decimals: 2, color: ORANGE, overlay: true }
 			],
+			bands: [{ lo: 'chanceLo', hi: 'chanceHi', label: '90% of coin-flip seasons', opacity: 0.16, neutral: true }],
 			refLine: { value: 1, label: 'A league of coin flips' },
 			axisLabel: 'Spread of records vs chance',
 			source: 'trends'
@@ -115,11 +119,11 @@
 		{
 			id: 'champion',
 			name: 'Does the Best Team Win?',
-			question: 'Where did each champion rank in regular-season scoring?',
+			question: 'Did the champion have the best team in the regular season?',
 			description:
-				"Each season's champion, placed at their rank in points per game over the regular season (1 = the top scorer). The shaded band is the top three.",
+				"Each season's champion at two ranks from the regular season: points per game (1 = the top scorer) and record. The shaded band is the top three scorers.",
 			kind: 'champion',
-			views: ['dots'],
+			views: ['dumbbell'],
 			series: [],
 			source: 'trends'
 		},
@@ -139,9 +143,9 @@
 			name: 'Where the Points Come From',
 			question: "Which positions score a starting lineup's points?",
 			description:
-				"Share of every starting lineup's regular-season points, by position. The 2008 shift (defenses halve, receivers jump) lines up with a change in the league's settings, and it explains part of that year's jump in scoring.",
+				"Share of every starting lineup's regular-season points, by position. Small multiples put each position on its own baseline, so its trend reads; the stacks show each season's split. The 2008 shift (defenses halve, receivers jump) is the biggest in league history, and nothing in the stored settings (teams, schedule) explains it, so it most likely reflects a scoring or roster change.",
 			kind: 'stacked',
-			views: ['stackedBar', 'stackedArea'],
+			views: ['multiples', 'stackedBar', 'stackedArea'],
 			series: POSITIONS.map(([k, label, color]) => ({
 				key: `pos_${k}`,
 				label,
@@ -172,9 +176,11 @@
 	const VIEW_NAMES: Record<ViewId, string> = {
 		line: 'Line',
 		bar: 'Bars',
-		dots: 'Dots',
+		ridgeline: 'Distribution',
+		dumbbell: 'Ranks',
 		grid: 'Grid',
 		race: 'Title race',
+		multiples: 'By position',
 		stackedBar: 'Stacked bars',
 		stackedArea: 'Stacked area'
 	};
@@ -184,7 +190,6 @@
 	$: if (!currentMetric.views.includes(selectedView)) selectedView = currentMetric.views[0];
 	$: live = data?.seasonInProgress ?? null;
 	$: trends = data?.trends ?? null;
-	$: headline = trends?.headline ?? null;
 
 	// ---- data ----------------------------------------------------------------
 
@@ -222,50 +227,86 @@
 
 	const pct = (v: number | null | undefined, digits = 0) => (v == null ? '—' : `${(v * 100).toFixed(digits)}%`);
 
-	// Insights, finished seasons only.
+	// ---- era and manager filters ---------------------------------------------
+
+	// One filter row above the chart scopes the tiles, insights and table to an
+	// era; the chart keeps every season and dims the ones outside it.
+	let selectedEra = 'all';
+	let highlightManager = '';
+	$: eras = (trends?.eras ?? []) as { id: string; name: string; start: number; end: number; headline: any }[];
+	$: era = eras.find((e) => e.id === selectedEra) ?? null;
+	$: inEra = (year: number) => era == null || (year >= era.start && year <= era.end);
+	$: headline = era?.headline ?? trends?.headline ?? null;
+	$: events = (trends?.events ?? []) as { season: number; labels: string[] }[];
+	// The highlight applies where managers are the subject.
+	$: managerScoped = currentMetric.kind === 'champion' || currentMetric.kind === 'titles';
+	$: managerOptions = [...new Set<string>((trends?.titles ?? []).map((m: any) => String(m.manager)))].sort((a, b) => a.localeCompare(b));
+	// League changes are marked on the season axis of these views.
+	$: showsEvents = events.length > 0 && !['grid', 'multiples'].includes(selectedView);
+
+	// Insights, finished seasons in the era only.
 	$: insights = (() => {
 		const m = currentMetric;
-		const done = rows.filter((r) => !isLive(r.seasonYear));
+		const done = rows.filter((r) => !isLive(r.seasonYear) && inEra(r.seasonYear));
+		const scope = era ? ` in ${era.start}–${era.end}` : '';
 		if (m.kind === 'champion') {
-			const h = headline;
-			if (!h) return [];
-			const worst = done
-				.filter((r) => r.champion?.pointsRank != null)
-				.reduce((a: any, r: any) => (a == null || r.champion.pointsRank > a.champion.pointsRank ? r : a), null);
+			const champs = done.filter((r) => r.champion?.pointsRank != null);
+			if (!champs.length) return [];
+			const best = champs.filter((r) => r.champion.recordRank === 1).length;
+			const top3 = champs.filter((r) => r.champion.pointsRank <= 3).length;
+			const gap = champs.reduce((a: any, r: any) =>
+				a == null || Math.abs(r.champion.recordRank - r.champion.pointsRank) > Math.abs(a.champion.recordRank - a.champion.pointsRank) ? r : a, null);
+			const worst = champs.reduce((a: any, r: any) => (a == null || r.champion.pointsRank > a.champion.pointsRank ? r : a), null);
 			return [
-				`A top-three scorer won ${h.championTopThree.count} of ${h.championTopThree.seasons} titles; the season's top scorer won ${h.topScorerTitles}.`,
+				`${best} of ${champs.length} champions${scope} had the league's best record; ${top3} were a top-three scorer.`,
+				gap && gap.champion.recordRank !== gap.champion.pointsRank
+					? `Widest gap: ${gap.champion.manager} in ${gap.seasonYear}, the #${gap.champion.pointsRank} scorer with the #${gap.champion.recordRank} record.`
+					: '',
 				worst ? `Longest shot: ${worst.champion.manager} in ${worst.seasonYear}, the #${worst.champion.pointsRank} scorer.` : '',
-				'Records are mostly luck year to year, but titles still mostly go to teams that score.'
+				'Titles go to teams that score more often than to teams with the best record: the record carries more luck.'
 			].filter(Boolean);
 		}
 		if (m.kind === 'titles') {
-			const t = trends?.titles ?? [];
-			if (!t.length) return [];
-			const total = t.reduce((a: number, x: any) => a + x.years.length, 0);
-			const lead = t[0];
-			const finals = (m: any) => m.years.length + m.finals.length;
-			const mostFinals = t.reduce((a: any, m: any) => (finals(m) > finals(a) ? m : a));
-			const champs = t.filter((m: any) => m.years.length);
-			const never = t.filter((m: any) => !m.years.length && m.finals.length).sort((a: any, b: any) => b.finals.length - a.finals.length);
-			const recent = done.slice(-10).map((r) => r.champion?.manager).filter(Boolean);
+			const finals = done.filter((r) => r.champion);
+			if (!finals.length) return [];
+			const won = d3Count(finals.map((r) => r.champion.manager));
+			const lost = d3Count(finals.map((r) => r.champion.runnerUp).filter(Boolean));
+			const lead = [...won.entries()].sort((a, b) => b[1] - a[1])[0];
+			const reached = (name: string) => (won.get(name) ?? 0) + (lost.get(name) ?? 0);
+			const never = [...lost.entries()].filter(([name]) => !won.has(name)).sort((a, b) => b[1] - a[1]);
+			const recent = finals.slice(-10).map((r) => r.champion.manager);
 			return [
-				`${lead.manager} has ${lead.years.length} of ${total} titles (${lead.years[0]}–${lead.years[lead.years.length - 1]}) and is ${lead.years.length}–${lead.finals.length} in finals.`,
-				mostFinals.manager !== lead.manager
-					? `Most finals: ${mostFinals.manager}, ${finals(mostFinals)} (${mostFinals.years.length} won).`
-					: '',
+				`${lead[0]} has ${lead[1]} of ${finals.length} titles${scope} and is ${lead[1]}–${lost.get(lead[0]) ?? 0} in finals.`,
 				never.length
-					? `Reached a final, never won one: ${never.map((m: any) => `${m.manager} (0–${m.finals.length})`).join(', ')}.`
+					? `Reached a final, never won one${scope}: ${never.map(([name, n]) => `${name} (0–${n})`).join(', ')}.`
 					: '',
-				`${champs.length} different champions in ${total} seasons; ${new Set(recent).size} in the last ${recent.length}.`
+				`${won.size} different champions in ${finals.length} seasons${era ? '' : `; ${new Set(recent).size} in the last ${recent.length}`}.`,
+				highlightManager && highlightManager !== lead[0] && reached(highlightManager)
+					? `${highlightManager}: ${won.get(highlightManager) ?? 0}–${lost.get(highlightManager) ?? 0} in finals${scope}.`
+					: ''
 			].filter(Boolean);
 		}
 		if (m.kind === 'stacked') {
-			const first = done.find((r) => r.positionShare);
-			const last = [...done].reverse().find((r) => r.positionShare);
-			if (!first || !last) return [];
-			return POSITIONS.slice(0, 3).map(
-				([k, label]) => `${label}: ${pct(first.positionShare[k])} in ${first.seasonYear} → ${pct(last.positionShare[k])} in ${last.seasonYear}`
-			);
+			const withShare = done.filter((r) => r.positionShare);
+			const first = withShare[0];
+			const last = withShare[withShare.length - 1];
+			if (!first || !last || first === last) return [];
+			const moves = POSITIONS.map(([k, label]) => ({ label, from: first.positionShare[k], to: last.positionShare[k] }))
+				.sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from));
+			return moves.slice(0, 3).map((d) => `${d.label}: ${pct(d.from)} in ${first.seasonYear} → ${pct(d.to)} in ${last.seasonYear}`);
+		}
+		if (m.id === 'scoring' && selectedView === 'ridgeline') {
+			const dist = done.map((r) => ({ year: r.seasonYear, scores: (trends?.scores?.[r.seasonYear] ?? []) as number[] })).filter((d) => d.scores.length);
+			if (dist.length < 2) return [];
+			const a = dist[0];
+			const b = dist[dist.length - 1];
+			const iqr = (v: number[]) => `${quantile(v, 0.25)!.toFixed(0)}–${quantile(v, 0.75)!.toFixed(0)}`;
+			const top = dist.flatMap((d) => d.scores.map((v) => ({ v, year: d.year }))).reduce((x, y) => (y.v > x.v ? y : x));
+			return [
+				`Median score: ${quantile(a.scores, 0.5)!.toFixed(1)} in ${a.year} → ${quantile(b.scores, 0.5)!.toFixed(1)} in ${b.year}.`,
+				`Middle half of scores: ${iqr(a.scores)} in ${a.year} → ${iqr(b.scores)} in ${b.year}.`,
+				`Best single game${scope}: ${top.v.toFixed(1)} (${top.year}).`
+			];
 		}
 		const s = m.series[0];
 		const pts = done
@@ -282,20 +323,30 @@
 			`Peak ${fmt(s, peak.val)} (${peak.year}) · low ${fmt(s, low.val)} (${low.year}) · ${pts.length}-season average ${fmt(s, avg)}`
 		];
 		if (m.id === 'balance' && headline) {
-			const avg5 = (list: typeof pts) => list.reduce((a, p) => a + p.val, 0) / list.length;
-			if (pts.length >= 10) {
+			const beyond = done.filter((r) => r.chanceHi != null && r.nollScully > r.chanceHi);
+			const lastBeyond = beyond[beyond.length - 1];
+			out.push(
+				`${beyond.length} of ${done.filter((r) => r.chanceHi != null).length} seasons${scope} spread out more than 95% of coin-flip seasons would` +
+					(lastBeyond ? `; the last was ${lastBeyond.seasonYear}.` : '.') +
+					' Every other season is a spread luck alone could produce.'
+			);
+			if (!era && pts.length >= 10) {
+				const avg5 = (list: typeof pts) => list.reduce((a, p) => a + p.val, 0) / list.length;
 				const early = pts.slice(0, 5);
 				const late = pts.slice(-5);
-				out.push(
-					`Five-season average: ${avg5(early).toFixed(2)} in ${early[0].year}–${early[4].year} → ${avg5(late).toFixed(2)} in ${late[0].year}–${late[4].year}. Records spread less than they used to; recent seasons sit near what coin flips would give.`
-				);
+				out.push(`Five-season average: ${avg5(early).toFixed(2)} in ${early[0].year}–${early[4].year} → ${avg5(late).toFixed(2)} in ${late[0].year}–${late[4].year}.`);
 			}
-			const below = pts.filter((p) => p.val < 1.05).length;
-			out.push(`${below} of ${pts.length} seasons were within 5% of a coin-flip league; on average ${pct(headline.skillShare)} of the spread in records was skill.`);
+			out.push(`On average ${pct(headline.skillShare)} of the spread in records${scope} was skill.`);
 		}
-		if (live) out.push(`${live.seasonYear} is still being played and isn't included.`);
+		if (live && inEra(live.seasonYear)) out.push(`${live.seasonYear} is still being played and isn't included.`);
 		return out;
 	})();
+
+	function d3Count(list: string[]): Map<string, number> {
+		const m = new Map<string, number>();
+		for (const v of list) m.set(v, (m.get(v) ?? 0) + 1);
+		return m;
+	}
 
 	// ---- rendering -----------------------------------------------------------
 
@@ -305,25 +356,58 @@
 	const GRID = '#334155';
 	const SURFACE = '#1c2746';
 	const PANEL_GAP = 48;
+	// Room under the season axis for the numbered league-change markers.
+	const EVENT_BAND = 26;
 
 	let hoverIndex: number | null = null;
 	let resizeObserver: ResizeObserver | null = null;
 	let reduceMotion = false;
+	// Pointer height inside the chart, so the tooltip sits beside it.
+	let pointerY: number | null = null;
+	// What was drawn last, so switching views of one measure can morph.
+	let lastDrawn: { metric: string; view: ViewId } | null = null;
 
 	const dur = (ms: number) => (reduceMotion ? 0 : ms);
 
 	// Below this width the championship grid turns on its side.
 	const isVerticalGrid = (width: number) => width < 520;
+	const multiplesColumns = (width: number) => (width >= 900 ? 3 : width >= 520 ? 2 : 1);
+	const MULTIPLE_H = 140;
+	const MULTIPLE_GAP = 56;
 
 	function marginFor(m: MetricDef, view: ViewId, width: number) {
+		const ev = showsEvents ? EVENT_BAND : 0;
 		if (m.kind === 'titles' && view === 'grid') {
 			if (isVerticalGrid(width)) return { top: 84, right: 6, bottom: 30, left: 40 };
 			return width < 760
 				? { top: 38, right: 28, bottom: 30, left: 112 }
 				: { top: 38, right: 150, bottom: 30, left: 168 };
 		}
-		if (m.kind === 'titles') return width < 520 ? { top: 30, right: 62, bottom: 34, left: 28 } : { top: 30, right: 104, bottom: 34, left: 40 };
-		return { top: m.kind === 'stacked' ? 30 : 16, right: 92, bottom: 34, left: 56 };
+		if (m.kind === 'titles')
+			return width < 520 ? { top: 30, right: 62, bottom: 34 + ev, left: 28 } : { top: 30, right: 104, bottom: 34 + ev, left: 40 };
+		if (view === 'ridgeline') return { top: 74, right: width < 520 ? 12 : 24, bottom: 40, left: 64 };
+		if (view === 'dumbbell') return { top: 64, right: 20, bottom: 34 + ev, left: 40 };
+		if (view === 'multiples') return { top: 34, right: 18, bottom: 26, left: 40 };
+		// Narrow: less room kept for the end labels, so the plot gets the width.
+		return width < 520 ? { top: 30, right: 58, bottom: 34 + ev, left: 38 } : { top: 30, right: 92, bottom: 34 + ev, left: 56 };
+	}
+
+	function plotHeightFor(metric: MetricDef, view: ViewId, width: number, plotW: number) {
+		if (metric.kind === 'titles' && view === 'grid') {
+			const seasons = (trends?.seasons ?? []).filter((s: any) => s.champion).length;
+			return isVerticalGrid(width) ? Math.max(1, seasons) * 24 : Math.max(1, trends?.titles?.length ?? 1) * 34;
+		}
+		if (view === 'ridgeline') return Math.max(1, rows.length) * 22;
+		if (view === 'dumbbell') return 280;
+		if (view === 'multiples') {
+			const rowsOf = Math.ceil(POSITIONS.length / multiplesColumns(plotW));
+			return rowsOf * MULTIPLE_H + (rowsOf - 1) * MULTIPLE_GAP;
+		}
+		if (metric.kind === 'series' && metric.layout === 'panels') {
+			const panels = metric.series.length;
+			return panels * 190 + (panels - 1) * PANEL_GAP;
+		}
+		return 360;
 	}
 
 	function render(animate: boolean) {
@@ -336,17 +420,11 @@
 
 		const margin = marginFor(metric, view, width);
 		const plotW = Math.max(120, width - margin.left - margin.right);
-		let plotH: number;
-		let panels = 1;
-		if (metric.kind === 'titles' && view === 'grid') {
-			const seasons = (trends?.seasons ?? []).filter((s: any) => s.champion).length;
-			plotH = isVerticalGrid(width) ? Math.max(1, seasons) * 24 : Math.max(1, trends?.titles?.length ?? 1) * 34;
-		}
-		else if (metric.kind === 'series' && metric.layout === 'panels') {
-			panels = metric.series.length;
-			plotH = panels * 190 + (panels - 1) * PANEL_GAP;
-		} else plotH = 360;
+		const plotH = plotHeightFor(metric, view, width, plotW);
 		const height = margin.top + plotH + margin.bottom;
+		// Same measure, new view: the old marks hand off to the new ones.
+		const from = animate && lastDrawn?.metric === metric.id && lastDrawn.view !== view ? lastDrawn.view : null;
+		lastDrawn = { metric: metric.id, view };
 
 		const root = d3.select(container);
 		let svg = root.select('svg.viz');
@@ -359,24 +437,23 @@
 			.attr('viewBox', `0 0 ${width} ${height}`)
 			.attr('height', height);
 
-		svg
-			.selectAll('g.frame')
-			.attr('class', 'frame-old')
-			.style('pointer-events', 'none')
-			.transition()
-			.duration(dur(animate ? 220 : 0))
-			.style('opacity', 0)
-			.remove();
+		const old = svg.selectAll('g.frame').attr('class', 'frame-old').style('pointer-events', 'none');
+		if (from) exitMorph(old, from, view);
+		old.transition().delay(dur(from ? 180 : 0)).duration(dur(animate ? (from ? 360 : 220) : 0)).style('opacity', 0).remove();
 		const frame = svg.append('g').attr('class', 'frame').attr('transform', `translate(${margin.left},${margin.top})`);
 		ensureDefs(svg, metric);
 		hideTooltip();
 		hoverIndex = null;
+		rowNavLength = 0;
+		rowIndex = null;
 
-		const ctx = { frame, metric, view, plotW, plotH, margin, animate };
-		if (metric.kind === 'series') drawSeries(ctx);
-		else if (metric.kind === 'champion') drawChampion(ctx);
+		const ctx: Ctx = { frame, metric, view, plotW, plotH, margin, animate, from };
+		if (view === 'ridgeline') drawRidgeline(ctx);
+		else if (metric.kind === 'series') drawSeries(ctx);
+		else if (metric.kind === 'champion') drawDumbbell(ctx);
 		else if (metric.kind === 'titles') (view === 'race' ? drawTitleRace : drawTitleGrid)(ctx);
-		else if (metric.kind === 'stacked') drawStacked(ctx);
+		else if (view === 'multiples') drawMultiples(ctx);
+		else drawStacked(ctx);
 	}
 
 	interface Ctx {
@@ -387,6 +464,41 @@
 		plotH: number;
 		margin: { top: number; right: number; bottom: number; left: number };
 		animate: boolean;
+		/** The view being replaced, when the measure stayed the same. */
+		from: ViewId | null;
+	}
+
+	/**
+	 * The old view's marks turn into the new view's before they fade: bars
+	 * shrink to the points the line will pass through; stacked bars widen
+	 * into the area.
+	 */
+	function exitMorph(old: any, from: ViewId, to: ViewId) {
+		if (reduceMotion) return;
+		if (from === 'bar' && to === 'line') {
+			old.selectAll('path.bar')
+				.style('transform-box', 'fill-box')
+				.style('transform-origin', function (this: any) {
+					return this.getAttribute('data-up') === '1' ? 'center top' : 'center bottom';
+				})
+				.transition()
+				.duration(380)
+				.ease(d3.easeCubicInOut)
+				.style('transform', 'scale(0.3, 0.02)');
+		}
+		if (from === 'stackedBar' && to === 'stackedArea') {
+			old.selectAll('rect.seg')
+				.transition()
+				.duration(380)
+				.ease(d3.easeCubicInOut)
+				.attr('x', function (this: any) {
+					return Number(this.getAttribute('data-cx')) - Number(this.getAttribute('data-step')) / 2;
+				})
+				.attr('width', function (this: any) {
+					return Number(this.getAttribute('data-step'));
+				})
+				.attr('stroke-width', 0);
+		}
 	}
 
 	function ensureDefs(svg: any, metric: MetricDef) {
@@ -420,8 +532,70 @@
 		if (animate) a.style('opacity', 0).transition().duration(dur(400)).style('opacity', 1);
 	}
 
-	function title(p: any, text: string, y = -4) {
-		p.append('text').attr('x', 0).attr('y', y).attr('fill', TEXT_SECONDARY).style('font-size', '12px').style('font-weight', '600').text(text);
+	/**
+	 * A panel's title, above its top tick (the top margin leaves room). Starts
+	 * at `x`; on a narrow chart pass the left margin's edge so it fits.
+	 */
+	function title(p: any, text: string, y = -16, x = 0) {
+		p.append('text').attr('x', x).attr('y', y).attr('fill', TEXT_SECONDARY).style('font-size', '12px').style('font-weight', '600').text(text);
+	}
+
+	/** Marks carrying `data-year` lift when their season is hovered. */
+	function markHot(frame: any, year: number | null) {
+		frame.selectAll('[data-year]').classed('hot', function (this: any) {
+			return year != null && Number(this.getAttribute('data-year')) === year;
+		});
+	}
+
+	/**
+	 * Dims the seasons outside the chosen era. `span(year)` gives a season's
+	 * [left, right] in plot coordinates.
+	 */
+	function shadeEra(frame: any, years: number[], span: (year: number) => [number, number], top: number, bottom: number, vertical = false) {
+		if (!era || !years.length) return;
+		const outside = years.filter((y) => !inEra(y));
+		const g = frame.append('g').style('pointer-events', 'none');
+		for (const y of outside) {
+			const [a, b] = span(y);
+			if (vertical) g.append('rect').attr('x', top).attr('width', bottom - top).attr('y', a).attr('height', b - a);
+			else g.append('rect').attr('x', a).attr('width', b - a).attr('y', top).attr('height', bottom - top);
+		}
+		g.selectAll('rect').attr('fill', SURFACE).attr('fill-opacity', 0).transition().duration(dur(300)).attr('fill-opacity', 0.66);
+	}
+
+	const eventNumber = (season: number) => events.findIndex((e) => e.season === season) + 1;
+
+	/**
+	 * League changes on a season axis: a faint hairline through the plot and a
+	 * numbered marker under the axis (the list under the chart says what each is).
+	 */
+	function drawEvents(ctx: Ctx, x: (year: number) => number, years: number[], bottom: number) {
+		if (!showsEvents) return;
+		const { frame, margin, plotW } = ctx;
+		const shown = events.filter((e) => years.includes(e.season));
+		const back = frame.insert('g', ':first-child').style('pointer-events', 'none');
+		const marks = frame.append('g');
+		// Numbered markers need 18px apart; closer (a phone), they become dots
+		// and the list under the chart names each season.
+		const xs = shown.map((e) => x(e.season));
+		const compact = xs.some((v, i) => i > 0 && v - xs[i - 1] < 18);
+		for (const e of shown) {
+			const cx = x(e.season);
+			back.append('line').attr('x1', cx).attr('x2', cx).attr('y1', 0).attr('y2', bottom)
+				.attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.22);
+			const m = marks.append('g').attr('transform', `translate(${cx},${bottom + (compact ? 30 : 34)})`).style('cursor', 'default');
+			m.append('circle').attr('r', compact ? 3 : 8).attr('fill', compact ? TEXT_MUTED : SURFACE).attr('stroke', TEXT_MUTED).attr('stroke-width', 1);
+			if (!compact) {
+				m.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY)
+					.style('font-size', '10px').style('font-weight', '600').text(String(eventNumber(e.season)));
+			}
+			m.append('circle').attr('r', 13).attr('fill', 'transparent')
+				.on('pointerenter', () => {
+					showTooltip(`${e.season}: league change`, e.labels.map((label) => ({ value: label, label: '' })));
+					positionTooltip(cx + margin.left, plotW + margin.left + margin.right);
+				})
+				.on('pointerleave', hideTooltip);
+		}
 	}
 
 	/**
@@ -449,12 +623,14 @@
 			for (const d of dotsFor(r)) {
 				dots.append('circle').attr('cy', d.cy).attr('r', 5).attr('fill', d.color).attr('stroke', SURFACE).attr('stroke-width', 2);
 			}
+			markHot(frame, r.seasonYear);
 			tip(r);
 			positionTooltip(x(r.seasonYear) + margin.left, plotW + margin.left + margin.right);
 		};
 		const hide = () => {
 			hoverIndex = null;
 			cross.style('display', 'none');
+			markHot(frame, null);
 			hideTooltip();
 		};
 		frame
@@ -481,8 +657,11 @@
 
 	// ---- series: a level over time (line / bars), shared axis or panels -------
 
+	/** Within the coin-flip band: a spread luck alone could produce. */
+	const withinChance = (r: any) => r.chanceHi != null && r.nollScully != null && r.nollScully <= r.chanceHi && r.nollScully >= r.chanceLo;
+
 	function drawSeries(ctx: Ctx) {
-		const { frame, metric, view, plotW, animate } = ctx;
+		const { frame, metric, view, plotW, animate, from } = ctx;
 		// Seasons with something to plot (the ratio has none for a season in progress).
 		const plotted = rows.filter((r) => metric.series.some((s) => read(r, s.key) != null));
 		const years = plotted.map((r) => r.seasonYear as number);
@@ -495,6 +674,7 @@
 		const panelH = metric.layout === 'panels' ? 190 : ctx.plotH;
 		const groups = metric.layout === 'panels' ? metric.series.map((s) => [s]) : [metric.series];
 		const yScales: any[] = [];
+		const hasChance = (metric.bands ?? []).some((b) => b.neutral);
 
 		groups.forEach((inPanel, pi) => {
 			const top = pi * (panelH + PANEL_GAP);
@@ -533,6 +713,27 @@
 			const t = metric.layout === 'panels' ? inPanel[0].label : metric.axisLabel;
 			if (t) title(p, t);
 
+			// Bands behind the series: real score ranges in the series color, or
+			// the gray range coin flips would give, growing out of the 1.0 line.
+			if (pi === 0 && metric.bands) {
+				for (const b of metric.bands) {
+					const withBand = rows.filter((r: any) => read(r, b.lo) != null && read(r, b.hi) != null);
+					const band = d3.area().x((r: any) => x(r.seasonYear)).y0((r: any) => y(read(r, b.lo))).y1((r: any) => y(read(r, b.hi))).curve(d3.curveMonotoneX);
+					const toLine = (r: any) => y(b.neutral && metric.refLine ? metric.refLine.value : read(r, metric.series[0].key));
+					const collapsed = d3.area().x((r: any) => x(r.seasonYear)).y0(toLine).y1(toLine).curve(d3.curveMonotoneX);
+					const path = p.append('path').datum(withBand)
+						.attr('fill', b.neutral ? TEXT_MUTED : metric.series[0].color).attr('fill-opacity', b.opacity);
+					if (animate) path.attr('d', collapsed).transition().delay(dur(b.neutral ? 150 : 350)).duration(dur(700)).ease(ease).attr('d', band);
+					else path.attr('d', band);
+					if (b.neutral && withBand.length && plotW >= 300) {
+						// Name the band inside it, at the right where it's widest of clutter.
+						const r = withBand[withBand.length - 1];
+						p.append('text').attr('x', x(r.seasonYear) - 4).attr('y', y(read(r, b.lo)) - 6).attr('text-anchor', 'end')
+							.attr('fill', TEXT_MUTED).style('font-size', '11px').text(b.label);
+					}
+				}
+			}
+
 			// Reference line: what the measure reads in a league of coin flips.
 			if (metric.refLine) {
 				const ry = y(metric.refLine.value);
@@ -541,41 +742,37 @@
 				p.append('text').attr('x', 4).attr('y', ry + 14).attr('fill', TEXT_MUTED).style('font-size', '11px').text(metric.refLine.label);
 			}
 
-			if (pi === 0 && metric.bands) {
-				for (const b of metric.bands) {
-					const band = d3.area().defined((r: any) => read(r, b.lo) != null && read(r, b.hi) != null)
-						.x((r: any) => x(r.seasonYear)).y0((r: any) => y(read(r, b.lo))).y1((r: any) => y(read(r, b.hi))).curve(d3.curveMonotoneX);
-					const collapsed = d3.area().defined((r: any) => read(r, b.lo) != null)
-						.x((r: any) => x(r.seasonYear)).y0((r: any) => y(read(r, metric.series[0].key))).y1((r: any) => y(read(r, metric.series[0].key))).curve(d3.curveMonotoneX);
-					const path = p.append('path').datum(rows).attr('fill', metric.series[0].color).attr('fill-opacity', b.opacity);
-					if (animate) path.attr('d', collapsed).transition().delay(dur(350)).duration(dur(700)).ease(ease).attr('d', band);
-					else path.attr('d', band);
-				}
-			}
-
 			for (const s of inPanel) {
 				const pts = rows.filter((r) => read(r, s.key) != null);
 				if (view === 'bar' && !s.overlay) {
 					const off = inPanel.filter((x) => !x.overlay).length > 1 ? (inPanel.indexOf(s) - 0.5) * (barW / 2 + 1) : 0;
-					const barPath = (r: any, v: number) => {
+					// A bar from `b` to `v`, rounded at the data end and square at the
+					// baseline (1.0 for the ratio, so bars point up or down from chance).
+					const barPath = (r: any, v: number, b = base) => {
 						const x0 = x(r.seasonYear) - barW / 2;
-						const y0 = y(base);
+						const y0 = y(b);
 						const y1 = y(v);
-						const up = y1 <= y0;
+						const up = v >= base;
 						const h = Math.abs(y0 - y1);
 						const rr = Math.min(4, h, barW / 2);
-						// Rounded at the data end, square at the baseline (which is 1.0
-						// for the ratio, so bars point up or down from chance).
 						return up
 							? `M${x0},${y0}V${y1 + rr}Q${x0},${y1} ${x0 + rr},${y1}H${x0 + barW - rr}Q${x0 + barW},${y1} ${x0 + barW},${y1 + rr}V${y0}Z`
 							: `M${x0},${y0}V${y1 - rr}Q${x0},${y1} ${x0 + rr},${y1}H${x0 + barW - rr}Q${x0 + barW},${y1} ${x0 + barW},${y1 - rr}V${y0}Z`;
 					};
-					p.append('g').attr('transform', `translate(${off},0)`).selectAll('path').data(pts).join('path')
+					// Inside the coin-flip band a season's bar fades: emphasis on the
+					// seasons that beat luck.
+					const opacity = (r: any) => (isLive(r.seasonYear) ? 0.45 : hasChance && s === metric.series[0] && withinChance(r) ? 0.38 : 0.9);
+					const bars = p.append('g').attr('transform', `translate(${off},0)`).selectAll('path').data(pts).join('path')
+						.attr('class', 'bar')
+						.attr('data-year', (r: any) => r.seasonYear)
+						.attr('data-up', (r: any) => (read(r, s.key)! >= base ? '1' : '0'))
 						.attr('fill', s.color)
-						.attr('fill-opacity', (r: any) => (isLive(r.seasonYear) ? 0.45 : 0.9))
-						.attr('d', (r: any) => barPath(r, base))
-						.transition()
-						.delay((_: any, i: number) => dur(animate ? 120 + i * 22 : 0))
+						.attr('fill-opacity', opacity);
+					// From the line: each bar drops from the point it replaces.
+					if (from === 'line') bars.attr('d', (r: any) => barPath(r, read(r, s.key)!, read(r, s.key)!));
+					else bars.attr('d', (r: any) => barPath(r, base, base));
+					bars.transition()
+						.delay((_: any, i: number) => dur(animate ? (from ? 120 : 120 + i * 22) : 0))
 						.duration(dur(animate ? 600 : 0))
 						.ease(ease)
 						.attr('d', (r: any) => barPath(r, read(r, s.key)!));
@@ -590,10 +787,18 @@
 				if (animate) {
 					const len = path.node().getTotalLength();
 					path.attr('stroke-dasharray', `${len} ${len}`).attr('stroke-dashoffset', len)
-						.transition().delay(dur(s.overlay ? 500 : 0)).duration(dur(1100)).ease(d3.easeCubicInOut).attr('stroke-dashoffset', 0)
+						.transition().delay(dur(s.overlay ? 500 : from ? 150 : 0)).duration(dur(1100)).ease(d3.easeCubicInOut).attr('stroke-dashoffset', 0)
 						.on('end', function (this: any) {
 							d3.select(this).attr('stroke-dasharray', null);
 						});
+				}
+				// Seasons that beat the coin-flip band get a dot on the line.
+				if (hasChance && s === metric.series[0] && view === 'line') {
+					p.append('g').selectAll('circle').data(finished.filter((r) => r.chanceHi != null && !withinChance(r))).join('circle')
+						.attr('data-year', (r: any) => r.seasonYear)
+						.attr('cx', (r: any) => x(r.seasonYear)).attr('cy', (r: any) => y(read(r, s.key)))
+						.attr('r', 0).attr('fill', s.color).attr('stroke', SURFACE).attr('stroke-width', 2)
+						.transition().delay(dur(animate ? 1000 : 0)).duration(dur(300)).attr('r', 4.5);
 				}
 				if (liveRow && finished.length) {
 					const last = finished[finished.length - 1];
@@ -635,6 +840,8 @@
 
 		const bottom = groups.length * panelH + (groups.length - 1) * PANEL_GAP;
 		seasonAxis(frame, x, bottom, plotW, years.length, animate);
+		shadeEra(frame, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -6, bottom);
+		drawEvents(ctx, x, years, bottom);
 		crosshair(
 			ctx,
 			x,
@@ -653,6 +860,7 @@
 			(r) => {
 				const lines: TipLine[] = metric.series.map((s) => ({ color: s.color, value: fmt(s, read(r, s.key)), label: s.label }));
 				for (const b of metric.bands ?? []) {
+					if (read(r, b.lo) == null) continue;
 					lines.push({ value: `${fmt(metric.series[0], read(r, b.lo))} – ${fmt(metric.series[0], read(r, b.hi))}`, label: b.label });
 				}
 				if (metric.source === 'scoring' && read(r, 'maxWeeklyScore') != null) {
@@ -660,66 +868,215 @@
 				}
 				if (metric.id === 'balance' && r.skillShare != null) {
 					lines.push({ value: pct(r.skillShare), label: 'of the spread was skill' });
+					if (r.chanceHi != null) {
+						lines.push({ value: withinChance(r) ? 'Within' : r.nollScully > r.chanceHi ? 'Beyond' : 'Below', label: 'what coin flips give' });
+					}
 				}
 				showTooltip(seasonHead(r), lines);
 			}
 		);
 	}
 
-	// ---- champion: rank in scoring, one dot per season -------------------------
+	// ---- champion: scoring rank and record rank, one dumbbell per season ------
 
-	function drawChampion(ctx: Ctx) {
-		const { frame, plotW, plotH, animate } = ctx;
+	function drawDumbbell(ctx: Ctx) {
+		const { frame, plotW, plotH, margin, animate } = ctx;
 		const champs = rows.filter((r) => r.champion?.pointsRank != null);
 		if (!champs.length) return;
+		const years = champs.map((r) => r.seasonYear as number);
 		const maxTeams = d3.max(champs, (r: any) => r.teams) ?? 10;
-		const x = d3.scaleLinear().domain(d3.extent(champs, (r: any) => r.seasonYear)).range([12, plotW - 12]);
-		// Rank 1 at the top, with room above it for the chart title.
-		const y = d3.scaleLinear().domain([1, maxTeams]).range([18, plotH]);
+		const deepest = d3.max(champs, (r: any) => Math.max(r.champion.pointsRank, r.champion.recordRank ?? 1)) ?? 3;
+		const bottomRank = Math.max(4, deepest);
+		const x = d3.scaleLinear().domain(d3.extent(years)).range([12, plotW - 12]);
+		const y = d3.scaleLinear().domain([1, bottomRank]).range([8, plotH - 12]);
 		const step = champs.length > 1 ? (plotW - 24) / (champs.length - 1) : plotW;
 
-		// Top-three band.
+		// Top-three scorers band.
 		frame.append('rect').attr('x', 0).attr('width', plotW).attr('y', y(0.5)).attr('height', y(3.5) - y(0.5))
-			.attr('fill', BLUE).attr('fill-opacity', 0.08);
-		frame.append('text').attr('x', plotW - 4).attr('y', y(0.5) + 12).attr('text-anchor', 'end').attr('fill', TEXT_MUTED).style('font-size', '11px').text('Top 3 scorers');
+			.attr('fill', BLUE).attr('fill-opacity', 0.07);
+		frame.append('text').attr('x', plotW - 4).attr('y', y(3.5) - 6).attr('text-anchor', 'end').attr('fill', TEXT_MUTED).style('font-size', '11px').text('Top 3');
 		frame.append('g')
-			.call(d3.axisLeft(y).ticks(maxTeams).tickSize(-plotW).tickFormat((d: number) => `#${d}`))
+			.call(d3.axisLeft(y).ticks(bottomRank).tickSize(-plotW).tickFormat((d: number) => `#${d}`))
 			.call(styleAxis)
 			.selectAll('.tick line')
 			.attr('stroke-opacity', 0.35);
-		title(frame, 'Champion’s scoring rank');
+		title(frame, plotW < 360 ? `Champion’s rank, of ${maxTeams}` : `Champion’s regular-season rank, of ${maxTeams} teams`, -margin.top + 14, plotW < 360 ? -margin.left + 4 : 0);
 
-		// A thin stem from the top so distance from #1 reads, then the dot.
+		// The champion's photo over each season, when there's room.
+		if (step >= 22) {
+			const heads = frame.append('g');
+			champs.forEach((r, i) => {
+				const g = heads.append('g').attr('class', 'champ-head').attr('data-manager', r.champion.manager)
+					.attr('transform', `translate(${x(r.seasonYear)},-24)`).style('opacity', 0);
+				avatar(g, r.champion.manager, Math.min(10, step / 2 - 2));
+				g.transition().delay(dur(animate ? 200 + i * 40 : 0)).duration(dur(300)).style('opacity', 1);
+			});
+		}
+
+		// Dots shrink to fit a narrow season step.
+		const dotR = Math.max(3, Math.min(6, step / 2 - 1));
 		const g = frame.append('g');
 		champs.forEach((r, i) => {
 			const cx = x(r.seasonYear);
-			const cy = y(r.champion.pointsRank);
+			const ys = y(r.champion.pointsRank);
+			const yr = y(r.champion.recordRank ?? r.champion.pointsRank);
 			const delay = dur(animate ? 80 + i * 40 : 0);
-			g.append('line').attr('x1', cx).attr('x2', cx).attr('y1', y(1)).attr('y2', y(1)).attr('stroke', BLUE).attr('stroke-opacity', 0.35).attr('stroke-width', 1.5)
-				.transition().delay(delay).duration(dur(animate ? 400 : 0)).ease(d3.easeCubicOut).attr('y2', cy);
-			g.append('circle').attr('cx', cx).attr('cy', y(1)).attr('r', 0).attr('fill', r.champion.pointsRank === 1 ? BLUE : SURFACE)
-				.attr('stroke', BLUE).attr('stroke-width', 2)
-				.transition().delay(delay).duration(dur(animate ? 400 : 0)).ease(d3.easeCubicOut).attr('cy', cy).attr('r', 6);
+			const d = g.append('g').attr('class', 'champ').attr('data-year', r.seasonYear).attr('data-manager', r.champion.manager);
+			d.append('line').attr('x1', cx).attr('x2', cx).attr('y1', y(1)).attr('y2', y(1))
+				.attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.55).attr('stroke-width', 2).attr('stroke-linecap', 'round')
+				.transition().delay(delay).duration(dur(animate ? 450 : 0)).ease(d3.easeCubicOut).attr('y1', Math.min(ys, yr)).attr('y2', Math.max(ys, yr));
+			// Record rank: a ring; scoring rank: a filled dot. Same rank: the ring
+			// circles the dot.
+			d.append('circle').attr('cx', cx).attr('cy', y(1)).attr('r', 0).attr('fill', 'none').attr('stroke', ORANGE).attr('stroke-width', dotR < 6 ? 2 : 2.5)
+				.transition().delay(delay).duration(dur(animate ? 450 : 0)).ease(d3.easeCubicOut).attr('cy', yr).attr('r', ys === yr ? dotR + 3.5 : dotR);
+			d.append('circle').attr('cx', cx).attr('cy', y(1)).attr('r', 0).attr('fill', BLUE).attr('stroke', SURFACE).attr('stroke-width', dotR < 6 ? 1.5 : 2)
+				.transition().delay(delay).duration(dur(animate ? 450 : 0)).ease(d3.easeCubicOut).attr('cy', ys).attr('r', dotR);
 		});
-		frame.append('text').attr('x', 0).attr('y', plotH + 30).attr('fill', TEXT_MUTED).style('font-size', '11px').text('Filled: the top scorer won it all');
+		applyHighlight(frame);
 
 		seasonAxis(frame, x, plotH, plotW, champs.length, animate);
+		shadeEra(frame, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -margin.top + 22, plotH);
+		drawEvents(ctx, x, years, plotH);
 		crosshair(
 			ctx,
 			x,
 			plotH,
 			step,
 			champs,
-			(r) => (r.champion?.pointsRank != null ? [{ cy: y(r.champion.pointsRank), color: BLUE }] : []),
+			() => [],
 			(r) => {
-				if (!r.champion) return showTooltip(seasonHead(r), [{ value: 'No champion yet', label: '' }]);
+				const c = r.champion;
 				showTooltip(seasonHead(r), [
-					{ color: BLUE, value: r.champion.manager, label: 'won the title' },
-					{ value: `#${r.champion.pointsRank}`, label: `in points per game, of ${r.teams}` },
-					{ value: `#${r.champion.recordRank}`, label: 'in regular-season record' }
+					{ value: c.manager, label: 'won the title' },
+					{ color: BLUE, value: `#${c.pointsRank}`, label: `in points per game, of ${r.teams}` },
+					{ color: ORANGE, value: `#${c.recordRank}`, label: 'in record' },
+					...(c.runnerUp ? [{ value: c.runnerUp, label: 'lost the final' }] : [])
 				]);
 			}
 		);
+	}
+
+	/** Dims every champion but the highlighted manager's. */
+	function applyHighlight(frame: any) {
+		frame.selectAll('.champ, .champ-head').transition().duration(dur(200))
+			.style('opacity', function (this: any) {
+				return !highlightManager || this.getAttribute('data-manager') === highlightManager ? 1 : 0.2;
+			});
+	}
+
+	// ---- scoring distribution: one ridge per season ---------------------------
+
+	function drawRidgeline(ctx: Ctx) {
+		const { frame, plotW, plotH, margin, animate, from } = ctx;
+		const seasons = rows
+			.map((r) => ({ r, year: r.seasonYear as number, scores: ((trends?.scores?.[r.seasonYear] ?? []) as number[]).slice().sort((a, b) => a - b) }))
+			.filter((d) => d.scores.length > 2);
+		if (!seasons.length) return;
+		const all = seasons.flatMap((d) => d.scores);
+		const x = d3.scaleLinear().domain([Math.min(40, d3.min(all)), d3.max(all)]).nice().range([0, plotW]);
+		const y = d3.scaleBand().domain(seasons.map((d) => d.year)).range([0, plotH]);
+		const step = y.step();
+		const amp = step * 3;
+		const xs = d3.range(x.domain()[0], x.domain()[1] + 1, 2);
+		const ridges = seasons.map((d) => {
+			const dens = kde(d.scores, xs);
+			return { ...d, dens, median: quantile(d.scores, 0.5)!, lo: quantile(d.scores, 0.25)!, hi: quantile(d.scores, 0.75)! };
+		});
+		// Each ridge to its own peak: the shape is what compares across seasons
+		// (the seasons have about the same number of games).
+		const peak = new Map(ridges.map((d) => [d.year, d3.max(d.dens) || 1]));
+		const h = (v: number, year: number) => (v / peak.get(year)!) * amp;
+		const baseline = (year: number) => y(year) + step;
+
+		frame.append('g').attr('transform', `translate(0,${plotH})`)
+			.call(d3.axisBottom(x).ticks(Math.floor(plotW / 70)).tickSize(-plotH).tickPadding(8))
+			.call(styleAxis).selectAll('.tick line').attr('stroke-opacity', 0.25);
+		title(frame, plotW < 360 ? 'Every score, by season' : 'Every team score in a game, by season', -margin.top + 14, plotW < 360 ? -margin.left + 4 : 0);
+		frame.append('text').attr('x', plotW).attr('y', plotH + 30).attr('text-anchor', 'end').attr('fill', TEXT_MUTED).style('font-size', '11px').text('Points');
+
+		const g = frame.append('g');
+		const groups = ridges.map((d, i) => {
+			const area = d3.area().x((_: any, k: number) => x(xs[k])).y0(0).y1((v: number) => -h(v, d.year)).curve(d3.curveBasis);
+			const live2 = isLive(d.year);
+			const rg = g.append('g').attr('class', 'ridge').attr('transform', `translate(0,${baseline(d.year)})`)
+				.style('opacity', inEra(d.year) ? 1 : 0.22);
+			const inner = rg.append('g');
+			// The surface fill hides the ridge behind; the tint and line sit on it.
+			inner.append('path').datum(d.dens).attr('d', area).attr('fill', SURFACE);
+			inner.append('path').datum(d.dens).attr('d', area).attr('fill', BLUE).attr('fill-opacity', live2 ? 0.08 : 0.2);
+			const edge = inner.append('path').datum(d.dens).attr('d', area.lineY1())
+				.attr('fill', 'none').attr('stroke', BLUE).attr('stroke-width', 1.5).attr('stroke-dasharray', live2 ? '3 3' : null);
+			// Median on the baseline.
+			inner.append('line').attr('x1', x(d.median)).attr('x2', x(d.median)).attr('y1', 0).attr('y2', -6)
+				.attr('stroke', TEXT_PRIMARY).attr('stroke-width', 1.5);
+			rg.append('text').attr('x', -10).attr('y', -3).attr('text-anchor', 'end').attr('fill', TEXT_MUTED)
+				.style('font-size', '11px').style('font-variant-numeric', 'tabular-nums').text(live2 && live ? `${d.year}*` : String(d.year));
+			if (showsEvents && eventNumber(d.year)) {
+				const m = rg.append('g').attr('transform', `translate(${-margin.left + 9},-7)`);
+				m.append('circle').attr('r', 7).attr('fill', SURFACE).attr('stroke', TEXT_MUTED);
+				m.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY).style('font-size', '9px').style('font-weight', '600')
+					.text(String(eventNumber(d.year)));
+			}
+			if (animate && !reduceMotion) {
+				inner.attr('transform', 'scale(1,0)').transition().delay(from ? 120 : 60 + i * 35).duration(500).ease(d3.easeCubicOut).attr('transform', 'scale(1,1)');
+			}
+			return { rg, edge };
+		});
+
+		// Medians joined down the seasons: the drift of a typical score.
+		const medianPath = d3.line().x((d: any) => x(d.median)).y((d: any) => baseline(d.year) - 3).curve(d3.curveMonotoneY);
+		const mp = frame.append('path').datum(ridges.filter((d) => !isLive(d.year))).attr('d', medianPath)
+			.attr('fill', 'none').attr('stroke', TEXT_PRIMARY).attr('stroke-opacity', 0.45).attr('stroke-width', 1).style('pointer-events', 'none');
+		if (animate && !reduceMotion) mp.style('opacity', 0).transition().delay(900).duration(400).style('opacity', 1);
+
+		const guide = frame.append('line').attr('stroke', TEXT_PRIMARY).attr('stroke-opacity', 0.7).style('display', 'none').style('pointer-events', 'none');
+		const focus = (i: number | null) => {
+			groups.forEach(({ edge }, j) => {
+				edge.attr('stroke', j === i ? TEXT_PRIMARY : BLUE).attr('stroke-width', j === i ? 2 : 1.5);
+			});
+			// Back to top-to-bottom order, then lift the hovered ridge over the rest.
+			for (const { rg } of groups) rg.raise();
+			if (i != null) groups[i].rg.raise();
+			mp.raise();
+		};
+		const show = (i: number, mx: number | null = null) => {
+			hoverIndex = i;
+			const d = ridges[i];
+			focus(i);
+			const lines: TipLine[] = [
+				{ color: BLUE, value: `${d.median.toFixed(1)}`, label: 'median score' },
+				{ value: `${d.lo.toFixed(0)}–${d.hi.toFixed(0)}`, label: 'middle half' },
+				{ value: `${d.scores[d.scores.length - 1].toFixed(1)}`, label: 'best single game' },
+				{ value: String(d.scores.length), label: 'team scores' }
+			];
+			if (mx != null) {
+				const v = x.invert(mx);
+				const below = d3.bisectLeft(d.scores, v);
+				const at = Math.max(0, Math.min(xs.length - 1, Math.round((v - xs[0]) / 2)));
+				guide.style('display', null).attr('x1', mx).attr('x2', mx).attr('y1', baseline(d.year)).attr('y2', baseline(d.year) - h(d.dens[at], d.year));
+				lines.unshift({ value: `${v.toFixed(0)} pts`, label: `beat ${Math.round((below / d.scores.length) * 100)}% of ${d.year} scores` });
+			} else guide.style('display', 'none');
+			showTooltip(isLive(d.year) && live ? `${d.year} · through week ${live.throughWeek}` : String(d.year), lines);
+			positionTooltip((mx ?? x(d.median)) + margin.left, plotW + margin.left + margin.right);
+		};
+		const hide = () => {
+			hoverIndex = null;
+			focus(null);
+			guide.style('display', 'none');
+			hideTooltip();
+		};
+		frame.append('rect').attr('x', 0).attr('y', -margin.top + 22).attr('width', plotW).attr('height', plotH + margin.top - 22)
+			.attr('fill', 'transparent')
+			.on('pointermove', (event: PointerEvent) => {
+				const [mx, my] = d3.pointer(event);
+				// The ridge whose baseline is just below the pointer.
+				const i = Math.max(0, Math.min(ridges.length - 1, Math.floor(my / step)));
+				show(i, mx);
+			})
+			.on('pointerleave', hide);
+		navLength = ridges.length;
+		keyboardShow = (i: number) => show(i);
+		keyboardHide = hide;
 	}
 
 	// ---- championships: who won, who came close -------------------------------
@@ -863,6 +1220,9 @@
 		});
 
 		// Totals: titles as a bar with "of N finals" beside each row, or a count under each column.
+		// Counted within the era, when one is chosen.
+		const wonIn = (m: any) => m.years.filter(inEra).length;
+		const lostIn = (m: any) => m.finals.filter(inEra).length;
 		const maxTitles = d3.max(t, (m: any) => m.years.length) ?? 1;
 		const totalsDelay = dur(animate ? 80 + years.length * 45 : 0);
 		lanes.each(function (this: any, m: any) {
@@ -870,7 +1230,7 @@
 			if (vertical) {
 				g.append('text').attr('x', cw / 2).attr('y', plotH + 18).attr('text-anchor', 'middle').attr('fill', TEXT_PRIMARY)
 					.style('font-size', '12px').style('font-weight', '600').style('font-variant-numeric', 'tabular-nums')
-					.text(String(m.years.length));
+					.text(String(wonIn(m)));
 				return;
 			}
 			const bar = margin.right >= 100 ? 54 : 0;
@@ -879,11 +1239,11 @@
 			if (bar) {
 				tg.append('rect').attr('y', -4).attr('height', 8).attr('rx', 2).attr('fill', YELLOW).attr('width', 0)
 					.transition().delay(totalsDelay).duration(dur(animate ? 500 : 0)).ease(d3.easeCubicOut)
-					.attr('width', Math.max(m.years.length ? 2 : 0, bx(m.years.length)));
+					.attr('width', Math.max(wonIn(m) ? 2 : 0, bx(wonIn(m))));
 			}
 			const label = tg.append('text').attr('x', bar ? bar + 8 : 0).attr('dy', '0.35em').style('font-variant-numeric', 'tabular-nums');
-			label.append('tspan').attr('fill', TEXT_PRIMARY).style('font-size', '12px').style('font-weight', '600').text(String(m.years.length));
-			if (bar) label.append('tspan').attr('fill', TEXT_MUTED).style('font-size', '11px').text(` of ${m.years.length + m.finals.length} finals`);
+			label.append('tspan').attr('fill', TEXT_PRIMARY).style('font-size', '12px').style('font-weight', '600').text(String(wonIn(m)));
+			if (bar) label.append('tspan').attr('fill', TEXT_MUTED).style('font-size', '11px').text(` of ${wonIn(m) + lostIn(m)} finals`);
 		});
 
 		// Season labels: under the columns, or left of the rows.
@@ -899,9 +1259,17 @@
 			}
 		});
 
+		// Hover focuses a lane; with none hovered, the highlighted manager keeps it.
 		const focusLane = (manager: string | null) => {
-			lanes.transition().duration(dur(150)).style('opacity', (m: any) => (manager == null || m.manager === manager ? 1 : 0.35));
+			const on = manager ?? (highlightManager || null);
+			lanes.transition().duration(dur(150)).style('opacity', (m: any) => (on == null || m.manager === on ? 1 : 0.35));
 		};
+		focusLane(null);
+		// Seasons outside the era fade.
+		if (era) {
+			const pad = (season.step() - season.bandwidth()) / 2;
+			shadeEra(frame, years, (yr) => [season(yr) - pad, season(yr) + season.bandwidth() + pad], -4, (vertical ? plotW : plotH) + 4, vertical);
+		}
 		const show = (col: number, manager: string | null = null) => {
 			hoverIndex = col;
 			const year = years[col];
@@ -952,6 +1320,9 @@
 		navLength = years.length;
 		keyboardShow = (i: number) => show(i);
 		keyboardHide = hide;
+		// Up and down step through the managers.
+		rowNavLength = t.length;
+		rowShow = (i: number) => showManager(t[i]);
 	}
 
 	/** Race: each manager's running title count, drawn left to right. */
@@ -973,8 +1344,9 @@
 
 		frame.append('g').call(d3.axisLeft(y).ticks(maxTitles).tickFormat(d3.format('d')).tickSize(-plotW)).call(styleAxis)
 			.selectAll('.tick line').attr('stroke-opacity', 0.35);
-		title(frame, 'Titles won, running total', -16);
+		title(frame, 'Titles won, running total');
 		seasonAxis(frame, x, plotH, plotW, years.length, animate);
+		drawEvents(ctx, x, years, plotH);
 
 		// Lines are revealed by a clip that sweeps left to right.
 		const clipId = `race-clip-${Math.random().toString(36).slice(2, 8)}`;
@@ -1033,7 +1405,9 @@
 			place(plotW);
 		}
 
-		const focus = (manager: string | null) => {
+		// Hover focuses a line; with none hovered, the highlighted manager keeps it.
+		const focus = (hovered: string | null) => {
+			const manager = hovered ?? (highlightManager || null);
 			lines.forEach(({ m, g }) => {
 				const on = m.manager === manager;
 				g.raise();
@@ -1045,6 +1419,8 @@
 			hi?.g.raise();
 			heads.forEach((h: any, i: number) => h.style('opacity', manager == null || t[i].manager === manager ? 1 : 0.35));
 		};
+		focus(null);
+		shadeEra(frame, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -6, plotH);
 
 		// Crosshair: the standings after any season, with that season's champion lit.
 		const cross = frame.append('line').attr('y1', -6).attr('y2', plotH).attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.6)
@@ -1081,29 +1457,138 @@
 			})
 			.on('pointerleave', hide);
 		// Photos sit above the crosshair layer, so they can be hovered on their own.
+		const showManager = (m: any) => {
+			cross.style('display', 'none');
+			focus(m.manager);
+			showTooltip(m.manager, [
+				{ color: YELLOW, value: String(m.years.length), label: `titles of ${m.years.length + m.finals.length} finals` },
+				{ value: m.years.join(', '), label: '' }
+			]);
+			positionTooltip(plotW + margin.left - 4, plotW + margin.left + margin.right);
+		};
 		heads.forEach((h: any, i: number) => {
-			const m = t[i];
-			h.raise()
-				.on('pointerenter', () => {
-					cross.style('display', 'none');
-					focus(m.manager);
-					showTooltip(m.manager, [
-						{ color: YELLOW, value: String(m.years.length), label: `titles of ${m.years.length + m.finals.length} finals` },
-						{ value: m.years.join(', '), label: '' }
-					]);
-					positionTooltip(plotW + margin.left - 4, plotW + margin.left + margin.right);
-				})
-				.on('pointerleave', hide);
+			h.raise().on('pointerenter', () => showManager(t[i])).on('pointerleave', hide);
 		});
 		navLength = years.length;
 		keyboardShow = show;
+		keyboardHide = hide;
+		rowNavLength = t.length;
+		rowShow = (i: number) => showManager(t[i]);
+	}
+
+	// ---- positions: small multiples, one shared scale -------------------------
+
+	function drawMultiples(ctx: Ctx) {
+		const { frame, metric, plotW, margin, animate } = ctx;
+		const data2 = rows.filter((r) => r.positionShare);
+		if (!data2.length) return;
+		const years = data2.map((r) => r.seasonYear as number);
+		const cols = multiplesColumns(plotW);
+		const gapX = 28;
+		const panelW = (plotW - (cols - 1) * gapX) / cols;
+		const panelH = MULTIPLE_H;
+		const x = d3.scaleLinear().domain(d3.extent(years)).range([0, panelW]);
+		const maxShare = d3.max(metric.series, (s: SeriesDef) => d3.max(data2, (r: any) => read(r, s.key) ?? 0)) ?? 0.4;
+		// One scale for every panel, so a position's size compares across them.
+		const y = d3.scaleLinear().domain([0, maxShare * 1.08]).nice(4).range([panelH, 0]);
+		const step = years.length > 1 ? panelW / (years.length - 1) : panelW;
+		const finished = data2.filter((r) => !isLive(r.seasonYear));
+		const liveRow = data2.find((r) => isLive(r.seasonYear));
+
+		const panels = metric.series.map((s, i) => {
+			const col = i % cols;
+			const row = Math.floor(i / cols);
+			const p = frame.append('g').attr('transform', `translate(${col * (panelW + gapX)},${row * (panelH + MULTIPLE_GAP)})`);
+			p.append('g')
+				.call(d3.axisLeft(y).ticks(3).tickSize(-panelW).tickFormat(col === 0 ? d3.format('.0%') : () => ''))
+				.call(styleAxis).selectAll('.tick line').attr('stroke-opacity', 0.35);
+			p.append('g').attr('transform', `translate(0,${panelH})`)
+				.call(d3.axisBottom(x).tickValues([years[0], years[Math.floor(years.length / 2)], years[years.length - 1]]).tickFormat(d3.format('d')).tickSize(0).tickPadding(8))
+				.call(styleAxis);
+			// Title with its line key.
+			p.append('line').attr('x1', 0).attr('x2', 12).attr('y1', -15).attr('y2', -15).attr('stroke', s.color).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+			p.append('text').attr('x', 18).attr('y', -11).attr('fill', TEXT_SECONDARY).style('font-size', '12px').style('font-weight', '600').text(s.label);
+
+			// The other positions, faint, for context.
+			const lineFor = (key: string) => d3.line().x((r: any) => x(r.seasonYear)).y((r: any) => y(read(r, key) ?? 0)).curve(d3.curveMonotoneX);
+			for (const o of metric.series) {
+				if (o === s) continue;
+				p.append('path').datum(finished).attr('d', lineFor(o.key)).attr('fill', 'none').attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.2).attr('stroke-width', 1);
+			}
+			const wash = d3.area().x((r: any) => x(r.seasonYear)).y0(panelH).y1((r: any) => y(read(r, s.key) ?? 0)).curve(d3.curveMonotoneX);
+			const flat = d3.area().x((r: any) => x(r.seasonYear)).y0(panelH).y1(panelH).curve(d3.curveMonotoneX);
+			const a = p.append('path').datum(finished).attr('fill', s.color).attr('fill-opacity', 0.1);
+			const l = p.append('path').datum(finished).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2)
+				.attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+			if (animate && !reduceMotion) {
+				const flatLine = d3.line().x((r: any) => x(r.seasonYear)).y(panelH).curve(d3.curveMonotoneX);
+				a.attr('d', flat).transition().delay(i * 60).duration(650).ease(d3.easeCubicOut).attr('d', wash);
+				l.attr('d', flatLine).transition().delay(i * 60).duration(650).ease(d3.easeCubicOut).attr('d', lineFor(s.key));
+			} else {
+				a.attr('d', wash);
+				l.attr('d', lineFor(s.key));
+			}
+			if (liveRow && finished.length) {
+				const last = finished[finished.length - 1];
+				p.append('path').attr('d', `M${x(last.seasonYear)},${y(read(last, s.key) ?? 0)}L${x(liveRow.seasonYear)},${y(read(liveRow, s.key) ?? 0)}`)
+					.attr('stroke', s.color).attr('stroke-width', 2).attr('stroke-dasharray', '2 4').attr('fill', 'none');
+				p.append('circle').attr('cx', x(liveRow.seasonYear)).attr('cy', y(read(liveRow, s.key) ?? 0)).attr('r', 4)
+					.attr('fill', SURFACE).attr('stroke', s.color).attr('stroke-width', 2);
+			}
+			// First and last finished values, at the ends.
+			const f = finished[0];
+			const e = finished[finished.length - 1];
+			const labels = p.append('g').style('opacity', 0);
+			labels.append('text').attr('x', 2).attr('y', y(read(f, s.key) ?? 0) - 8).attr('fill', TEXT_SECONDARY).style('font-size', '11px').text(pct(read(f, s.key)));
+			labels.append('text').attr('x', x(e.seasonYear)).attr('y', y(read(e, s.key) ?? 0) - 8).attr('text-anchor', 'end')
+				.attr('fill', TEXT_PRIMARY).style('font-size', '11px').style('font-weight', '600').text(pct(read(e, s.key)));
+			labels.transition().delay(dur(animate ? 600 + i * 60 : 0)).duration(dur(300)).style('opacity', 1);
+			shadeEra(p, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -4, panelH);
+
+			const cross = p.append('g').style('display', 'none').style('pointer-events', 'none');
+			cross.append('line').attr('y1', 0).attr('y2', panelH).attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.6);
+			const dot = cross.append('circle').attr('r', 4.5).attr('fill', s.color).attr('stroke', SURFACE).attr('stroke-width', 2);
+			const value = cross.append('text').attr('y', -6).attr('fill', TEXT_PRIMARY).style('font-size', '11px').style('font-weight', '600');
+			return { p, s, cross, dot, value, col, row };
+		});
+
+		// One crosshair through every panel.
+		const show = (i: number, panelIndex = 0) => {
+			hoverIndex = i;
+			const r = data2[i];
+			const cx = x(r.seasonYear);
+			for (const d of panels) {
+				const v = read(r, d.s.key) ?? 0;
+				d.cross.style('display', null).attr('transform', `translate(${cx},0)`);
+				d.dot.attr('cy', y(v));
+				d.value.attr('x', cx > panelW - 40 ? -6 : 6).attr('text-anchor', cx > panelW - 40 ? 'end' : 'start').attr('y', y(v) - 8).text(pct(v, 1));
+			}
+			showTooltip(seasonHead(r), metric.series.map((s) => ({ color: s.color, value: fmt(s, read(r, s.key)), label: s.label })));
+			const hp = panels[panelIndex];
+			positionTooltip(hp.col * (panelW + gapX) + cx + margin.left, plotW + margin.left + margin.right);
+		};
+		const hide = () => {
+			hoverIndex = null;
+			for (const d of panels) d.cross.style('display', 'none');
+			hideTooltip();
+		};
+		panels.forEach((d, pi) => {
+			d.p.append('rect').attr('x', -step / 2).attr('y', -4).attr('width', panelW + step).attr('height', panelH + 8).attr('fill', 'transparent')
+				.on('pointermove', (event: PointerEvent) => {
+					const [mx] = d3.pointer(event);
+					show(d3.minIndex(years, (yr: number) => Math.abs(x(yr) - mx)), pi);
+				})
+				.on('pointerleave', hide);
+		});
+		navLength = data2.length;
+		keyboardShow = (i: number) => show(i);
 		keyboardHide = hide;
 	}
 
 	// ---- stacked: shares of a whole ------------------------------------------
 
 	function drawStacked(ctx: Ctx) {
-		const { frame, metric, view, plotW, plotH, animate } = ctx;
+		const { frame, metric, view, plotW, plotH, animate, from } = ctx;
 		const data2 = rows.filter((r) => r.positionShare);
 		if (!data2.length) return;
 		const keys = metric.series.map((s) => s.key);
@@ -1126,26 +1611,46 @@
 			if (view === 'stackedArea') {
 				const area = d3.area().x((d: any) => x(d.data.seasonYear)).y0((d: any) => y(d[0])).y1((d: any) => y(d[1])).curve(d3.curveMonotoneX);
 				const flat = d3.area().x((d: any) => x(d.data.seasonYear)).y0((d: any) => y(d[0])).y1((d: any) => y(d[0])).curve(d3.curveMonotoneX);
-				const path = frame.append('path').datum(layer).attr('fill', s.color).attr('fill-opacity', 0.85).attr('stroke', SURFACE).attr('stroke-width', 1);
-				if (animate) path.attr('d', flat).transition().delay(dur(li * 90)).duration(dur(600)).ease(d3.easeCubicOut).attr('d', area);
-				else path.attr('d', area);
+				// A lighter fill with a 2px surface seam and a line along each layer's
+				// top: the layers read without a wall of saturated color.
+				const path = frame.append('path').datum(layer).attr('fill', s.color).attr('fill-opacity', 0.5).attr('stroke', SURFACE).attr('stroke-width', 2);
+				const edge = frame.append('path').datum(layer).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 1.5)
+					.attr('d', area.lineY1());
+				if (from === 'stackedBar' && !reduceMotion) {
+					// The widened bars become the area.
+					path.attr('d', area).style('opacity', 0).transition().delay(220).duration(320).style('opacity', 1);
+					edge.style('opacity', 0).transition().delay(220).duration(320).style('opacity', 1);
+				} else if (animate) {
+					path.attr('d', flat).transition().delay(dur(li * 90)).duration(dur(600)).ease(d3.easeCubicOut).attr('d', area);
+					edge.style('opacity', 0).transition().delay(dur(li * 90 + 400)).duration(dur(300)).style('opacity', 1);
+				} else path.attr('d', area);
 			} else {
-				frame.append('g').selectAll('rect').data(layer).join('rect')
-					.attr('x', (d: any) => x(d.data.seasonYear) - barW / 2)
-					.attr('width', barW)
+				const segs = frame.append('g').selectAll('rect').data(layer).join('rect')
+					.attr('class', 'seg')
+					.attr('data-year', (d: any) => d.data.seasonYear)
+					.attr('data-cx', (d: any) => x(d.data.seasonYear))
+					.attr('data-step', step)
 					.attr('fill', s.color)
 					.attr('fill-opacity', (d: any) => (isLive(d.data.seasonYear) ? 0.5 : 0.92))
-					// 2px of surface between stacked segments.
+					// A 2px surface gap between stacked segments (the stroke straddles the edge).
 					.attr('stroke', SURFACE)
-					.attr('stroke-width', 1)
-					.attr('y', (d: any) => y(d[0]))
-					.attr('height', 0)
-					.transition()
-					.delay((_: any, i: number) => dur(animate ? li * 70 + i * 12 : 0))
-					.duration(dur(animate ? 450 : 0))
-					.ease(d3.easeCubicOut)
-					.attr('y', (d: any) => y(d[1]))
-					.attr('height', (d: any) => Math.max(0, y(d[0]) - y(d[1])));
+					.attr('stroke-width', 2);
+				if (from === 'stackedArea' && !reduceMotion) {
+					// From the area: full-width slices narrow into bars.
+					segs.attr('x', (d: any) => x(d.data.seasonYear) - step / 2).attr('width', step)
+						.attr('y', (d: any) => y(d[1])).attr('height', (d: any) => Math.max(0, y(d[0]) - y(d[1])))
+						.transition().duration(450).ease(d3.easeCubicInOut)
+						.attr('x', (d: any) => x(d.data.seasonYear) - barW / 2).attr('width', barW);
+				} else {
+					segs.attr('x', (d: any) => x(d.data.seasonYear) - barW / 2).attr('width', barW)
+						.attr('y', (d: any) => y(d[0])).attr('height', 0)
+						.transition()
+						.delay((_: any, i: number) => dur(animate ? li * 70 + i * 12 : 0))
+						.duration(dur(animate ? 450 : 0))
+						.ease(d3.easeCubicOut)
+						.attr('y', (d: any) => y(d[1]))
+						.attr('height', (d: any) => Math.max(0, y(d[0]) - y(d[1])));
+				}
 			}
 		});
 
@@ -1159,6 +1664,8 @@
 		});
 
 		seasonAxis(frame, x, plotH, plotW, years.length, animate);
+		shadeEra(frame, years, (yr) => [x(yr) - step / 2, x(yr) + step / 2], -6, plotH);
+		drawEvents(ctx, x, years, plotH);
 		crosshair(ctx, x, plotH, step, data2, () => [], (r) => {
 			showTooltip(
 				seasonHead(r),
@@ -1205,12 +1712,16 @@
 		tooltipEl.style.display = 'block';
 	}
 
+	/** Beside the anchor, at the pointer's height, kept inside the chart. */
 	function positionTooltip(anchorX: number, maxX: number) {
 		if (!tooltipEl) return;
 		const w = tooltipEl.offsetWidth;
+		const h = tooltipEl.offsetHeight;
 		const left = anchorX + 14 + w > maxX ? anchorX - 14 - w : anchorX + 14;
-		tooltipEl.style.left = `${Math.max(0, left)}px`;
-		tooltipEl.style.top = '16px';
+		tooltipEl.style.left = `${Math.max(0, Math.min(maxX - w, left))}px`;
+		const room = (container?.clientHeight ?? h) - h;
+		const top = pointerY == null ? 16 : pointerY - h / 2;
+		tooltipEl.style.top = `${Math.max(0, Math.min(room, top))}px`;
 	}
 
 	function hideTooltip() {
@@ -1220,9 +1731,22 @@
 	let keyboardShow: (i: number) => void = () => {};
 	let keyboardHide: () => void = () => {};
 	let navLength = 0;
+	// Up and down, where a chart has rows of managers.
+	let rowShow: (i: number) => void = () => {};
+	let rowNavLength = 0;
+	let rowIndex: number | null = null;
 	function onKey(e: KeyboardEvent) {
+		if (rowNavLength && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+			e.preventDefault();
+			const start = rowIndex ?? (e.key === 'ArrowDown' ? -1 : rowNavLength);
+			rowIndex = Math.max(0, Math.min(rowNavLength - 1, start + (e.key === 'ArrowDown' ? 1 : -1)));
+			hoverIndex = null;
+			rowShow(rowIndex);
+			return;
+		}
 		if (!navLength) return;
 		if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+			rowIndex = null;
 			e.preventDefault();
 			const start = hoverIndex ?? (e.key === 'ArrowRight' ? -1 : navLength);
 			const next = Math.max(0, Math.min(navLength - 1, start + (e.key === 'ArrowRight' ? 1 : -1)));
@@ -1279,9 +1803,104 @@
 		data;
 		tick().then(() => render(true));
 	}
+
+	// The era and the highlight redraw in place, without replaying the entry.
+	let lastFilters = '';
+	$: if (d3) {
+		const key = `${selectedEra}|${highlightManager}`;
+		if (lastFilters && key !== lastFilters) tick().then(() => render(false));
+		lastFilters = key;
+	}
+
+	$: tableRows = rows.filter((r) => inEra(r.seasonYear));
+
+	// The legend, from the same list the saved image draws.
+	$: legendItems = ((): LegendItem[] => {
+		const m = currentMetric;
+		const v = selectedView;
+		const out: LegendItem[] = [];
+		if (m.kind === 'stacked') {
+			for (const s of m.series) out.push({ kind: v === 'multiples' ? 'line' : 'rect', color: s.color, label: s.label });
+		} else if (m.kind === 'champion') {
+			out.push({ kind: 'dot', color: BLUE, label: 'Scoring rank' }, { kind: 'ring', color: ORANGE, label: 'Record rank' }, { kind: 'rect', color: BLUE, opacity: 0.3, label: 'Top 3 scorers' });
+		} else if (m.kind === 'titles') {
+			if (v === 'race') out.push({ kind: 'dot', color: YELLOW, label: 'A title' });
+		} else if (v === 'ridgeline') {
+			out.push({ kind: 'rect', color: BLUE, opacity: 0.45, label: 'How often each score came up' }, { kind: 'line', color: TEXT_PRIMARY, label: 'Median' });
+			if (live) out.push({ kind: 'line', color: BLUE, opacity: 0.6, label: `${live.seasonYear}*: through week ${live.throughWeek}` });
+		} else {
+			if (m.series.length > 1) for (const s of m.series) out.push({ kind: v === 'bar' && !s.overlay ? 'rect' : 'line', color: s.color, label: s.label });
+			for (const b of m.bands ?? []) {
+				out.push({ kind: 'rect', color: b.neutral ? TEXT_MUTED : m.series[0].color, opacity: b.neutral ? 0.45 : b.opacity * 2.5, label: b.label });
+			}
+		}
+		if (live && (m.kind === 'stacked' || (m.kind === 'series' && v !== 'ridgeline')) && m.id !== 'balance') {
+			out.push({ kind: 'ring', color: BLUE, label: `${live.seasonYear} in progress` });
+		}
+		return out;
+	})();
+
+	let saving = false;
+	let saveError = '';
+	async function saveImage() {
+		const svg = container?.querySelector('svg.viz') as SVGSVGElement | null;
+		if (!svg || saving) return;
+		saving = true;
+		saveError = '';
+		try {
+			const years = rows.map((r) => r.seasonYear as number);
+			const range = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : '';
+			await saveChartImage(svg, {
+				title: currentMetric.name,
+				subtitle: currentMetric.question + (era ? ` ${era.name}, ${era.start}–${era.end}.` : ''),
+				legend: legendItems,
+				footer: `The League · ${range}${showsEvents ? ' · League changes: ' + events.map((e, i) => `(${i + 1}) ${e.season} ${e.labels.join(', ')}`).join('; ') : ''}`,
+				filename: `league-${currentMetric.id}-${selectedView}${era ? `-${era.id}` : ''}.png`,
+				fontFamily: getComputedStyle(container).fontFamily
+			});
+		} catch (e) {
+			saveError = e instanceof Error ? e.message : 'The image could not be saved.';
+		} finally {
+			saving = false;
+		}
+	}
 </script>
 
 <div class="d3-overview-container">
+	<!-- Filters: scope the tiles, chart, insights and table below -->
+	{#if eras.length}
+		<div class="mb-4 flex flex-wrap items-end gap-4">
+			<div>
+				<span class="mb-2 block text-sm font-medium text-slate-300" id="era-label">Seasons</span>
+				<div class="inline-flex flex-wrap rounded-lg border border-slate-600 bg-slate-800/60 p-1" role="group" aria-labelledby="era-label">
+					{#each [{ id: 'all', name: 'All', start: null, end: null }, ...eras] as e}
+						<button
+							type="button"
+							class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {selectedEra === e.id
+								? 'bg-slate-600 text-white'
+								: 'text-slate-300 hover:text-white'}"
+							aria-pressed={selectedEra === e.id}
+							on:click={() => (selectedEra = e.id)}
+						>
+							{e.name.replace(' Era', '')}{#if e.start}<span class="ml-1 text-xs text-slate-400">{e.start}–{String(e.end).slice(2)}</span>{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
+			{#if managerScoped && managerOptions.length}
+				<label>
+					<span class="mb-2 block text-sm font-medium text-slate-300">Highlight a manager</span>
+					<select bind:value={highlightManager} class="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-white">
+						<option value="">Nobody</option>
+						{#each managerOptions as name}
+							<option value={name}>{name}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+		</div>
+	{/if}
+
 	<!-- Headline numbers: what twenty seasons say about this league -->
 	{#if headline}
 		<div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1352,26 +1971,28 @@
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
 			<h3 class="text-lg font-semibold text-white">{currentMetric.name}</h3>
 			<div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
-				{#if currentMetric.kind === 'stacked'}
-					{#each currentMetric.series as s}
-						<span class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-sm" style="background:{s.color}"></span>{s.label}</span>
-					{/each}
-				{:else if currentMetric.series.length > 1}
-					{#each currentMetric.series as s}
-						<span class="flex items-center gap-2"><span class="h-0.5 w-4 rounded" style="background:{s.color}"></span>{s.label}</span>
-					{/each}
-				{:else if currentMetric.bands}
-					{#each currentMetric.bands as b}
-						<span class="flex items-center gap-2"
-							><span class="h-2.5 w-4 rounded-sm" style="background:{currentMetric.series[0].color};opacity:{b.opacity * 2.5}"></span>{b.label}</span
-						>
-					{/each}
-				{/if}
-				{#if live && currentMetric.kind !== 'champion' && currentMetric.kind !== 'titles' && currentMetric.id !== 'balance'}
-					<span class="flex items-center gap-2 text-slate-400"
-						><span class="h-2.5 w-2.5 rounded-full border-2" style="border-color:{BLUE}"></span>{live.seasonYear} in progress</span
-					>
-				{/if}
+				{#each legendItems as item}
+					<span class="flex items-center gap-2">
+						{#if item.kind === 'line'}
+							<span class="h-0.5 w-4 rounded" style="background:{item.color};opacity:{item.opacity ?? 1}"></span>
+						{:else if item.kind === 'rect'}
+							<span class="h-2.5 w-3 rounded-sm" style="background:{item.color};opacity:{item.opacity ?? 1}"></span>
+						{:else if item.kind === 'dot'}
+							<span class="h-2.5 w-2.5 rounded-full" style="background:{item.color}"></span>
+						{:else}
+							<span class="h-2.5 w-2.5 rounded-full border-2" style="border-color:{item.color}"></span>
+						{/if}
+						{item.label}
+					</span>
+				{/each}
+				<button
+					type="button"
+					class="rounded-md border border-slate-600 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-50"
+					disabled={saving}
+					on:click={saveImage}
+				>
+					{saving ? 'Saving…' : 'Save image'}
+				</button>
 				<button
 					type="button"
 					class="rounded-md border border-slate-600 px-2 py-1 text-slate-300 hover:text-white"
@@ -1389,8 +2010,10 @@
 			class="viz-host relative w-full outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
 			tabindex="0"
 			role="group"
-			aria-label="{currentMetric.name}. Use left and right arrow keys to read each season."
+			aria-label="{currentMetric.name}. Use left and right arrow keys to read each season{rowNavLength ? ', up and down for each manager' : ''}."
 			on:keydown={onKey}
+			on:pointermove|capture={(e) => (pointerY = e.clientY - container.getBoundingClientRect().top)}
+			on:pointerleave={() => (pointerY = null)}
 			on:blur={() => keyboardHide()}
 		>
 			<div bind:this={tooltipEl} class="tooltip" role="status" aria-live="polite"></div>
@@ -1400,7 +2023,23 @@
 			<div class="flex h-64 items-center justify-center text-slate-400">Loading league data...</div>
 		{/if}
 
-		{#if showTable && rows.length}
+		{#if saveError}
+			<p class="mt-2 text-sm text-rose-300" role="alert">{saveError}</p>
+		{/if}
+
+		{#if showsEvents && data}
+			<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+				<span class="font-medium text-slate-300">League changes</span>
+				{#each events as e, i}
+					<span class="flex items-center gap-1.5">
+						<span class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-500 text-[10px] font-semibold text-slate-300">{i + 1}</span>
+						{e.season}: {e.labels.join(', ')}
+					</span>
+				{/each}
+			</div>
+		{/if}
+
+		{#if showTable && tableRows.length}
 			<div class="mt-4 max-h-80 overflow-auto rounded-lg border border-slate-700/60">
 				<table class="w-full text-sm">
 					<thead class="sticky top-0 bg-slate-800 text-left text-xs uppercase tracking-wide text-slate-400">
@@ -1410,8 +2049,8 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each rows as r}
-							<tr class="border-t border-slate-700/40 text-slate-200">
+						{#each tableRows as r}
+							<tr class="border-t border-slate-700/40 text-slate-200" class:bg-slate-700={highlightManager && r.champion?.manager === highlightManager}>
 								<td class="px-3 py-1.5"
 									>{r.seasonYear}{#if isLive(r.seasonYear)}<span class="ml-1 text-xs text-slate-400">(in progress)</span>{/if}</td
 								>
@@ -1448,6 +2087,10 @@
 		display: block;
 		overflow: visible;
 		font-family: inherit;
+	}
+	/* A hovered season's bars and marks lift. */
+	.viz-host :global(.hot) {
+		filter: brightness(1.35);
 	}
 	.tooltip {
 		display: none;

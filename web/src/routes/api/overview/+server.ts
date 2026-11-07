@@ -4,7 +4,10 @@ import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import {
 	balanceOf,
+	coinFlipBand,
+	leagueEvents,
 	recordPersistence,
+	splitEras,
 	recordRank,
 	rollingMean,
 	scoringRank,
@@ -24,7 +27,7 @@ const rows = async (q: string) => Array.from(await db.execute(sql.raw(q))) as an
  * needs a finished season (balance, champions, the headlines).
  */
 async function loadTrends() {
-	const [gameRows, champRows, teamRows, positionRows, draftedRows, moveRows, tradeRows, leagueRows] =
+	const [gameRows, champRows, teamRows, positionRows, draftedRows, moveRows, tradeRows, leagueRows, scoreRows, faabRows] =
 		await Promise.all([
 			rows(`
 				SELECT fm.season_year, fm.team1_key, fm.team2_key, fm.team1_points, fm.team2_points,
@@ -72,7 +75,15 @@ async function loadTrends() {
 				SELECT season_year, COUNT(DISTINCT split_part(source_transaction_id, '_', 1)) AS trades
 				FROM edw.fact_transaction WHERE transaction_type = 'trade' GROUP BY 1
 			`),
-			rows(`SELECT season_year, num_teams FROM edw.dim_league`)
+			rows(`SELECT season_year, num_teams, playoff_start_week, num_playoff_teams FROM edw.dim_league`),
+			// Every team score in every game, as the scoring chart counts them.
+			rows(`
+				SELECT fm.season_year, ROUND(v.points::numeric, 1) AS points
+				FROM edw.fact_matchup fm
+				CROSS JOIN LATERAL (VALUES (fm.team1_points), (fm.team2_points)) AS v(points)
+				WHERE v.points > 0
+			`),
+			rows(`SELECT MIN(season_year) AS season FROM edw.fact_transaction WHERE faab_bid > 0`)
 		]);
 
 	const games: RegularGame[] = gameRows.map((g) => ({
@@ -142,6 +153,16 @@ async function loadTrends() {
 			trades: trades.get(season) ?? 0
 		};
 	});
+	// What a league of coin flips would give for each season's teams and games.
+	const bands = new Map<string, { lo: number; hi: number }>();
+	for (const s of perSeason) {
+		if (s.nollScully == null || !s.gamesPerTeam) continue;
+		const games = Math.round(s.gamesPerTeam);
+		const key = `${s.teams}|${games}`;
+		if (!bands.has(key)) bands.set(key, coinFlipBand(s.teams, games));
+		const band = bands.get(key)!;
+		Object.assign(s, { chanceLo: band.lo, chanceHi: band.hi });
+	}
 	const rolling = rollingMean(perSeason.map((s) => s.nollScully), 5);
 	perSeason.forEach((s, i) => Object.assign(s, { nollScullyRolling: s.nollScully == null ? null : rolling[i] }));
 
@@ -155,11 +176,38 @@ async function loadTrends() {
 		}
 	}
 	const done = perSeason.filter((s) => !s.inProgress);
-	const skill = done.map((s) => s.skillShare).filter((v): v is number => v != null);
-	const champs = done.filter((s) => s.champion?.pointsRank != null);
-	const drafted = draftedRows.filter((d) => finished(Number(d.seasonYear)));
-	const draftedPoints = drafted.reduce((a, d) => a + Number(d.draftedPoints ?? 0), 0);
-	const allPoints = drafted.reduce((a, d) => a + Number(d.allPoints ?? 0), 0);
+
+	/** The headline numbers over finished seasons, optionally one era's. */
+	const headlineFor = (start = -Infinity, end = Infinity) => {
+		const inRange = (season: number) => season >= start && season <= end;
+		const seasons = done.filter((s) => inRange(s.seasonYear));
+		const skill = seasons.map((s) => s.skillShare).filter((v): v is number => v != null);
+		const champs = seasons.filter((s) => s.champion?.pointsRank != null);
+		const drafted = draftedRows.filter((d) => finished(Number(d.seasonYear)) && inRange(Number(d.seasonYear)));
+		const draftedPoints = drafted.reduce((a, d) => a + Number(d.draftedPoints ?? 0), 0);
+		const allPoints = drafted.reduce((a, d) => a + Number(d.allPoints ?? 0), 0);
+		// Pairs of consecutive seasons, both inside the range.
+		const pairs = new Map([...byManagerSeason].filter(([key]) => inRange(Number(key.split('|')[1]))));
+		const balanced = seasons.filter((s: any) => s.chanceHi != null);
+		return {
+			recordPersistence: recordPersistence(pairs),
+			skillShare: skill.length ? skill.reduce((a, b) => a + b, 0) / skill.length : null,
+			championTopThree: {
+				count: champs.filter((s) => s.champion!.pointsRank! <= 3).length,
+				seasons: champs.length
+			},
+			topScorerTitles: champs.filter((s) => s.champion!.pointsRank === 1).length,
+			bestRecordTitles: champs.filter((s) => s.champion!.recordRank === 1).length,
+			// Seasons whose records spread wider than 95% of coin-flip seasons.
+			beyondChance: {
+				count: balanced.filter((s: any) => s.nollScully > s.chanceHi).length,
+				seasons: balanced.length
+			},
+			draftedShare: allPoints ? draftedPoints / allPoints : null,
+			seasons: seasons.length
+		};
+	};
+	const eras = splitEras(perSeason.map((s) => s.seasonYear));
 
 	// Who reached the final and who won it, one row per finalist: titles,
 	// finals lost, and the finished seasons they played (so the chart can tell
@@ -187,17 +235,26 @@ async function loadTrends() {
 					b.finals.length - a.finals.length ||
 					Math.max(0, ...b.years, ...b.finals) - Math.max(0, ...a.years, ...a.finals)
 			),
-		headline: {
-			recordPersistence: recordPersistence(byManagerSeason),
-			skillShare: skill.length ? skill.reduce((a, b) => a + b, 0) / skill.length : null,
-			championTopThree: {
-				count: champs.filter((s) => s.champion!.pointsRank! <= 3).length,
-				seasons: champs.length
-			},
-			topScorerTitles: champs.filter((s) => s.champion!.pointsRank === 1).length,
-			draftedShare: allPoints ? draftedPoints / allPoints : null,
-			seasons: done.length
-		}
+		headline: headlineFor(),
+		eras: eras.map((e) => ({ ...e, headline: headlineFor(e.start, e.end) })),
+		// Seasons where the league's stored settings changed.
+		events: leagueEvents(
+			leagueRows.map((l) => ({
+				season: Number(l.seasonYear),
+				teams: Number(l.numTeams),
+				regularWeeks: l.playoffStartWeek == null ? null : Number(l.playoffStartWeek) - 1,
+				playoffTeams: l.numPlayoffTeams == null ? null : Number(l.numPlayoffTeams)
+			})),
+			faabRows[0]?.season == null ? null : Number(faabRows[0].season)
+		),
+		// Every team score by season, for the distribution view.
+		scores: Object.fromEntries(
+			[...scoreRows.reduce((m, r) => {
+				const season = Number(r.seasonYear);
+				m.set(season, [...(m.get(season) ?? []), Number(r.points)]);
+				return m;
+			}, new Map<number, number[]>())]
+		)
 	};
 }
 
