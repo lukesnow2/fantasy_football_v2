@@ -43,7 +43,10 @@
 		<!-- Best and Worst Picks -->
 		{#if analytics.bestWorstPicks?.length > 0}
 			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-				<h3 class="text-xl font-bold text-white mb-4">🏆 Best & Worst Picks</h3>
+				<h3 class="text-xl font-bold text-white mb-1">🏆 Best & Worst Picks</h3>
+				<p class="mb-4 text-sm text-slate-400">
+					Judged against what players at the same position, taken around the same round, have scored in this league. Busts are picks expected to beat an average pick, so late kickers and defenses don't count unless they were reached for early.
+				</p>
 				
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 					<!-- Best Picks -->
@@ -54,10 +57,17 @@
 								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{pick.playerName}</span>
-										<span class="text-xs bg-green-500 text-black px-2 py-1 rounded">#{pick.overallPick}</span>
+										<span class="text-xs bg-green-500 text-black px-2 py-1 rounded">R{pick.roundNumber} · #{pick.overallPick}</span>
 									</div>
 									<div class="text-sm text-slate-300">{pick.primaryPosition} • {pick.managerName}</div>
-									<div class="text-lg font-bold text-green-400">{parseFloat(pick.seasonPoints || 0).toFixed(1)} pts</div>
+									<div class="flex items-baseline justify-between gap-3">
+										<span class="text-lg font-bold text-green-400">{parseFloat(pick.seasonPoints || 0).toFixed(1)} pts</span>
+										{#if pick.expectedPoints != null}
+											<span class="text-sm text-slate-400 tabular-nums">
+												expected {pick.expectedPoints.toFixed(0)} · <span class="font-semibold text-green-400">{pick.valueOverExpected > 0 ? '+' : ''}{pick.valueOverExpected.toFixed(0)}</span>
+											</span>
+										{/if}
+									</div>
 								</div>
 							{/each}
 						</div>
@@ -71,10 +81,17 @@
 								<div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
 									<div class="flex items-center justify-between mb-2">
 										<span class="font-bold text-white">{pick.playerName}</span>
-										<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">#{pick.overallPick}</span>
+										<span class="text-xs bg-red-500 text-white px-2 py-1 rounded">R{pick.roundNumber} · #{pick.overallPick}</span>
 									</div>
 									<div class="text-sm text-slate-300">{pick.primaryPosition} • {pick.managerName}</div>
-									<div class="text-lg font-bold text-red-400">{parseFloat(pick.seasonPoints || 0).toFixed(1)} pts</div>
+									<div class="flex items-baseline justify-between gap-3">
+										<span class="text-lg font-bold text-red-400">{parseFloat(pick.seasonPoints || 0).toFixed(1)} pts</span>
+										{#if pick.expectedPoints != null}
+											<span class="text-sm text-slate-400 tabular-nums">
+												expected {pick.expectedPoints.toFixed(0)} · <span class="font-semibold text-red-400">{pick.valueOverExpected > 0 ? '+' : ''}{pick.valueOverExpected.toFixed(0)}</span>
+											</span>
+										{/if}
+									</div>
 								</div>
 							{/each}
 						</div>

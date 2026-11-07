@@ -27,29 +27,17 @@
 		return 'text-red-400';
 	}
 
-	// Data-driven expected points per draft slot (average across all drafts), so a pick's
-	// value is judged against how that slot actually performs historically — not a
-	// fabricated fixed curve. Returns expectedAt(pickNum) -> avg points (0 if unknown).
-	function buildSlotBaseline(drafts: any[]) {
-		const slotTotals: Record<number, { sum: number; n: number }> = {};
-		(drafts || []).forEach((p: any) => {
-			const n = p.overallPick;
-			const pts = parseFloat(p.seasonPoints || 0);
-			if (!slotTotals[n]) slotTotals[n] = { sum: 0, n: 0 };
-			slotTotals[n].sum += pts;
-			slotTotals[n].n++;
-		});
-		return (pickNum: number) =>
-			slotTotals[pickNum] && slotTotals[pickNum].n > 0
-				? slotTotals[pickNum].sum / slotTotals[pickNum].n
-				: 0;
-	}
+	// What each pick was expected to score: from the API, which judges it against
+	// players at the same position taken around the same round in this league's
+	// history ($lib/draft-value). It used to be computed here as the average of
+	// every pick at the same overall slot, position-blind, so QBs were always
+	// steals and late kickers that were cut always busts.
+	const expectedOf = (pick: any): number => Number(pick.expectedPoints ?? 0);
 
 	// Calculate comprehensive manager analytics
 	function getManagerAnalytics(drafts: any[]) {
 		if (!drafts?.length) return [];
 
-		const expectedAt = buildSlotBaseline(drafts);
 
 		const managerStats: any = {};
 
@@ -78,17 +66,18 @@
 			
 			// Steals/busts/hits judged against the slot's historical average.
 			const steals = manager.picks.filter((p: any) => {
-				const expected = expectedAt(p.pickNum);
+				const expected = expectedOf(p.pick);
 				return expected > 0 && p.points > expected * 1.5;
 			}).length;
 
 			const busts = manager.picks.filter((p: any) => {
-				const expected = expectedAt(p.pickNum);
-				return expected > 0 && p.points < expected * 0.5;
+				const expected = expectedOf(p.pick);
+				// Only picks the draft counted on (expected to beat an average pick).
+				return p.pick.highExpectation && expected > 0 && p.points < expected * 0.5;
 			}).length;
 
 			const hits = manager.picks.filter((p: any) => {
-				const expected = expectedAt(p.pickNum);
+				const expected = expectedOf(p.pick);
 				return expected > 0 && p.points >= expected * 0.8;
 			}).length;
 			
@@ -151,13 +140,12 @@
 	function getBestValueHunter(drafts: any[]) {
 		if (!drafts?.length) return null;
 
-		const expectedAt = buildSlotBaseline(drafts);
 		const managerStats: any = {};
 
 		drafts.forEach(pick => {
 			const manager = pick.managerName;
 			const points = parseFloat(pick.seasonPoints || 0);
-			const expected = expectedAt(pick.overallPick);
+			const expected = expectedOf(pick);
 			const value = expected > 0 ? points - expected : 0;
 
 			if (!managerStats[manager]) {
@@ -182,13 +170,12 @@
 	function getMostConsistent(drafts: any[]) {
 		if (!drafts?.length) return null;
 
-		const expectedAt = buildSlotBaseline(drafts);
 		const managerStats: any = {};
 
 		drafts.forEach(pick => {
 			const manager = pick.managerName;
 			const points = parseFloat(pick.seasonPoints || 0);
-			const expected = expectedAt(pick.overallPick);
+			const expected = expectedOf(pick);
 
 			if (!managerStats[manager]) {
 				managerStats[manager] = { name: manager, hits: 0, total: 0 };
@@ -403,10 +390,10 @@
 						</div>
 					</div>
 
-					<!-- Draft Value: value over positional replacement (VOR) -->
+					<!-- Draft Value: points over what the pick's position and round were expected to score -->
 					{#if draftValue}
 						<div class="bg-gray-700 p-4 rounded-lg mt-6">
-							<h4 class="text-lg font-semibold text-white mb-1">Draft Value (Value Over Replacement)</h4>
+							<h4 class="text-lg font-semibold text-white mb-1">Draft Value (points over expectation)</h4>
 							<p class="text-xs text-gray-400 mb-4">{draftValue.methodology}</p>
 
 							<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -419,14 +406,14 @@
 													{p.playerName}
 													<span class="text-gray-400">· {p.position} · {p.seasonYear} · R{p.roundNumber}</span>
 												</span>
-												<span class="text-green-400 font-bold ml-2 whitespace-nowrap">+{p.vor}</span>
+												<span class="text-green-400 font-bold ml-2 whitespace-nowrap">+{p.valueOverExpected}</span>
 											</div>
 										{/each}
 									</div>
 								</div>
 
 								<div>
-									<h5 class="text-sm font-semibold text-red-400 mb-2">Biggest Busts (rounds 1–5)</h5>
+									<h5 class="text-sm font-semibold text-red-400 mb-2">Biggest Busts</h5>
 									<div class="space-y-1">
 										{#each draftValue.biggestBusts.slice(0, 8) as p}
 											<div class="flex items-center justify-between text-sm bg-gray-600/50 rounded px-3 py-1.5">
@@ -434,7 +421,7 @@
 													{p.playerName}
 													<span class="text-gray-400">· {p.position} · {p.seasonYear} · R{p.roundNumber}</span>
 												</span>
-												<span class="text-red-400 font-bold ml-2 whitespace-nowrap">{p.vor}</span>
+												<span class="text-red-400 font-bold ml-2 whitespace-nowrap">{p.valueOverExpected}</span>
 											</div>
 										{/each}
 									</div>
@@ -442,12 +429,12 @@
 							</div>
 
 							{#if draftValue.byManager?.length}
-								<h5 class="text-sm font-semibold text-blue-400 mt-6 mb-2">Best Drafters (avg VOR per pick)</h5>
+								<h5 class="text-sm font-semibold text-blue-400 mt-6 mb-2">Best Drafters (avg points over expectation per pick)</h5>
 								<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
 									{#each draftValue.byManager.slice(0, 5) as m}
 										<div class="bg-gray-600/50 rounded p-3 text-center">
 											<div class="font-bold text-white truncate">{m.managerName}</div>
-											<div class="text-blue-400 font-bold">{m.avgVor > 0 ? '+' : ''}{m.avgVor}</div>
+											<div class="text-blue-400 font-bold">{m.avgValue > 0 ? '+' : ''}{m.avgValue}</div>
 											<div class="text-xs text-gray-400">{m.picks} picks</div>
 										</div>
 									{/each}
