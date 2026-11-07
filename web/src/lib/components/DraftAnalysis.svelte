@@ -44,6 +44,11 @@
 		{#if analytics.bestWorstPicks?.length > 0}
 			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
 				<h3 class="text-xl font-bold text-white mb-1">🏆 Best & Worst Picks</h3>
+				{#if analytics.seasonInProgress}
+					<p class="mb-2 text-sm font-medium text-amber-300">
+						This season is still being played: these are judged on points so far, and an early injury or slow start can still turn around.
+					</p>
+				{/if}
 				<p class="mb-4 text-sm text-slate-400">
 					Judged against what players at the same position, taken around the same round, have scored in this league. Busts are picks expected to beat an average pick, so late kickers and defenses don't count unless they were reached for early.
 				</p>

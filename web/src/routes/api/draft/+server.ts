@@ -32,7 +32,7 @@ async function loadValuedPicks() {
 		included: r.includeInAnalysis === true
 	}));
 	const done = new Set((Array.from(doneRows) as any[]).map((r) => Number(r.seasonYear)));
-	return valueDraftPicks(picks, done);
+	return { valued: valueDraftPicks(picks, done), completedSeasons: done };
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -81,10 +81,12 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY fd.season_year DESC, fd.overall_pick ASC
 		`;
 
-		const [draftResult, valued] = await Promise.all([
+		const [draftResult, { valued, completedSeasons }] = await Promise.all([
 			db.execute(sql.raw(draftQuery)),
 			loadValuedPicks()
 		]);
+		// A season still being played is judged on its points so far.
+		data.seasonInProgress = season !== 'all' && !completedSeasons.has(parseInt(season));
 		const valueOf = new Map(valued.map((p) => [`${p.seasonYear}:${p.overallPick}`, p]));
 		const shown = valued.filter(
 			(p) => p.included && (season === 'all' || p.seasonYear === parseInt(season))
@@ -327,7 +329,17 @@ export const GET: RequestHandler = async ({ url }) => {
 				playerName: pick.playerName || pick.player_name,
 				primaryPosition: pick.primaryPosition || pick.primary_position,
 				nflTeam: pick.nflTeam || pick.nfl_team,
-				numTeams: pick.numTeams || pick.num_teams
+				numTeams: pick.numTeams || pick.num_teams,
+				...(() => {
+					const v = valueOf.get(`${parseInt(season)}:${pick.overallPick ?? pick.overall_pick}`);
+					return v
+						? {
+								expectedPoints: round1(v.expectedPoints),
+								valueOverExpected: round1(v.valueOverExpected),
+								highExpectation: v.highExpectation
+							}
+						: { expectedPoints: null, valueOverExpected: null, highExpectation: false };
+				})()
 			}));
 		}
 

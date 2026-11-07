@@ -64,7 +64,9 @@
 			const avgPoints = manager.totalPoints / manager.totalPicks;
 			const avgPick = manager.picks.reduce((sum: number, p: any) => sum + p.pickNum, 0) / manager.picks.length;
 			
-			// Steals/busts/hits judged against the slot's historical average.
+			// Steals/busts/hits judged against what the pick's position and round were
+			// expected to score (expectedOf); busts only among picks expected to beat
+			// an average pick.
 			const steals = manager.picks.filter((p: any) => {
 				const expected = expectedOf(p.pick);
 				return expected > 0 && p.points > expected * 1.5;
