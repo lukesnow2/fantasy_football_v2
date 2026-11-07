@@ -5,6 +5,7 @@
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
 	import MetricHelp from '$lib/components/MetricHelp.svelte';
 	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
+	import { splitEras } from '$lib/league-trends';
 	
 	let h2hData: any = null;
 	let overviewData: any = null;
@@ -254,17 +255,10 @@
 			})
 			.sort((a: any, b: any) => a.year - b.year);
 
-		// Three contiguous buckets, front-loading the remainder so earlier eras absorb it.
-		const n = seasons.length;
-		const base = Math.floor(n / 3);
-		const rem = n % 3;
-		const sizes = [base + (rem > 0 ? 1 : 0), base + (rem > 1 ? 1 : 0), base];
-		const names = ['Early Era', 'Middle Era', 'Modern Era'];
+		// Three contiguous eras, the same split the trends chart's era buttons use.
 		const out: any[] = [];
-		let i = 0;
-		for (let e = 0; e < 3; e++) {
-			const slice = seasons.slice(i, i + sizes[e]);
-			i += sizes[e];
+		for (const era of splitEras(seasons.map((s: any) => s.year))) {
+			const slice = seasons.filter((s: any) => s.year >= era.start && s.year <= era.end);
 			if (!slice.length) continue;
 
 			const titles = new Map<string, number>();
@@ -275,7 +269,7 @@
 			const top = ranked[0];
 
 			out.push({
-				name: names[e],
+				name: era.name,
 				range: `${slice[0].year}–${slice[slice.length - 1].year}`,
 				seasonCount: slice.length,
 				avgScore: (slice.reduce((s: number, x: any) => s + x.score, 0) / slice.length).toFixed(1),
