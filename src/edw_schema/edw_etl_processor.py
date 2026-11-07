@@ -98,9 +98,34 @@ class ETLStats:
 # extracted before migration 011 carry NULLs, and re-publishing one must not
 # wipe what the migration backfilled from its bracket.
 LEAGUE_FORMAT_COLUMNS = ('end_week', 'playoff_start_week', 'num_playoff_teams', 'trade_end_date')
+# The rest of the season's settings (migration 012), under the same rule: raw
+# rows loaded before it carry NULLs. scoring_type and draft_type used to be
+# placeholders overwritten on every load; they are Yahoo's values now.
+LEAGUE_SETTINGS_COLUMNS = (
+    'scoring_type', 'draft_type', 'start_date', 'end_date', 'previous_league_id',
+    'is_auction_draft', 'draft_time', 'uses_playoff', 'num_playoff_consolation_teams',
+    'uses_playoff_reseeding', 'has_multiweek_championship', 'uses_median_score',
+    'waiver_type', 'waiver_rule', 'waiver_time', 'uses_faab', 'trade_ratify_type',
+    'trade_reject_time', 'post_draft_players', 'uses_fractional_points',
+    'uses_negative_points',
+)
 LEAGUE_FORMAT_SET = [
-    f'{c} = COALESCE(EXCLUDED.{c}, dim_league.{c})' for c in LEAGUE_FORMAT_COLUMNS
+    f'{c} = COALESCE(EXCLUDED.{c}, dim_league.{c})'
+    for c in (*LEAGUE_FORMAT_COLUMNS, *LEAGUE_SETTINGS_COLUMNS)
 ]
+
+# A league-season's scoring rules, bonuses and lineup: edw table -> (raw
+# table, columns copied). Keyed by league_id, not league_key, so a full
+# rebuild that renumbers dim_league leaves them valid.
+LEAGUE_SETTINGS_TABLES = {
+    'dim_scoring_rule': ('league_scoring',
+                         ['stat_id', 'stat_name', 'display_name', 'stat_group',
+                          'position_type', 'points', 'is_display_only', 'sort_order']),
+    'dim_scoring_bonus': ('league_scoring_bonuses', ['stat_id', 'target', 'points']),
+    'dim_roster_slot': ('league_roster_slots',
+                        ['position', 'position_type', 'slot_count', 'is_starting',
+                         'sort_order']),
+}
 
 # Used only when a league's format is neither stored nor visible in its games
 # (a season in progress loaded before migration 011): the league's format
@@ -132,11 +157,10 @@ DIMENSION_UPSERTS = {
         None),
     'dim_league': (
         ['league_id', 'league_name', 'season_year', 'num_teams', 'league_type',
-         'scoring_type', 'draft_type', *LEAGUE_FORMAT_COLUMNS,
+         *LEAGUE_FORMAT_COLUMNS, *LEAGUE_SETTINGS_COLUMNS,
          'is_active', 'valid_from', 'valid_to'],
         'league_id, season_year',
-        ['league_name', 'num_teams', 'league_type', 'scoring_type', 'draft_type',
-         'is_active', 'valid_to'],
+        ['league_name', 'num_teams', 'league_type', 'is_active', 'valid_to'],
         LEAGUE_FORMAT_SET),
     'dim_team': (
         ['team_id', 'league_key', 'team_name', 'manager_name', 'manager_id',
@@ -228,6 +252,13 @@ class EdwEtlProcessor:
     # how a new season's matchups (no dim_week rows) and rookies' statistics
     # (no dim_player rows) vanished while the refresh reported success.
     EDW_PROCESSING_STRATEGIES = {
+        'league_settings': {
+            # dim_scoring_rule stands for all three settings tables, which
+            # load_league_settings_tables replaces together.
+            'triggers_refresh': ['dim_league', 'dim_scoring_rule'],
+            'refresh_type': 'INCREMENTAL',
+            'depends_on': 'operational_league_settings'
+        },
         'leagues': {
             'triggers_refresh': ['dim_season', 'dim_week', 'dim_league',
                                  'mart_league_summary'],
@@ -433,7 +464,8 @@ class EdwEtlProcessor:
             logger.info(f"🔗 Using database engine: {self.engine.url}")
             
             self.data = {}
-            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics']
+            operational_tables = ['leagues', 'teams', 'rosters', 'matchups', 'transactions', 'draft_picks', 'statistics',
+                                  *(raw for raw, _ in LEAGUE_SETTINGS_TABLES.values())]
             
             with self.engine.connect() as conn:
                 logger.info("🔌 Database connection established successfully")
@@ -583,8 +615,11 @@ class EdwEtlProcessor:
     def update_metadata(self, table_name: str) -> None:
         """Update metadata after processing a table"""
         try:
+            # 'league_settings' names three raw tables; its scoring rules
+            # stand for the set.
+            source = 'league_scoring' if table_name == 'league_settings' else table_name
             with self.engine.connect() as conn:
-                current_count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).fetchone()[0]
+                current_count = conn.execute(text(f"SELECT COUNT(*) FROM {source}")).fetchone()[0]
                 
                 upsert_metadata = """
                     INSERT INTO edw.edw_metadata (table_name, last_processed_at, record_count, checksum)
@@ -1017,12 +1052,14 @@ class EdwEtlProcessor:
                 'season_year': season_year,
                 'num_teams': league['num_teams'],
                 'league_type': league.get('league_type', 'private'),
-                'scoring_type': 'standard',  # Default, could be extracted from settings
-                'draft_type': 'snake',  # Default, could be extracted from draft data
                 'end_week': _positive_int(league.get('end_week')),
                 'playoff_start_week': _positive_int(league.get('playoff_start_week')),
                 'num_playoff_teams': _positive_int(league.get('num_playoff_teams')),
                 'trade_end_date': league.get('trade_end_date') or None,
+                # None when the raw row predates migration 012; the upsert
+                # then keeps what is stored.
+                **{c: (None if league.get(c) == '' else league.get(c))
+                   for c in LEAGUE_SETTINGS_COLUMNS},
                 'is_active': True,
                 'valid_from': datetime.now(),
                 'valid_to': datetime(9999, 12, 31)
@@ -2766,26 +2803,13 @@ class EdwEtlProcessor:
             # Load leagues
             leagues = self.transform_leagues()
             for league in leagues:
-                result = self.session.execute(text("""
-                    INSERT INTO edw.dim_league (league_id, league_name, season_year, num_teams,
-                                          league_type, scoring_type, draft_type,
-                                          end_week, playoff_start_week, num_playoff_teams,
-                                          trade_end_date, is_active, valid_from, valid_to)
-                    VALUES (:league_id, :league_name, :season_year, :num_teams,
-                            :league_type, :scoring_type, :draft_type,
-                            :end_week, :playoff_start_week, :num_playoff_teams,
-                            :trade_end_date, :is_active, :valid_from, :valid_to)
-                    ON CONFLICT (league_id, season_year) DO UPDATE SET
-                        league_name = EXCLUDED.league_name,
-                        num_teams = EXCLUDED.num_teams,
-                        league_type = EXCLUDED.league_type,
-                        scoring_type = EXCLUDED.scoring_type,
-                        draft_type = EXCLUDED.draft_type,
-                        is_active = EXCLUDED.is_active,
-                        valid_to = EXCLUDED.valid_to,
-                        """ + ',\n                        '.join(LEAGUE_FORMAT_SET) + """
-                    RETURNING league_key, league_id
-                """), league)
+                columns, conflict, update_cols, extra_set = DIMENSION_UPSERTS['dim_league']
+                result = self.session.execute(text(
+                    f"INSERT INTO edw.dim_league ({', '.join(columns)}) "
+                    f"VALUES ({', '.join(':' + c for c in columns)}) "
+                    f"ON CONFLICT ({conflict}) DO UPDATE SET "
+                    f"{upsert_set(update_cols, extra_set)} "
+                    "RETURNING league_key, league_id"), league)
                 
                 row = result.fetchone()
                 self.dim_mappings['league_keys'][league['league_id']] = row[0]
@@ -2894,6 +2918,9 @@ class EdwEtlProcessor:
             logger.info(f"  ✅ Teams: {len(teams)} processed")
             
             self.session.commit()
+
+            if not self.load_league_settings_tables():
+                return False
             logger.info("✅ All dimensions loaded successfully")
             
             # Track refreshed dimension tables for smart view management
@@ -3172,6 +3199,9 @@ class EdwEtlProcessor:
                 'dim_manager': self.transform_managers,
             }
 
+            if table_name in LEAGUE_SETTINGS_TABLES:
+                return self.load_league_settings_tables()
+
             extractor = extractors.get(table_name)
             if extractor is None:
                 logger.warning(f"⚠️ No dimension extractor for {table_name}")
@@ -3193,6 +3223,41 @@ class EdwEtlProcessor:
             logger.error(f"❌ Failed to process dimension {table_name}: {e}")
             return False
     
+    def load_league_settings_tables(self) -> bool:
+        """Replace the scoring rules, bonuses and lineup of every league whose
+        settings the raw layer holds, in one transaction.
+
+        A league is replaced only when raw holds scoring or lineup rows for
+        it; one with none (not yet fetched) keeps what the warehouse has, as
+        an empty fetch never deletes. Leagues of record only, like dim_league.
+        """
+        try:
+            seasons = {}
+            for league in self.data.get('leagues', []):
+                season = _positive_int(league.get('season'))
+                if season and self.is_league_of_record(league['league_id'], season):
+                    seasons[league['league_id']] = season
+            fetched = sorted({r['league_id'] for raw in ('league_scoring', 'league_roster_slots')
+                              for r in self.data.get(raw, []) if r['league_id'] in seasons})
+            if not fetched:
+                logger.info("📊 No league settings to load")
+                return True
+            with self.engine.begin() as conn:
+                for table, (raw, cols) in LEAGUE_SETTINGS_TABLES.items():
+                    conn.execute(text(f"DELETE FROM edw.{table} WHERE league_id = ANY(:l)"),
+                                 {'l': fetched})
+                    rows = [(r['league_id'], seasons[r['league_id']], *(r[c] for c in cols))
+                            for r in self.data.get(raw, []) if r['league_id'] in fetched]
+                    if rows:
+                        insert_batched(conn, f'edw.{table}',
+                                       ['league_id', 'season_year', *cols], rows, '')
+                    logger.info(f"  ✅ {table}: {len(rows)} rows for {len(fetched)} leagues")
+            self.refreshed_tables.update(LEAGUE_SETTINGS_TABLES)
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to load league settings: {e}")
+            return False
+
     def load_dimension_table(self, table_name: str, data: List[Dict]) -> bool:
         """Load data into dimension table with proper upsert logic"""
         try:

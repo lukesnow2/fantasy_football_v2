@@ -39,11 +39,32 @@ CONSTRAINT_DDL = [
     "CREATE UNIQUE INDEX IF NOT EXISTS ux_draft_picks_id ON public.draft_picks (draft_pick_id)",
 ]
 
-# end_week and the season format are refreshed on every load: a commissioner
-# can change them mid-season, and the odds, standings and status read them.
+# Settings beyond the playoff format (migration 012), as parsed by
+# src.extractors.league_settings.
+LEAGUE_SETTINGS_COLS = [
+    'start_date', 'end_date', 'previous_league_id', 'scoring_type', 'draft_type',
+    'is_auction_draft', 'draft_time', 'uses_playoff', 'num_playoff_consolation_teams',
+    'uses_playoff_reseeding', 'has_multiweek_championship', 'uses_median_score',
+    'waiver_type', 'waiver_rule', 'waiver_time', 'uses_faab', 'trade_ratify_type',
+    'trade_reject_time', 'post_draft_players', 'uses_fractional_points',
+    'uses_negative_points',
+]
+
+# end_week and the season's settings are refreshed on every load: a
+# commissioner can change them mid-season, and the odds, standings and status
+# read them.
 LEAGUE_UPDATE_COLS = ['name', 'current_week', 'end_week', 'draft_status',
                       'playoff_start_week', 'num_playoff_teams', 'trade_end_date',
-                      'extracted_at']
+                      *LEAGUE_SETTINGS_COLS, 'extracted_at']
+
+# A league-season's scoring rules, bonuses and lineup slots: raw-data key ->
+# table. Each is a complete list per league, so a fetch replaces the league's
+# rows outright (a rule the commissioner removed must disappear).
+LEAGUE_SETTINGS_TABLES = {
+    'scoring': 'league_scoring',
+    'bonuses': 'league_scoring_bonuses',
+    'roster_slots': 'league_roster_slots',
+}
 TEAM_UPDATE_COLS = ['name', 'manager_name', 'wins', 'losses', 'ties',
                     'points_for', 'points_against', 'playoff_seed',
                     'waiver_priority', 'faab_balance', 'extracted_at']
@@ -246,6 +267,32 @@ def append_only(conn, table: str, rows: List[dict], conflict_cols: str,
     return len(returned)
 
 
+def replace_league_settings(conn, league_id: str, settings: Dict[str, List[dict]],
+                            extracted_at=None) -> int:
+    """Replace one league's scoring rules, bonuses and roster slots.
+
+    `settings` is parse_league_settings' output (its 'league' part goes to
+    public.leagues through the ordinary upsert). All three tables are
+    replaced together on the caller's transaction. A response with no
+    scoring rules and no lineup is a failed fetch, not a league without
+    rules: nothing is deleted, as with an empty week (see load_delta).
+
+    Returns the number of rows written.
+    """
+    if not settings.get('scoring') and not settings.get('roster_slots'):
+        logger.warning("%s: settings came back without scoring or lineup - "
+                       "keeping the settings already held", league_id)
+        return 0
+    written = 0
+    for key, table in LEAGUE_SETTINGS_TABLES.items():
+        rows = [{**r, 'league_id': league_id, 'extracted_at': extracted_at}
+                for r in settings.get(key, [])]
+        conn.execute(text(f'DELETE FROM public.{table} WHERE league_id = :l'),
+                     {'l': league_id})
+        written += _insert_rows(conn, table, rows, '') if rows else 0
+    return written
+
+
 def _keep_captured_teams(conn, league_id: str, weeks: List[int], rows: List[dict]) -> None:
     """Keep the NFL team a roster row was first loaded with.
 
@@ -305,6 +352,10 @@ def load_delta(conn, state, league_id: str, season: int, weeks: List[int],
     if 'teams' in data:
         counts['teams'] = upsert_dimension(
             conn, 'teams', 'team_id', data['teams'], TEAM_UPDATE_COLS)
+    if 'league_settings' in data:
+        counts['league_settings'] = replace_league_settings(
+            conn, league_id, data['league_settings'],
+            extracted_at=data['league_settings'].get('extracted_at'))
 
     # Rows per entity, so each period records its own counts rather than
     # the run's totals (and a week with genuinely no rows is visible).

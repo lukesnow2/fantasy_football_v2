@@ -47,6 +47,26 @@ CREATE TABLE dim_league (
     playoff_start_week INTEGER,    -- regular season is the weeks before this
     num_playoff_teams INTEGER,
     trade_end_date DATE,           -- trade deadline; NULL for seasons before migration 011
+    -- The rest of Yahoo's league settings (migration 012).
+    start_date DATE,
+    end_date DATE,
+    previous_league_id VARCHAR(50),  -- the season before, from Yahoo's renew
+    is_auction_draft BOOLEAN,
+    draft_time TIMESTAMPTZ,
+    uses_playoff BOOLEAN,
+    num_playoff_consolation_teams INTEGER,
+    uses_playoff_reseeding BOOLEAN,
+    has_multiweek_championship BOOLEAN,
+    uses_median_score BOOLEAN,
+    waiver_type VARCHAR(10),       -- R rolling, FR FAAB
+    waiver_rule VARCHAR(20),
+    waiver_time INTEGER,
+    uses_faab BOOLEAN,
+    trade_ratify_type VARCHAR(20),
+    trade_reject_time INTEGER,
+    post_draft_players VARCHAR(10),
+    uses_fractional_points BOOLEAN,
+    uses_negative_points BOOLEAN,
     is_active BOOLEAN DEFAULT TRUE,
     valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     valid_to TIMESTAMP DEFAULT '9999-12-31'::TIMESTAMP,
@@ -58,6 +78,43 @@ CREATE TABLE dim_league (
 );
 
 CREATE INDEX idx_league_id ON dim_league (league_id);
+
+-- A league-season's scoring and lineup (migration 012). Keyed by league_id,
+-- not league_key, so a rebuild that renumbers dim_league leaves them valid.
+CREATE TABLE dim_scoring_rule (
+    league_id VARCHAR(50) NOT NULL,
+    season_year INTEGER NOT NULL,
+    stat_id INTEGER NOT NULL,
+    stat_name VARCHAR(100),
+    display_name VARCHAR(50),
+    stat_group VARCHAR(50),
+    position_type VARCHAR(10),
+    points NUMERIC,                -- per unit of the stat; NULL if display-only
+    is_display_only BOOLEAN NOT NULL DEFAULT false,
+    sort_order INTEGER,
+    PRIMARY KEY (league_id, stat_id)
+);
+CREATE INDEX dim_scoring_rule_season_idx ON dim_scoring_rule (season_year);
+
+CREATE TABLE dim_scoring_bonus (
+    league_id VARCHAR(50) NOT NULL,
+    season_year INTEGER NOT NULL,
+    stat_id INTEGER NOT NULL,
+    target NUMERIC NOT NULL,       -- bonus once a game's stat reaches this
+    points NUMERIC NOT NULL,
+    PRIMARY KEY (league_id, stat_id, target)
+);
+
+CREATE TABLE dim_roster_slot (
+    league_id VARCHAR(50) NOT NULL,
+    season_year INTEGER NOT NULL,
+    position VARCHAR(10) NOT NULL,
+    position_type VARCHAR(10),
+    slot_count INTEGER NOT NULL,
+    is_starting BOOLEAN,
+    sort_order INTEGER,
+    PRIMARY KEY (league_id, position)
+);
 CREATE INDEX idx_season_year ON dim_league (season_year);
 CREATE INDEX idx_league_active ON dim_league (is_active);
 CREATE INDEX idx_valid_period ON dim_league (valid_from, valid_to);
