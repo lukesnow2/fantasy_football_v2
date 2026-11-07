@@ -124,11 +124,11 @@ def test_in_progress_season_uses_the_configured_length():
 def test_completed_season_still_reads_its_own_bracket():
     proc = EdwEtlProcessor.__new__(EdwEtlProcessor)
     proc.data = {
-        'leagues': [{'league_id': 'L07', 'season': '2007', 'start_week': '2', 'end_week': '16'}],
-        'matchups': ([{'league_id': 'L07', 'week': w, 'is_playoffs': False,
+        'leagues': [{'league_id': '175.l.658531', 'season': '2007', 'start_week': '2', 'end_week': '16'}],
+        'matchups': ([{'league_id': '175.l.658531', 'week': w, 'is_playoffs': False,
                        'is_championship': False} for w in range(2, 15)]
-                     + [{'league_id': 'L07', 'week': 15, 'is_playoffs': True, 'is_championship': False},
-                        {'league_id': 'L07', 'week': 16, 'is_playoffs': True, 'is_championship': True}]),
+                     + [{'league_id': '175.l.658531', 'week': 15, 'is_playoffs': True, 'is_championship': False},
+                        {'league_id': '175.l.658531', 'week': 16, 'is_playoffs': True, 'is_championship': True}]),
     }
     season = {s['season_year']: s for s in proc.extract_seasons()}[2007]
     assert season['championship_week'] == 16
