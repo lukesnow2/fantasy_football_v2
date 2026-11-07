@@ -1,7 +1,15 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
-import { topBusts, topSteals, valueDraftPicks } from '$lib/draft-value';
+import {
+	careerGrade,
+	seasonDraftScores,
+	seasonGrade,
+	spreadOf,
+	topBusts,
+	topSteals,
+	valueDraftPicks
+} from '$lib/draft-value';
 import type { RequestHandler } from './$types';
 
 /**
@@ -288,6 +296,52 @@ export const GET: RequestHandler = async ({ url }) => {
 					.sort((a, b) => b.avgValue - a.avgValue),
 				methodology:
 					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks from rounds 1-8 expected to beat an average pick, so a late kicker, defense or flier that was cut doesn't count; one reached for early does."
+			};
+
+			// Manager draft grades ($lib/draft-value): a draft's points over
+			// expectation in average picks. Season grades place a score among every
+			// finished manager-season; career grades weigh the evidence (average
+			// over its standard error). History and spread use every manager's
+			// finished seasons; only managers in analysis are shown.
+			const included = new Set(valued.filter((p) => p.included).map((p) => p.managerName));
+			const scores = seasonDraftScores(valued);
+			const finished = scores.filter((x) => completedSeasons.has(x.seasonYear));
+			const history = finished.map((x) => x.score);
+			const spread = spreadOf(history);
+			data.draftGrades = {
+				bySeason: scores
+					.filter(
+						(x) =>
+							included.has(x.managerName) &&
+							(season === 'all' || x.seasonYear === parseInt(season))
+					)
+					.map((x) => ({
+						managerName: x.managerName,
+						seasonYear: x.seasonYear,
+						score: Math.round(x.score * 100) / 100,
+						picks: x.picks,
+						inProgress: !completedSeasons.has(x.seasonYear),
+						...seasonGrade(x.score, history)
+					}))
+					.sort((a, b) => b.seasonYear - a.seasonYear || b.score - a.score),
+				byManager: [...included]
+					.map((managerName) => {
+						const c = careerGrade(
+							finished.filter((x) => x.managerName === managerName).map((x) => x.score),
+							spread
+						);
+						return {
+							managerName,
+							grade: c.grade,
+							averageScore: Math.round(c.average * 100) / 100,
+							evidence: Math.round(c.z * 100) / 100,
+							seasons: c.seasons
+						};
+					})
+					.filter((m) => m.seasons > 0)
+					.sort((a, b) => b.evidence - a.evidence),
+				method:
+					"A draft's score is its picks' points over what their positions and rounds were expected to score, in average picks: +2.4 means about two and a half average picks more than its slots promised. Season grades rank a score among every finished manager-season in league history (A top 15%, B next 25%, C middle 30%, D next 20%, F bottom 10%). Career grades weigh the evidence: a manager's average season score over its standard error, so a grade above or below C means a consistent record, not one big year."
 			};
 		}
 

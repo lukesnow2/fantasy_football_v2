@@ -42,6 +42,8 @@ export interface PickValue {
 	highExpectation: boolean;
 	/** Expectation as a multiple of the season's average pick. */
 	expectedRelative: number;
+	/** Points scored by the season's average drafted pick (the unit for draft scores). */
+	seasonAverage: number;
 }
 
 /**
@@ -120,7 +122,8 @@ export function valueDraftPicks<T extends DraftPickInput>(
 			expectedPoints,
 			valueOverExpected: p.seasonPoints - expectedPoints,
 			highExpectation: expectedRelative >= 1 && p.roundNumber <= MAX_BUST_ROUND,
-			expectedRelative
+			expectedRelative,
+			seasonAverage: seasonMean.get(p.seasonYear) ?? 0
 		};
 	});
 }
@@ -192,4 +195,106 @@ export function pickGrade(
 	if (r >= 0.8) return 'C+';
 	if (r >= 0.65) return 'C';
 	return pickVerdict(points, expected, highExpectation) === 'bust' ? 'F' : 'D';
+}
+
+// ---- Manager draft grades ---------------------------------------------------
+//
+// A draft's score is how much its picks beat (or missed) what their positions and
+// rounds were expected to score, summed over every pick a manager made that
+// season, in units of the season's average pick: +2.4 means the draft produced
+// about two and a half average picks more than its slots promised. Drafting from
+// #1 or #10 doesn't matter: each pick is judged against its own slot.
+//
+// Checked on this league (198 manager-seasons, 2005-2025): a season's draft score
+// correlates with that season's wins (r = 0.53), so it measures something that
+// matters; year to year it barely persists (r = 0.19), so one draft says little
+// about the next. That shapes the two grades:
+//
+//  - Season grade: where the score falls among every finished manager-season in
+//    league history (A top 15%, B next 25%, C middle 30%, D next 20%, F bottom
+//    10%). Not curved within the season, so a year when everyone drafted well
+//    isn't forced into Cs.
+//  - Career grade: how strong the evidence is that a manager drafts above or
+//    below average: their average season score divided by its standard error
+//    (season spread / sqrt(seasons)). A at 2+ standard errors above, B at 0.75+,
+//    C within 0.75 either way, D and F below. Most managers land on C, which is
+//    the honest result when drafting skill is mostly noise.
+
+export interface ScoredPick extends PickValue {
+	managerName: string;
+	seasonYear: number;
+}
+
+export interface SeasonDraftScore {
+	managerName: string;
+	seasonYear: number;
+	/** Points over expectation across the draft, in average picks. */
+	score: number;
+	picks: number;
+}
+
+export function seasonDraftScores(picks: ScoredPick[]): SeasonDraftScore[] {
+	const acc = new Map<string, SeasonDraftScore>();
+	for (const p of picks) {
+		if (!(p.seasonAverage > 0)) continue;
+		const key = `${p.managerName}|${p.seasonYear}`;
+		const a = acc.get(key) ?? {
+			managerName: p.managerName,
+			seasonYear: p.seasonYear,
+			score: 0,
+			picks: 0
+		};
+		a.score += p.valueOverExpected / p.seasonAverage;
+		a.picks += 1;
+		acc.set(key, a);
+	}
+	return [...acc.values()];
+}
+
+export const SEASON_GRADE_PERCENTILES: [string, number][] = [
+	['A', 0.85],
+	['B', 0.6],
+	['C', 0.3],
+	['D', 0.1]
+];
+
+/** Letter and percentile of a season score among finished manager-seasons (`history`). */
+export function seasonGrade(
+	score: number,
+	history: number[]
+): { grade: string; percentile: number } {
+	if (history.length === 0) return { grade: 'C', percentile: 0.5 };
+	const percentile = history.filter((h) => h < score).length / history.length;
+	const grade = SEASON_GRADE_PERCENTILES.find(([, cut]) => percentile >= cut)?.[0] ?? 'F';
+	return { grade, percentile };
+}
+
+/** Standard errors from average: A at +2 or more, B at +0.75, C within 0.75, D to -2, F beyond. */
+function careerLetter(z: number): string {
+	if (z >= 2) return 'A';
+	if (z >= 0.75) return 'B';
+	if (z > -0.75) return 'C';
+	if (z > -2) return 'D';
+	return 'F';
+}
+
+/**
+ * Career grade from a manager's season scores. `spread` is the standard
+ * deviation of season scores across all finished manager-seasons.
+ */
+export function careerGrade(
+	seasonScores: number[],
+	spread: number
+): { grade: string; average: number; z: number; seasons: number } {
+	const seasons = seasonScores.length;
+	const average = seasons ? seasonScores.reduce((a, b) => a + b, 0) / seasons : 0;
+	const z = seasons && spread > 0 ? average / (spread / Math.sqrt(seasons)) : 0;
+	return { grade: careerLetter(z), average, z, seasons };
+}
+
+/** Population standard deviation. */
+export function spreadOf(values: number[]): number {
+	if (values.length === 0) return 0;
+	const mean = values.reduce((a, b) => a + b, 0) / values.length;
+	return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length);
 }

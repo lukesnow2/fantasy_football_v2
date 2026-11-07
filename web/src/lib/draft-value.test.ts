@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
 	isHit,
 	pickGrade,
+	careerGrade,
 	pickVerdict,
+	seasonDraftScores,
+	seasonGrade,
 	topBusts,
 	topSteals,
 	valueDraftPicks,
@@ -151,5 +154,40 @@ describe('pickVerdict and pickGrade', () => {
 		expect(pickGrade(100, 0, true)).toBeNull();
 		expect(isHit(100, null)).toBe(false);
 		expect(isHit(80, 100)).toBe(true);
+	});
+});
+
+describe('manager draft grades', () => {
+	it('scores a draft in average picks over expectation, per manager and season', () => {
+		const pick = (managerName: string, value: number) => ({
+			managerName,
+			seasonYear: 2025,
+			valueOverExpected: value,
+			seasonAverage: 100,
+			expectedPoints: 100,
+			highExpectation: true,
+			expectedRelative: 1
+		});
+		const scores = seasonDraftScores([pick('a', 150), pick('a', 90), pick('b', -40)]);
+		expect(scores.find((x) => x.managerName === 'a')).toMatchObject({ score: 2.4, picks: 2 });
+		expect(scores.find((x) => x.managerName === 'b')?.score).toBeCloseTo(-0.4);
+	});
+
+	it('grades a season against league history, not a curve', () => {
+		const history = Array.from({ length: 100 }, (_, i) => i - 50); // -50..49
+		expect(seasonGrade(40, history).grade).toBe('A');
+		expect(seasonGrade(15, history).grade).toBe('B');
+		expect(seasonGrade(0, history).grade).toBe('C');
+		expect(seasonGrade(-35, history).grade).toBe('D');
+		expect(seasonGrade(-45, history).grade).toBe('F');
+	});
+
+	it('career grade needs evidence, not just a positive average', () => {
+		// The same +0.5 average a season: weak evidence over 4 seasons, real over 30.
+		expect(careerGrade([0.5, 0.5, 0.5, 0.5], 2.7).grade).toBe('C');
+		expect(careerGrade(Array(30).fill(0.5), 2.7).grade).toBe('B');
+		expect(careerGrade(Array(30).fill(1.2), 2.7).grade).toBe('A');
+		expect(careerGrade(Array(30).fill(-0.5), 2.7).grade).toBe('D');
+		expect(careerGrade(Array(30).fill(-1.2), 2.7).grade).toBe('F');
 	});
 });

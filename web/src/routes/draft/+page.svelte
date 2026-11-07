@@ -25,7 +25,8 @@
 		if (grade.startsWith('B')) return 'text-blue-400';
 		if (grade.startsWith('C')) return 'text-yellow-400';
 		if (grade.startsWith('D')) return 'text-orange-400';
-		return 'text-red-400';
+		if (grade.startsWith('F')) return 'text-red-400';
+		return 'text-gray-400';
 	}
 
 	// What each pick was expected to score: from the API, which judges it against
@@ -35,9 +36,13 @@
 	// steals and late kickers that were cut always busts.
 	const expectedOf = (pick: any): number => Number(pick.expectedPoints ?? 0);
 
-	// Calculate comprehensive manager analytics
-	function getManagerAnalytics(drafts: any[]) {
+	// Calculate comprehensive manager analytics. The grade is the API's career
+	// draft grade (draftGrades.byManager, $lib/draft-value): points over
+	// expectation per season, graded on the evidence. It used to be raw points
+	// per pick (A at 120+), which rewarded taking QBs early.
+	function getManagerAnalytics(drafts: any[], careerGrades: any[]) {
 		if (!drafts?.length) return [];
+		const career = new Map(careerGrades.map((g: any) => [g.managerName, g]));
 
 		const managerStats: any = {};
 
@@ -80,13 +85,7 @@
 			// Best pick
 			const bestPick = Math.min(...manager.picks.map((p: any) => p.pickNum));
 			
-			// Grade calculation
-			let grade = 'F';
-			if (avgPoints >= 120) grade = 'A';
-			else if (avgPoints >= 100) grade = 'B';
-			else if (avgPoints >= 80) grade = 'C';
-			else if (avgPoints >= 60) grade = 'D';
-			
+			const c: any = career.get(manager.name);
 			return {
 				...manager,
 				avgPick: Math.round(avgPick),
@@ -95,9 +94,11 @@
 				busts,
 				hitRate,
 				bestPick,
-				grade
+				grade: c?.grade ?? '—',
+				draftValue: c?.averageScore ?? null,
+				evidence: c?.evidence ?? null
 			};
-		}).sort((a, b) => parseFloat(b.avgPointsPerPick) - parseFloat(a.avgPointsPerPick));
+		}).sort((a, b) => (b.evidence ?? -Infinity) - (a.evidence ?? -Infinity));
 	}
 
 	// Find best early round drafter (rounds 1-3)
@@ -232,7 +233,9 @@
 	}
 
 	// Reactive analytics calculations
-	$: managerAnalytics = draftData?.data?.drafts ? getManagerAnalytics(draftData.data.drafts) : [];
+	$: managerAnalytics = draftData?.data?.drafts
+		? getManagerAnalytics(draftData.data.drafts, draftData.data.draftGrades?.byManager ?? [])
+		: [];
 	$: bestEarlyRoundDrafter = draftData?.data?.drafts ? getBestEarlyRoundDrafter(draftData.data.drafts) : null;
 	$: bestValueHunter = draftData?.data?.drafts ? getBestValueHunter(draftData.data.drafts) : null;
 	$: mostConsistent = draftData?.data?.drafts ? getMostConsistent(draftData.data.drafts) : null;
@@ -300,7 +303,10 @@
 					<div class="space-y-6">
 						<!-- Top-Level Manager Analytics -->
 						<div class="bg-gray-700 p-4 rounded-lg">
-							<h4 class="text-lg font-semibold text-white mb-4">Manager Draft Performance (Career)</h4>
+							<h4 class="text-lg font-semibold text-white mb-1">Manager Draft Performance (Career)</h4>
+							{#if draftData.data.draftGrades?.method}
+								<p class="text-xs text-gray-400 mb-4">{draftData.data.draftGrades.method}</p>
+							{/if}
 							<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 								{#each managerAnalytics as manager}
 									<div class="bg-gray-600 p-4 rounded-lg">
@@ -327,9 +333,11 @@
 												<div class="text-gray-400">Busts</div>
 												<div class="font-bold text-red-400">{manager.busts}</div>
 											</div>
-											<div>
-												<div class="text-gray-400">Avg PPP</div>
-												<div class="font-bold text-purple-400">{manager.avgPointsPerPick}</div>
+											<div title="Average season score: points over expectation, in average picks">
+												<div class="text-gray-400">Draft value</div>
+												<div class="font-bold text-purple-400">
+													{manager.draftValue == null ? '—' : `${manager.draftValue > 0 ? '+' : ''}${manager.draftValue.toFixed(2)}/season`}
+												</div>
 											</div>
 										</div>
 										<div class="mt-2 pt-2 border-t border-gray-500">
