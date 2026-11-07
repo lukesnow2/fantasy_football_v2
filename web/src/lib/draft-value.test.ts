@@ -9,11 +9,27 @@ function season(year: number, overrides: Partial<Record<string, number>> = {}): 
 	for (let round = 1; round <= 15; round++) {
 		const late = round >= 12;
 		const slots: [string, number][] = late
-			? [['K', 110], ['DEF', 100], ['RB', 220 - round * 12], ['WR', 220 - round * 12]]
-			: [['QB', 420 - round * 10], ['RB', 300 - round * 14], ['WR', 300 - round * 14], ['TE', 240 - round * 10]];
+			? [
+					['K', 110],
+					['DEF', 100],
+					['RB', 220 - round * 12],
+					['WR', 220 - round * 12]
+				]
+			: [
+					['QB', 420 - round * 10],
+					['RB', 300 - round * 14],
+					['WR', 300 - round * 14],
+					['TE', 240 - round * 10]
+				];
 		for (const [position, points] of slots) {
 			const name = `${year}-${position}-${round}`;
-			picks.push({ seasonYear: year, roundNumber: round, position, seasonPoints: overrides[name] ?? points, name });
+			picks.push({
+				seasonYear: year,
+				roundNumber: round,
+				position,
+				seasonPoints: overrides[name] ?? points,
+				name
+			});
 		}
 	}
 	return picks;
@@ -41,16 +57,32 @@ describe('valueDraftPicks', () => {
 	});
 
 	it('a kicker reached for in an early round carries that round expectation', () => {
-		const reach: Pick = { seasonYear: 2025, roundNumber: 4, position: 'K', seasonPoints: 110, name: 'reach' };
+		const reach: Pick = {
+			seasonYear: 2025,
+			roundNumber: 4,
+			position: 'K',
+			seasonPoints: 110,
+			name: 'reach'
+		};
 		const v = valueDraftPicks([...history, ...season(2025), reach], done);
 		const k = v.find((p) => p.name === 'reach')!;
 		expect(k.highExpectation).toBe(true);
-		expect(topBusts(v.filter((p) => p.seasonYear === 2025), 1)[0].name).toBe('reach');
+		expect(
+			topBusts(
+				v.filter((p) => p.seasonYear === 2025),
+				1
+			)[0].name
+		).toBe('reach');
 	});
 
 	it('a late breakout is the top steal', () => {
 		const v = valueDraftPicks([...history, ...season(2025, { '2025-WR-13': 330 })], done);
-		expect(topSteals(v.filter((p) => p.seasonYear === 2025), 1)[0].name).toBe('2025-WR-13');
+		expect(
+			topSteals(
+				v.filter((p) => p.seasonYear === 2025),
+				1
+			)[0].name
+		).toBe('2025-WR-13');
 	});
 
 	it('judges a partial season on its own scale', () => {
@@ -66,5 +98,22 @@ describe('valueDraftPicks', () => {
 		for (const pick of full) {
 			expect(ratio(pick.name.replace('2025', '2026'))).toBeCloseTo(ratio(pick.name), 9);
 		}
+	});
+
+	it('a late-round pick is never a bust, even a QB the league expects a lot from', () => {
+		// QBs out-score an average pick deep into the draft, but a round-11 flier
+		// isn't a pick the draft counted on.
+		const flier: Pick = {
+			seasonYear: 2025,
+			roundNumber: 11,
+			position: 'QB',
+			seasonPoints: 0,
+			name: 'flier'
+		};
+		const v = valueDraftPicks([...history, ...season(2025), flier], done);
+		const qb = v.find((p) => p.name === 'flier')!;
+		expect(qb.expectedRelative).toBeGreaterThan(1);
+		expect(qb.highExpectation).toBe(false);
+		expect(topBusts(v, 50).map((p) => p.name)).not.toContain('flier');
 	});
 });

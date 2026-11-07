@@ -36,13 +36,21 @@ export interface PickValue {
 	/** seasonPoints - expectedPoints. Positive beat the slot, negative missed it. */
 	valueOverExpected: number;
 	/**
-	 * Expected to out-score an average pick (roughly rounds 1-7 at any position).
-	 * Only these can be busts: a bust is a pick the draft counted on.
+	 * A pick the draft counted on: taken in the first MAX_BUST_ROUND rounds and
+	 * expected to out-score an average pick. Only these can be busts.
 	 */
 	highExpectation: boolean;
 	/** Expectation as a multiple of the season's average pick. */
 	expectedRelative: number;
 }
+
+/**
+ * Busts come from the first eight rounds only. Expectation alone let QBs
+ * through from much later (QBs score so much here that even a round-11 QB is
+ * expected to beat an average pick), and a round-11 flier is not a pick the
+ * draft counted on: 2019's Andrew Luck (R11, 0 points) ranked #3 all-time.
+ */
+export const MAX_BUST_ROUND = 8;
 
 export interface DraftValueOptions {
 	/** Rounds either side pooled into a round's average (default 1). */
@@ -111,7 +119,7 @@ export function valueDraftPicks<T extends DraftPickInput>(
 			...p,
 			expectedPoints,
 			valueOverExpected: p.seasonPoints - expectedPoints,
-			highExpectation: expectedRelative >= 1,
+			highExpectation: expectedRelative >= 1 && p.roundNumber <= MAX_BUST_ROUND,
 			expectedRelative
 		};
 	});

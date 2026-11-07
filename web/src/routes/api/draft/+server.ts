@@ -287,7 +287,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					}))
 					.sort((a, b) => b.avgValue - a.avgValue),
 				methodology:
-					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks expected to beat an average pick, so a late kicker or defense that was cut doesn't count; one reached for early does."
+					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks from rounds 1-8 expected to beat an average pick, so a late kicker, defense or flier that was cut doesn't count; one reached for early does."
 			};
 		}
 
