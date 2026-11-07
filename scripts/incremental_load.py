@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.extractors.comprehensive_data_extractor import (  # noqa: E402
     YahooFantasyExtractor, completed_weeks, season_format, week_is_complete)
+from src.extractors.league_settings import parse_league_settings  # noqa: E402
 from src.pipeline import raw_loader, publish as pub  # noqa: E402
 from src.pipeline.state import PipelineState, LockHeld  # noqa: E402
 
@@ -48,8 +49,8 @@ MIGRATIONS_DIR = os.path.join(
 
 # Raw tables -> EDW refresh triggers, matching EdwEtlProcessor's
 # EDW_PROCESSING_STRATEGIES keys.
-ALL_OPERATIONAL_TABLES = {'leagues', 'teams', 'rosters', 'matchups',
-                          'transactions', 'draft_picks', 'statistics'}
+ALL_OPERATIONAL_TABLES = {'leagues', 'league_settings', 'teams', 'rosters',
+                          'matchups', 'transactions', 'draft_picks', 'statistics'}
 
 
 def is_fantasy_season(now=None):
@@ -683,6 +684,12 @@ def _run_locked(args, state) -> int:
     run_id = state.start_run(season)
     try:
         # 4. Extract the scoped delta (draft-only for a new pre-week-1 league).
+        #    The full settings (scoring, bonuses, lineup) come from the raw
+        #    settings response; yfa's settings() drops the scoring and lineup.
+        #    One extra call, skipped by a stats-only repair, which loads no
+        #    league row.
+        parsed = None if args.stats_only else parse_league_settings(
+            league.yhandler.get_settings_raw(league_id), league_id)
         league_info_rows = [{
             'league_id': league_id, 'name': settings.get('name'),
             'season': str(season), 'game_code': settings.get('game_code', 'nfl'),
@@ -698,9 +705,14 @@ def _run_locked(args, state) -> int:
             'url': settings.get('url'), 'logo_url': settings.get('logo_url') or '',
             'extracted_at': datetime.now(),
             **season_format(settings),
+            **(parsed['league'] if parsed else {}),
         }]
         data = extract_scope(extractor, league_id, weeks, args.stats_only,
                              is_new, league_info_rows)
+        if parsed:
+            data['league_settings'] = {
+                k: parsed[k] for k in ('scoring', 'bonuses', 'roster_slots')}
+            data['league_settings']['extracted_at'] = datetime.now()
         scrub_historical_teams(data, season)
 
         # 5. One transaction: the full raw delta + period flags.
