@@ -78,7 +78,8 @@
 
 	function getValueIndicator(pick: any): string {
 		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
-		return verdict ? VERDICT_ICONS[verdict] : '✓';
+		// Nothing to judge against is shown as nothing, not as "fair".
+		return verdict ? VERDICT_ICONS[verdict] : '—';
 	}
 
 	$: draftBoard = createDraftBoard(draftData);

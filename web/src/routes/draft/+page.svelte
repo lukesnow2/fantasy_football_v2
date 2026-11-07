@@ -39,7 +39,6 @@
 	function getManagerAnalytics(drafts: any[]) {
 		if (!drafts?.length) return [];
 
-
 		const managerStats: any = {};
 
 		drafts.forEach(pick => {
