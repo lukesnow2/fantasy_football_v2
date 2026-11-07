@@ -51,18 +51,30 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Scoring patterns by season
 		if (metric === 'scoring' || metric === 'all') {
+			// Every team's score in every game, from fact_matchup. This used to read
+			// fact_team_performance.weekly_points, which is the season-to-date running
+			// average, not the week's score: it halved the spread (2025 sd 15.4 vs
+			// 27.7 for real games) and skewed the average.
 			const scoringQuery = `
-				SELECT 
+				WITH games AS (
+					SELECT fm.season_year, v.points
+					FROM edw.fact_matchup fm
+					CROSS JOIN LATERAL (VALUES (fm.team1_points), (fm.team2_points)) AS v(points)
+					WHERE v.points > 0
+				)
+				SELECT
 					season_year,
-					AVG(weekly_points) as avg_weekly_score,
-					MAX(weekly_points) as max_weekly_score,
-					MIN(weekly_points) as min_weekly_score,
-					STDDEV(weekly_points) as score_volatility,
+					AVG(points) as avg_weekly_score,
+					MAX(points) as max_weekly_score,
+					MIN(points) as min_weekly_score,
+					STDDEV(points) as score_volatility,
 					COUNT(*) as total_team_weeks,
-					PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY weekly_points) as p90_score,
-					PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY weekly_points) as p10_score
-				FROM edw.fact_team_performance
-				WHERE weekly_points > 0
+					PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY points) as p90_score,
+					PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY points) as p75_score,
+					PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY points) as median_score,
+					PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY points) as p25_score,
+					PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY points) as p10_score
+				FROM games
 				GROUP BY season_year
 				ORDER BY season_year
 			`;
@@ -239,6 +251,9 @@ export const GET: RequestHandler = async ({ url }) => {
 				scoreVolatility: item.scoreVolatility || item.score_volatility,
 				totalTeamWeeks: item.totalTeamWeeks || item.total_team_weeks,
 				p90Score: item.p90Score || item.p90_score,
+				p75Score: item.p75Score || item.p75_score,
+				medianScore: item.medianScore || item.median_score,
+				p25Score: item.p25Score || item.p25_score,
 				p10Score: item.p10Score || item.p10_score
 			}));
 		}
@@ -313,6 +328,26 @@ export const GET: RequestHandler = async ({ url }) => {
 			.filter((y: number) => Number.isFinite(y));
 		const firstYear = seasonYears.length ? Math.min(...seasonYears) : null;
 		const lastYear = seasonYears.length ? Math.max(...seasonYears) : null;
+
+		// The season still being played (no championship game yet), so charts can
+		// mark it as partial rather than a finished year.
+		const [live] = Array.from(
+			await db.execute(sql.raw(`
+				SELECT MAX(fm.season_year) AS season_year,
+					MAX(dw.week_number) AS through_week
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_week dw ON dw.week_key = fm.week_key
+				WHERE fm.season_year = (SELECT MAX(season_year) FROM edw.fact_matchup)
+				  AND NOT EXISTS (
+					SELECT 1 FROM edw.fact_matchup c
+					WHERE c.season_year = fm.season_year AND c.is_championship
+				  )
+			`))
+		) as any[];
+		camelCaseData.seasonInProgress =
+			live?.seasonYear != null
+				? { seasonYear: Number(live.seasonYear), throughWeek: Number(live.throughWeek) }
+				: null;
 
 		return json({
 			data: camelCaseData,
