@@ -2,6 +2,204 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
+import {
+	balanceOf,
+	recordPersistence,
+	recordRank,
+	rollingMean,
+	scoringRank,
+	seasonRecords,
+	type RegularGame
+} from '$lib/league-trends';
+
+const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'] as const;
+const rows = async (q: string) => Array.from(await db.execute(sql.raw(q))) as any[];
+
+/**
+ * Long-run league measures for the trends chart ($lib/league-trends): balance
+ * and skill share per season, each champion's regular-season ranks, who won
+ * when, where starting-lineup points came from by position, waiver activity
+ * per team, and the headline numbers above the chart. Regular season only;
+ * the season still being played is flagged, and left out of anything that
+ * needs a finished season (balance, champions, the headlines).
+ */
+async function loadTrends() {
+	const [gameRows, champRows, teamRows, positionRows, draftedRows, moveRows, tradeRows, leagueRows] =
+		await Promise.all([
+			rows(`
+				SELECT fm.season_year, fm.team1_key, fm.team2_key, fm.team1_points, fm.team2_points,
+					fm.winner_team_key, fm.is_tie
+				FROM edw.fact_matchup fm WHERE fm.matchup_type = 'regular'
+			`),
+			rows(`
+				SELECT fm.season_year, fm.winner_team_key,
+					dw.manager_name AS winner_manager, dl.manager_name AS loser_manager,
+					GREATEST(fm.team1_points, fm.team2_points) AS winner_points,
+					LEAST(fm.team1_points, fm.team2_points) AS loser_points
+				FROM edw.fact_matchup fm
+				JOIN edw.dim_team dw ON dw.team_key = fm.winner_team_key
+				LEFT JOIN edw.dim_team dl ON dl.team_key =
+					CASE WHEN fm.winner_team_key = fm.team1_key THEN fm.team2_key ELSE fm.team1_key END
+				WHERE fm.is_championship
+			`),
+			rows(`SELECT team_key, manager_name FROM edw.dim_team`),
+			rows(`
+				SELECT fr.season_year, dp.primary_position AS position, SUM(fr.weekly_points) AS points
+				FROM edw.fact_roster fr
+				JOIN edw.dim_player dp ON dp.player_key = fr.player_key
+				JOIN edw.dim_week dw ON dw.week_key = fr.week_key
+				WHERE fr.is_starter AND dw.week_type = 'regular'
+				GROUP BY 1, 2
+			`),
+			rows(`
+				WITH drafted AS (SELECT DISTINCT season_year, team_key, player_key FROM edw.fact_draft)
+				SELECT fr.season_year,
+					SUM(fr.weekly_points) FILTER (WHERE d.player_key IS NOT NULL) AS drafted_points,
+					SUM(fr.weekly_points) AS all_points
+				FROM edw.fact_roster fr
+				JOIN edw.dim_week dw ON dw.week_key = fr.week_key
+				LEFT JOIN drafted d ON d.season_year = fr.season_year AND d.team_key = fr.team_key
+					AND d.player_key = fr.player_key
+				WHERE fr.is_starter AND dw.week_type = 'regular'
+				GROUP BY 1
+			`),
+			// A move is one transaction (an add/drop is one move, not two rows).
+			rows(`
+				SELECT season_year, COUNT(DISTINCT split_part(source_transaction_id, '_', 1)) AS moves
+				FROM edw.fact_transaction WHERE transaction_type <> 'trade' GROUP BY 1
+			`),
+			rows(`
+				SELECT season_year, COUNT(DISTINCT split_part(source_transaction_id, '_', 1)) AS trades
+				FROM edw.fact_transaction WHERE transaction_type = 'trade' GROUP BY 1
+			`),
+			rows(`SELECT season_year, num_teams FROM edw.dim_league`)
+		]);
+
+	const games: RegularGame[] = gameRows.map((g) => ({
+		season: Number(g.seasonYear),
+		teamA: Number(g.team1Key),
+		teamB: Number(g.team2Key),
+		pointsA: Number(g.team1Points ?? 0),
+		pointsB: Number(g.team2Points ?? 0),
+		winner: g.winnerTeamKey == null ? null : Number(g.winnerTeamKey),
+		tie: g.isTie === true
+	}));
+	const champions = new Map(
+		champRows.map((c) => [
+			Number(c.seasonYear),
+			{
+				team: Number(c.winnerTeamKey),
+				manager: String(c.winnerManager),
+				runnerUp: c.loserManager == null || String(c.loserManager).includes('hidden') ? null : String(c.loserManager),
+				score: [Number(c.winnerPoints ?? 0), Number(c.loserPoints ?? 0)] as [number, number]
+			}
+		])
+	);
+	const managerOf = new Map(teamRows.map((t) => [Number(t.teamKey), t.managerName == null ? null : String(t.managerName)]));
+	const teamsIn = new Map(leagueRows.map((l) => [Number(l.seasonYear), Number(l.numTeams)]));
+	const moves = new Map(moveRows.map((m) => [Number(m.seasonYear), Number(m.moves)]));
+	const trades = new Map(tradeRows.map((t) => [Number(t.seasonYear), Number(t.trades)]));
+	const positions = new Map<number, Record<string, number>>();
+	for (const p of positionRows) {
+		const season = Number(p.seasonYear);
+		const m = positions.get(season) ?? {};
+		m[String(p.position ?? '?')] = Number(p.points ?? 0);
+		positions.set(season, m);
+	}
+
+	const records = seasonRecords(games);
+	const seasons = [...new Set([...records.keys(), ...positions.keys(), ...moves.keys()])].sort((a, b) => a - b);
+	const finished = (s: number) => champions.has(s);
+
+	const perSeason = seasons.map((season) => {
+		const recs = records.get(season) ?? [];
+		const done = finished(season);
+		const balance = done ? balanceOf(season, recs) : null;
+		const champ = champions.get(season);
+		const pos = positions.get(season) ?? {};
+		const posTotal = POSITIONS.reduce((a, k) => a + (pos[k] ?? 0), 0);
+		const teams = teamsIn.get(season) ?? recs.length;
+		return {
+			seasonYear: season,
+			inProgress: !done,
+			teams,
+			gamesPerTeam: balance?.gamesPerTeam ?? null,
+			nollScully: balance?.nollScully ?? null,
+			skillShare: balance?.skillShare ?? null,
+			champion: champ
+				? {
+						manager: champ.manager,
+						runnerUp: champ.runnerUp,
+						score: champ.score,
+						pointsRank: scoringRank(recs, champ.team),
+						recordRank: recordRank(recs, champ.team)
+					}
+				: null,
+			positionShare: posTotal
+				? Object.fromEntries(POSITIONS.map((k) => [k, (pos[k] ?? 0) / posTotal]))
+				: null,
+			movesPerTeam: teams && moves.has(season) ? moves.get(season)! / teams : null,
+			trades: trades.get(season) ?? 0
+		};
+	});
+	const rolling = rollingMean(perSeason.map((s) => s.nollScully), 5);
+	perSeason.forEach((s, i) => Object.assign(s, { nollScullyRolling: s.nollScully == null ? null : rolling[i] }));
+
+	// Headlines, finished seasons only.
+	const byManagerSeason = new Map<string, number>();
+	for (const [season, recs] of records) {
+		if (!finished(season)) continue;
+		for (const r of recs) {
+			const m = managerOf.get(r.team);
+			if (m && !m.includes('hidden')) byManagerSeason.set(`${m}|${season}`, r.wins / r.games);
+		}
+	}
+	const done = perSeason.filter((s) => !s.inProgress);
+	const skill = done.map((s) => s.skillShare).filter((v): v is number => v != null);
+	const champs = done.filter((s) => s.champion?.pointsRank != null);
+	const drafted = draftedRows.filter((d) => finished(Number(d.seasonYear)));
+	const draftedPoints = drafted.reduce((a, d) => a + Number(d.draftedPoints ?? 0), 0);
+	const allPoints = drafted.reduce((a, d) => a + Number(d.allPoints ?? 0), 0);
+
+	// Who reached the final and who won it, one row per finalist: titles,
+	// finals lost, and the finished seasons they played (so the chart can tell
+	// "didn't win" from "wasn't in the league").
+	const played = new Map<string, number[]>();
+	for (const [key] of byManagerSeason) {
+		const [manager, season] = key.split('|');
+		played.set(manager, [...(played.get(manager) ?? []), Number(season)]);
+	}
+	const finalists = new Map<string, { years: number[]; finals: number[] }>();
+	const entry = (m: string) => finalists.get(m) ?? finalists.set(m, { years: [], finals: [] }).get(m)!;
+	for (const s of done) {
+		if (!s.champion) continue;
+		entry(s.champion.manager).years.push(s.seasonYear);
+		if (s.champion.runnerUp) entry(s.champion.runnerUp).finals.push(s.seasonYear);
+	}
+
+	return {
+		seasons: perSeason,
+		titles: [...finalists.entries()]
+			.map(([manager, f]) => ({ manager, ...f, seasons: (played.get(manager) ?? []).sort((a, b) => a - b) }))
+			.sort(
+				(a, b) =>
+					b.years.length - a.years.length ||
+					b.finals.length - a.finals.length ||
+					Math.max(0, ...b.years, ...b.finals) - Math.max(0, ...a.years, ...a.finals)
+			),
+		headline: {
+			recordPersistence: recordPersistence(byManagerSeason),
+			skillShare: skill.length ? skill.reduce((a, b) => a + b, 0) / skill.length : null,
+			championTopThree: {
+				count: champs.filter((s) => s.champion!.pointsRank! <= 3).length,
+				seasons: champs.length
+			},
+			topScorerTitles: champs.filter((s) => s.champion!.pointsRank === 1).length,
+			draftedShare: allPoints ? draftedPoints / allPoints : null,
+			seasons: done.length
+		}
+	};
+}
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
@@ -328,6 +526,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			.filter((y: number) => Number.isFinite(y));
 		const firstYear = seasonYears.length ? Math.min(...seasonYears) : null;
 		const lastYear = seasonYears.length ? Math.max(...seasonYears) : null;
+
+		if (metric === 'all' || metric === 'trends') {
+			camelCaseData.trends = await loadTrends();
+		}
 
 		// The season still being played (no championship game yet), so charts can
 		// mark it as partial rather than a finished year.
