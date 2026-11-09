@@ -1,33 +1,16 @@
 <script lang="ts">
 	import '../app.css';
-	import { page } from '$app/stores';
+	import { tick } from 'svelte';
+	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { dev } from '$app/environment';
 	import { injectAnalytics } from '@vercel/analytics/sveltekit';
-	import {
-		Trophy,
-		BarChart3,
-		Calendar,
-		Users,
-		Crown,
-		BookOpen,
-		Target,
-		TrendingUp,
-		MessageSquare,
-		Database,
-		Shield,
-		ArrowLeftRight,
-		ChevronDown,
-		Settings,
-		LogIn,
-		LogOut,
-		User,
-		Menu,
-		X,
-		Handshake
-	} from 'lucide-svelte';
+	import { ChevronDown, Menu, X } from 'lucide-svelte';
+	import { clickOutside } from '$lib/actions/clickOutside';
+	import { directLinks, navGroups, isActivePath, nextMenuIndex } from '$lib/nav';
 	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
-	import NavDropdown, { type NavItem } from '$lib/components/NavDropdown.svelte';
+	import NavDropdown from '$lib/components/NavDropdown.svelte';
 	import type { LayoutData } from './$types';
 	import type { SubmitFunction } from '@sveltejs/kit';
 
@@ -36,98 +19,17 @@
 	// Vercel Web Analytics. In dev it logs page views to the console instead of sending them.
 	injectAnalytics({ mode: dev ? 'development' : 'production' });
 
-	/**
-	 * The bar is two direct links plus three subject dropdowns.
-	 *
-	 * There is deliberately no "More". A catch-all bucket is where the pages
-	 * nobody owns go to be forgotten, and the last version put Hall of Fame,
-	 * Draft Central and the whole 20-season archive in it. Every page now sits
-	 * under a heading that says what it is, one click deep at most.
-	 */
-	const directLinks = [
-		{ name: 'This Season', href: '/this-season', icon: Calendar },
-		{ name: 'Chat', href: '/chat', icon: MessageSquare },
-		// A direct link rather than a one-item dropdown: Trade Center and Draft
-		// Central moved out to Activity, where they read as league movement rather
-		// than as something belonging to a manager.
-		{ name: 'Managers', href: '/managers', icon: Users }
-	];
-
-	const navGroups: { label: string; icon: typeof Calendar; items: NavItem[] }[] = [
-		{
-			label: 'Rankings',
-			icon: TrendingUp,
-			items: [
-				{
-					name: 'Power Rankings',
-					href: '/power-rankings',
-					icon: TrendingUp,
-					blurb: "Who's actually good right now"
-				},
-				{
-					name: 'Hall of Fame',
-					href: '/hall-of-fame',
-					icon: Crown,
-					blurb: 'The all-time leaderboard'
-				},
-				{
-					name: 'Historical Deep Dive',
-					href: '/historical',
-					icon: BarChart3,
-					blurb: 'Twenty seasons of analysis'
-				}
-			]
-		},
-		{
-			label: 'Activity',
-			icon: ArrowLeftRight,
-			items: [
-				{
-					name: 'Trade Center',
-					href: '/trades',
-					icon: Target,
-					blurb: 'Every trade ever made'
-				},
-				{
-					name: 'Draft Central',
-					href: '/draft',
-					icon: Trophy,
-					blurb: 'Draft boards and grades'
-				},
-				{
-					name: 'Bet Board',
-					href: '/bets',
-					icon: Handshake,
-					blurb: 'Side bets, props, and who owes who'
-				}
-			]
-		},
-		{
-			label: 'League',
-			icon: BookOpen,
-			items: [
-				{
-					name: 'Constitution',
-					href: '/constitution',
-					icon: BookOpen,
-					blurb: 'Rules, proposals and voting'
-				},
-				{
-					name: 'Data Dictionary',
-					href: '/data-dictionary',
-					icon: Database,
-					blurb: 'What every metric means'
-				}
-			]
-		}
-	];
-
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
-	// One open menu at a time, held here rather than in each dropdown — otherwise
+	// One open menu at a time, held here rather than in each dropdown, otherwise
 	// clicking a second trigger leaves two panels overlapping.
 	let openNavMenu = $state<string | null>(null);
 
+	let userButton = $state<HTMLButtonElement | null>(null);
+	let userMenu = $state<HTMLDivElement | null>(null);
+
+	const pathname = $derived(page.url.pathname);
+	const signedIn = $derived(Boolean(data.user && data.authenticatedManager));
 	const isCommissioner = $derived(data.member?.role === 'commissioner');
 	// The dropdown links to the manager's public stats page. Encoded because every
 	// name in the roster has a space in it ("Gabe the Younger", "Troy Colvin").
@@ -137,13 +39,49 @@
 			: '/managers'
 	);
 
-	function toggleUserMenu() {
+	// Any navigation closes every menu, including one a link didn't close itself
+	// (the back button, a link in the page behind an open menu).
+	afterNavigate(() => {
+		openNavMenu = null;
+		showUserMenu = false;
+		showMobileMenu = false;
+	});
+
+	function userMenuItems(): HTMLElement[] {
+		return [...(userMenu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+	}
+
+	async function toggleUserMenu(event: MouseEvent) {
 		showUserMenu = !showUserMenu;
-		if (showUserMenu) openNavMenu = null;
+		if (!showUserMenu) return;
+		openNavMenu = null;
+		// From the keyboard (a click with no pointer behind it), focus the first
+		// item, as the nav menus do.
+		if (event.detail === 0) {
+			await tick();
+			userMenuItems()[0]?.focus();
+		}
 	}
 
 	function closeUserMenu() {
 		showUserMenu = false;
+	}
+
+	function onUserMenuKeydown(event: KeyboardEvent) {
+		const items = userMenuItems();
+		const next = nextMenuIndex(
+			items.indexOf(document.activeElement as HTMLElement),
+			items.length,
+			event.key
+		);
+		if (next === null) return;
+		event.preventDefault();
+		items[next].focus();
+	}
+
+	function onUserMenuFocusout(event: FocusEvent) {
+		const to = event.relatedTarget as Node | null;
+		if (to && !userMenu?.contains(to) && !userButton?.contains(to)) closeUserMenu();
 	}
 
 	function setNavMenu(label: string | null) {
@@ -163,28 +101,27 @@
 		if (event.key !== 'Escape') return;
 		if (showMobileMenu) closeMobileMenu();
 		if (openNavMenu) openNavMenu = null;
-		if (showUserMenu) closeUserMenu();
+		if (showUserMenu) {
+			closeUserMenu();
+			userButton?.focus();
+		}
 	}
 
-	const handleLogout: SubmitFunction = ({ formData, cancel }) => {
-		// Close menu immediately
+	const handleLogout: SubmitFunction = () => {
+		// Close the menu at once and let SvelteKit handle the redirect.
 		closeUserMenu();
-		// Let SvelteKit handle the redirect naturally
 	};
 </script>
 
-<div
-	class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900"
-	onkeydown={handleKeydown}
-	role="main"
->
+<svelte:window onkeydown={handleKeydown} />
+
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
 	<!-- Header -->
 	<header class="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-md">
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 			<div class="flex h-16 items-center justify-between">
 				<div class="flex items-center">
 					<a href="/" class="flex items-center">
-						<Trophy class="h-8 w-8 text-amber-400" />
 						<h1 class="ml-2 text-xl font-bold text-white">The League</h1>
 					</a>
 				</div>
@@ -193,14 +130,13 @@
 				     bar overflowed into the user menu. -->
 				<nav class="hidden items-center space-x-1 lg:flex">
 					{#each directLinks as item (item.href)}
-						{@const Icon = item.icon}
 						<a
 							href={item.href}
+							aria-current={isActivePath(pathname, item.href) ? 'page' : undefined}
 							class="flex items-center rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-							class:bg-slate-800={$page.url.pathname === item.href}
-							class:text-white={$page.url.pathname === item.href}
+							class:bg-slate-800={isActivePath(pathname, item.href)}
+							class:text-white={isActivePath(pathname, item.href)}
 						>
-							<Icon class="mr-2 h-4 w-4" />
 							{item.name}
 						</a>
 					{/each}
@@ -208,8 +144,7 @@
 					{#each navGroups as group (group.label)}
 						<NavDropdown
 							label={group.label}
-							icon={group.icon}
-							items={group.items}
+										items={group.items}
 							open={openNavMenu}
 							onToggle={setNavMenu}
 						/>
@@ -223,9 +158,10 @@
 						<div class="relative">
 							<button
 								type="button"
+								bind:this={userButton}
 								onclick={toggleUserMenu}
 								aria-expanded={showUserMenu}
-								aria-haspopup="true"
+								aria-haspopup="menu"
 								class="flex items-center space-x-3 rounded-full bg-slate-800 p-2 text-sm text-white transition-colors hover:bg-slate-700"
 							>
 								<ManagerProfilePicture
@@ -242,11 +178,17 @@
 							</button>
 
 							{#if showUserMenu}
-								<!-- User dropdown menu - Dark theme styling -->
 								<div
+									bind:this={userMenu}
+									role="menu"
+									aria-label="Account"
+									tabindex="-1"
+									use:clickOutside={{ onOutside: closeUserMenu, ignore: [userButton] }}
+									onkeydown={onUserMenuKeydown}
+									onfocusout={onUserMenuFocusout}
 									class="absolute right-0 z-50 mt-2 w-48 origin-top-right rounded-md border border-slate-600 bg-slate-800 py-1 shadow-lg ring-1 ring-slate-700"
 								>
-									<div class="border-b border-slate-700 px-4 py-3">
+									<div role="none" class="border-b border-slate-700 px-4 py-3">
 										<p class="text-sm text-slate-300">Signed in as</p>
 										<p class="truncate text-sm font-medium text-white">
 											{data.authenticatedManager.displayName}
@@ -254,36 +196,39 @@
 									</div>
 									<a
 										href={profileHref}
+										role="menuitem"
+										aria-current={isActivePath(pathname, profileHref) ? 'page' : undefined}
 										onclick={closeUserMenu}
 										class="flex items-center px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
 									>
-										<User class="mr-2 h-4 w-4" />
 										Your Profile
 									</a>
 									<a
 										href="/settings"
+										role="menuitem"
+										aria-current={isActivePath(pathname, '/settings') ? 'page' : undefined}
 										onclick={closeUserMenu}
 										class="flex items-center px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
 									>
-										<Settings class="mr-2 h-4 w-4" />
 										Settings
 									</a>
 									{#if isCommissioner}
 										<a
 											href="/admin/members"
+											role="menuitem"
+											aria-current={isActivePath(pathname, '/admin/members') ? 'page' : undefined}
 											onclick={closeUserMenu}
 											class="flex items-center px-4 py-2 text-sm text-amber-300 transition-colors hover:bg-slate-700 hover:text-amber-200"
 										>
-											<Shield class="mr-2 h-4 w-4" />
 											Commissioner
 										</a>
 									{/if}
-									<form method="post" action="/logout" use:enhance={handleLogout}>
+									<form method="post" action="/logout" use:enhance={handleLogout} role="none">
 										<button
 											type="submit"
+											role="menuitem"
 											class="flex w-full items-center px-4 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white"
 										>
-											<LogOut class="mr-2 h-4 w-4" />
 											Sign Out
 										</button>
 									</form>
@@ -296,7 +241,6 @@
 							href="/login"
 							class="flex items-center rounded-md px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 						>
-							<LogIn class="mr-2 h-4 w-4" />
 							Sign In
 						</a>
 					{/if}
@@ -343,15 +287,13 @@
 					<!-- The drawer has the vertical room the bar doesn't, so the groups
 					     open flat under their headings rather than as nested menus. -->
 					{#each directLinks as item (item.href)}
-						{@const Icon = item.icon}
 						<a
 							href={item.href}
 							onclick={closeMobileMenu}
 							class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-							class:bg-slate-800={$page.url.pathname === item.href}
-							class:text-white={$page.url.pathname === item.href}
+							class:bg-slate-800={isActivePath(pathname, item.href)}
+							class:text-white={isActivePath(pathname, item.href)}
 						>
-							<Icon class="mr-3 h-5 w-5" />
 							{item.name}
 						</a>
 					{/each}
@@ -362,15 +304,13 @@
 								{group.label}
 							</p>
 							{#each group.items as item (item.href)}
-								{@const Icon = item.icon}
 								<a
 									href={item.href}
 									onclick={closeMobileMenu}
 									class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-									class:bg-slate-800={$page.url.pathname === item.href}
-									class:text-white={$page.url.pathname === item.href}
+									class:bg-slate-800={isActivePath(pathname, item.href)}
+									class:text-white={isActivePath(pathname, item.href)}
 								>
-									<Icon class="mr-3 h-5 w-5" />
 									{item.name}
 								</a>
 							{/each}
@@ -378,14 +318,13 @@
 					{/each}
 
 					<!-- Auth links for mobile -->
-					{#if !data.user || !data.authenticatedManager}
+					{#if !signedIn}
 						<div class="mt-4 border-t border-slate-700 pt-4">
 							<a
 								href="/login"
 								onclick={closeMobileMenu}
 								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<LogIn class="mr-3 h-5 w-5" />
 								Sign In
 							</a>
 						</div>
@@ -396,7 +335,6 @@
 								onclick={closeMobileMenu}
 								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<User class="mr-3 h-5 w-5" />
 								Your Profile
 							</a>
 							<a
@@ -404,7 +342,6 @@
 								onclick={closeMobileMenu}
 								class="flex items-center rounded-md px-4 py-3 text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 							>
-								<Settings class="mr-3 h-5 w-5" />
 								Settings
 							</a>
 							{#if isCommissioner}
@@ -413,7 +350,6 @@
 									onclick={closeMobileMenu}
 									class="flex items-center rounded-md px-4 py-3 text-base font-medium text-amber-300 transition-colors hover:bg-slate-800 hover:text-amber-200"
 								>
-									<Shield class="mr-3 h-5 w-5" />
 									Commissioner
 								</a>
 							{/if}
@@ -423,7 +359,6 @@
 									onclick={closeMobileMenu}
 									class="flex w-full items-center rounded-md px-4 py-3 text-left text-base font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 								>
-									<LogOut class="mr-3 h-5 w-5" />
 									Sign Out
 								</button>
 							</form>
@@ -450,23 +385,3 @@
 		</div>
 	</footer>
 </div>
-
-<!-- Click outside to close user menu -->
-<!-- TEMPORARILY DISABLED FOR TESTING -->
-<!--
-{#if showUserMenu}
-	<div 
-		class="fixed inset-0 z-40" 
-		role="button" 
-		tabindex="-1"
-		onclick={(e) => {
-			// Only close if clicking outside the dropdown area
-			if (e.target === e.currentTarget) {
-				closeUserMenu();
-			}
-		}}
-		onkeydown={(e) => { if (e.key === 'Escape') closeUserMenu(); }}
-		aria-label="Close user menu"
-	></div>
-{/if}
--->
