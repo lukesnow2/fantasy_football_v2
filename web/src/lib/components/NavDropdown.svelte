@@ -1,4 +1,9 @@
 <script lang="ts">
+	/**
+	 * One group in the header band ("Rankings ▾") and the menu it opens, as the
+	 * Navigation board draws them (WP2, S2.2). The layout holds which menu is
+	 * open, so only one is open at a time.
+	 */
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { clickOutside } from '$lib/actions/clickOutside';
@@ -74,16 +79,15 @@
 	}
 </script>
 
-<div class="relative" bind:this={root} onkeydown={onKeydown} onfocusout={onFocusout} role="none">
+<div class="group" bind:this={root} onkeydown={onKeydown} onfocusout={onFocusout} role="none">
 	<button
 		bind:this={trigger}
 		type="button"
+		class="band-link"
+		class:on={isActive || isOpen}
 		aria-expanded={isOpen}
 		aria-haspopup="menu"
 		onclick={onTriggerClick}
-		class="flex items-center whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
-		class:bg-slate-800={isActive || isOpen}
-		class:text-white={isActive || isOpen}
 	>
 		{label}<span aria-hidden="true">&nbsp;{isOpen ? '▴' : '▾'}</span>
 	</button>
@@ -91,27 +95,116 @@
 	{#if isOpen}
 		<div
 			bind:this={panel}
+			class="menu"
 			role="menu"
 			aria-label={label}
 			use:clickOutside={{ onOutside: () => onToggle(null), ignore: [trigger] }}
-			class="absolute left-0 z-50 mt-2 w-72 origin-top-left rounded-lg border border-slate-600 bg-slate-800 py-1.5 shadow-xl ring-1 ring-slate-700"
 		>
 			{#each items as item (item.href)}
 				{@const current = isActivePath(page.url.pathname, item.href)}
 				<a
 					href={item.href}
+					class="item"
+					class:current
 					role="menuitem"
 					aria-current={current ? 'page' : undefined}
 					onclick={() => onToggle(null)}
-					class="flex items-start gap-3 px-3 py-2 transition-colors hover:bg-slate-700"
-					class:bg-slate-700={current}
 				>
-					<span class="min-w-0">
-						<span class="block text-sm font-medium text-white">{item.name}</span>
-						<span class="block text-xs text-slate-400">{item.blurb}</span>
+					<span class="bar" aria-hidden="true"></span>
+					<span>
+						<span class="name">{item.name}</span>
+						<span class="blurb">{item.blurb}</span>
 					</span>
 				</a>
 			{/each}
+			<div class="hint" aria-hidden="true">↑ ↓ to move · Esc to close</div>
 		</div>
 	{/if}
 </div>
+
+<style>
+	.group {
+		position: relative;
+	}
+
+	/* The trigger shares the band link's look with the direct links; the
+	   layout's .band-link rule is global so both read the same. */
+
+	.menu {
+		position: absolute;
+		/* The group sits centered in the 68px band, so its middle is 34px above
+		   the band's bottom edge. The board puts the menu 4px below that edge. */
+		top: calc(50% + 34px + 4px);
+		left: 0;
+		z-index: 50;
+		/* Content-box, as the board draws it: 340px of items inside the padding. */
+		box-sizing: content-box;
+		width: 340px;
+		padding: 8px;
+		border-radius: var(--radius-card);
+		background: var(--color-card);
+		border: 1px solid var(--color-line);
+		box-shadow: var(--shadow-popover);
+		color: var(--color-ink);
+		/* The menu sits inside the nav, which sets 15px weight 500 for the band
+		   links; the board's menu is outside it and reads at the page's 16px 400. */
+		font-size: 16px;
+		font-weight: 400;
+	}
+
+	.item {
+		display: flex;
+		gap: 12px;
+		padding: 12px;
+		border-radius: var(--radius-control);
+		color: var(--color-ink);
+	}
+
+	/* Before the hover rule, so hovering the current page's item turns it
+	   field-wash with a clear bar like every other item. */
+	.item.current {
+		background: var(--color-field-tint);
+	}
+
+	.item:hover,
+	.item:focus-visible {
+		background: var(--color-field-wash);
+		color: var(--color-ink);
+		outline: none;
+	}
+
+	.bar {
+		flex: none;
+		width: 4px;
+		border-radius: 2px;
+		background: transparent;
+	}
+
+	.item.current .bar {
+		background: var(--color-field);
+	}
+
+	.item.current:hover .bar,
+	.item.current:focus-visible .bar {
+		background: transparent;
+	}
+
+	.name {
+		display: block;
+		font-size: 15px;
+		font-weight: 700;
+	}
+
+	.blurb {
+		display: block;
+		margin-top: 2px;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.hint {
+		padding: 8px 12px 4px;
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+</style>
