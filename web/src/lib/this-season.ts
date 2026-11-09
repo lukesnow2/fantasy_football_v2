@@ -373,8 +373,10 @@ export function oddsMethod(sims: number, playoffTeams: number, byes: number): [s
 	const format =
 		playoffTeams === 6 && byes === 2
 			? 'Six make it and the top two get byes: 3 plays 6, 4 plays 5.'
-			: byes > 0
-				? `The top ${playoffTeams} make it and the top ${byes} get byes.`
+			: byes === 1
+				? `The top ${playoffTeams} make it and the top seed gets a bye.`
+				: byes > 0
+					? `The top ${playoffTeams} make it and the top ${byes} get byes.`
 				: `The top ${playoffTeams} make it.`;
 	return [
 		first,

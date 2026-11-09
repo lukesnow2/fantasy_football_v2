@@ -387,7 +387,8 @@ describe('oddsMethod', () => {
 	});
 
 	it('describes other formats', () => {
-		expect(oddsMethod(10000, 4, 1)[1]).toMatch(/^The top 4 make it and the top 1 get byes\. Back/);
+		expect(oddsMethod(10000, 4, 1)[1]).toMatch(/^The top 4 make it and the top seed gets a bye\. Back/);
+		expect(oddsMethod(10000, 8, 4)[1]).toMatch(/^The top 8 make it and the top 4 get byes\. Back/);
 		expect(oddsMethod(10000, 4, 0)[1]).toMatch(/^The top 4 make it\. Back/);
 	});
 });

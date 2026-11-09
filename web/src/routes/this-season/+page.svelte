@@ -281,7 +281,9 @@
 
 {#if status === 'loading'}
 	<div class="skeleton" aria-busy="true" aria-label="Loading this season">
-		<div class="sk-card sk-strip"></div>
+		<div class="sk-card sk-strip">
+			{#each Array(4) as _, i (i)}<span class="sk-tile"><span class="sk-bar short"></span><span class="sk-bar tall"></span></span>{/each}
+		</div>
 		<div class="sk-card">
 			{#each Array(10) as _, i (i)}<span class="sk-bar"></span>{/each}
 		</div>
@@ -690,8 +692,22 @@
 	}
 
 	.sk-strip {
-		height: 118px;
-		box-sizing: border-box;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 20px 44px;
+	}
+
+	.sk-tile {
+		display: grid;
+		gap: 10px;
+	}
+
+	.sk-bar.short {
+		width: 60%;
+		height: 14px;
+	}
+
+	.sk-bar.tall {
+		height: 38px;
 	}
 
 	.sk-bar {
@@ -929,6 +945,19 @@
 		.skeleton {
 			margin-top: 14px;
 			gap: 14px;
+		}
+
+		.sk-card {
+			padding: 16px;
+		}
+
+		.sk-strip {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 16px;
+		}
+
+		.sk-bar.tall {
+			height: 24px;
 		}
 
 		.phone-standings li {
