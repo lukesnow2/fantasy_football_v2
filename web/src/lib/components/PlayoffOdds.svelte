@@ -330,25 +330,66 @@
 		{#if showMethod}
 			<div class="mt-2 space-y-2 text-xs leading-relaxed text-slate-400">
 				<p>
-					Each team gets a projected weekly score: its season average, pulled toward the league
-					average until there are enough games to trust it. Points matter more than record because
-					there's no defense in fantasy. A 6-1 team that scores like a 4-3 team keeps its six wins
-					but is projected to play like a 4-3 team from here on.
+					Each team gets a projected weekly score: its season average, blended with the league
+					average as if it had played three extra average games. After 3 games that's half its own
+					scoring, after 12 it's 80%. Points matter more than record because there's no defense in
+					fantasy, so a 6-1 team that scores like a 4-3 team keeps its six wins but is projected to
+					play like a 4-3 team from here on.
 				</p>
 				<p>
-					The rest of the season is then played out {data.sims.toLocaleString()} times against the real
-					remaining schedule (Yahoo repeats the round robin, so it's known). Each run varies how good
-					each team really is, lets that drift week to week for injuries and trades, and draws weekly
-					scores with each team's own boom-or-bust spread. Seeding is wins, then points for, then a 3v6
-					/ 4v5 bracket for the title odds.
+					The rest of the season is then played out {data.sims.toLocaleString()} times. Each run varies
+					how good each team really is, lets that drift week to week for injuries and trades, and draws
+					weekly scores with each team's own week-to-week spread. The schedule repeats every {data
+						.teams.length - 1} weeks, so once everyone has played everyone the rest of it is known; until
+					then the unplayed pairings are drawn at random. Seeding is wins, then points for, simulated
+					points included.
+					{#if data.playoffTeams === 6 && data.byes === 2}
+						The top 6 make it and 1 and 2 get byes. Then it's 3 v 6 and 4 v 5, with 1 playing the
+						4/5 winner and 2 playing the 3/6 winner.
+					{:else if data.byes > 0}
+						The top {data.playoffTeams} make it and the top {data.byes} get byes.
+					{:else}
+						The top {data.playoffTeams} make it.
+					{/if}
 				</p>
+				<dl class="space-y-1.5">
+					<div>
+						<dt class="inline text-slate-300">Luck:</dt>
+						<dd class="inline">
+							actual wins minus expected wins. Expected wins are the all-play win rate (how often
+							the team's score beat each other team's score that week) times games played.
+						</dd>
+					</div>
+					<div>
+						<dt class="inline text-slate-300">Clinched and Out:</dt>
+						<dd class="inline">
+							no remaining result can change it. A tie on wins counts for neither, since points
+							could still break it. Short of that, the most a team shows is &gt;99%.
+						</dd>
+					</div>
+					<div>
+						<dt class="inline text-slate-300">Schedule left:</dt>
+						<dd class="inline">
+							the average projected score of the opponents still to play. The 3 hardest are marked
+							tough, the 3 easiest soft.
+						</dd>
+					</div>
+					<div>
+						<dt class="inline text-slate-300">Projected finish:</dt>
+						<dd class="inline">the average final record across all the runs.</dd>
+					</div>
+					<div>
+						<dt class="inline text-slate-300">Arrows:</dt>
+						<dd class="inline">
+							the change from last week's odds, run with the same random draws so the move comes
+							from last week's results. Moves under 2 points aren't shown.
+						</dd>
+					</div>
+				</dl>
 				<p>
-					<span class="text-slate-300">Luck</span> is actual wins minus the wins the team's scores would
-					earn on average (all-play). "Clinched" and "Out" are mathematical, not just likely.
-				</p>
-				<p>
-					Tested on every week of the 2008-2025 seasons: teams given about 90% made the playoffs 90%
-					of the time, and it beats a record-and-schedule-only model.
+					Tested on 2008-2025, every week from week 3 on with at least two weeks left: teams given
+					85-95% made the playoffs 90% of the time. That's slightly better than using record and
+					schedule alone, but not by enough to rule out luck.
 				</p>
 			</div>
 		{/if}
