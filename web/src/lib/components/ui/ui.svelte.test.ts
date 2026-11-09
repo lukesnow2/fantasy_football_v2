@@ -1,10 +1,11 @@
 import { page, userEvent } from '@vitest/browser/context';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
 import Segmented from './Segmented.svelte';
 import StatTip from './StatTip.svelte';
 import Movement from './Movement.svelte';
+import ButtonHarness from './ButtonHarness.test.svelte';
 import { resetStatTipData } from './stat-tip-data';
 
 const LUCK = {
@@ -115,6 +116,8 @@ describe('StatTip', () => {
 	});
 
 	it('stays inside a 390 wide viewport', async () => {
+		const before = { width: window.innerWidth, height: window.innerHeight };
+		onTestFinished(() => page.viewport(before.width, before.height));
 		await page.viewport(390, 800);
 		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
 		const { container } = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
@@ -154,5 +157,16 @@ describe('Movement', () => {
 	it('prints None for a missing or non-finite change', async () => {
 		expect(render(Movement, { change: null }).container.textContent?.trim()).toBe('None');
 		expect(render(Movement, { change: NaN }).container.textContent?.trim()).toBe('None');
+	});
+});
+
+describe('Button', () => {
+	it('adds a caller class to its own, and a disabled link has no href', async () => {
+		const { container } = render(ButtonHarness);
+		const links = container.querySelectorAll('a');
+		expect(links[0].className).toMatch(/\bbtn\b.*\bprimary\b.*\bmt-4\b/);
+		expect(links[0].getAttribute('href')).toBe('/power-rankings');
+		expect(links[1].hasAttribute('href')).toBe(false);
+		expect(links[1].getAttribute('aria-disabled')).toBe('true');
 	});
 });

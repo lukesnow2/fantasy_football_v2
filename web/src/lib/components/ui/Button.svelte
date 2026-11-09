@@ -8,7 +8,8 @@
 	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
-	 * (onclick, type, disabled, aria-*) goes through to the element.
+	 * (onclick, type, aria-*) goes through to the element, and `class` adds to
+	 * the part's own. A disabled link drops its href, so it can't navigate.
 	 */
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
@@ -22,13 +23,26 @@
 	} & Omit<HTMLButtonAttributes, 'children'> &
 		Omit<HTMLAnchorAttributes, 'children'>;
 
-	let { variant = 'primary', href, children, type = 'button', ...rest }: Props = $props();
+	let {
+		variant = 'primary',
+		href,
+		children,
+		type = 'button',
+		class: className = '',
+		disabled = false,
+		...rest
+	}: Props = $props();
 </script>
 
 {#if href}
-	<a {href} class="btn {variant}" {...rest as HTMLAnchorAttributes}>{@render children()}</a>
+	<a
+		{...rest as HTMLAnchorAttributes}
+		href={disabled ? undefined : href}
+		aria-disabled={disabled || undefined}
+		class="btn {variant} {className}">{@render children()}</a
+	>
 {:else}
-	<button {type} class="btn {variant}" {...rest as HTMLButtonAttributes}
+	<button {...rest as HTMLButtonAttributes} {type} {disabled} class="btn {variant} {className}"
 		>{@render children()}</button
 	>
 {/if}
@@ -89,7 +103,8 @@
 		outline-offset: 2px;
 	}
 
-	.btn:disabled {
+	.btn:disabled,
+	.btn[aria-disabled='true'] {
 		cursor: not-allowed;
 		opacity: 0.55;
 	}

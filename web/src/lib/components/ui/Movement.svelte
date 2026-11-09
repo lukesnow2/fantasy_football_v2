@@ -23,7 +23,7 @@
 {#if move === null}
 	<EmptyValue />
 {:else if move.direction === 'same'}
-	<span class="movement same">Same</span>
+	<span class="movement same">{move.text}</span>
 {:else}
 	<span class="movement {move.direction}"
 		><span aria-hidden="true">{move.direction === 'up' ? '▲' : '▼'}</span><span class="sr-only"

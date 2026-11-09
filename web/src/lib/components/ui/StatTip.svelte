@@ -65,7 +65,8 @@
 	let position: { top: number; left: number } | null = $state(null);
 	let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
-	const showing = $derived((open || hovering) && status === 'ready' && definition !== null);
+	// 'ready' always comes with a definition.
+	const showing = $derived((open || hovering) && status === 'ready');
 
 	$effect(() => {
 		const id = metricId;
@@ -107,10 +108,19 @@
 			return;
 		}
 		tick().then(place);
-		const follow = () => place();
+		// One measurement per frame, however many scroll events arrive.
+		let frame = 0;
+		const follow = () => {
+			if (frame) return;
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				place();
+			});
+		};
 		window.addEventListener('scroll', follow, true);
 		window.addEventListener('resize', follow);
 		return () => {
+			cancelAnimationFrame(frame);
 			window.removeEventListener('scroll', follow, true);
 			window.removeEventListener('resize', follow);
 		};
@@ -142,16 +152,11 @@
 		hovering = false;
 	}
 
+	// A click, tap or Enter toggles the pinned state. A card the pointer opened
+	// isn't pinned yet, so the first click pins it rather than closing it.
 	function onclick() {
-		// A click on a card the pointer already opened keeps it open; otherwise
-		// a click (or a tap, or Enter) toggles it.
-		if (hovering && !open) {
-			open = true;
-		} else if (open) {
-			close();
-		} else {
-			open = true;
-		}
+		if (open) close();
+		else open = true;
 	}
 
 	function onpointerenter(event: PointerEvent) {
