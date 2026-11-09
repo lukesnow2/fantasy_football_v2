@@ -218,7 +218,7 @@
 								{@const team = oddsByManager.get(row.managerName)}
 								<li class="week-row">
 									<span class="week-rank">{i + 1}</span>
-									<Avatar name={row.managerName} size={32} />
+									<Avatar name={row.managerName} size={32} initialTone="field" />
 									<span class="week-name">{@render manager(row.managerName)}</span>
 									<span class="week-wl">{formatRecord(row.wins, row.losses, row.ties)}</span>
 									{#if mode === 'final'}
@@ -289,7 +289,7 @@
 				<ul class="wall">
 					{#each banners as b (b.name)}
 						<li class="wall-row">
-							<Avatar name={b.name} size={36} />
+							<Avatar name={b.name} size={36} initialTone="field" initialSize={16} />
 							<span class="wall-name">{@render manager(b.name)}</span>
 							<span class="pennants" role="img" aria-label={titlesLabel(b.count)}>
 								{#each Array(b.count) as _, i (i)}<Pennant />{/each}
@@ -338,7 +338,7 @@
 				{:else}
 					<div class="faceoff">
 						<div class="side">
-							<Avatar name={series.left} size={rivalAvatar} ring={3} />
+							<Avatar name={series.left} size={rivalAvatar} ring={3} initialTone="field" />
 							<span class="side-name">{@render manager(series.left)}</span>
 						</div>
 						<div class="score">
@@ -346,7 +346,7 @@
 							<div class="score-note">{series.meetings} meetings since {series.since}</div>
 						</div>
 						<div class="side">
-							<Avatar name={series.right} size={rivalAvatar} ring={3} />
+							<Avatar name={series.right} size={rivalAvatar} ring={3} initialTone="field" />
 							<span class="side-name">{@render manager(series.right)}</span>
 						</div>
 					</div>

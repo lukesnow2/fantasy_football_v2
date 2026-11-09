@@ -33,3 +33,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="No photo, field tone">
+	{#snippet template()}
+		<div style="display: flex; gap: 16px; align-items: center">
+			{#each sizes as size (size)}<Avatar name="Justin" {size} initialTone="field" />{/each}
+		</div>
+	{/snippet}
+</Story>
