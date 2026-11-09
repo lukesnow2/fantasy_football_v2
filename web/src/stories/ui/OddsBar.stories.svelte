@@ -30,3 +30,12 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Fixed number width">
+	{#snippet template()}
+		<div style="display: grid; gap: 12px; width: 260px">
+			<OddsBar percent={85} numberWidth={38} />
+			<OddsBar percent={5} tone="sage" numberWidth={38} />
+		</div>
+	{/snippet}
+</Story>

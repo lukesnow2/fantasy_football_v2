@@ -10,6 +10,10 @@
 	 * `value` is bindable.
 	 *
 	 *   <Segmented label="Week" options={weeks} bind:value={week} />
+	 *
+	 * `size="toggle"` is the view switch This Season draws (Odds of, Order
+	 * standings by): 34px buttons at 13px, every label in ink. Below 640px it
+	 * grows to 44px at 14px, the phone boards' touch size.
 	 */
 	import { segmentedTarget } from './parts';
 
@@ -24,9 +28,10 @@
 		/** The group's accessible name, such as "Week". */
 		label: string;
 		onchange?: (value: Value) => void;
+		size?: 'default' | 'toggle';
 	}
 
-	let { options, value = $bindable(), label, onchange }: Props = $props();
+	let { options, value = $bindable(), label, onchange, size = 'default' }: Props = $props();
 
 	let buttons: HTMLButtonElement[] = $state([]);
 
@@ -52,7 +57,7 @@
 	}
 </script>
 
-<div class="segmented" role="radiogroup" aria-label={label}>
+<div class="segmented size-{size}" role="radiogroup" aria-label={label}>
 	{#each options as option, index (option.value)}
 		{@const on = index === selectedIndex}
 		<button
@@ -101,6 +106,19 @@
 		background: var(--color-card);
 		color: var(--color-ink);
 		font-weight: 700;
+	}
+
+	.size-toggle button {
+		min-height: 34px;
+		font-size: 13px;
+		color: var(--color-ink);
+	}
+
+	@media (max-width: 639.98px) {
+		.size-toggle button {
+			min-height: 44px;
+			font-size: 14px;
+		}
 	}
 
 	button:focus-visible {

@@ -27,3 +27,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Champion size">
+	{#snippet template()}
+		<div style="display: inline-flex; padding: 16px; background: var(--color-clubhouse)">
+			<Pennant staff="var(--color-white)" fill="var(--color-pennant-light)" width={14} height={20} />
+		</div>
+	{/snippet}
+</Story>

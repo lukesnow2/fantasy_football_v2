@@ -13,6 +13,8 @@
 		name: string;
 		size?: number;
 		ring?: number;
+		/** The ring's color: white (card) unless the board draws another. */
+		ringColor?: string;
 		initialTone?: 'wash' | 'field';
 		initialSize?: number;
 		class?: string;
@@ -22,6 +24,7 @@
 		name,
 		size = 28,
 		ring = 0,
+		ringColor,
 		initialTone = 'wash',
 		initialSize,
 		class: className = ''
@@ -36,6 +39,7 @@
 		style:width="{size}px"
 		style:height="{size}px"
 		style:border-width={ring ? `${ring}px` : undefined}
+		style:border-color={ringColor}
 	>
 		<ManagerProfilePicture managerName={name} />
 	</span>
@@ -47,6 +51,7 @@
 		style:width="{size}px"
 		style:height="{size}px"
 		style:border-width={ring ? `${ring}px` : undefined}
+		style:border-color={ringColor}
 		style:font-size="{initialSize ?? size * 0.4}px">{avatarInitial(name)}</span
 	>
 {/if}

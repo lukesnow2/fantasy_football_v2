@@ -16,20 +16,24 @@
 	 * fill the after-the-final board draws for the winner, and `last-place` is
 	 * the ink fill for the Last Place Trophy (WP4 S4.9's Finish tag).
 	 *
-	 * One size everywhere: 4px 10px, 12px weight 700, 0.04em, as System draws it,
-	 * at the normal line height whatever the row around it sets.
+	 * System's size is 4px 10px, 12px weight 700, 0.04em, at the normal line
+	 * height whatever the row around it sets. This Season's rows draw two more
+	 * (WP4 S4.5, S4.9): `size="row"` is 2px 8px with no letter spacing (Recent
+	 * moves, the Finish tag), and `size="small"` is 1px 6px at 11px (the Bye tag
+	 * in Playoff Field).
 	 */
 	import type { Snippet } from 'svelte';
 
 	interface Props {
 		variant: TagVariant;
+		size?: 'default' | 'row' | 'small';
 		children: Snippet;
 	}
 
-	let { variant, children }: Props = $props();
+	let { variant, size = 'default', children }: Props = $props();
 </script>
 
-<span class="tag {variant}">{@render children()}</span>
+<span class="tag {variant} size-{size}">{@render children()}</span>
 
 <style>
 	.tag {
@@ -41,6 +45,17 @@
 		letter-spacing: 0.04em;
 		line-height: normal;
 		white-space: nowrap;
+	}
+
+	.size-row {
+		padding: 2px 8px;
+		letter-spacing: normal;
+	}
+
+	.size-small {
+		padding: 1px 6px;
+		font-size: 11px;
+		letter-spacing: normal;
 	}
 
 	.clinched {

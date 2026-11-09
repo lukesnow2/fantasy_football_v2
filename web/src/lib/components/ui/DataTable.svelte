@@ -6,6 +6,8 @@
 		numeric?: boolean;
 		/** A CSS width for the column, such as "56px". The rest share what's left. */
 		width?: string;
+		/** An accessible name for the header when its text is a symbol ("Wk Δ"). */
+		ariaLabel?: string;
 	}
 </script>
 
@@ -89,6 +91,7 @@
 						class:num={column.numeric}
 						class:bare={hideHeader}
 						style:width={column.width}
+						aria-label={column.ariaLabel}
 					>
 						<span class:sr-only={hideHeader}
 							>{#if header}{@render header(column)}{:else}{column.label}{/if}</span
