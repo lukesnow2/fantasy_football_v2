@@ -9,21 +9,19 @@
 	 * Champion is pennant-tint with pennant-dark. `champion-strong` is the pennant
 	 * fill the after-the-final board draws for the winner.
 	 *
-	 * `compact` is the in-row size from the after-the-final standings: 2px 8px of
-	 * padding and no letter spacing.
+	 * One size everywhere: 4px 10px, 12px weight 700, 0.04em, as System draws it.
 	 */
 	import type { Snippet } from 'svelte';
 
 	interface Props {
 		variant: TagVariant;
-		compact?: boolean;
 		children: Snippet;
 	}
 
-	let { variant, compact = false, children }: Props = $props();
+	let { variant, children }: Props = $props();
 </script>
 
-<span class="tag {variant}" class:compact>{@render children()}</span>
+<span class="tag {variant}">{@render children()}</span>
 
 <style>
 	.tag {
@@ -34,11 +32,6 @@
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		white-space: nowrap;
-	}
-
-	.compact {
-		padding: 2px 8px;
-		letter-spacing: normal;
 	}
 
 	.clinched {

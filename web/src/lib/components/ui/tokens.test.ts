@@ -79,3 +79,18 @@ describe('Record Book tokens', () => {
 		expect(recordBook).toMatch(/literal hex anywhere outside this\s+\*\s+@theme block is a bug/);
 	});
 });
+
+describe('Record Book link rules', () => {
+	const rule = (selector: string) =>
+		css.match(new RegExp(`\\n\\s*${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+
+	it('draws a link in ink, turning field on hover', () => {
+		expect(rule('a')).toContain('color: var(--color-ink);');
+		expect(rule('a:hover')).toContain('color: var(--color-field);');
+	});
+
+	it('draws a field link in field, turning clubhouse on hover', () => {
+		expect(rule('a.field-link')).toContain('color: var(--color-field);');
+		expect(rule('a.field-link:hover')).toContain('color: var(--color-clubhouse);');
+	});
+});

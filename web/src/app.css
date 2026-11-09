@@ -227,7 +227,9 @@
 
 /*
  * Record Book base styles (WP1, S1.2), from the boards' page wrapper and their
- * `a` / `a:hover` rules. The boards set no line height on the page, so neither
+ * link rules. A link is ink and turns field on hover. A field link (the "→"
+ * links, Sign in's "try again") is field and turns clubhouse, the System
+ * board's `a.field-link`. The boards set no line height on the page, so neither
  * does this: text without its own line height reads at the font's normal.
  */
 @layer base {
@@ -246,5 +248,13 @@
 
   a:hover {
     color: var(--color-field);
+  }
+
+  a.field-link {
+    color: var(--color-field);
+  }
+
+  a.field-link:hover {
+    color: var(--color-clubhouse);
   }
 }

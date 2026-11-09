@@ -69,8 +69,8 @@
 		color: var(--color-ink);
 	}
 
-	/* The board's link is a bare anchor: no box, no height, and the System
-	   board's own hover color. */
+	/* The board's link is a bare anchor: no box, no height, and the
+	   `a.field-link` colors, field turning clubhouse. */
 	.link {
 		display: inline;
 		min-height: 0;

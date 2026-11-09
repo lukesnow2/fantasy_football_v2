@@ -22,13 +22,13 @@
 	{/snippet}
 </Story>
 
-<Story name="Compact, in a row">
+<Story name="In a row">
 	{#snippet template()}
 		<div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 15px">
-			<Tag variant="champion-strong" compact>Champion</Tag>
-			<Tag variant="champion" compact>Runner-up</Tag>
-			<Tag variant="bye" compact>Semifinalist</Tag>
-			<Tag variant="eliminated" compact>Consolation winner</Tag>
+			<Tag variant="champion-strong">Champion</Tag>
+			<Tag variant="champion">Runner-up</Tag>
+			<Tag variant="bye">Semifinalist</Tag>
+			<Tag variant="eliminated">Consolation winner</Tag>
 		</div>
 	{/snippet}
 </Story>
