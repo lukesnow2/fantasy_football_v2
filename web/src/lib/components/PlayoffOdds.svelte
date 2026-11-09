@@ -36,21 +36,39 @@
 		{ id: 'titleOdds', label: 'Title' }
 	];
 
-	let data = $state<OddsResponse | null>(null);
+	interface Props {
+		/**
+		 * The /api/playoff-odds response, when the page has already fetched it
+		 * (This Season shares it with its standings, stat strip and notes).
+		 * Without it the component fetches for itself.
+		 */
+		data?: OddsResponse | null;
+	}
+
+	let { data: given }: Props = $props();
+
+	let fetched = $state<OddsResponse | null>(null);
 	let loading = $state(true);
 	let failed = $state(false);
 	let metric = $state<Metric>('playoffOdds');
 	let open = $state<number | null>(null);
 	let showMethod = $state(false);
 
+	const data = $derived(given !== undefined ? given : fetched);
+
 	$effect(() => {
+		if (given !== undefined) {
+			loading = false;
+			failed = given === null;
+			return;
+		}
 		let cancelled = false;
 		(async () => {
 			try {
 				const res = await fetch('/api/playoff-odds');
 				if (!res.ok) throw new Error(String(res.status));
 				const body = await res.json();
-				if (!cancelled) data = body;
+				if (!cancelled) fetched = body;
 			} catch (err) {
 				console.error('Playoff odds failed to load:', err);
 				if (!cancelled) failed = true;
