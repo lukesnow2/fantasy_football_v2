@@ -8,13 +8,16 @@
 	import { movement } from './parts';
 
 	interface Props {
-		/** Places gained (positive) or lost (negative). Null renders "None". */
+		/**
+		 * Places gained (positive) or lost (negative). Null, or a value that isn't
+		 * a finite number (a subtraction with a missing week), renders "None".
+		 */
 		change: number | null | undefined;
 	}
 
 	let { change }: Props = $props();
 
-	const move = $derived(change == null ? null : movement(change));
+	const move = $derived(change == null || !Number.isFinite(change) ? null : movement(change));
 </script>
 
 {#if move === null}

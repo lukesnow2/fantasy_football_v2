@@ -38,6 +38,7 @@ describe('avatarInitial', () => {
 		expect(avatarInitial('  gabe the younger')).toBe('G');
 		expect(avatarInitial('')).toBe('');
 		expect(avatarInitial(null)).toBe('');
+		expect(avatarInitial('🦅 Craig')).toBe('🦅');
 	});
 });
 

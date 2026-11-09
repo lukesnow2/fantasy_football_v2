@@ -51,7 +51,8 @@
 	const cardId = `stattip-${id}`;
 
 	// A definition already in the store (the Data Dictionary seeds every one)
-	// renders with the first paint; anything else loads on mount.
+	// renders with the first paint; anything else loads once mounted, and again
+	// whenever metricId changes.
 	const cached = cachedDefinition(metricId);
 	let definition: StatTipDefinition | null = $state(cached);
 	let status: 'loading' | 'ready' | 'missing' = $state(cached ? 'ready' : 'loading');
@@ -66,19 +67,28 @@
 
 	const showing = $derived((open || hovering) && status === 'ready' && definition !== null);
 
-	onMount(() => {
-		if (status === 'ready') return;
+	$effect(() => {
+		const id = metricId;
+		const known = cachedDefinition(id);
+		if (known) {
+			definition = known;
+			status = 'ready';
+			return;
+		}
+		definition = null;
+		status = 'loading';
 		let cancelled = false;
-		loadDefinition(metricId).then((found) => {
+		loadDefinition(id).then((found) => {
 			if (cancelled) return;
 			definition = found;
 			status = found ? 'ready' : 'missing';
 		});
 		return () => {
 			cancelled = true;
-			clearTimeout(closeTimer);
 		};
 	});
+
+	onMount(() => () => clearTimeout(closeTimer));
 
 	async function place() {
 		if (!trigger || !card) return;

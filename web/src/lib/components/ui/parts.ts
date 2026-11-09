@@ -23,9 +23,12 @@ export function formatPercent(value: number): string {
 	return `${Math.round(clampPercent(value))}%`;
 }
 
-/** The letter on a photo-less avatar: the first letter of the name, capitalized. */
+/**
+ * The letter on a photo-less avatar: the first character of the name,
+ * capitalized. Taken by code point, so an emoji isn't split in half.
+ */
 export function avatarInitial(name: string | null | undefined): string {
-	const first = (name ?? '').trim().charAt(0);
+	const [first = ''] = (name ?? '').trim();
 	return first.toUpperCase();
 }
 

@@ -89,6 +89,21 @@ describe('StatTip', () => {
 		expect(document.activeElement).toBe(button.element());
 	});
 
+	it('shows the new metric when metricId changes', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		metricDefinitionsStore.setMetric('pythagorean_wins', {
+			metric: { ...LUCK, metricId: 'pythagorean_wins', metricName: 'Pythagorean Wins' } as never
+		});
+		const view = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		await view.rerender({ metricId: 'pythagorean_wins', label: 'Pyth W' });
+
+		await page.getByRole('button', { name: /Pyth W/ }).click();
+		await expect.element(page.getByRole('tooltip')).toHaveTextContent('Pythagorean Wins');
+		await expect
+			.element(page.getByRole('link', { name: 'Full definition in the Data Dictionary →' }))
+			.toHaveAttribute('href', '/data-dictionary#pythagorean_wins');
+	});
+
 	it('closes on a click outside', async () => {
 		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
 		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
@@ -134,5 +149,10 @@ describe('Movement', () => {
 		expect(up.container.textContent?.replace(/\s+/g, ' ').trim()).toBe('▲Up 4');
 		const same = render(Movement, { change: 0 });
 		expect(same.container.textContent?.trim()).toBe('Same');
+	});
+
+	it('prints None for a missing or non-finite change', async () => {
+		expect(render(Movement, { change: null }).container.textContent?.trim()).toBe('None');
+		expect(render(Movement, { change: NaN }).container.textContent?.trim()).toBe('None');
 	});
 });

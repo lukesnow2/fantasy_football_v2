@@ -25,6 +25,7 @@
 	 *   </DataTable>
 	 */
 	import type { Snippet } from 'svelte';
+	import EmptyValue from './EmptyValue.svelte';
 
 	interface Props {
 		columns: Column[];
@@ -47,7 +48,10 @@
 		selected?: (row: Row, index: number) => boolean;
 		/** A label for a rule drawn before this row, or null for none. */
 		divider?: (row: Row, index: number) => string | null;
-		/** Draws a body cell. Without it a cell shows row[column.key]. */
+		/**
+		 * Draws a body cell. Without it a cell shows row[column.key], or "None"
+		 * when that's null or undefined (G6).
+		 */
 		cell?: Snippet<[Row & Record<string, unknown>, Column, number]>;
 		/** Draws a header cell, such as a label with a StatTip. */
 		header?: Snippet<[Column]>;
@@ -111,7 +115,11 @@
 				<tr class:highlighted={highlighted?.(row, index)} class:selected={selected?.(row, index)}>
 					{#each columns as column (column.key)}
 						<td class:num={column.numeric}>
-							{#if cell}{@render cell(row, column, index)}{:else}{row[column.key] ?? ''}{/if}
+							{#if cell}{@render cell(
+									row,
+									column,
+									index
+								)}{:else if row[column.key] == null}<EmptyValue />{:else}{row[column.key]}{/if}
 						</td>
 					{/each}
 				</tr>
