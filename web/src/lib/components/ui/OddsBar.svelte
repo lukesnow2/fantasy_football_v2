@@ -28,7 +28,7 @@
 	>
 	<span
 		class="number"
-		class:fixed={numberWidth !== undefined}
+		class:set-width={numberWidth !== undefined}
 		style:width={numberWidth === undefined ? undefined : `${numberWidth}px`}
 		>{text ?? formatPercent(percent)}</span
 	>
@@ -66,7 +66,7 @@
 		font-weight: 600;
 	}
 
-	.number.fixed {
+	.number.set-width {
 		flex: none;
 		text-align: right;
 	}

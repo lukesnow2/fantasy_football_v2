@@ -53,6 +53,7 @@ export interface OddsResponse {
 	sims: number;
 	playoffTeams: number;
 	byes: number;
+	leagueAverage: number;
 	teams: OddsTeam[];
 }
 
@@ -231,12 +232,15 @@ export interface StandingsTableRow {
 	weekChangeText: string;
 }
 
-/** PF minus PA at one decimal: "+43.6", "-3.5", "0.0". */
+/**
+ * PF minus PA at one decimal: "+43.6", "-3.5", "0.0". The board's rule: the
+ * sign from the difference, then its size to one decimal.
+ */
 export function formatDiff(pointsFor: number, pointsAgainst: number): {
 	text: string;
 	negative: boolean;
 } {
-	const diff = Math.round((pointsFor - pointsAgainst) * 10) / 10;
+	const diff = pointsFor - pointsAgainst;
 	const sign = diff > 0 ? '+' : diff < 0 ? '-' : '';
 	return { text: `${sign}${Math.abs(diff).toFixed(1)}`, negative: diff < 0 };
 }

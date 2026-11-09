@@ -433,3 +433,11 @@ describe('updatedAgo', () => {
 		expect(updatedAgo('not a date', now)).toBeNull();
 	});
 });
+
+describe('formatDiff', () => {
+	it("rounds the way the board's script does", async () => {
+		const { formatDiff } = await import('./this-season');
+		expect(formatDiff(368.2, 359.95).text).toBe('+8.3');
+		expect(formatDiff(337.05, 460).text).toBe('-122.9');
+	});
+});
