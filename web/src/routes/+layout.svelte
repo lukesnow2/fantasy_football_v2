@@ -580,6 +580,15 @@
 		border-top: 1px solid var(--color-line-soft);
 	}
 
+	/* Just above the phone width, the longest name on the roster ("Gabe the
+	   Younger") pushes the pill onto a second row. The tagline goes first; the
+	   footer still says "Est. 2005". */
+	@media (min-width: 1024px) and (max-width: 1079.98px) {
+		.brand-est {
+			display: none;
+		}
+	}
+
 	/* ---- The phone ---- */
 
 	.menu-button {

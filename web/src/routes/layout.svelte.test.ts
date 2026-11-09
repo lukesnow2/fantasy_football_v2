@@ -25,12 +25,12 @@ const Layout = (await import('./+layout.svelte')).default;
 
 const children = createRawSnippet(() => ({ render: () => '<p>Page</p>' }));
 
-function signedIn(role = 'manager') {
+function signedIn(role = 'manager', name = 'Luke S') {
 	return {
 		data: {
 			user: { id: 'u1', username: 'luke' },
 			member: { role },
-			authenticatedManager: { managerName: 'Luke S', displayName: 'Luke S' }
+			authenticatedManager: { managerName: name, displayName: name }
 		},
 		children
 	} as never;
@@ -162,6 +162,28 @@ describe('the signed-in pill and account menu at 1280', () => {
 		await expect.element(page.getByRole('menu', { name: 'Account' })).toBeVisible();
 		await page.getByText('Page').click();
 		await expect.element(page.getByRole('menu', { name: 'Account' })).not.toBeInTheDocument();
+	});
+});
+
+describe('the band just above the phone width', () => {
+	it('keeps the longest name on the band row by dropping the tagline', async () => {
+		// 1024 is the narrowest the bar draws.
+		await page.viewport(1024, 900);
+		render(Layout, signedIn('manager', 'Gabe the Younger'));
+		const pill = page.getByRole('button', { name: 'Gabe the Younger' }).element();
+		const brand = document.querySelector('.brand')!;
+		const middle = (el: Element) => {
+			const b = el.getBoundingClientRect();
+			return b.top + b.height / 2;
+		};
+		expect(Math.abs(middle(pill) - middle(brand))).toBeLessThan(4);
+		expect(getComputedStyle(document.querySelector('.brand-est')!).display).toBe('none');
+	});
+
+	it('shows the tagline again from 1080', async () => {
+		await page.viewport(1080, 900);
+		render(Layout, signedIn('manager', 'Gabe the Younger'));
+		await expect.element(page.getByText('Est. 2005').first()).toBeVisible();
 	});
 });
 
