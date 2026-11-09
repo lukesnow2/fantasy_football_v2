@@ -66,3 +66,26 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="On the band, borderless">
+	{#snippet template()}
+		<div style="padding: 24px; background: var(--color-clubhouse)">
+			<div style="max-width: 388px">
+				<Card title="This week" titleSize={26} headGap={10} tone="borderless">
+					{#snippet action()}<span>Wk 3 of 14</span>{/snippet}
+					<p style="margin: 0">Israel 3-0</p>
+				</Card>
+			</div>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Pennant">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<Card tone="pennant" padding="24px">
+				<p style="margin: 0">Luke S 21-19 Trevor</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>

@@ -12,26 +12,42 @@
 	interface Props {
 		name: string;
 		size?: number;
+		ring?: number;
+		initialTone?: 'wash' | 'field';
+		initialSize?: number;
 		class?: string;
 	}
 
-	let { name, size = 28, class: className = '' }: Props = $props();
+	let {
+		name,
+		size = 28,
+		ring = 0,
+		initialTone = 'wash',
+		initialSize,
+		class: className = ''
+	}: Props = $props();
 
 	const hasPhoto = $derived(getManagerProfilePicture(name) !== null);
 </script>
 
 {#if hasPhoto}
-	<span class="avatar {className}" style:width="{size}px" style:height="{size}px">
+	<span
+		class="avatar {className}"
+		style:width="{size}px"
+		style:height="{size}px"
+		style:border-width={ring ? `${ring}px` : undefined}
+	>
 		<ManagerProfilePicture managerName={name} />
 	</span>
 {:else}
 	<span
-		class="avatar initial {className}"
+		class="avatar initial {initialTone} {className}"
 		role="img"
 		aria-label={name}
 		style:width="{size}px"
 		style:height="{size}px"
-		style:font-size="{size * 0.4}px">{avatarInitial(name)}</span
+		style:border-width={ring ? `${ring}px` : undefined}
+		style:font-size="{initialSize ?? size * 0.4}px">{avatarInitial(name)}</span
 	>
 {/if}
 
@@ -41,6 +57,8 @@
 		flex: none;
 		align-items: center;
 		justify-content: center;
+		box-sizing: content-box;
+		border: 0 solid var(--color-card);
 		border-radius: 50%;
 		overflow: hidden;
 	}
@@ -56,5 +74,10 @@
 		color: var(--color-ink-2);
 		font-weight: 700;
 		line-height: 1;
+	}
+
+	.initial.field {
+		background: var(--color-field-tint);
+		color: var(--color-clubhouse);
 	}
 </style>

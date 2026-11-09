@@ -48,3 +48,16 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Stat strip, value first">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip label="The league in numbers" twoUpOnPhones>
+				<StatTile valueFirst value="22" label="seasons, 2005 to 2026" />
+				<StatTile valueFirst value="20" label="managers all-time" />
+				<StatTile valueFirst value="10,612" label="transactions" />
+				<StatTile valueFirst value="1,595" label="matchups played" />
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>

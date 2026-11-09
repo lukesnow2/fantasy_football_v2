@@ -32,3 +32,9 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Last place">
+	{#snippet template()}
+		<Tag variant="last-place">Last Place Trophy</Tag>
+	{/snippet}
+</Story>
