@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ArrowRight, MessageSquare } from 'lucide-svelte';
-	import ChatAvatar from './ChatAvatar.svelte';
+	import Avatar from '../ui/Avatar.svelte';
+	import Card from '../ui/Card.svelte';
 	import SignedOutPanel from './SignedOutPanel.svelte';
 	import { formatRelative, toPlainText } from '$lib/chat/format';
 	import type { ChatMessageDTO } from '$lib/chat/types';
@@ -48,60 +48,145 @@
 	const recent = $derived(messages.slice(-4));
 </script>
 
-<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<h2 class="flex items-center gap-2 text-xl font-bold text-white">
-			<span class="flex h-7 w-7 items-center justify-center rounded-lg bg-green-500/15">
-				<MessageSquare class="h-4 w-4 text-green-400" />
-			</span>
-			League Chat
-		</h2>
-		<a
-			href="/chat"
-			class="flex items-center gap-1 text-sm font-medium text-green-400 hover:text-green-300"
-		>
-			Open chat <ArrowRight class="h-3.5 w-3.5" />
-		</a>
-	</div>
+<Card
+	title="League chat"
+	class="chat-preview"
+	headGap={14}
+	phonePadding="6px 16px 16px"
+	phoneHeadGap={6}
+	phoneHeadAlign="center"
+>
+	{#snippet action()}<a class="field-link open-chat" href="/chat">Open chat →</a>{/snippet}
 
 	{#if !canRead}
-		<SignedOutPanel redirectTo="/chat" />
+		<!-- "You'll land right back here" is only true with this page as the redirect. -->
+		<SignedOutPanel redirectTo={page.url.pathname} />
 	{:else if loading}
-		<div class="space-y-3">
-			{#each Array(3) as _, i}
-				<div class="flex gap-3">
-					<div class="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-slate-700/50"></div>
-					<div class="flex-1 space-y-2">
-						<div class="h-3 w-20 animate-pulse rounded bg-slate-700/50"></div>
-						<div class="h-3 animate-pulse rounded bg-slate-700/40" style="width: {[70, 50, 62][i]}%"></div>
-					</div>
+		<div class="rows" aria-busy="true">
+			{#each [70, 50, 62] as width (width)}
+				<div class="row">
+					<span class="dot"></span>
+					<span class="lines"
+						><span class="bar short"></span><span class="bar" style:width="{width}%"></span></span
+					>
 				</div>
 			{/each}
 		</div>
 	{:else if recent.length === 0}
-		<p class="py-6 text-center text-sm text-slate-500">
-			Nothing said yet. <a href="/chat" class="text-green-400 hover:underline">Start it off.</a>
+		<p class="empty">
+			Nothing said yet. <a class="field-link" href="/chat">Start it off.</a>
 		</p>
 	{:else}
-		<ul class="space-y-3">
+		<ul class="rows">
 			{#each recent as message (message.messageId)}
-				<li class="flex gap-3">
-					<ChatAvatar
-						managerName={message.authorName}
-						displayName={message.authorDisplayName}
-						profileImageUrl={message.authorProfileImage}
-					/>
-					<div class="min-w-0 flex-1">
-						<div class="flex items-baseline gap-2">
-							<span class="text-sm font-semibold text-white">{message.authorDisplayName}</span>
-							<span class="text-[11px] text-slate-500">{formatRelative(message.createdAt)}</span>
+				<li class="row">
+					<Avatar name={message.authorName ?? message.authorDisplayName} size={26} />
+					<div class="text">
+						<div class="who">
+							<span class="author">{message.authorDisplayName}</span>
+							<span class="when">{formatRelative(message.createdAt)}</span>
 						</div>
 						<!-- Stripped to plain text on purpose: the preview is a glance, and
 						     rendering markdown would ship marked + DOMPurify to a public page. -->
-						<p class="truncate text-sm text-slate-300">{toPlainText(message.content)}</p>
+						<p class="body">{toPlainText(message.content)}</p>
 					</div>
 				</li>
 			{/each}
 		</ul>
 	{/if}
-</section>
+</Card>
+
+<style>
+	:global(.chat-preview) {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.open-chat {
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.rows {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 9px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+	}
+
+	.text {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.who {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		font-size: 15px;
+	}
+
+	.author {
+		font-weight: 600;
+	}
+
+	.when {
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.body {
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	.empty {
+		margin: 0;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	.dot {
+		width: 26px;
+		height: 26px;
+		flex: none;
+		border-radius: 50%;
+		background: var(--color-line-soft);
+	}
+
+	.lines {
+		flex: 1;
+		display: grid;
+		gap: 6px;
+	}
+
+	.bar {
+		display: block;
+		height: 12px;
+		border-radius: 4px;
+		background: var(--color-line-soft);
+	}
+
+	.bar.short {
+		width: 80px;
+	}
+
+	@media (max-width: 639.98px) {
+		.open-chat {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+		}
+	}
+</style>
