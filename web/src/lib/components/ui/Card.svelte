@@ -37,13 +37,24 @@
 		action,
 		children
 	}: Props = $props();
+
+	const headingId = $props.id();
 </script>
 
-<section class="card {className}" class:flush>
+<section
+	class="card {className}"
+	class:flush
+	aria-labelledby={title ? `card-${headingId}` : undefined}
+>
 	{#if title || action}
 		<div class="head">
 			{#if title}
-				<svelte:element this={`h${level}`} class="title" style:font-size="{titleSize}px">
+				<svelte:element
+					this={`h${level}`}
+					id="card-{headingId}"
+					class="title"
+					style:font-size="{titleSize}px"
+				>
 					{title}
 				</svelte:element>
 			{/if}

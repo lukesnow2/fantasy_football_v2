@@ -9,7 +9,8 @@
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
 	 * (onclick, type, aria-*) goes through to the element, and `class` adds to
-	 * the part's own. A disabled link drops its href, so it can't navigate.
+	 * the part's own. A disabled link drops its href and its onclick, so it
+	 * can't navigate or act, and keeps the link role so it's announced as one.
 	 */
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
@@ -38,7 +39,9 @@
 	<a
 		{...rest as HTMLAnchorAttributes}
 		href={disabled ? undefined : href}
+		role={disabled ? 'link' : undefined}
 		aria-disabled={disabled || undefined}
+		onclick={disabled ? undefined : (rest as HTMLAnchorAttributes).onclick}
 		class="btn {variant} {className}">{@render children()}</a
 	>
 {:else}

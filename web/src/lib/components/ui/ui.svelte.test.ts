@@ -6,6 +6,7 @@ import Segmented from './Segmented.svelte';
 import StatTip from './StatTip.svelte';
 import Movement from './Movement.svelte';
 import ButtonHarness from './ButtonHarness.test.svelte';
+import Card from './Card.svelte';
 import { resetStatTipData } from './stat-tip-data';
 
 const LUCK = {
@@ -161,12 +162,23 @@ describe('Movement', () => {
 });
 
 describe('Button', () => {
-	it('adds a caller class to its own, and a disabled link has no href', async () => {
-		const { container } = render(ButtonHarness);
+	it('adds a caller class to its own, and a disabled link neither navigates nor acts', async () => {
+		const onclick = vi.fn();
+		const { container } = render(ButtonHarness, { onclick });
 		const links = container.querySelectorAll('a');
 		expect(links[0].className).toMatch(/\bbtn\b.*\bprimary\b.*\bmt-4\b/);
 		expect(links[0].getAttribute('href')).toBe('/power-rankings');
 		expect(links[1].hasAttribute('href')).toBe(false);
 		expect(links[1].getAttribute('aria-disabled')).toBe('true');
+		expect(links[1].getAttribute('role')).toBe('link');
+		links[1].click();
+		expect(onclick).not.toHaveBeenCalled();
+	});
+});
+
+describe('Card', () => {
+	it('is a region named by its title', async () => {
+		render(Card, { title: 'Standings' });
+		await expect.element(page.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
 	});
 });
