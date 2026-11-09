@@ -64,9 +64,7 @@ describe('the nav copy', () => {
 	});
 
 	it('matches the Navigation board word for word', () => {
-		expect(
-			navGroups.map((g) => [g.label, g.items.map((i) => [i.name, i.blurb, i.href])])
-		).toEqual([
+		expect(navGroups.map((g) => [g.label, g.items.map((i) => [i.name, i.blurb, i.href])])).toEqual([
 			[
 				'Rankings',
 				[
