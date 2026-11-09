@@ -172,9 +172,9 @@ INSERT INTO metric_definitions (
 
 -- Team Performance
 ('playoff_probability', 'Playoff Probability', 'playoff_analysis',
-'Calculated probability of making playoffs based on current performance',
+'The share of 10,000 simulated seasons in which a team makes the playoffs.',
 'Multi-factor calculation considering current record, points scored, strength of schedule, and weeks remaining.',
-'Weighted combination of: Record (40%) + Points Rank (30%) + Schedule (20%) + Time Remaining (10%)',
+'Each team gets a projected score, pulled toward the league average early in the year. The rest of the season is played 10,000 times with that score drifting week to week, and seeds go by wins, then points for. A team''s odds are the share of those runs where it makes the field.',
 'Team in 3rd place, week 10, good points: 40%×0.9 + 30%×0.8 + 20%×0.7 + 10%×0.6 = 80.0%',
 '80%+ is very likely, 60-80% is likely, 40-60% is uncertain, 20-40% is unlikely, below 20% is very unlikely.',
 'percentage', 'percentage', '0-100%', 0.6000, 0.8000, 'percentage_1', 16),

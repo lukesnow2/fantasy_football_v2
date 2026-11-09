@@ -31,7 +31,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		// counted bracket games in the record (7 of 10 teams in 2025). Bracket
 		// weeks are dropped by the games' own flags rather than a week cutoff,
 		// which would be a guess until the season's format is stored.
-		const [format, standingsRows] = await Promise.all([
+		const [format, standingsRows, updatedRows] = await Promise.all([
 			getLeagueFormat(targetSeason),
 			db.execute(sql`
 			SELECT
@@ -56,8 +56,19 @@ export const GET: RequestHandler = async ({ url }) => {
 				  AND (fm.is_playoffs OR fm.is_consolation)
 			  )
 			GROUP BY dt.team_key, dt.team_name, dt.manager_name, dl.league_name
+		`),
+			// When the season's data last changed (WP4 S4.3, "Updated 2 hours
+			// ago"). updated_at is a timestamp without a zone, written with
+			// CURRENT_TIMESTAMP in the database's own zone, so it's read back in
+			// that zone to get the real instant.
+			db.execute(sql`
+			SELECT MAX(updated_at) AT TIME ZONE current_setting('TimeZone') AS updated_at
+			FROM edw.fact_team_performance
+			WHERE season_year = ${targetSeason}
 		`)
 		]);
+		const updatedAt = (updatedRows[0] as any)?.updatedAt;
+		const dataUpdatedAt = updatedAt ? new Date(updatedAt).toISOString() : null;
 
 		const standings = standingsRows.map((r: any) => {
 			const wins = Number(r.wins) || 0;
@@ -101,6 +112,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				isSeasonComplete: false,
 				isFinalStandings: false,
 				lastPlaceGameLoser: null,
+				dataUpdatedAt,
 				lastUpdated: new Date().toISOString()
 			});
 		}
@@ -254,6 +266,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			isSeasonComplete: seasonComplete,
 			isFinalStandings: seasonComplete,
 			lastPlaceGameLoser,
+			dataUpdatedAt,
 			lastUpdated: new Date().toISOString()
 		});
 	} catch (error) {
