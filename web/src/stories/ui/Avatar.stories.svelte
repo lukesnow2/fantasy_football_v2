@@ -4,7 +4,7 @@
 
 	const { Story } = defineMeta({ title: 'UI/Avatar', component: Avatar, tags: ['autodocs'] });
 
-	const sizes = [20, 28, 40, 64, 104, 128];
+	const sizes = [20, 28, 30, 40, 64, 104, 128];
 </script>
 
 <Story name="Photo, every size">
