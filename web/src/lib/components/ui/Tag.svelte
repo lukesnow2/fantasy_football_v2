@@ -1,5 +1,11 @@
 <script lang="ts" module>
-	export type TagVariant = 'clinched' | 'bye' | 'eliminated' | 'champion' | 'champion-strong';
+	export type TagVariant =
+		| 'clinched'
+		| 'bye'
+		| 'eliminated'
+		| 'champion'
+		| 'champion-strong'
+		| 'last-place';
 </script>
 
 <script lang="ts">
@@ -7,7 +13,8 @@
 	 * A status tag (System board, "Status tags"). Clinched is field with white
 	 * text, Bye is field-tint with clubhouse text, Eliminated is wash with ink-2,
 	 * Champion is pennant-tint with pennant-dark. `champion-strong` is the pennant
-	 * fill the after-the-final board draws for the winner.
+	 * fill the after-the-final board draws for the winner, and `last-place` is
+	 * the ink fill for the Last Place Trophy (WP4 S4.9's Finish tag).
 	 *
 	 * One size everywhere: 4px 10px, 12px weight 700, 0.04em, as System draws it.
 	 */
@@ -56,6 +63,11 @@
 
 	.champion-strong {
 		background: var(--color-pennant);
+		color: var(--color-white);
+	}
+
+	.last-place {
+		background: var(--color-ink);
 		color: var(--color-white);
 	}
 </style>

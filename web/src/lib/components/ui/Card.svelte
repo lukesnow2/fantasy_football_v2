@@ -22,6 +22,9 @@
 		/** The heading level, 2 unless the card sits under another card's title. */
 		level?: 2 | 3;
 		flush?: boolean;
+		padding?: string;
+		headGap?: number;
+		tone?: 'default' | 'borderless' | 'pennant';
 		/** Classes for spacing between cards, passed by the page. */
 		class?: string;
 		action?: Snippet;
@@ -33,6 +36,9 @@
 		titleSize = 28,
 		level = 2,
 		flush = false,
+		padding,
+		headGap,
+		tone = 'default',
 		class: className = '',
 		action,
 		children
@@ -42,12 +48,13 @@
 </script>
 
 <section
-	class="card {className}"
+	class="card {tone} {className}"
 	class:flush
+	style:padding={flush ? undefined : padding}
 	aria-labelledby={title ? `card-${headingId}` : undefined}
 >
 	{#if title || action}
-		<div class="head">
+		<div class="head" style:margin-bottom={headGap === undefined ? undefined : `${headGap}px`}>
 			{#if title}
 				<svelte:element
 					this={`h${level}`}
@@ -77,6 +84,15 @@
 
 	.card.flush {
 		padding: 0;
+	}
+
+	.card.borderless {
+		border: 0;
+	}
+
+	.card.pennant {
+		background: var(--color-pennant-tint);
+		border-color: var(--color-pennant-line);
 	}
 
 	.head {

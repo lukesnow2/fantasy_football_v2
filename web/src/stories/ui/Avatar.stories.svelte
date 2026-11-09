@@ -4,7 +4,7 @@
 
 	const { Story } = defineMeta({ title: 'UI/Avatar', component: Avatar, tags: ['autodocs'] });
 
-	const sizes = [20, 28, 30, 40, 64, 104, 128];
+	const sizes = [20, 28, 30, 32, 36, 40, 64, 84, 104, 128];
 </script>
 
 <Story name="Photo, every size">
@@ -19,6 +19,17 @@
 	{#snippet template()}
 		<div style="display: flex; gap: 16px; align-items: center">
 			{#each sizes as size (size)}<Avatar name="Bobby" {size} />{/each}
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="With a ring">
+	{#snippet template()}
+		<div
+			style="display: flex; gap: 16px; align-items: center; padding: 24px; background: var(--color-pennant-tint)"
+		>
+			<Avatar name="Luke S" size={84} ring={3} />
+			<Avatar name="Trevor" size={64} ring={3} />
 		</div>
 	{/snippet}
 </Story>

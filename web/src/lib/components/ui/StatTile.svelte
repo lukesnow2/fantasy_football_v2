@@ -18,18 +18,26 @@
 		value: string | number;
 		sub?: string;
 		metricId?: string;
+		valueFirst?: boolean;
 	}
 
-	let { label, value, sub, metricId }: Props = $props();
+	let { label, value, sub, metricId, valueFirst = false }: Props = $props();
 
 	const inStrip = getContext<boolean>(STAT_STRIP) === true;
 </script>
 
-<div class="tile" class:in-strip={inStrip}>
-	<div class="label">
-		{#if metricId}<StatTip {metricId} {label} />{:else}{label}{/if}
-	</div>
-	<div class="value">{value}</div>
+{#snippet labelText()}
+	{#if metricId}<StatTip {metricId} {label} />{:else}{label}{/if}
+{/snippet}
+
+<div class="tile" class:in-strip={inStrip} class:value-first={valueFirst}>
+	{#if valueFirst}
+		<div class="value">{value}</div>
+		<div class="first-label">{@render labelText()}</div>
+	{:else}
+		<div class="label">{@render labelText()}</div>
+		<div class="value">{value}</div>
+	{/if}
 	{#if sub}<div class="sub">{sub}</div>{/if}
 </div>
 
@@ -83,5 +91,22 @@
 
 	.in-strip .sub {
 		margin-top: 6px;
+	}
+
+	.value-first .value {
+		margin-top: 0;
+		font-size: 40px;
+	}
+
+	.first-label {
+		margin-top: 6px;
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	@media (max-width: 639.98px) {
+		.value-first .value {
+			font-size: 28px;
+		}
 	}
 </style>

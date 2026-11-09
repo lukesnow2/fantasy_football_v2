@@ -15,10 +15,18 @@
 	import type { Snippet } from 'svelte';
 	import type { HTMLAnchorAttributes, HTMLButtonAttributes } from 'svelte/elements';
 
-	type Variant = 'primary' | 'secondary' | 'link';
+	type Variant =
+		| 'primary'
+		| 'secondary'
+		| 'link'
+		| 'link-pennant'
+		| 'band-primary'
+		| 'band-outline';
+	type Size = 'default' | 'large' | 'tap';
 
 	type Props = {
 		variant?: Variant;
+		size?: Size;
 		href?: string;
 		children: Snippet;
 	} & Omit<HTMLButtonAttributes, 'children'> &
@@ -26,6 +34,7 @@
 
 	let {
 		variant = 'primary',
+		size = 'default',
 		href,
 		children,
 		type = 'button',
@@ -42,11 +51,14 @@
 		role={disabled ? 'link' : undefined}
 		aria-disabled={disabled || undefined}
 		onclick={disabled ? undefined : (rest as HTMLAnchorAttributes).onclick}
-		class="btn {variant} {className}">{@render children()}</a
+		class="btn {variant} size-{size} {className}">{@render children()}</a
 	>
 {:else}
-	<button {...rest as HTMLButtonAttributes} {type} {disabled} class="btn {variant} {className}"
-		>{@render children()}</button
+	<button
+		{...rest as HTMLButtonAttributes}
+		{type}
+		{disabled}
+		class="btn {variant} size-{size} {className}">{@render children()}</button
 	>
 {/if}
 
@@ -101,9 +113,62 @@
 		color: var(--color-clubhouse);
 	}
 
+	.link-pennant {
+		display: inline;
+		min-height: 0;
+		padding: 0;
+		border-radius: 0;
+		background: transparent;
+		color: var(--color-pennant-dark);
+	}
+
+	.link-pennant:hover {
+		color: var(--color-ink-brown);
+	}
+
+	/* A link variant with a 44px touch target, as Home's card links draw it. */
+	.link.size-tap,
+	.link-pennant.size-tap {
+		display: inline-flex;
+		min-height: 44px;
+	}
+
+	.band-primary {
+		background: var(--color-pennant-light);
+		color: var(--color-clubhouse);
+		font-weight: 700;
+	}
+
+	.band-primary:hover {
+		color: var(--color-clubhouse);
+	}
+
+	.band-outline {
+		border: 1px solid var(--color-clubhouse-line);
+		background: transparent;
+		color: var(--color-white);
+	}
+
+	.band-outline:hover {
+		background: var(--color-clubhouse-3);
+		color: var(--color-white);
+	}
+
+	.size-large {
+		box-sizing: content-box;
+		min-height: 48px;
+		padding: 0 22px;
+		font-size: 16px;
+	}
+
 	.btn:focus-visible {
 		outline: 2px solid var(--color-field);
 		outline-offset: 2px;
+	}
+
+	.band-primary:focus-visible,
+	.band-outline:focus-visible {
+		outline-color: var(--color-white);
 	}
 
 	.btn:disabled,

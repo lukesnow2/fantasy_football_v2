@@ -7,6 +7,7 @@ export type { Column } from './DataTable.svelte';
 export { default as EmptyValue } from './EmptyValue.svelte';
 export { default as Movement } from './Movement.svelte';
 export { default as OddsBar } from './OddsBar.svelte';
+export { default as Pennant } from './Pennant.svelte';
 export { default as Segmented } from './Segmented.svelte';
 export { default as StatStrip } from './StatStrip.svelte';
 export { default as StatTile } from './StatTile.svelte';

@@ -12,16 +12,22 @@
 	interface Props {
 		name: string;
 		size?: number;
+		ring?: number;
 		class?: string;
 	}
 
-	let { name, size = 28, class: className = '' }: Props = $props();
+	let { name, size = 28, ring = 0, class: className = '' }: Props = $props();
 
 	const hasPhoto = $derived(getManagerProfilePicture(name) !== null);
 </script>
 
 {#if hasPhoto}
-	<span class="avatar {className}" style:width="{size}px" style:height="{size}px">
+	<span
+		class="avatar {className}"
+		style:width="{size}px"
+		style:height="{size}px"
+		style:border-width={ring ? `${ring}px` : undefined}
+	>
 		<ManagerProfilePicture managerName={name} />
 	</span>
 {:else}
@@ -31,6 +37,7 @@
 		aria-label={name}
 		style:width="{size}px"
 		style:height="{size}px"
+		style:border-width={ring ? `${ring}px` : undefined}
 		style:font-size="{size * 0.4}px">{avatarInitial(name)}</span
 	>
 {/if}
@@ -41,6 +48,8 @@
 		flex: none;
 		align-items: center;
 		justify-content: center;
+		box-sizing: content-box;
+		border: 0 solid var(--color-card);
 		border-radius: 50%;
 		overflow: hidden;
 	}
