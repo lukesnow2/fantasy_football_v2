@@ -12,6 +12,8 @@ const config: StorybookConfig = {
     "@storybook/addon-a11y",
     "@storybook/addon-vitest"
   ],
+  // The manager photos ManagerProfilePicture points at live in static/.
+  "staticDirs": ["../static"],
   "framework": {
     "name": "@storybook/sveltekit",
     "options": {}
