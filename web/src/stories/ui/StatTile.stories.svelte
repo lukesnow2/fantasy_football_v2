@@ -61,3 +61,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Compact (This Season phone strip)">
+	{#snippet template()}
+		<div style="width: 180px">
+			<StatTile label="Most points · Craig" value="465.5" compact />
+		</div>
+	{/snippet}
+</Story>
