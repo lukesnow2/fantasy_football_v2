@@ -7,7 +7,8 @@
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { clickOutside } from '$lib/actions/clickOutside';
-	import { isActivePath, nextMenuIndex, type NavItem } from '$lib/nav';
+	import { isActivePath, type NavItem } from '$lib/nav';
+	import { focusFirstMenuItem, moveMenuFocus } from '$lib/menu-focus';
 
 	interface Props {
 		label: string;
@@ -28,10 +29,6 @@
 	// tells you where you are once the page itself is a click deep.
 	const isActive = $derived(items.some((item) => isActivePath(page.url.pathname, item.href)));
 
-	function menuItems(): HTMLElement[] {
-		return [...(panel?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-	}
-
 	async function onTriggerClick(event: MouseEvent) {
 		if (isOpen) {
 			onToggle(null);
@@ -43,7 +40,7 @@
 		// mouse open leaves focus on the trigger.
 		if (event.detail === 0) {
 			await tick();
-			menuItems()[0]?.focus();
+			focusFirstMenuItem(panel);
 		}
 	}
 
@@ -59,15 +56,7 @@
 			close();
 			return;
 		}
-		const links = menuItems();
-		const next = nextMenuIndex(
-			links.indexOf(document.activeElement as HTMLElement),
-			links.length,
-			event.key
-		);
-		if (next === null) return;
-		event.preventDefault();
-		links[next].focus();
+		moveMenuFocus(panel, event);
 	}
 
 	// Tabbing out of the menu closes it. A null relatedTarget is a pointer press

@@ -62,7 +62,13 @@ beforeAll(async () => {
 	link.href =
 		'https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap';
 	document.head.append(link);
-	await new Promise((resolve) => link.addEventListener('load', resolve, { once: true }));
+	// Fail loudly if the stylesheet can't be fetched, rather than waiting forever.
+	await new Promise((resolve, reject) => {
+		link.addEventListener('load', resolve, { once: true });
+		link.addEventListener('error', () => reject(new Error(`Couldn't load ${link.href}`)), {
+			once: true
+		});
+	});
 	await Promise.all(
 		['400', '500', '600', '700'].map((w) => document.fonts.load(`${w} 15px "Instrument Sans"`))
 	);

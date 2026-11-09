@@ -7,7 +7,8 @@
 	import { dev } from '$app/environment';
 	import { injectAnalytics } from '@vercel/analytics/sveltekit';
 	import { clickOutside } from '$lib/actions/clickOutside';
-	import { directLinks, navGroups, isActivePath, nextMenuIndex } from '$lib/nav';
+	import { directLinks, navGroups, isActivePath } from '$lib/nav';
+	import { focusFirstMenuItem, moveMenuFocus } from '$lib/menu-focus';
 	import { Avatar } from '$lib/components/ui';
 	import NavDropdown from '$lib/components/NavDropdown.svelte';
 	import type { LayoutData } from './$types';
@@ -36,7 +37,6 @@
 
 	const pathname = $derived(page.url.pathname);
 	const fullBleed = $derived(FULL_BLEED_ROUTES.has(pathname));
-	const signedIn = $derived(Boolean(data.user && data.authenticatedManager));
 	const isCommissioner = $derived(data.member?.role === 'commissioner');
 	// The dropdown links to the manager's public stats page. Encoded because every
 	// name in the roster has a space in it ("Gabe the Younger", "Troy Colvin").
@@ -45,6 +45,10 @@
 			? `/managers/${encodeURIComponent(data.authenticatedManager.managerName)}`
 			: '/managers'
 	);
+	// Which account item is the page you're on, worked out once per item.
+	const profileCurrent = $derived(isActivePath(pathname, profileHref));
+	const settingsCurrent = $derived(isActivePath(pathname, '/settings'));
+	const adminCurrent = $derived(isActivePath(pathname, '/admin/members'));
 
 	// Any navigation closes every menu, including one a link didn't close itself
 	// (the back button, a link in the page behind an open menu).
@@ -76,10 +80,6 @@
 		return () => wide.removeEventListener('change', onChange);
 	});
 
-	function userMenuItems(): HTMLElement[] {
-		return [...(userMenu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
-	}
-
 	async function toggleUserMenu(event: MouseEvent) {
 		showUserMenu = !showUserMenu;
 		if (!showUserMenu) return;
@@ -88,7 +88,7 @@
 		// item, as the nav menus do.
 		if (event.detail === 0) {
 			await tick();
-			userMenuItems()[0]?.focus();
+			focusFirstMenuItem(userMenu);
 		}
 	}
 
@@ -97,15 +97,7 @@
 	}
 
 	function onUserMenuKeydown(event: KeyboardEvent) {
-		const items = userMenuItems();
-		const next = nextMenuIndex(
-			items.indexOf(document.activeElement as HTMLElement),
-			items.length,
-			event.key
-		);
-		if (next === null) return;
-		event.preventDefault();
-		items[next].focus();
+		moveMenuFocus(userMenu, event);
 	}
 
 	function onUserMenuFocusout(event: FocusEvent) {
@@ -162,7 +154,9 @@
 <div class="shell">
 	<header class="band" class:menu-open={showMobileMenu}>
 		<div class="band-row">
-			<a href="/" class="brand">
+			<!-- With the phone panel open this row is the panel's top row, so the
+			     brand closes it too, even when you're already on Home. -->
+			<a href="/" class="brand" onclick={closeMobileMenu}>
 				<span class="brand-name">The League</span>
 				<span class="brand-est">Est. 2005</span>
 			</a>
@@ -225,26 +219,26 @@
 							<a
 								href={profileHref}
 								class="account-item"
-								class:current={isActivePath(pathname, profileHref)}
+								class:current={profileCurrent}
 								role="menuitem"
-								aria-current={isActivePath(pathname, profileHref) ? 'page' : undefined}
+								aria-current={profileCurrent ? 'page' : undefined}
 								onclick={closeUserMenu}>Your profile</a
 							>
 							<a
 								href="/settings"
 								class="account-item"
-								class:current={isActivePath(pathname, '/settings')}
+								class:current={settingsCurrent}
 								role="menuitem"
-								aria-current={isActivePath(pathname, '/settings') ? 'page' : undefined}
+								aria-current={settingsCurrent ? 'page' : undefined}
 								onclick={closeUserMenu}>Settings</a
 							>
 							{#if isCommissioner}
 								<a
 									href="/admin/members"
 									class="account-item"
-									class:current={isActivePath(pathname, '/admin/members')}
+									class:current={adminCurrent}
 									role="menuitem"
-									aria-current={isActivePath(pathname, '/admin/members') ? 'page' : undefined}
+									aria-current={adminCurrent ? 'page' : undefined}
 									onclick={closeUserMenu}>Commissioner</a
 								>
 							{/if}
@@ -327,7 +321,7 @@
 			{/each}
 
 			<div class="phone-account">
-				{#if signedIn && data.authenticatedManager}
+				{#if data.user && data.authenticatedManager}
 					<Avatar name={data.authenticatedManager.managerName} size={28} />
 					<span>
 						<a href={profileHref} class="phone-account-link" onclick={closeMobileMenu}
