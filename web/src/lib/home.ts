@@ -5,24 +5,7 @@
 
 import type { TagVariant } from '$lib/components/ui/Tag.svelte';
 
-/* ---------- Shared wording ---------- */
-
-const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
-
-/** A count as the house writes it: one to nine as words, 10 and up as numerals. */
-export function countWord(n: number): string {
-	return n >= 0 && n < 10 && Number.isInteger(n) ? WORDS[n] : String(n);
-}
-
-function capitalize(s: string): string {
-	return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** Names joined with ", " and a final " and ". */
-export function joinNames(names: string[]): string {
-	if (names.length <= 1) return names.join('');
-	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
+/* ---------- Shared ---------- */
 
 /** A manager's profile URL. */
 export function profileHref(name: string): string {
@@ -271,62 +254,10 @@ export function rivalry(pair: H2HRow): Rivalry {
 }
 
 /**
- * The line under the rivalry bar. The subject is the manager trailing the
- * series; the line lists the current managers with a winning record against
- * them, the rival first, then by meetings, up to three names.
+ * The line under the rivalry bar: fixed copy, true by how the pair is chosen
+ * (the API's most-played pair), so it can't go stale.
  */
-export function rivalryLine(
-	pair: H2HRow,
-	hallOfFame: HallOfFameRow[],
-	h2hRows: H2HRow[],
-	currentManagers: string[]
-): string {
-	const r = rivalry(pair);
-	if (r.level) {
-		return `${r.left} and ${r.right} have split ${meetingsSince(countWord(r.meetings), r.since)}.`;
-	}
-
-	const subject = r.right;
-	const current = new Set(currentManagers);
-	const ahead = h2hRows
-		.flatMap((row, index) => {
-			const subjectIsA = row.managerAName === subject;
-			if (!subjectIsA && row.managerBName !== subject) return [];
-			const other = subjectIsA ? row.managerBName : row.managerAName;
-			const otherWins = Number(subjectIsA ? row.managerBWins : row.managerAWins) || 0;
-			const subjectWins = Number(subjectIsA ? row.managerAWins : row.managerBWins) || 0;
-			if (!current.has(other) || otherWins <= subjectWins) return [];
-			return [{ name: other, meetings: Number(row.totalMatchups) || 0, index }];
-		})
-		.sort(
-			(a, b) =>
-				Number(b.name === r.left) - Number(a.name === r.left) ||
-				b.meetings - a.meetings ||
-				a.index - b.index
-		);
-
-	const titles = titlesOf(hallOfFame.find((h) => h.managerName === subject));
-	const lead =
-		titles >= 2
-			? `${capitalize(countWord(titles))} titles, and ${subject} still`
-			: titles === 1
-				? `One title, and ${subject} still`
-				: subject;
-
-	if (ahead.length === 0) {
-		const tail = `doesn't trail any current manager head to head.`;
-		return titles > 0 ? `${lead.replace(/ still$/, '')} ${tail}` : `${subject} ${tail}`;
-	}
-
-	const shown = ahead.slice(0, 3).map((a) => a.name);
-	const rest = ahead.length - shown.length;
-	const list = joinNames(
-		rest > 0 ? [...shown, `${countWord(rest)} ${rest === 1 ? 'other' : 'others'}`] : shown
-	);
-	const who =
-		ahead.length === 1 ? 'one current manager' : `${countWord(ahead.length)} current managers`;
-	return `${lead} trails ${who} head to head: ${list}.`;
-}
+export const RIVALRY_LINE = 'No two managers have played each other more.';
 
 /* ---------- S3.7 Latest trades ---------- */
 

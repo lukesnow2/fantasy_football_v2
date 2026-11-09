@@ -14,7 +14,7 @@
 <Story name="A row of titles">
 	{#snippet template()}
 		<span role="img" aria-label="7 titles" style="display: inline-flex; gap: 3px">
-			{#each Array(7) as _, i (i)}<Pennant />{/each}
+			{#each [...Array(7).keys()] as i (i)}<Pennant />{/each}
 		</span>
 	{/snippet}
 </Story>

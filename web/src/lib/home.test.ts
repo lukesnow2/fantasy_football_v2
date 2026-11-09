@@ -1,17 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
 	bannerWall,
-	countWord,
 	featuredRecords,
 	finishTag,
 	formatCount,
 	formatOdds,
 	formatRecord,
-	joinNames,
 	meetingsSince,
 	parseRecord,
 	rivalry,
-	rivalryLine,
 	statStrip,
 	thisWeekMode,
 	titlesLabel,
@@ -37,19 +34,6 @@ const HALL_OF_FAME: HallOfFameRow[] = [
 	{ managerName: 'Bobby', championshipsWon: null, hallOfFameRank: 12 }
 ];
 
-const CURRENT = [
-	'Israel',
-	'Craig',
-	'Gabe Flores',
-	'Trevor',
-	'Luke S',
-	'Nick',
-	'Omar',
-	'Erik Snow',
-	'Gabe the Younger',
-	'Troy Colvin'
-];
-
 const h2h = (a: string, b: string, aWins: number, bWins: number, first = '2005-W1'): H2HRow => ({
 	managerAName: a,
 	managerBName: b,
@@ -60,17 +44,6 @@ const h2h = (a: string, b: string, aWins: number, bWins: number, first = '2005-W
 });
 
 const PAIR = h2h('Luke S', 'Trevor', 21, 19);
-
-// Trevor trails Luke S (the rival) and Gabe the Younger among current
-// managers; Bobby leads Trevor too but isn't a current manager.
-const H2H: H2HRow[] = [
-	PAIR,
-	h2h('Israel', 'Trevor', 16, 20, '2005-W13'),
-	h2h('Craig', 'Luke S', 21, 15, '2008-W7'),
-	h2h('Trevor', 'Gabe the Younger', 14, 16, '2006-W2'),
-	h2h('Bobby', 'Trevor', 9, 5, '2005-W3'),
-	h2h('Nick', 'Trevor', 10, 12, '2009-W1')
-];
 
 describe('formatOdds', () => {
 	it('prints whole percents and never claims certainty the sim has not earned', () => {
@@ -262,83 +235,11 @@ describe('rivalry', () => {
 	});
 });
 
-describe('rivalryLine', () => {
-	it("gives the board's line on the board's data", () => {
-		expect(rivalryLine(PAIR, HALL_OF_FAME, H2H, CURRENT)).toBe(
-			'Seven titles, and Trevor still trails two current managers head to head: Luke S and Gabe the Younger.'
-		);
-	});
-
-	it('says "One title" for a one-time champion', () => {
-		const hof = [{ managerName: 'Trevor', championshipsWon: 1 }];
-		expect(rivalryLine(PAIR, hof, H2H, CURRENT)).toBe(
-			'One title, and Trevor still trails two current managers head to head: Luke S and Gabe the Younger.'
-		);
-	});
-
-	it('drops the titles clause for a manager with none', () => {
-		expect(rivalryLine(PAIR, [], H2H, CURRENT)).toBe(
-			'Trevor trails two current managers head to head: Luke S and Gabe the Younger.'
-		);
-	});
-
-	it('uses the singular for one name', () => {
-		expect(rivalryLine(PAIR, HALL_OF_FAME, [PAIR], CURRENT)).toBe(
-			'Seven titles, and Trevor still trails one current manager head to head: Luke S.'
-		);
-	});
-
-	it('lists three names, the rival first then by meetings, and counts the rest', () => {
-		const rows = [
-			PAIR,
-			h2h('Israel', 'Trevor', 20, 16),
-			h2h('Craig', 'Trevor', 8, 6),
-			h2h('Trevor', 'Nick', 9, 12),
-			h2h('Omar', 'Trevor', 6, 5),
-			h2h('Erik Snow', 'Trevor', 4, 3)
-		];
-		expect(rivalryLine(PAIR, [], rows, CURRENT)).toBe(
-			'Trevor trails six current managers head to head: Luke S, Israel, Nick and three others.'
-		);
-		expect(rivalryLine(PAIR, [], rows.slice(0, 5), CURRENT)).toBe(
-			'Trevor trails five current managers head to head: Luke S, Israel, Nick and two others.'
-		);
-		expect(rivalryLine(PAIR, [], rows.slice(0, 4), CURRENT)).toBe(
-			'Trevor trails four current managers head to head: Luke S, Israel, Nick and one other.'
-		);
-	});
-
-	it('writes counts of 10 and up as numerals', () => {
-		const others = Array.from({ length: 11 }, (_, i) => `M${i}`);
-		const rows = [PAIR, ...others.map((m) => h2h(m, 'Trevor', 3, 1))];
-		expect(rivalryLine(PAIR, [], rows, [...CURRENT, ...others])).toBe(
-			'Trevor trails 12 current managers head to head: Luke S, M0, M1 and nine others.'
-		);
-	});
-
-	it('says the subject trails no one when no current manager leads them', () => {
-		const formerRival = h2h('Bobby', 'Trevor', 21, 19);
-		expect(rivalryLine(formerRival, HALL_OF_FAME, [formerRival], CURRENT)).toBe(
-			"Seven titles, and Trevor doesn't trail any current manager head to head."
-		);
-	});
-
+describe('meetingsSince', () => {
 	it('leaves the year out when the series has no start date', () => {
-		const undated = { ...h2h('Luke S', 'Trevor', 20, 20), firstMatchupDate: null };
-		expect(rivalryLine(undated, HALL_OF_FAME, H2H, CURRENT)).toBe(
-			'Luke S and Trevor have split 40 meetings.'
-		);
-		expect(meetingsSince(40, '')).toBe('40 meetings');
 		expect(meetingsSince(40, '2005')).toBe('40 meetings since 2005');
-	});
-
-	it('says the series is split when it is level', () => {
-		expect(rivalryLine(h2h('Luke S', 'Trevor', 20, 20), HALL_OF_FAME, H2H, CURRENT)).toBe(
-			'Luke S and Trevor have split 40 meetings since 2005.'
-		);
-		expect(rivalryLine(h2h('Israel', 'Omar', 4, 4), HALL_OF_FAME, H2H, CURRENT)).toBe(
-			'Israel and Omar have split eight meetings since 2005.'
-		);
+		expect(meetingsSince(40, '')).toBe('40 meetings');
+		expect(rivalry({ ...PAIR, firstMatchupDate: null }).since).toBe('');
 	});
 });
 
@@ -371,15 +272,5 @@ describe('tradeTag', () => {
 			text: 'Even trade',
 			even: true
 		});
-	});
-});
-
-describe('wording', () => {
-	it('writes one to nine as words and joins names with a final "and"', () => {
-		expect(countWord(2)).toBe('two');
-		expect(countWord(10)).toBe('10');
-		expect(joinNames(['Luke S'])).toBe('Luke S');
-		expect(joinNames(['Luke S', 'Gabe the Younger'])).toBe('Luke S and Gabe the Younger');
-		expect(joinNames(['A', 'B', 'C'])).toBe('A, B and C');
 	});
 });

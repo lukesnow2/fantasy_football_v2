@@ -23,8 +23,8 @@
 		formatRecord,
 		meetingsSince,
 		profileHref,
+		RIVALRY_LINE,
 		rivalry,
-		rivalryLine,
 		statStrip,
 		thisWeekMode,
 		titlesLabel,
@@ -108,6 +108,10 @@
 	const phone = $derived(innerWidth < 640);
 
 	const ov = $derived(overview.data?.overview ?? null);
+	// " in 2005", or " in " before a placeholder bar while the overview loads.
+	const introYear = $derived(
+		ov ? ` in ${ov.firstSeason}` : overview.status === 'loading' ? ' in ' : ''
+	);
 
 	// ---- This week ----
 	const weekData = $derived(standings.data);
@@ -135,16 +139,6 @@
 	const banners = $derived(bannerWall(hallOfFame.data?.hallOfFame ?? []));
 	const pair = $derived(headToHead.data?.headToHead?.[0] ?? null);
 	const series = $derived(pair ? rivalry(pair) : null);
-	const rivalryText = $derived(
-		pair && hallOfFame.status === 'ready' && standings.status === 'ready'
-			? rivalryLine(
-					pair,
-					hallOfFame.data?.hallOfFame ?? [],
-					headToHead.data?.headToHead ?? [],
-					(standings.data?.standings ?? []).map((s) => s.managerName)
-				)
-			: null
-	);
 	const rivalAvatar = $derived(phone ? 64 : 84);
 
 	const records = $derived(featuredRecords(recordBook.data?.records ?? []));
@@ -161,7 +155,7 @@
 
 {#snippet bars(count: number, height: number, tone = 'soft')}
 	<div class="bars" aria-hidden="true">
-		{#each Array(count) as _, i (i)}
+		{#each [...Array(count).keys()] as i (i)}
 			<span class="bar {tone}" style:height="{height}px"></span>
 		{/each}
 	</div>
@@ -190,8 +184,10 @@
 				<h1>The League</h1>
 				<p class="intro">
 					Standings, history and records for one fantasy football league, going back to the first
-					draft{#if ov}{' '}in {ov.firstSeason}{:else if overview.status === 'loading'}{' '}in
-						<span class="band-bar year-bar" aria-hidden="true"></span>{/if}.
+					draft{introYear}{#if !ov && overview.status === 'loading'}<span
+							class="band-bar year-bar"
+							aria-hidden="true"
+						></span>{/if}.
 				</p>
 				<div class="hero-links">
 					<Button variant="band-primary" size="large" href="/this-season">This season →</Button>
@@ -311,7 +307,7 @@
 							<Avatar name={b.name} size={36} initialTone="field" initialSize={16} />
 							<span class="wall-name">{@render manager(b.name)}</span>
 							<span class="pennants" role="img" aria-label={titlesLabel(b.count)}>
-								{#each Array(b.count) as _, i (i)}<Pennant />{/each}
+								{#each [...Array(b.count).keys()] as i (i)}<Pennant />{/each}
 							</span>
 							<span class="wall-count">{b.count}</span>
 						</li>
@@ -377,7 +373,7 @@
 						<span class="seg left" style:width="{series.leftShare}%"></span>
 						<span class="seg right" style:width="{100 - series.leftShare}%"></span>
 					</div>
-					{#if rivalryText}<p class="rivalry-line">{rivalryText}</p>{/if}
+					<p class="rivalry-line">{RIVALRY_LINE}</p>
 				{/if}
 				<div class="rivalry-link">
 					<Button variant="link-pennant" size="tap" href="/historical?tab=head-to-head"
