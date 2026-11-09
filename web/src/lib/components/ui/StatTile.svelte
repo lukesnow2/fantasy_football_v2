@@ -108,5 +108,13 @@
 		.value-first .value {
 			font-size: 28px;
 		}
+
+		.value-first .first-label {
+			font-size: 13px;
+		}
+
+		.in-strip.value-first {
+			padding: 14px 16px;
+		}
 	}
 </style>

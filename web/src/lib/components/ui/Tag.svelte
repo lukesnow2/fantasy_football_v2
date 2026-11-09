@@ -16,7 +16,8 @@
 	 * fill the after-the-final board draws for the winner, and `last-place` is
 	 * the ink fill for the Last Place Trophy (WP4 S4.9's Finish tag).
 	 *
-	 * One size everywhere: 4px 10px, 12px weight 700, 0.04em, as System draws it.
+	 * One size everywhere: 4px 10px, 12px weight 700, 0.04em, as System draws it,
+	 * at the normal line height whatever the row around it sets.
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -38,6 +39,7 @@
 		font-size: 12px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
+		line-height: normal;
 		white-space: nowrap;
 	}
 

@@ -161,6 +161,12 @@
 		font-size: 16px;
 	}
 
+	@media (max-width: 639.98px) {
+		.size-large {
+			box-sizing: border-box;
+		}
+	}
+
 	.btn:focus-visible {
 		outline: 2px solid var(--color-field);
 		outline-offset: 2px;
