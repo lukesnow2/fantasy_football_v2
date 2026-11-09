@@ -1,0 +1,67 @@
+<script module>
+	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import StatTip from '$lib/components/ui/StatTip.svelte';
+	import StatTipCard from '$lib/components/ui/StatTipCard.svelte';
+	import { LUCK_FACTOR, seedDefinitions } from './fixtures';
+
+	seedDefinitions();
+
+	const { Story } = defineMeta({ title: 'UI/StatTip', component: StatTip, tags: ['autodocs'] });
+</script>
+
+<Story name="Closed">
+	{#snippet template()}
+		<span class="header-label"><StatTip metricId="luck_factor" label="Luck" /></span>
+	{/snippet}
+</Story>
+
+<Story name="Open">
+	{#snippet template()}
+		<div style="min-height: 320px">
+			<span class="header-label"><StatTip metricId="luck_factor" label="Luck" open /></span>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Card on its own">
+	{#snippet template()}
+		<div style="width: 360px"><StatTipCard definition={LUCK_FACTOR} /></div>
+	{/snippet}
+</Story>
+
+<Story name="Labels in a row">
+	{#snippet template()}
+		<div class="header-label" style="display: flex; flex-wrap: wrap; gap: 8px 18px">
+			<StatTip metricId="pythagorean_wins" label="Pyth W" />
+			<StatTip metricId="power_score" label="Power score" />
+			<StatTip metricId="hall_of_fame_index" label="HoF index" />
+			<StatTip metricId="draft_grade" label="Grade" />
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Missing definition">
+	{#snippet template()}
+		<p style="font-size: 15px">
+			<StatTip metricId="not_in_the_dictionary" label="Mystery stat" /> shows its label and no ⓘ.
+		</p>
+	{/snippet}
+</Story>
+
+<Story name="Open near the right edge">
+	{#snippet template()}
+		<div style="min-height: 320px; text-align: right">
+			<span class="header-label"><StatTip metricId="luck_factor" label="Luck" open /></span>
+		</div>
+	{/snippet}
+</Story>
+
+<style>
+	.header-label {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-ink-2);
+	}
+</style>
