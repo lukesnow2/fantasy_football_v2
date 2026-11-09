@@ -202,6 +202,7 @@
 					title={mode === 'final' ? 'Final standings' : 'This week'}
 					titleSize={26}
 					headGap={10}
+					phoneHeadGap={6}
 					tone="borderless"
 				>
 					{#snippet action()}
@@ -230,7 +231,7 @@
 								{@const team = oddsByManager.get(row.managerName)}
 								<li class="week-row">
 									<span class="week-rank">{i + 1}</span>
-									<Avatar name={row.managerName} size={32} initialTone="field" />
+									<Avatar name={row.managerName} size={phone ? 28 : 32} initialTone="field" />
 									<span class="week-name">{@render manager(row.managerName)}</span>
 									<span class="week-wl">{formatRecord(row.wins, row.losses, row.ties)}</span>
 									{#if mode === 'final'}
@@ -287,7 +288,14 @@
 		</div>
 
 		<!-- S3.4 The banner wall -->
-		<Card title="The banner wall" padding="24px" headGap={16} class="gap-top">
+		<Card
+			title="The banner wall"
+			padding="24px"
+			headGap={16}
+			phoneHeadGap={6}
+			phoneHeadStack
+			class="gap-top"
+		>
 			{#snippet action()}
 				{#if ov}
 					<span class="wall-note">
@@ -305,7 +313,12 @@
 				<ul class="wall">
 					{#each banners as b (b.name)}
 						<li class="wall-row">
-							<Avatar name={b.name} size={36} initialTone="field" initialSize={16} />
+							<Avatar
+								name={b.name}
+								size={phone ? 32 : 36}
+								initialTone="field"
+								initialSize={phone ? 13 : 16}
+							/>
 							<span class="wall-name">{@render manager(b.name)}</span>
 							<span class="pennants" role="img" aria-label={titlesLabel(b.count)}>
 								{#each [...Array(b.count).keys()] as i (i)}<Pennant />{/each}
@@ -319,7 +332,14 @@
 
 		<div class="pair gap-top">
 			<!-- S3.5 From the record book -->
-			<Card title="From the record book" padding="24px" headGap={6} class="half">
+			<Card
+				title="From the record book"
+				padding="24px"
+				headGap={6}
+				phonePadding="16px 16px 6px"
+				phoneHeadGap={2}
+				class="half"
+			>
 				{#if recordBook.status === 'loading'}
 					{@render bars(3, 66)}
 				{:else if recordBook.status === 'failed'}
@@ -343,7 +363,7 @@
 			</Card>
 
 			<!-- S3.6 Biggest rivalry -->
-			<Card tone="pennant" padding="24px" class="half rivalry">
+			<Card tone="pennant" padding="24px" phonePadding="16px 16px 6px" class="half rivalry">
 				<div class="rivalry-kicker">Biggest rivalry</div>
 				{#if headToHead.status === 'loading'}
 					<div class="rivalry-loading">{@render bars(2, 60, 'pennant')}</div>
@@ -353,18 +373,18 @@
 					<p class="empty">No rivalries yet.</p>
 				{:else}
 					<div class="faceoff">
-						<div class="side">
+						<a class="side" href={profileHref(series.left)}>
 							<Avatar name={series.left} size={rivalAvatar} ring={3} initialTone="field" />
-							<span class="side-name">{@render manager(series.left)}</span>
-						</div>
+							<span class="side-name">{series.left}</span>
+						</a>
 						<div class="score">
 							<div class="score-num">{series.score}</div>
 							<div class="score-note">{meetingsSince(series.meetings, series.since)}</div>
 						</div>
-						<div class="side">
+						<a class="side" href={profileHref(series.right)}>
 							<Avatar name={series.right} size={rivalAvatar} ring={3} initialTone="field" />
-							<span class="side-name">{@render manager(series.right)}</span>
-						</div>
+							<span class="side-name">{series.right}</span>
+						</a>
 					</div>
 					<div
 						class="series-bar"
@@ -385,9 +405,17 @@
 		</div>
 
 		<!-- S3.7 Latest trades -->
-		<Card title="Latest trades" padding="24px" headGap={8} class="gap-top">
+		<Card
+			title="Latest trades"
+			padding="24px"
+			headGap={8}
+			phonePadding="6px 16px 16px"
+			phoneHeadGap={0}
+			phoneHeadAlign="center"
+			class="gap-top"
+		>
 			{#snippet action()}
-				<Button variant="link" href="/trades">Trade Center →</Button>
+				<a class="field-link trade-center" href="/trades">Trade Center →</a>
 			{/snippet}
 			{#if trades.status === 'loading'}
 				{@render bars(3, 48)}
@@ -757,6 +785,11 @@
 		padding-top: 12px;
 	}
 
+	.trade-center {
+		font-size: 15px;
+		font-weight: 600;
+	}
+
 	/* ---- S3.7 Latest trades ---- */
 
 	.trade {
@@ -819,35 +852,197 @@
 		padding: 10px 0;
 	}
 
-	/* ---- S3.8 Phones ---- */
+	/* ---- S3.8 Phones, as the "Home · phone" board draws them ---- */
 
 	@media (max-width: 639.98px) {
+		/* The hero: one column, the This week card full width under the text. */
 		.band-row {
 			padding: 32px 16px 56px;
+			flex-direction: column;
+			align-items: stretch;
+			gap: 32px;
+		}
+
+		/* In a column, the desktop flex bases would become heights. */
+		.hero-text,
+		.this-week {
+			flex: none;
+		}
+
+		.kicker {
+			font-size: 12px;
 		}
 
 		h1 {
+			margin: 10px 0 12px;
 			font-size: 56px;
 		}
 
-		/* One link per row. Equal rows keep the filled link as tall as the
-		   outline one, whose border sits outside its 48px, as the desktop row
-		   does by stretching. */
-		.hero-links {
-			display: grid;
-			grid-auto-rows: 1fr;
+		.intro {
+			margin: 0 0 24px;
+			max-width: none;
+			font-size: 17px;
+			line-height: 1.5;
 		}
 
+		.hero-links {
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		/* This week */
+		.week-label {
+			font-size: 12px;
+		}
+
+		.week-row {
+			gap: 10px;
+			padding: 0;
+			font-size: 14px;
+		}
+
+		.week-rank {
+			width: 16px;
+			font-size: 16px;
+		}
+
+		.week-odds {
+			width: 40px;
+		}
+
+		.week-foot {
+			margin-top: 2px;
+			align-items: center;
+		}
+
+		.week-foot a {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+		}
+
+		/* A name link is the row's 48px target. */
+		.week-name,
+		.wall-name {
+			display: flex;
+		}
+
+		.week-name > a,
+		.wall-name > a {
+			flex: 1;
+			min-width: 0;
+			min-height: 48px;
+			display: flex;
+			align-items: center;
+		}
+
+		/* The main column: cards 14px apart. */
 		.main {
-			padding: 0 16px 64px;
+			padding: 0 16px 48px;
+		}
+
+		.main :global(.gap-top) {
+			margin-top: 14px;
+		}
+
+		.pair {
+			gap: 14px;
+		}
+
+		/* The banner wall: one column, no gap between rows. */
+		/* A block, so its line is 13px tall, not the header's 16px. */
+		.wall-note {
+			display: block;
+			font-size: 13px;
+		}
+
+		.wall {
+			display: block;
+		}
+
+		.wall-row {
+			padding: 0;
+			font-size: 14px;
+		}
+
+		/* From the record book */
+		.record {
+			padding: 12px 0;
+		}
+
+		.record-line {
+			gap: 10px;
+		}
+
+		.record-value {
+			font-size: 28px;
+		}
+
+		.record-who {
+			font-size: 14px;
+		}
+
+		/* Biggest rivalry */
+		.rivalry-kicker {
+			font-size: 12px;
+		}
+
+		.faceoff {
+			margin-top: 16px;
+			gap: 12px;
+		}
+
+		.side {
+			font-size: 15px;
 		}
 
 		.score-num {
 			font-size: 44px;
 		}
 
+		.score-note {
+			font-size: 13px;
+		}
+
+		.series-bar {
+			margin-top: 18px;
+		}
+
+		.rivalry-line {
+			margin-top: 14px;
+		}
+
+		.rivalry-link {
+			margin-top: 4px;
+			padding-top: 0;
+		}
+
+		/* Latest trades: each row stacks. */
+		.trade-center {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+			font-size: 14px;
+		}
+
+		.trade {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 6px;
+			padding: 12px 0;
+			line-height: 1.4;
+		}
+
 		.trade-when {
-			width: 100%;
+			width: auto;
+		}
+
+		.trade-side {
+			flex: none;
+		}
+
+		.trade > :global(.tag) {
+			margin-top: 2px;
 		}
 	}
 </style>
