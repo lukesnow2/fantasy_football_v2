@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	bannerWall,
+	biggestRivalry,
 	featuredRecords,
 	finishTag,
 	formatCount,
@@ -217,8 +218,7 @@ describe('rivalry', () => {
 			score: '21-19',
 			meetings: 40,
 			since: '2005',
-			leftShare: 52.5,
-			level: false
+			leftShare: 52.5
 		});
 	});
 
@@ -229,9 +229,25 @@ describe('rivalry', () => {
 		});
 		expect(rivalry(h2h('Israel', 'Omar', 10, 10))).toMatchObject({
 			left: 'Israel',
-			level: true,
 			leftShare: 50
 		});
+	});
+});
+
+describe('biggestRivalry', () => {
+	it('takes the pair with the most meetings', () => {
+		const rows = [h2h('Israel', 'Trevor', 16, 20), PAIR, h2h('Craig', 'Luke S', 21, 15)];
+		expect(biggestRivalry(rows)).toBe(PAIR);
+	});
+
+	it('breaks a tie by the pair names, whatever order the API sends', () => {
+		const tied = h2h('Israel', 'Trevor', 20, 20);
+		expect(biggestRivalry([PAIR, tied])).toBe(tied);
+		expect(biggestRivalry([tied, PAIR])).toBe(tied);
+	});
+
+	it('is null with no rows', () => {
+		expect(biggestRivalry([])).toBeNull();
 	});
 });
 
@@ -265,6 +281,10 @@ describe('tradeTag', () => {
 		expect(
 			tradeTag({ ...trade, teamAFinalScore: 61, teamBFinalScore: 39, tradeWinner: 'Trevor' })?.text
 		).toBe('Trevor wins 61.0-39.0');
+	});
+
+	it('gives no tag when the winner is neither manager', () => {
+		expect(tradeTag({ ...trade, tradeWinner: 'Cee Dee’s Nuts' })).toBeNull();
 	});
 
 	it('reads "Even trade" on the wash', () => {

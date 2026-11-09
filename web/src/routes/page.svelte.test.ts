@@ -84,6 +84,17 @@ describe('/+page.svelte', () => {
 		expect(page.getByRole('link', { name: 'Nick' }).elements()).toHaveLength(0);
 	});
 
+	it('reads None for a manager missing from the odds', async () => {
+		const responses = season(false, 'regular');
+		responses['/api/playoff-odds'].teams = ODDS.filter((t) => t.managerName !== 'Trevor');
+		stubApis(responses);
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		render(Page);
+
+		await expect.element(page.getByText('None', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('86%')).toBeInTheDocument();
+	});
+
 	it('hides the odds during the playoffs (D4)', async () => {
 		stubApis(season(false, 'postseason'));
 		vi.spyOn(console, 'error').mockImplementation(() => {});

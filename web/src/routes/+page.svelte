@@ -17,6 +17,7 @@
 	} from '$lib/components/ui';
 	import {
 		bannerWall,
+		biggestRivalry,
 		featuredRecords,
 		finishTag,
 		formatOdds,
@@ -137,7 +138,7 @@
 
 	// ---- Banner wall, rivalry ----
 	const banners = $derived(bannerWall(hallOfFame.data?.hallOfFame ?? []));
-	const pair = $derived(headToHead.data?.headToHead?.[0] ?? null);
+	const pair = $derived(biggestRivalry(headToHead.data?.headToHead ?? []));
 	const series = $derived(pair ? rivalry(pair) : null);
 	const rivalAvatar = $derived(phone ? 64 : 84);
 

@@ -124,7 +124,7 @@ export interface HallOfFameRow {
 	hallOfFameRank?: number | string | null;
 }
 
-export function titlesOf(row: HallOfFameRow | undefined): number {
+function titlesOf(row: HallOfFameRow | undefined): number {
 	const n = Number(row?.championshipsWon ?? 0);
 	return Number.isFinite(n) ? n : 0;
 }
@@ -212,7 +212,6 @@ export interface Rivalry {
 	right: string;
 	leftWins: number;
 	rightWins: number;
-	level: boolean;
 	/** Leader first: "21-19". */
 	score: string;
 	meetings: number;
@@ -227,8 +226,24 @@ export function meetingsSince(count: number | string, since: string): string {
 }
 
 /** The year a series began, from "2005-W1". */
-export function seriesStart(firstMatchupDate: string | null | undefined): string {
+function seriesStart(firstMatchupDate: string | null | undefined): string {
 	return firstMatchupDate?.match(/^\d{4}/)?.[0] ?? '';
+}
+
+/**
+ * The league's biggest rivalry: the pair with the most meetings. The API
+ * orders by meetings alone, so a tie is broken by the pair's names, and the
+ * card doesn't swap pairs from one load to the next.
+ */
+export function biggestRivalry(rows: H2HRow[]): H2HRow | null {
+	const key = (r: H2HRow) => `${r.managerAName}|${r.managerBName}`;
+	return (
+		[...rows].sort(
+			(a, b) =>
+				(Number(b.totalMatchups) || 0) - (Number(a.totalMatchups) || 0) ||
+				key(a).localeCompare(key(b))
+		)[0] ?? null
+	);
 }
 
 /** The series leader on the left; manager A there when it's level. */
@@ -245,7 +260,6 @@ export function rivalry(pair: H2HRow): Rivalry {
 		right,
 		leftWins,
 		rightWins,
-		level: aWins === bWins,
 		score: `${leftWins}-${rightWins}`,
 		meetings: Number(pair.totalMatchups) || 0,
 		since: seriesStart(pair.firstMatchupDate),
@@ -276,7 +290,8 @@ function oneDecimal(n: number | string | null | undefined): string {
 
 /**
  * The verdict tag: "{winner} wins {winner's score}-{loser's score}", or
- * "Even trade" on the wash.
+ * "Even trade" on the wash. A winner that is neither manager gets no tag, so
+ * a team name or a stray label never reaches the page (G8).
  */
 export function tradeTag(trade: TradeRow): { text: string; even: boolean } | null {
 	const winner = trade.tradeWinner?.trim();
@@ -286,5 +301,5 @@ export function tradeTag(trade: TradeRow): { text: string; even: boolean } | nul
 	const b = oneDecimal(trade.teamBFinalScore);
 	if (winner === trade.teamAManager) return { text: `${winner} wins ${a}-${b}`, even: false };
 	if (winner === trade.teamBManager) return { text: `${winner} wins ${b}-${a}`, even: false };
-	return { text: `${winner} wins`, even: false };
+	return null;
 }
