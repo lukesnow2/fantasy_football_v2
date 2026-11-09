@@ -59,22 +59,37 @@ export type ThisWeekMode = 'regular' | 'playoffs' | 'final';
 /**
  * Which "This week" card to draw (D4): the regular season as drawn, the
  * playoffs (odds hidden) once the odds API says the postseason is on, and the
- * final standings once the season has a champion.
+ * final standings once the season has a champion. Without an answer from the
+ * odds API, the standings' weeks decide: `currentWeek` is the last completed
+ * week, so the playoffs are on once the whole regular season has been played.
  */
 export function thisWeekMode(
 	isSeasonComplete: boolean | undefined,
-	oddsPhase: string | undefined
+	oddsPhase: string | undefined,
+	currentWeek?: number,
+	regularSeasonWeeks?: number
 ): ThisWeekMode {
 	if (isSeasonComplete) return 'final';
 	if (oddsPhase === 'postseason') return 'playoffs';
+	if (
+		oddsPhase === undefined &&
+		currentWeek !== undefined &&
+		regularSeasonWeeks !== undefined &&
+		currentWeek >= regularSeasonWeeks
+	)
+		return 'playoffs';
 	return 'regular';
 }
 
 /**
  * The Finish tag (WP4 S4.9): the standings API's `playoffTier` in the board's
- * words and colors.
+ * words and colors. No tier at all gives no tag, so a season whose tiers
+ * haven't landed yet doesn't call its champion "Missed playoffs".
  */
-export function finishTag(tier: string | null | undefined): { text: string; variant: TagVariant } {
+export function finishTag(
+	tier: string | null | undefined
+): { text: string; variant: TagVariant } | null {
+	if (!tier) return null;
 	switch (tier) {
 		case 'Champion':
 			return { text: 'Champion', variant: 'champion-strong' };
@@ -223,6 +238,11 @@ export interface Rivalry {
 	leftShare: number;
 }
 
+/** "40 meetings since 2005", or "40 meetings" when the start year is unknown. */
+export function meetingsSince(count: number | string, since: string): string {
+	return since ? `${count} meetings since ${since}` : `${count} meetings`;
+}
+
 /** The year a series began, from "2005-W1". */
 export function seriesStart(firstMatchupDate: string | null | undefined): string {
 	return firstMatchupDate?.match(/^\d{4}/)?.[0] ?? '';
@@ -263,7 +283,7 @@ export function rivalryLine(
 ): string {
 	const r = rivalry(pair);
 	if (r.level) {
-		return `${r.left} and ${r.right} have split ${countWord(r.meetings)} meetings since ${r.since}.`;
+		return `${r.left} and ${r.right} have split ${meetingsSince(countWord(r.meetings), r.since)}.`;
 	}
 
 	const subject = r.right;

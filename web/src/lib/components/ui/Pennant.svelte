@@ -16,7 +16,7 @@
 </script>
 
 <svg width="12" height="18" viewBox="0 0 12 18" aria-hidden="true" class="pennant">
-	<path d="M1 1v16" stroke={staff} stroke-width="1.5" />
+	<path d="M1 1v16" style:stroke={staff} stroke-width="1.5" />
 	<path d="M2 1.5h9L8 5.5l3 4H2z" {fill} />
 </svg>
 

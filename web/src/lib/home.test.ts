@@ -8,6 +8,7 @@ import {
 	formatOdds,
 	formatRecord,
 	joinNames,
+	meetingsSince,
 	parseRecord,
 	rivalry,
 	rivalryLine,
@@ -100,6 +101,12 @@ describe('thisWeekMode', () => {
 		expect(thisWeekMode(false, 'postseason')).toBe('playoffs');
 		expect(thisWeekMode(true, 'postseason')).toBe('final');
 	});
+
+	it("falls back to the standings' weeks when the odds API didn't answer", () => {
+		expect(thisWeekMode(false, undefined, 14, 14)).toBe('playoffs');
+		expect(thisWeekMode(false, undefined, 8, 14)).toBe('regular');
+		expect(thisWeekMode(false, 'regular', 14, 14)).toBe('regular');
+	});
 });
 
 describe('finishTag', () => {
@@ -107,12 +114,17 @@ describe('finishTag', () => {
 		expect(finishTag('Champion')).toEqual({ text: 'Champion', variant: 'champion-strong' });
 		expect(finishTag('Runner-up')).toEqual({ text: 'Runner-up', variant: 'champion' });
 		expect(finishTag('Semifinalist')).toEqual({ text: 'Semifinalist', variant: 'bye' });
-		expect(finishTag('Consolation Winner').text).toBe('Consolation winner');
+		expect(finishTag('Consolation Winner')?.text).toBe('Consolation winner');
 		expect(finishTag('Consolation 4th (Last Place)')).toEqual({
 			text: 'Last Place Trophy',
 			variant: 'last-place'
 		});
 		expect(finishTag('Regular Season')).toEqual({ text: 'Missed playoffs', variant: 'eliminated' });
+	});
+
+	it('gives no tag when the API sends no tier', () => {
+		expect(finishTag(null)).toBeNull();
+		expect(finishTag(undefined)).toBeNull();
 	});
 });
 
@@ -309,6 +321,15 @@ describe('rivalryLine', () => {
 		expect(rivalryLine(formerRival, HALL_OF_FAME, [formerRival], CURRENT)).toBe(
 			"Seven titles, and Trevor doesn't trail any current manager head to head."
 		);
+	});
+
+	it('leaves the year out when the series has no start date', () => {
+		const undated = { ...h2h('Luke S', 'Trevor', 20, 20), firstMatchupDate: null };
+		expect(rivalryLine(undated, HALL_OF_FAME, H2H, CURRENT)).toBe(
+			'Luke S and Trevor have split 40 meetings.'
+		);
+		expect(meetingsSince(40, '')).toBe('40 meetings');
+		expect(meetingsSince(40, '2005')).toBe('40 meetings since 2005');
 	});
 
 	it('says the series is split when it is level', () => {

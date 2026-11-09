@@ -5,13 +5,23 @@
 	 * Every line is computed by a pure helper in $lib/home.
 	 */
 	import { onMount } from 'svelte';
-	import { Avatar, Button, Card, Pennant, StatStrip, StatTile, Tag } from '$lib/components/ui';
+	import {
+		Avatar,
+		Button,
+		Card,
+		EmptyValue,
+		Pennant,
+		StatStrip,
+		StatTile,
+		Tag
+	} from '$lib/components/ui';
 	import {
 		bannerWall,
 		featuredRecords,
 		finishTag,
 		formatOdds,
 		formatRecord,
+		meetingsSince,
 		profileHref,
 		rivalry,
 		rivalryLine,
@@ -102,7 +112,12 @@
 	// ---- This week ----
 	const weekData = $derived(standings.data);
 	const mode = $derived(
-		thisWeekMode(weekData?.isSeasonComplete, odds.status === 'ready' ? odds.data?.phase : undefined)
+		thisWeekMode(
+			weekData?.isSeasonComplete,
+			odds.status === 'ready' ? odds.data?.phase : undefined,
+			weekData?.currentWeek,
+			weekData?.regularSeasonWeeks
+		)
 	);
 	const oddsByManager = $derived(
 		new Map(
@@ -167,7 +182,7 @@
 					{:else}
 						<span
 							class="band-bar kicker-bar"
-							class:hidden={overview.status === 'failed'}
+							class:hidden={overview.status !== 'loading'}
 							aria-hidden="true"
 						></span>
 					{/if}
@@ -223,10 +238,14 @@
 									<span class="week-wl">{formatRecord(row.wins, row.losses, row.ties)}</span>
 									{#if mode === 'final'}
 										{@const tag = finishTag(row.playoffTier)}
-										<Tag variant={tag.variant}>{tag.text}</Tag>
+										{#if tag}<Tag variant={tag.variant}>{tag.text}</Tag>{/if}
 									{:else if showOdds}
 										<span class="week-odds">
-											{team ? formatOdds(team.playoffOdds, team.clinched || team.eliminated) : ''}
+											{#if team}
+												{formatOdds(team.playoffOdds, team.clinched || team.eliminated)}
+											{:else if odds.status === 'ready'}
+												<EmptyValue />
+											{/if}
 										</span>
 									{/if}
 								</li>
@@ -261,7 +280,7 @@
 				</StatStrip>
 			{:else}
 				<Card padding="20px 22px">
-					{#if overview.status === 'failed'}
+					{#if overview.status !== 'loading'}
 						{@render failed('the league numbers', overview.load)}
 					{:else}
 						{@render bars(1, 43)}
@@ -343,7 +362,7 @@
 						</div>
 						<div class="score">
 							<div class="score-num">{series.score}</div>
-							<div class="score-note">{series.meetings} meetings since {series.since}</div>
+							<div class="score-note">{meetingsSince(series.meetings, series.since)}</div>
 						</div>
 						<div class="side">
 							<Avatar name={series.right} size={rivalAvatar} ring={3} initialTone="field" />
