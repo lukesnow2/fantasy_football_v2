@@ -162,32 +162,17 @@ export function groupByTier<T extends { hallOfFameRank: number }>(
 	return groups.filter((g) => g.rows.length > 0);
 }
 
-/** A rate as the board writes Win %: three places, no leading zero (".563"). */
-export function formatRate(value: number | string | null | undefined): string | null {
+/** A finite number, or null for a missing or unreadable value. */
+export function toNumber(value: number | string | null | undefined): number | null {
+	if (value == null || value === '') return null;
 	const n = Number(value);
-	if (value == null || value === '' || !Number.isFinite(n)) return null;
-	return n.toFixed(3).replace(/^(-?)0\./, '$1.');
+	return Number.isFinite(n) ? n : null;
 }
 
-/** A rate as a percent to one place ("57.5%"). */
-export function formatPercent1(value: number | string | null | undefined): string | null {
-	const n = Number(value);
-	if (value == null || value === '' || !Number.isFinite(n)) return null;
-	return `${(n * 100).toFixed(1)}%`;
-}
-
-/** A number to a fixed count of places ("0.352", "1.8"). */
+/** A number to a fixed count of places ("0.352", "1.8"), or null when missing. */
 export function fixed(value: number | string | null | undefined, places: number): string | null {
-	const n = Number(value);
-	if (value == null || value === '' || !Number.isFinite(n)) return null;
-	return n.toFixed(places);
-}
-
-/** "W-L", with "-T" when there are ties. */
-export function careerRecord(wins: unknown, losses: unknown, ties: unknown): string {
-	const t = Number(ties) || 0;
-	const base = `${Number(wins) || 0}-${Number(losses) || 0}`;
-	return t > 0 ? `${base}-${t}` : base;
+	const n = toNumber(value);
+	return n == null ? null : n.toFixed(places);
 }
 
 /** "12 managers", "1 manager". */

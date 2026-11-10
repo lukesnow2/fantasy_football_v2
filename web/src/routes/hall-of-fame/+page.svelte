@@ -16,18 +16,17 @@
 		type Column
 	} from '$lib/components/ui';
 	import {
-		careerRecord,
 		fixed,
-		formatPercent1,
-		formatRate,
 		groupByTier,
 		indexBarPct,
 		managerCount,
 		numberWord,
 		podiumStyle,
-		tierKey
+		tierKey,
+		toNumber
 	} from '$lib/utils/hall-of-fame';
-	import { profileHref } from '$lib/utils/managers';
+	import { formatPct3, formatPercent1, profileHref } from '$lib/utils/managers';
+	import { formatCount, formatRecord } from '$lib/home';
 
 	type HallOfFameRow = {
 		managerName: string;
@@ -98,6 +97,22 @@
 
 	const totalManagers = $derived(Number(analytics.totalManagers) || 0);
 
+	/** Win % as the board writes it (".563"), or null when missing. */
+	function rate(value: number | string | null | undefined): string | null {
+		const n = toNumber(value);
+		return n == null ? null : formatPct3(n);
+	}
+
+	/** A rate as a percent to one place ("57.5%"), or null when missing. */
+	function percent(value: number | string | null | undefined): string | null {
+		const n = toNumber(value);
+		return n == null ? null : formatPercent1(n);
+	}
+
+	function record(wins: unknown, losses: unknown, ties: unknown = 0): string {
+		return formatRecord(Number(wins) || 0, Number(losses) || 0, Number(ties) || 0);
+	}
+
 	// ---- S7.2 header and strip ----------------------------------------------
 	const kicker = $derived(
 		range?.first != null && range?.last != null
@@ -108,7 +123,7 @@
 	const stats = $derived([
 		{ label: 'managers ranked', value: String(totalManagers) },
 		{ label: 'titles per manager', value: fixed(analytics.avgChampionships, 1) },
-		{ label: 'average win rate', value: formatPercent1(analytics.avgWinPercentage) },
+		{ label: 'average win rate', value: percent(analytics.avgWinPercentage) },
 		{ label: 'seasons per manager', value: fixed(analytics.avgSeasonsPlayed, 1) },
 		{
 			label: 'average HoF index',
@@ -127,7 +142,7 @@
 		managers.reduce((sum, m) => sum + (Number(m.championshipsWon) || 0), 0)
 	);
 	const caption = $derived(
-		`${managerCount(totalManagers)} · ${(Number(analytics.totalCareerWins) || 0).toLocaleString('en-US')} wins · ${totalTitles} ${totalTitles === 1 ? 'title' : 'titles'}`
+		`${managerCount(totalManagers)} · ${formatCount(analytics.totalCareerWins)} wins · ${totalTitles} ${totalTitles === 1 ? 'title' : 'titles'}`
 	);
 
 	const topIndex = $derived(
@@ -168,6 +183,9 @@
 
 	const columns = $derived(phone ? phoneColumns : desktopColumns);
 </script>
+
+<!-- A missing number reads "None", never a blank or a dash (G6). -->
+{#snippet orNone(text: string | null)}{#if text == null}<EmptyValue />{:else}{text}{/if}{/snippet}
 
 <svelte:head>
 	<title>Hall of Fame · The League</title>
@@ -274,11 +292,11 @@
 					</span>
 					<span class="podium-stats">
 						<span>
-							<span class="podium-value">{fixed(m.hallOfFameIndex, 3)}</span>
+							<span class="podium-value">{@render orNone(fixed(m.hallOfFameIndex, 3))}</span>
 							<span class="podium-label">HoF index</span>
 						</span>
 						<span>
-							<span class="podium-value">{formatRate(m.careerWinPercentage)}</span>
+							<span class="podium-value">{@render orNone(rate(m.careerWinPercentage))}</span>
 							<span class="podium-label">Win %</span>
 						</span>
 						<span>
@@ -325,10 +343,10 @@
 						<span class="tier-count">{managerCount(r.opens?.count ?? 0)}</span>
 						{#if stat}
 							<span class="tier-stats">
-								<span>Avg titles <b>{fixed(stat.avgChampionships, 1)}</b></span>
-								<span>Win % <b>{formatPercent1(stat.avgWinPct)}</b></span>
-								<span>Index <b>{fixed(stat.avgHallOfFameIndex, 3)}</b></span>
-								<span>Record <b>{careerRecord(stat.totalWins, stat.totalLosses, 0)}</b></span>
+								<span>Avg titles <b>{@render orNone(fixed(stat.avgChampionships, 1))}</b></span>
+								<span>Win % <b>{@render orNone(percent(stat.avgWinPct))}</b></span>
+								<span>Index <b>{@render orNone(fixed(stat.avgHallOfFameIndex, 3))}</b></span>
+								<span>Record <b>{record(stat.totalWins, stat.totalLosses)}</b></span>
 							</span>
 						{/if}
 					</div>
@@ -366,22 +384,27 @@
 							<EmptyValue />
 						{/if}
 					{:else if column.key === 'record'}
-						<span class="strong">{careerRecord(r.careerWins, r.careerLosses, r.careerTies)}</span>
+						<span class="strong">{record(r.careerWins, r.careerLosses, r.careerTies)}</span>
 					{:else if column.key === 'pct'}
-						{formatRate(r.careerWinPercentage) ?? ''}
+						{@render orNone(rate(r.careerWinPercentage))}
 					{:else if column.key === 'ppg'}
-						<span class="soft">{fixed(r.avgPointsPerGame, 1)}</span>
+						<span class="soft">{@render orNone(fixed(r.avgPointsPerGame, 1))}</span>
 					{:else if column.key === 'playoffs'}
 						<span class="soft">{r.playoffAppearances}</span>
 					{:else if column.key === 'seasons'}
 						<span class="soft">{r.totalSeasons}</span>
 					{:else if column.key === 'index'}
-						<OddsBar
-							percent={indexBarPct(Number(r.hallOfFameIndex), topIndex)}
-							text={fixed(r.hallOfFameIndex, 3) ?? ''}
-							numberWidth={phone ? 38 : 40}
-							gap={phone ? 8 : 10}
-						/>
+						{@const index = fixed(r.hallOfFameIndex, 3)}
+						{#if index == null}
+							<EmptyValue />
+						{:else}
+							<OddsBar
+								percent={indexBarPct(Number(r.hallOfFameIndex), topIndex)}
+								text={index}
+								numberWidth={phone ? 38 : 40}
+								gap={phone ? 8 : 10}
+							/>
+						{/if}
 					{/if}
 				{/snippet}
 			</DataTable>

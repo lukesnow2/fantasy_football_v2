@@ -104,7 +104,7 @@ export const GET: RequestHandler = async ({ url }) => {
 		// Main Hall of Fame query. `manager` is an exact match, bound as a
 		// parameter, so "Gabe" doesn't also find "Gabe the Younger".
 		const managerFilter = manager ? sql`WHERE manager_name = ${manager}` : sql``;
-		const hallOfFameResult = await db.execute(sql`
+		const hallOfFameQuery = db.execute(sql`
 			WITH hof AS (${hallOfFameRows})
 			SELECT
 				manager_name,
@@ -125,10 +125,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY hall_of_fame_rank ASC, manager_name ASC
 			LIMIT ${limit}
 		`);
-		const hallOfFameData = Array.from(hallOfFameResult);
 
 		// Analytics for the Hall of Fame, from the same finished-season rows.
-		const analyticsResult = await db.execute(sql`
+		const analyticsQuery = db.execute(sql`
 			WITH hof AS (${hallOfFameRows})
 			SELECT
 				COUNT(*) as total_managers,
@@ -147,10 +146,9 @@ export const GET: RequestHandler = async ({ url }) => {
 				MIN(hall_of_fame_index) as lowest_hall_of_fame_index
 			FROM hof
 		`);
-		const analytics = Array.from(analyticsResult)[0] as any;
 
 		// Tier breakdowns, from the same rows.
-		const tiersResult = await db.execute(sql`
+		const tiersQuery = db.execute(sql`
 			WITH hof AS (${hallOfFameRows})
 			SELECT
 				CASE
@@ -172,15 +170,25 @@ export const GET: RequestHandler = async ({ url }) => {
 			GROUP BY 1
 			ORDER BY MIN(hall_of_fame_rank)
 		`);
-		const tiers = Array.from(tiersResult);
 
 		// The first season and the latest finished one, for the page's kicker.
-		const rangeResult = await db.execute(sql`
+		const rangeQuery = db.execute(sql`
 			WITH finished_leagues AS (${finishedLeagues})
 			SELECT MIN(dl.season_year)::integer AS first, MAX(dl.season_year)::integer AS last
 			FROM edw.dim_league dl
 			JOIN finished_leagues fl ON fl.league_key = dl.league_key
 		`);
+
+		// The four reads are independent, so they run at once.
+		const [hallOfFameResult, analyticsResult, tiersResult, rangeResult] = await Promise.all([
+			hallOfFameQuery,
+			analyticsQuery,
+			tiersQuery,
+			rangeQuery
+		]);
+		const hallOfFameData = Array.from(hallOfFameResult);
+		const analytics = Array.from(analyticsResult)[0] as any;
+		const tiers = Array.from(tiersResult);
 		const range = Array.from(rangeResult)[0] as any;
 		const seasonRange = {
 			first: range?.first == null ? null : Number(range.first),

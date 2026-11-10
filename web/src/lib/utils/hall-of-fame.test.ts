@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-	careerRecord,
 	fixed,
-	formatPercent1,
-	formatRate,
 	groupByTier,
 	hofTier,
 	indexBarPct,
 	managerCount,
 	numberWord,
 	podiumStyle,
-	tierKey
+	tierKey,
+	toNumber
 } from './hall-of-fame';
 
 describe('hofTier', () => {
@@ -167,28 +165,18 @@ describe('groupByTier', () => {
 });
 
 describe('formatters', () => {
-	it('writes Win % with three places and no leading zero', () => {
-		expect(formatRate(0.5625)).toBe('.563');
-		expect(formatRate('0.429')).toBe('.429');
-		expect(formatRate(1)).toBe('1.000');
-		expect(formatRate(null)).toBeNull();
-	});
-
-	it('writes a rate as a percent to one place', () => {
-		expect(formatPercent1('0.50416')).toBe('50.4%');
-		expect(formatPercent1(undefined)).toBeNull();
-	});
-
 	it('fixes places', () => {
 		expect(fixed('0.35225', 3)).toBe('0.352');
 		expect(fixed(1.75, 1)).toBe('1.8');
 		expect(fixed('', 1)).toBeNull();
 	});
 
-	it('writes a record with ties only when there are some', () => {
-		expect(careerRecord(185, 144, 1)).toBe('185-144-1');
-		expect(careerRecord(33, 27, 0)).toBe('33-27');
-		expect(careerRecord(33, 27, null)).toBe('33-27');
+	it('reads numbers and treats missing ones as null', () => {
+		expect(toNumber('0.429')).toBe(0.429);
+		expect(toNumber(0)).toBe(0);
+		expect(toNumber(null)).toBeNull();
+		expect(toNumber('')).toBeNull();
+		expect(toNumber('x')).toBeNull();
 	});
 
 	it('counts managers', () => {
