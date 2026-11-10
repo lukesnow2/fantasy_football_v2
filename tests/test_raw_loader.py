@@ -722,6 +722,43 @@ def test_a_game_the_seeds_cannot_place_keeps_yahoos_flags(state):
     assert len(consolation_pairs(state, NEW_L)) == 3       # as Yahoo sent them
 
 
+def test_seeds_read_a_season_with_no_consolation_bracket(state):
+    """2005 and 2006: Yahoo marks every playoff game consolation, only the
+    bracket teams have seeds, and nobody else plays in the playoff weeks."""
+    seed_bracket(state, OLD_L, rounds=2)
+    with state.engine.begin() as conn:
+        # The fixture's t.5 v t.6 consolation games stay is_playoffs false
+        # here: in 2005 and 2006 there was no consolation bracket to flag.
+        conn.execute(text("UPDATE public.matchups SET is_consolation = true, "
+                          "is_championship = false, is_semifinal = false "
+                          "WHERE league_id = :l AND is_playoffs"), {'l': OLD_L})
+        set_seeds(conn, OLD_L, 4, [1, 2, 3, 4, None, None, None, None])
+        raw_loader.refresh_playoff_flags(conn, OLD_L)
+
+    rows = flags(state, OLD_L)
+    assert [r[0] for r in rows if r[1]] == [16]
+    assert sum(1 for r in rows if r[2]) == 2
+    with state.engine.connect() as conn:
+        n = conn.execute(text("SELECT count(*) FROM public.matchups WHERE league_id = :l "
+                              "AND is_playoffs AND is_consolation"), {'l': OLD_L}).scalar()
+    assert n == 0
+
+
+def test_too_few_seeds_for_the_bracket_keeps_yahoos_flags(state, caplog):
+    """Four teams seeded within a 5-team bracket and no game mixed: only the
+    count says the seeds don't describe the bracket, so nothing is decided
+    from them."""
+    seed_bracket(state, OLD_L, rounds=2)
+    with state.engine.begin() as conn:
+        consolation_as_playoffs(conn, OLD_L)
+        set_seeds(conn, OLD_L, 5, [1, 2, 3, 4, None, None, 7, 8])
+        with caplog.at_level('WARNING'):
+            raw_loader.refresh_playoff_flags(conn, OLD_L)
+    assert "4 seeded within it, 0 game(s)" in caplog.text
+    t5, t6 = f'{OLD_L}.t.5', f'{OLD_L}.t.6'
+    assert consolation_pairs(state, OLD_L) == [(15, t5, t6), (16, t5, t6)]
+
+
 def test_reloading_a_week_keeps_the_team_it_was_played_with(state):
     """Yahoo reports only a player's current team. Reloading week 1 after a
     trade used to rewrite week 1 with the new team, and the draft board -

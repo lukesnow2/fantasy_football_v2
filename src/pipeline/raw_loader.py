@@ -466,43 +466,38 @@ def _consolation_from_seeds(conn, league_id: str) -> None:
     a seed missing, or a game between a seeded and an unseeded team), the
     flags stay as Yahoo sent them.
     """
-    n, seeded, games, mixed = conn.execute(text("""
-        WITH setting AS (
-            SELECT max(num_playoff_teams) AS n FROM public.leagues
-            WHERE league_id = :l),
-        bracket AS (
-            SELECT DISTINCT t.team_id FROM public.teams t, setting
-            WHERE t.league_id = :l AND t.playoff_seed BETWEEN 1 AND setting.n),
-        games AS (
-            SELECT m.team1_id IN (SELECT team_id FROM bracket) AS in1,
-                   m.team2_id IN (SELECT team_id FROM bracket) AS in2
-            FROM public.matchups m WHERE m.league_id = :l AND m.is_playoffs)
-        SELECT (SELECT n FROM setting), (SELECT count(*) FROM bracket),
-               (SELECT count(*) FROM games),
-               (SELECT count(*) FROM games WHERE in1 <> in2)"""),
-        {'l': league_id}).one()
-    if games == 0:
+    n = conn.execute(text(
+        "SELECT max(num_playoff_teams) FROM public.leagues WHERE league_id = :l"),
+        {'l': league_id}).scalar()
+    games = conn.execute(text(
+        "SELECT matchup_id, team1_id, team2_id, is_consolation FROM public.matchups "
+        "WHERE league_id = :l AND is_playoffs"), {'l': league_id}).fetchall()
+    if not games:
         return
-    if n is None or seeded != n or mixed:
+    bracket = {r[0] for r in conn.execute(text(
+        "SELECT team_id FROM public.teams WHERE league_id = :l "
+        "AND team_id IS NOT NULL AND playoff_seed BETWEEN 1 AND :n"),
+        {'l': league_id, 'n': n})} if n is not None else set()
+    mixed = sum(1 for _, t1, t2, _c in games if (t1 in bracket) != (t2 in bracket))
+    if n is None or len(bracket) != n or mixed:
         logger.warning(
             "%s: seeds can't place the playoff games (num_playoff_teams %s, "
             "%d seeded within it, %d game(s) between a seeded and an unseeded "
-            "team) - keeping Yahoo's consolation flags", league_id, n, seeded, mixed)
+            "team) - keeping Yahoo's consolation flags", league_id, n,
+            len(bracket), mixed)
         return
     # No game is mixed, so team1 alone says which side a game is on.
-    changed = conn.execute(text("""
-        WITH bracket AS (
-            SELECT team_id FROM public.teams
-            WHERE league_id = :l AND playoff_seed BETWEEN 1 AND :n)
-        UPDATE public.matchups
-        SET is_consolation = team1_id NOT IN (SELECT team_id FROM bracket)
-        WHERE league_id = :l AND is_playoffs
-          AND is_consolation IS DISTINCT FROM
-              (team1_id NOT IN (SELECT team_id FROM bracket))"""),
-        {'l': league_id, 'n': n}).rowcount
+    changed = [(mid, t1 not in bracket) for mid, t1, _t2, cons in games
+               if cons is not (t1 not in bracket)]
+    for consolation in (True, False):
+        ids = [mid for mid, c in changed if c is consolation]
+        if ids:
+            conn.execute(text(
+                "UPDATE public.matchups SET is_consolation = :c "
+                "WHERE matchup_id = ANY(:ids)"), {'c': consolation, 'ids': ids})
     if changed:
         logger.info("%s: set is_consolation from the seeds on %d playoff game(s)",
-                    league_id, changed)
+                    league_id, len(changed))
 
 
 def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
