@@ -89,3 +89,24 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Clubhouse tone">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<Card tone="clubhouse" padding="26px 28px">
+				<p style="margin: 0; font-size: 16px; color: var(--color-on-clubhouse)">A dark card, as This Season's champion draws it.</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Centered header with a control">
+	{#snippet template()}
+		<div style="max-width: 760px">
+			<Card title="Final standings" headAlign="center" headSpacing="10px 16px">
+				{#snippet action()}<Button variant="secondary">Record</Button>{/snippet}
+				<p style="margin: 0; color: var(--color-ink-2)">Card body.</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>

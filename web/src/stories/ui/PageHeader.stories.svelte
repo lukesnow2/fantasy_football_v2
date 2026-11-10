@@ -103,3 +103,25 @@
 		}
 	}
 </style>
+
+<Story name="Loading">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<PageHeader title="This Season" pending>Intro.</PageHeader>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Phone kicker" parameters={{ viewport: { defaultViewport: 'mobile1' } }}>
+	{#snippet template()}
+		<PageHeader
+			kicker="2026 Season · Week 3 of 14 · Regular season in progress"
+			phoneKicker="2026 · Week 3 of 14"
+			title="This Season"
+			hideActionOnPhone
+		>
+			Live standings, matchups and the playoff picture as the season plays out.
+			{#snippet action()}<Button variant="secondary" href="#">Open in Yahoo ↗</Button>{/snippet}
+		</PageHeader>
+	{/snippet}
+</Story>

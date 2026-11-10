@@ -614,6 +614,12 @@
 			padding: 14px 16px;
 		}
 
+		/* A 44px tap target, as the phone boards draw the brand (WP3 S3.8). */
+		.brand {
+			align-items: center;
+			min-height: 44px;
+		}
+
 		.brand-name {
 			font-size: 22px;
 		}

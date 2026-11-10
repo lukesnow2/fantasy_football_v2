@@ -34,3 +34,18 @@
 		<Segmented label="Week" options={weeks} value={0} />
 	{/snippet}
 </Story>
+
+<Story name="Toggle size (This Season)">
+	{#snippet template()}
+		<Segmented
+			label="Odds of"
+			size="toggle"
+			options={[
+				{ value: 'p', label: 'Playoffs' },
+				{ value: 'b', label: 'Bye' },
+				{ value: 't', label: 'Title' }
+			]}
+			value="p"
+		/>
+	{/snippet}
+</Story>

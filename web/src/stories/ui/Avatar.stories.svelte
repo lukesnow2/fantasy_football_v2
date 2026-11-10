@@ -41,3 +41,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Ring color (This Season's champion)">
+	{#snippet template()}
+		<div style="display: inline-flex; padding: 20px; background: var(--color-clubhouse)">
+			<Avatar name="Gabe the Younger" size={104} ring={4} ringColor="var(--color-pennant-light)" />
+		</div>
+	{/snippet}
+</Story>

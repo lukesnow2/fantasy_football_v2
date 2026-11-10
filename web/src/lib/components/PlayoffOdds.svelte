@@ -1,56 +1,67 @@
 <script lang="ts">
-	import { Trophy, ChevronDown, Info } from 'lucide-svelte';
+	import { compareSeeding } from '$lib/playoff-odds';
+	import { formatOdds, formatRecord } from '$lib/home';
 	import {
-		compareSeeding,
-		type OddsResult,
-		type TeamOdds as EngineTeamOdds
-	} from '$lib/playoff-odds';
+		oddsDetail,
+		oddsMethod,
+		oddsTone,
+		thousands,
+		type OddsResponse,
+		type OddsTeam
+	} from '$lib/this-season';
+	import Card from './ui/Card.svelte';
+	import Segmented from './ui/Segmented.svelte';
+	import Tag from './ui/Tag.svelte';
 
 	/**
-	 * Simulated playoff odds for the This Season page. Replaces a "Playoff
-	 * Picture" card that called any top-six team over .700 "clinched".
-	 * The model lives in $lib/playoff-odds; this only presents it.
+	 * Simulated playoff odds for the This Season page (WP4 S4.4), and the
+	 * Playoff Field once the postseason starts (S4.9). The model lives in
+	 * $lib/playoff-odds; this only presents it.
 	 */
 
-	/** What /api/playoff-odds adds to each engine row. */
-	interface TeamOdds extends EngineTeamOdds {
-		teamName: string;
-		managerName: string | null;
-		projectedPointsRank: number;
-		previousOdds: number | null;
-	}
-
-	interface OddsResponse extends Omit<OddsResult, 'teams'> {
-		season: number;
-		available: boolean;
-		reason?: string;
-		regularSeasonWeeks: number;
-		phase: 'regular' | 'postseason';
-		teams: TeamOdds[];
-	}
+	type TeamOdds = OddsTeam;
 
 	type Metric = 'playoffOdds' | 'byeOdds' | 'titleOdds';
-	const TABS: { id: Metric; label: string }[] = [
-		{ id: 'playoffOdds', label: 'Playoffs' },
-		{ id: 'byeOdds', label: 'Bye' },
-		{ id: 'titleOdds', label: 'Title' }
+	const TABS: { value: Metric; label: string }[] = [
+		{ value: 'playoffOdds', label: 'Playoffs' },
+		{ value: 'byeOdds', label: 'Bye' },
+		{ value: 'titleOdds', label: 'Title' }
 	];
 
-	let data = $state<OddsResponse | null>(null);
+	interface Props {
+		/**
+		 * The /api/playoff-odds response, when the page has already fetched it
+		 * (This Season shares it with its standings, stat strip and notes).
+		 * Without it the component fetches for itself.
+		 */
+		data?: OddsResponse | null;
+	}
+
+	let { data: given }: Props = $props();
+
+	let fetched = $state<OddsResponse | null>(null);
 	let loading = $state(true);
 	let failed = $state(false);
 	let metric = $state<Metric>('playoffOdds');
-	let open = $state<number | null>(null);
+	/** The open row. Undefined until a reader picks one: then the top row is open. */
+	let chosen = $state<number | null | undefined>(undefined);
 	let showMethod = $state(false);
 
+	const data = $derived(given !== undefined ? given : fetched);
+
 	$effect(() => {
+		if (given !== undefined) {
+			loading = false;
+			failed = given === null;
+			return;
+		}
 		let cancelled = false;
 		(async () => {
 			try {
 				const res = await fetch('/api/playoff-odds');
 				if (!res.ok) throw new Error(String(res.status));
 				const body = await res.json();
-				if (!cancelled) data = body;
+				if (!cancelled) fetched = body;
 			} catch (err) {
 				console.error('Playoff odds failed to load:', err);
 				if (!cancelled) failed = true;
@@ -63,11 +74,16 @@
 		};
 	});
 
-	const sorted = $derived.by(() => {
-		if (!data?.teams) return [];
-		return [...data.teams].sort(
-			(a, b) => b[metric] - a[metric] || b.projectedWins - a.projectedWins
-		);
+	const sortBy = (m: Metric) =>
+		[...(data?.teams ?? [])].sort((a, b) => b[m] - a[m] || b.projectedWins - a.projectedWins);
+
+	const sorted = $derived(sortBy(metric));
+
+	// The board's state starts with the top row of the Playoffs sort open, and
+	// switching the metric keeps the same team open.
+	const open = $derived.by(() => {
+		if (chosen !== undefined) return chosen;
+		return (metric === 'playoffOdds' ? sorted : sortBy('playoffOdds'))[0]?.teamKey ?? null;
 	});
 
 	// Final seeding, once the regular season is over: wins, then points for.
@@ -76,30 +92,6 @@
 		return [...data.teams].sort(compareSeeding);
 	});
 
-	// Remaining-schedule difficulty ranked within the league (1 = toughest).
-	const scheduleRank = $derived.by(() => {
-		const withSched = (data?.teams ?? []).filter((t) => t.remainingOpponentPoints != null);
-		const ranked = [...withSched].sort(
-			(a, b) => b.remainingOpponentPoints! - a.remainingOpponentPoints!
-		);
-		return new Map(ranked.map((t, i) => [t.teamKey, i + 1]));
-	});
-
-	function pct(p: number, locked: boolean): string {
-		if (locked) return p >= 1 ? '100%' : '0%';
-		// The simulation isn't proof; don't print certainty the math hasn't earned.
-		if (p > 0.995) return '>99%';
-		if (p < 0.005) return '<1%';
-		return `${Math.round(p * 100)}%`;
-	}
-
-	function tone(p: number): string {
-		if (p >= 0.75) return 'bg-green-400';
-		if (p >= 0.4) return 'bg-amber-400';
-		if (p >= 0.15) return 'bg-orange-400';
-		return 'bg-red-400/80';
-	}
-
 	function delta(t: TeamOdds): number | null {
 		if (metric !== 'playoffOdds' || t.previousOdds == null) return null;
 		const d = Math.round((t.playoffOdds - t.previousOdds) * 100);
@@ -107,250 +99,403 @@
 		return Math.abs(d) < 2 ? null : d;
 	}
 
-	// All-play records can carry a half from a tied week; rounding both sides up
-	// would add a game that wasn't played.
-	const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
-	const record = (t: TeamOdds) => `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ''}`;
-	const signed = (x: number, digits = 1) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(digits)}`;
+	const record = (t: TeamOdds) => formatRecord(t.wins, t.losses, t.ties);
+	const postseason = $derived(data?.available === true && data.phase === 'postseason');
+	const method = $derived(
+		data?.available ? oddsMethod(data.sims, data.playoffTeams, data.byes) : null
+	);
 </script>
 
-<section
-	class="rounded-xl border border-green-500/20 bg-gradient-to-br from-green-900/20 to-amber-900/20 p-6"
+<Card
+	title={postseason ? 'Playoff Field' : 'Playoff Odds'}
+	headSpacing="8px"
+	headGap={postseason ? 0 : 12}
 >
-	<div class="mb-4 flex items-start justify-between gap-3">
-		<h2 class="flex items-center text-xl font-bold text-white">
-			<Trophy class="mr-3 h-5 w-5 shrink-0 text-amber-400" />
-			{data?.phase === 'postseason' ? 'Playoff Field' : 'Playoff Odds'}
-		</h2>
+	{#snippet action()}
 		{#if data?.available}
 			<!-- The season is always named: through the offseason the newest season
 			     in the warehouse is last year's, and its field shouldn't pass for this year's. -->
-			<span class="pt-1 text-right text-xs leading-tight text-slate-400">
+			<span class="meta">
 				{#if data.phase === 'regular'}
-					{data.season} · wk {data.throughWeek}<br />
-					{data.sims.toLocaleString()} sims
+					{data.season} · wk {data.throughWeek} · {thousands(data.sims)} sims
 				{:else}
 					{data.season} season
 				{/if}
 			</span>
 		{/if}
-	</div>
+	{/snippet}
 
 	{#if loading}
-		<div class="space-y-2" aria-busy="true">
+		<div class="loading" aria-busy="true">
 			{#each [0, 1, 2, 3, 4, 5] as row (row)}
-				<div class="h-8 animate-pulse rounded bg-slate-700/30"></div>
+				<div class="bar-row"></div>
 			{/each}
 		</div>
 	{:else if failed || !data}
-		<p class="text-sm text-slate-400">Playoff odds couldn't be loaded right now.</p>
+		<p class="note">Playoff odds couldn't be loaded right now.</p>
 	{:else if !data.available}
-		<p class="text-sm text-slate-400">{data.reason}</p>
+		<p class="note">{data.reason}</p>
 	{:else if data.phase === 'postseason'}
-		<div class="space-y-1.5">
+		<p class="field-note">Seeded by wins, then points for.</p>
+		<ol class="field">
 			{#each seeds as t, i (t.teamKey)}
-				<div
-					class="flex items-center justify-between text-sm {i < data.playoffTeams
-						? 'text-white'
-						: 'text-slate-500'}"
-				>
-					<span class="flex min-w-0 items-center gap-2">
-						<span class="w-5 text-right text-slate-400 tabular-nums">{i + 1}</span>
-						<span class="truncate">{t.teamName}</span>
-						{#if i < data.byes}<span class="text-[10px] tracking-wide text-amber-300 uppercase"
-								>bye</span
-							>{/if}
-					</span>
-					<span class="shrink-0 text-slate-400 tabular-nums">{record(t)}</span>
-				</div>
-				{#if i === data.playoffTeams - 1}
-					<div class="my-2 border-t border-dashed border-slate-600"></div>
+				{#if i === data.playoffTeams}
+					<li class="field-cut" aria-hidden="true"></li>
 				{/if}
+				<li class="seed-row" class:out={i >= data.playoffTeams}>
+					<span class="seed">{i + 1}</span>
+					<span class="seed-name">{t.managerName ?? 'Unknown manager'}</span>
+					{#if i < data.byes}<Tag variant="bye" size="small">Bye</Tag>{/if}
+					<span class="seed-record">{record(t)}</span>
+				</li>
 			{/each}
-		</div>
+		</ol>
 	{:else}
 		<!-- A segmented toggle, not ARIA tabs: there's one list that re-sorts, no panels. -->
-		<div
-			class="mb-4 flex rounded-lg bg-slate-900/40 p-0.5 text-xs font-medium"
-			role="group"
-			aria-label="Odds shown"
-		>
-			{#each TABS as tab (tab.id)}
-				<button
-					aria-pressed={metric === tab.id}
-					class="flex-1 rounded-md px-2 py-1.5 transition-colors {metric === tab.id
-						? 'bg-slate-700 text-white'
-						: 'text-slate-400 hover:text-slate-200'}"
-					onclick={() => (metric = tab.id)}
-				>
-					{tab.label}
-				</button>
-			{/each}
-		</div>
+		<Segmented label="Odds of" size="toggle" options={TABS} bind:value={metric} />
 
 		{#if data.throughWeek === 0}
-			<p class="mb-3 text-xs text-slate-400">
+			<p class="note week-zero">
 				No games yet: every team starts level. Odds start moving after week 1.
 			</p>
 		{/if}
 
-		<ul class="space-y-1">
+		<ul class="list">
 			{#each sorted as t, i (t.teamKey)}
 				{@const p = t[metric]}
 				{@const locked = t.eliminated || (metric === 'playoffOdds' && t.clinched)}
 				{@const d = delta(t)}
+				{@const isOpen = open === t.teamKey}
 				<li>
 					<button
-						class="w-full rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-slate-700/30"
-						aria-expanded={open === t.teamKey}
-						onclick={() => (open = open === t.teamKey ? null : t.teamKey)}
+						type="button"
+						class="team"
+						aria-expanded={isOpen}
+						onclick={() => (chosen = isOpen ? null : t.teamKey)}
 					>
-						<span class="flex items-center justify-between gap-2">
-							<span class="flex min-w-0 items-baseline gap-1.5">
-								<span class="truncate text-sm {t.eliminated ? 'text-slate-500' : 'text-white'}"
-									>{t.teamName}</span
+						<span class="line">
+							<span class="name"
+								>{t.managerName ?? 'Unknown manager'}
+								<span class="record">{record(t)}</span></span
+							>
+							{#if d != null}
+								<span class="delta" class:down={d < 0} title="Change since last week"
+									><span aria-hidden="true">{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span><span
+										class="sr-only">{d > 0 ? 'Up' : 'Down'} {Math.abs(d)} since last week</span
+									></span
 								>
-								<span class="shrink-0 text-xs text-slate-500 tabular-nums">{record(t)}</span>
-							</span>
-							<span class="flex shrink-0 items-center gap-1.5">
-								{#if d != null}
-									<span
-										class="text-[11px] tabular-nums {d > 0 ? 'text-green-400' : 'text-red-400'}"
-										title="Change since last week"
-									>
-										{d > 0 ? '▲' : '▼'}{Math.abs(d)}
-									</span>
-								{/if}
-								{#if metric === 'playoffOdds' && t.clinched}
-									<span
-										class="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-green-300 uppercase"
-										>Clinched</span
-									>
-								{:else if metric === 'playoffOdds' && t.eliminated}
-									<span
-										class="rounded bg-slate-600/30 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-400 uppercase"
-										>Out</span
-									>
-								{:else}
-									<span class="w-10 text-right text-sm font-semibold text-white tabular-nums"
-										>{pct(p, locked)}</span
-									>
-								{/if}
-								<ChevronDown
-									class="h-3.5 w-3.5 text-slate-500 transition-transform {open === t.teamKey
-										? 'rotate-180'
-										: ''}"
-								/>
-							</span>
+							{/if}
+							{#if metric === 'playoffOdds' && t.clinched}
+								<Tag variant="clinched" size="row">Clinched</Tag>
+							{:else if metric === 'playoffOdds' && t.eliminated}
+								<Tag variant="eliminated" size="row">Eliminated</Tag>
+							{:else}
+								<span class="pct">{formatOdds(p, locked)}</span>
+							{/if}
+							<svg
+								class="chevron"
+								class:turned={isOpen}
+								width="12"
+								height="12"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
 						</span>
-						<span class="mt-1 block h-1.5 overflow-hidden rounded-full bg-slate-700/50">
+						<span class="track" aria-hidden="true">
 							<span
-								class="block h-full rounded-full {tone(p)} transition-[width] duration-500"
-								style="width: {Math.max(p * 100, p > 0 ? 1.5 : 0)}%"
+								class="fill"
+								style:width="{Math.max(p * 100, p > 0 ? 1.5 : 0)}%"
+								style:background={oddsTone(p * 100)}
 							></span>
 						</span>
 					</button>
 
-					{#if open === t.teamKey}
-						<dl
-							class="mx-2 mt-1 mb-2 grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-lg bg-slate-900/40 p-3 text-xs"
-						>
-							<dt class="text-slate-400">Projected score</dt>
-							<dd class="text-right text-white tabular-nums">
-								{t.projectedPoints.toFixed(1)}/wk
-								<span class="text-slate-500">#{t.projectedPointsRank}</span>
-							</dd>
-
-							<dt class="text-slate-400">All-play record</dt>
-							<dd class="text-right text-white tabular-nums">
-								{halves(t.allPlayWins)}-{halves(t.allPlayLosses)}
-							</dd>
-
-							<dt class="text-slate-400">Luck</dt>
-							<dd
-								class="text-right tabular-nums {t.luck >= 0.75
-									? 'text-amber-300'
-									: t.luck <= -0.75
-										? 'text-sky-300'
-										: 'text-white'}"
-							>
-								{signed(t.luck)} wins
-							</dd>
-
-							{#if t.remainingOpponentPoints != null}
-								{@const r = scheduleRank.get(t.teamKey) ?? 0}
-								<dt class="text-slate-400">Schedule left ({t.remainingGames})</dt>
-								<dd class="text-right text-white tabular-nums">
-									{t.remainingOpponentPoints.toFixed(1)}
-									<span
-										class={r <= 3
-											? 'text-red-300'
-											: r > scheduleRank.size - 3
-												? 'text-green-300'
-												: 'text-slate-500'}
-										>{r <= 3 ? 'tough' : r > scheduleRank.size - 3 ? 'soft' : 'avg'}</span
-									>
-								</dd>
-							{/if}
-
-							<dt class="text-slate-400">Projected finish</dt>
-							<dd class="text-right text-white tabular-nums">
-								{t.projectedWins.toFixed(1)}-{(data.regularSeasonWeeks - t.projectedWins).toFixed(
-									1
-								)}
-							</dd>
-
-							<dt class="text-slate-400">Bye · #1 seed · Title</dt>
-							<dd class="text-right text-white tabular-nums">
-								{pct(t.byeOdds, t.eliminated)} · {pct(t.topSeedOdds, t.eliminated)} · {pct(
-									t.titleOdds,
-									t.eliminated
-								)}
-							</dd>
+					{#if isOpen}
+						<dl class="detail">
+							{#each oddsDetail(t) as row (row.term)}
+								<div class="pair">
+									<dt>{row.term}</dt>
+									<dd>{row.value}</dd>
+								</div>
+							{/each}
 						</dl>
 					{/if}
 				</li>
 				{#if metric === 'playoffOdds' && i === data.playoffTeams - 1}
-					<li class="flex items-center gap-2 py-1" aria-hidden="true">
-						<span class="flex-1 border-t border-dashed border-slate-600"></span>
-						<span class="text-[10px] tracking-wide text-slate-500 uppercase">Projected cut</span>
-						<span class="flex-1 border-t border-dashed border-slate-600"></span>
+					<li class="cut" aria-hidden="true">
+						<span class="dash"></span>Projected cut<span class="dash"></span>
 					</li>
 				{/if}
 			{/each}
 		</ul>
 
 		<button
-			class="mt-4 flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200"
+			type="button"
+			class="how"
 			aria-expanded={showMethod}
 			onclick={() => (showMethod = !showMethod)}
 		>
-			<Info class="h-3.5 w-3.5" /> How these odds work
+			How these odds work {showMethod ? '▴' : '▾'}
 		</button>
-		{#if showMethod}
-			<div class="mt-2 space-y-2 text-xs leading-relaxed text-slate-400">
-				<p>
-					Each team gets a projected weekly score: its season average, pulled toward the league
-					average until there are enough games to trust it. Points matter more than record because
-					there's no defense in fantasy. A 6-1 team that scores like a 4-3 team keeps its six wins
-					but is projected to play like a 4-3 team from here on.
-				</p>
-				<p>
-					The rest of the season is then played out {data.sims.toLocaleString()} times against the real
-					remaining schedule (Yahoo repeats the round robin, so it's known). Each run varies how good
-					each team really is, lets that drift week to week for injuries and trades, and draws weekly
-					scores with each team's own boom-or-bust spread. Seeding is wins, then points for, then a 3v6
-					/ 4v5 bracket for the title odds.
-				</p>
-				<p>
-					<span class="text-slate-300">Luck</span> is actual wins minus the wins the team's scores would
-					earn on average (all-play). "Clinched" and "Out" are mathematical, not just likely.
-				</p>
-				<p>
-					Tested on every week of the 2008-2025 seasons: teams given about 90% made the playoffs 90%
-					of the time, and it beats a record-and-schedule-only model.
-				</p>
+		{#if showMethod && method}
+			<div class="method">
+				<p>{method[0]}</p>
+				<p>{method[1]}</p>
 			</div>
 		{/if}
 	{/if}
-</section>
+</Card>
+
+<style>
+	.meta {
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.note {
+		margin: 0;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	.week-zero {
+		margin-top: 8px;
+		font-size: 13px;
+	}
+
+	.loading {
+		display: grid;
+		gap: 12px;
+	}
+
+	.bar-row {
+		height: 32px;
+		border-radius: 6px;
+		background: var(--color-line-soft);
+	}
+
+	ul,
+	ol {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.list {
+		margin-top: 8px;
+	}
+
+	.team {
+		display: block;
+		width: 100%;
+		padding: 8px 0;
+		border: 0;
+		border-bottom: 1px solid var(--color-line-soft);
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+		font-family: var(--font-sans);
+		color: var(--color-ink);
+	}
+
+	.team:focus-visible,
+	.how:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+	}
+
+	.line {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 14px;
+	}
+
+	.name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 600;
+	}
+
+	.record {
+		font-weight: 500;
+		color: var(--color-muted);
+	}
+
+	.delta {
+		position: relative;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--color-field);
+	}
+
+	.delta.down {
+		color: var(--color-pennant);
+	}
+
+	.pct {
+		width: 38px;
+		text-align: right;
+		font-weight: 700;
+	}
+
+	.chevron {
+		flex: none;
+		color: var(--color-muted);
+	}
+
+	.chevron.turned {
+		transform: rotate(180deg);
+	}
+
+	.track {
+		display: block;
+		margin-top: 5px;
+		height: 6px;
+		border-radius: 3px;
+		background: var(--color-wash);
+	}
+
+	.fill {
+		display: block;
+		height: 6px;
+		border-radius: 3px;
+	}
+
+	.detail {
+		margin: 0;
+		padding: 10px 12px;
+		border-radius: 0 0 8px 8px;
+		background: var(--color-ground);
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 5px 12px;
+		font-size: 13px;
+	}
+
+	.pair {
+		display: contents;
+	}
+
+	dt {
+		color: var(--color-muted);
+	}
+
+	dd {
+		margin: 0;
+		text-align: right;
+		font-weight: 600;
+	}
+
+	.cut {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 4px 0;
+		font-size: 11px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-field);
+	}
+
+	.dash {
+		flex: 1;
+		border-top: 1.5px dashed var(--color-field);
+	}
+
+	.how {
+		margin-top: 10px;
+		min-height: 40px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		font-family: var(--font-sans);
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-field);
+	}
+
+	.method {
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--color-ink-2);
+	}
+
+	.method p {
+		margin: 8px 0 0;
+	}
+
+	.method p:first-child {
+		margin-top: 4px;
+	}
+
+	/* Playoff Field */
+	.field-note {
+		margin: 4px 0 8px;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.seed-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+		font-size: 14px;
+	}
+
+	.seed-row.out {
+		opacity: 0.55;
+	}
+
+	.seed {
+		width: 20px;
+		font-family: var(--font-slab);
+		font-weight: 700;
+	}
+
+	.seed-name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 600;
+	}
+
+	.seed-record {
+		font-weight: 600;
+	}
+
+	.field-cut {
+		margin: 4px 0;
+		border-top: 1.5px dashed var(--color-field);
+	}
+
+	@media (max-width: 639.98px) {
+		.line {
+			min-height: 20px;
+		}
+
+		.detail {
+			display: flex;
+			flex-direction: column;
+			gap: 5px;
+		}
+
+		.pair {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+		}
+
+		.how {
+			margin-top: 6px;
+			min-height: 44px;
+		}
+	}
+</style>

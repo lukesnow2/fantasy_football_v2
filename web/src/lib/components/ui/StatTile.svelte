@@ -8,6 +8,9 @@
 	 * padding and a 38px value.
 	 *
 	 * Give it a `metricId` and the label becomes a StatTip.
+	 *
+	 * `compact` is This Season's phone strip (WP4 S4.10): value first in slab
+	 * 24px, then the label in 12px muted, 12px 14px of padding.
 	 */
 	import { getContext } from 'svelte';
 	import StatTip from './StatTip.svelte';
@@ -19,9 +22,10 @@
 		sub?: string;
 		metricId?: string;
 		valueFirst?: boolean;
+		compact?: boolean;
 	}
 
-	let { label, value, sub, metricId, valueFirst = false }: Props = $props();
+	let { label, value, sub, metricId, valueFirst = false, compact = false }: Props = $props();
 
 	const inStrip = getContext<boolean>(STAT_STRIP) === true;
 </script>
@@ -30,8 +34,8 @@
 	{#if metricId}<StatTip {metricId} {label} />{:else}{label}{/if}
 {/snippet}
 
-<div class="tile" class:in-strip={inStrip} class:value-first={valueFirst}>
-	{#if valueFirst}
+<div class="tile" class:in-strip={inStrip} class:value-first={valueFirst || compact} class:compact>
+	{#if valueFirst || compact}
 		<div class="value">{value}</div>
 		<div class="first-label">{@render labelText()}</div>
 	{:else}
@@ -108,5 +112,30 @@
 		.value-first .value {
 			font-size: 28px;
 		}
+
+		.value-first .first-label {
+			font-size: 13px;
+		}
+
+		.in-strip.value-first {
+			padding: 14px 16px;
+		}
+	}
+
+	/* After the strip and phone rules above, at the same specificity, so it
+	   wins at every width. */
+	.tile.compact {
+		padding: 12px 14px;
+	}
+
+	.compact .value {
+		font-size: 24px;
+		line-height: normal;
+	}
+
+	.compact .first-label {
+		margin-top: 0;
+		font-size: 12px;
+		color: var(--color-muted);
 	}
 </style>

@@ -38,3 +38,21 @@
 		<Tag variant="last-place">Last Place Trophy</Tag>
 	{/snippet}
 </Story>
+
+<Story name="Row size (This Season)">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px; flex-wrap: wrap; font-size: 15px">
+			<Tag variant="bye" size="row">Add</Tag>
+			<Tag variant="champion" size="row">Drop</Tag>
+			<Tag variant="eliminated" size="row">Add/drop</Tag>
+			<Tag variant="champion-strong" size="row">Champion</Tag>
+			<Tag variant="last-place" size="row">Last Place Trophy</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Small size (Playoff Field's Bye)">
+	{#snippet template()}
+		<Tag variant="bye" size="small">Bye</Tag>
+	{/snippet}
+</Story>
