@@ -147,13 +147,16 @@
 		manager ? profileKicker(hofRow ? Number(hofRow.hallOfFameRank) : null, manager.firstSeason) : ''
 	);
 	// "Most in the league" needs rank 1 held alone.
+	// Unknown (null) when the Hall of Fame didn't load, so the line claims
+	// neither "most" nor "tied".
 	const sharesTopRank = $derived(
-		manager != null &&
-			hallOfFame.some(
-				(r) =>
-					r.managerName !== manager.managerName &&
-					Number(r.championshipsWon ?? 0) === Number(manager.totalChampionships ?? 0)
-			)
+		manager == null || hallOfFame.length === 0
+			? null
+			: hallOfFame.some(
+					(r) =>
+						r.managerName !== manager.managerName &&
+						Number(r.championshipsWon ?? 0) === Number(manager.totalChampionships ?? 0)
+				)
 	);
 
 	const titleYears = $derived([...championshipSeasons].sort((a, b) => a - b));

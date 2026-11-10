@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { page } from '$app/state';
-	import { replaceState } from '$app/navigation';
+	import { afterNavigate, replaceState } from '$app/navigation';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ManagerLuckCard from '$lib/components/ManagerLuckCard.svelte';
 	import { Avatar, Button, Card, EmptyValue, StatTip, Tag, TitleFlags } from '$lib/components/ui';
@@ -80,6 +80,13 @@
 	onMount(() => {
 		loadManagerData();
 		loadDraft();
+	});
+
+	// A real navigation to this page while it's open (the header's Managers
+	// link, or a link to ?manager=) picks the manager its URL names again.
+	// Rail clicks are shallow, so they don't come through here.
+	afterNavigate(({ type }) => {
+		if (type !== 'enter' && managerData) selectedName = initialSelection();
 	});
 
 	const rankings = $derived(

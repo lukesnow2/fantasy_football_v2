@@ -47,11 +47,19 @@
 	}
 
 	onMount(() => {
-		// Only the row scrolls: `nearest` on the block axis leaves the page put.
-		const active = row?.querySelector<HTMLElement>('[aria-current="page"]');
-		if (active && row && row.scrollWidth > row.clientWidth) {
-			active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-		}
+		// Measured once the web fonts are in, since they set how wide the row
+		// is. Only the row scrolls: `nearest` on the block axis leaves the page.
+		let live = true;
+		const reveal = () => {
+			const active = row?.querySelector<HTMLElement>('[aria-current="page"]');
+			if (live && active && row && row.scrollWidth > row.clientWidth) {
+				active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+			}
+		};
+		(document.fonts?.ready ?? Promise.resolve()).then(reveal);
+		return () => {
+			live = false;
+		};
 	});
 </script>
 

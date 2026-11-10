@@ -705,13 +705,13 @@ export function rivalryHref(manager: string, opponent: string): string {
 export function titleGamesSummary(
 	titleGames: TitleGame[],
 	championshipRank: number | null | undefined,
-	sharesTopRank: boolean
+	sharesTopRank: boolean | null
 ): { wins: string; rest: string } | null {
 	const trips = titleGames.length;
 	if (trips === 0) return null;
 	const won = titleGames.filter((g) => g.won).length;
 	const suffix =
-		championshipRank === 1
+		championshipRank === 1 && sharesTopRank !== null
 			? sharesTopRank
 				? ', tied for the most in the league'
 				: ', most in the league'

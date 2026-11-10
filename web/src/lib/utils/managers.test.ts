@@ -595,6 +595,8 @@ describe('titleGamesSummary', () => {
 			' in 3 trips, tied for the most in the league'
 		);
 		expect(titleGamesSummary(finals, 2, false)?.rest).toBe(' in 3 trips');
+		// The Hall of Fame didn't load: no claim either way.
+		expect(titleGamesSummary(finals, 1, null)?.rest).toBe(' in 3 trips');
 	});
 
 	it('says 1 win and 1 trip', () => {
