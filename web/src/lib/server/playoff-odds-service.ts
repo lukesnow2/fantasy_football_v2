@@ -45,6 +45,8 @@ export type SeasonOdds =
 			playoffTeams: number;
 			byes: number;
 			leagueAverage: number;
+			/** Every game and score the forecast saw (see gamesFingerprint). */
+			gamesFingerprint: string;
 			teams: SeasonTeamOdds[];
 	  };
 
@@ -133,7 +135,8 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 	const { playoffTeams, source: formatSource } = format;
 
 	const keys = teams.map((t) => t.teamKey);
-	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${gamesFingerprint(games)}`;
+	const fingerprint = gamesFingerprint(games);
+	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}`;
 	let sims = cache.get(key);
 	if (!sims) {
 		// One seed for both runs: the engine draws each week's randomness from
@@ -173,6 +176,7 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 		playoffTeams: now.playoffTeams,
 		byes: now.byes,
 		leagueAverage: now.leagueAverage,
+		gamesFingerprint: fingerprint,
 		teams: now.teams.map((t) => ({
 			...t,
 			teamName: info.get(t.teamKey)?.teamName ?? '',

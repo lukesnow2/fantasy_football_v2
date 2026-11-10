@@ -9,6 +9,7 @@ on Vercel, backed by **Neon** (serverless Postgres). Local dev uses a local Post
 - `edw.*` — dimensional warehouse (dim_/fact_/mart_ + analytical views). Built by the ETL. **What the web app reads.**
 - `meta_data.*` — data-dictionary metric definitions.
 - `app.*` — auth/chat/rules (user, session, webauthn_*, chat_*, rule_*). Owned by Drizzle.
+- `model.*` — saved playoff-odds forecasts (migration 015). Created by a pipeline migration, written by `web/scripts/snapshot-playoff-odds.ts`. **Never rebuilt**: a forecast can't be re-derived later, so nothing that drops `edw` (full rebuild, `promote_to_neon.sh`) or `app` touches it, and it has no foreign keys into `edw`.
 
 Every connection must resolve `app, edw, public` on its search_path. This is set at the
 **database level** (`ALTER DATABASE <db> SET search_path TO app, edw, public`) — do this once
@@ -203,6 +204,27 @@ settings don't survive transaction pooling.
 Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)
 runs from OUTSIDE GitHub Actions and files an issue when no successful run has
 finished within 6.5 days in-season. Run ledger: `public.pipeline_runs`.
+
+### Playoff-odds snapshots
+After each load the workflow saves the playoff-odds forecast the site is showing
+to `model.playoff_odds_snapshots` (one row per season, week and model version)
+and `model.playoff_odds_snapshot_teams` (each team's odds and record). The model
+version is a hash of `web/src/lib/playoff-odds.ts` and
+`web/src/lib/server/playoff-odds-service.ts`, so changing the model starts a new
+version by itself; the next run then rebuilds the season's earlier weeks under
+it (`captured_live = false`) so versions compare week for week. Only rows with
+`captured_live = true` were taken the week they were shown. A stat correction
+to the current week saves a second snapshot; grading uses the last.
+```bash
+cd web
+DATABASE_URL=... npm run odds:snapshot -- --dry-run      # what it would save
+DATABASE_URL=... npm run odds:snapshot -- --season 2025  # rebuild a past season
+DATABASE_URL=... npm run odds:grade                      # Brier, log loss, calibration
+```
+The grade report scores playoffs, bye, top seed and title against a no-skill
+baseline (every team equal), split by model version and live vs rebuilt. A
+season grades once its playoffs start. Past seasons rebuilt with
+`--season` are in-sample for 2008-2018, the years the model was tuned on.
 
 ### Dead-man's check on Luke's Mac
 - LaunchAgent `~/Library/LaunchAgents/com.theleague.staleness-check.plist`:

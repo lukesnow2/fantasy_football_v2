@@ -23,7 +23,9 @@
 		"build-storybook": "storybook build",
 		"db:generate": "drizzle-kit generate && node scripts/filter-migration.js",
 		"seed:members": "node scripts/seed-league-members.js",
-		"seed:constitution": "node scripts/seed-constitution.js"
+		"seed:constitution": "node scripts/seed-constitution.js",
+		"odds:snapshot": "vite-node --options.transformMode.ssr='.*' scripts/snapshot-playoff-odds.ts",
+		"odds:grade": "vite-node --options.transformMode.ssr='.*' scripts/grade-playoff-odds.ts"
 	},
 	"devDependencies": {
 		"@chromatic-com/storybook": "^4.0.1",
