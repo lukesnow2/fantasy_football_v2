@@ -1329,7 +1329,6 @@
 
 	/* ---------- Achievements (S6.8) ---------- */
 	.summary {
-		display: block;
 		font-size: 14px;
 		color: var(--color-ink-2);
 	}

@@ -712,7 +712,6 @@
 
 	/* ---------- S5.5 Chart ---------- */
 	.chart-note {
-		display: block;
 		font-size: 13px;
 		color: var(--color-muted);
 	}

@@ -587,10 +587,7 @@
 		margin-top: 24px;
 	}
 
-	/* A block, so the Card's action div has no 16px line of its own around
-	   it; the board's caption is a bare 13px flex item. */
 	.caption {
-		display: block;
 		font-size: 13px;
 		color: var(--color-muted);
 	}
