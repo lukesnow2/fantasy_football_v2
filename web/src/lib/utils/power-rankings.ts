@@ -124,7 +124,7 @@ export function spellNumber(n: number): string {
 }
 
 /** "A", "A and B", "A, B and C". */
-function joinNames(names: string[]): string {
+export function joinNames(names: string[]): string {
 	if (names.length <= 1) return names.join('');
 	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

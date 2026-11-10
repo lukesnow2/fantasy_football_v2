@@ -4,7 +4,8 @@
 	 * auto-fit columns of at least 200px, 1px line rules between the tiles.
 	 * `twoUpOnPhones` holds it to two columns below 640px (Home's phone strip),
 	 * with the phone board's dividers: a right rule on the left column and a
-	 * bottom rule on the first row.
+	 * bottom rule on the first row. `stackOnPhones` puts one tile per row below
+	 * 640px (the profile's Head to head strip), whatever the width.
 	 *
 	 *   <StatStrip>
 	 *     <StatTile label="Top seed" value="Omar" sub="3-0 · 412.6 PF" />
@@ -17,10 +18,11 @@
 	interface Props {
 		label?: string;
 		twoUpOnPhones?: boolean;
+		stackOnPhones?: boolean;
 		children: Snippet;
 	}
 
-	let { label, twoUpOnPhones = false, children }: Props = $props();
+	let { label, twoUpOnPhones = false, stackOnPhones = false, children }: Props = $props();
 
 	setContext(STAT_STRIP, true);
 </script>
@@ -28,6 +30,7 @@
 <div
 	class="strip"
 	class:two-up={twoUpOnPhones}
+	class:stack={stackOnPhones}
 	role={label ? 'group' : undefined}
 	aria-label={label}
 >
@@ -45,6 +48,10 @@
 	}
 
 	@media (max-width: 639.98px) {
+		.strip.stack {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
 		.strip.two-up {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}

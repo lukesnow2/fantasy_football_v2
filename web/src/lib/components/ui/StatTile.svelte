@@ -197,8 +197,8 @@
 	}
 
 	@media (max-width: 639.98px) {
-		/* One tile per row, each with a rule under it but the last, as the
-		   phone board draws them (not the pulled-back rules above). */
+		/* One tile per row (StatStrip's stackOnPhones), each with a rule under
+		   it but the last, as the phone board draws them. */
 		.tile.avatar-tile.in-strip {
 			margin: 0;
 			border: 0;

@@ -225,6 +225,15 @@
 		background: var(--color-field-tint);
 	}
 
+	/* The sticky cell keeps the row's fill. */
+	.sticky-first tr.highlighted td:first-child {
+		background: var(--color-pennant-wash);
+	}
+
+	.sticky-first tr.selected td:first-child {
+		background: var(--color-field-tint);
+	}
+
 	tr.divider td {
 		padding: 8px 0;
 		border-bottom: 0;

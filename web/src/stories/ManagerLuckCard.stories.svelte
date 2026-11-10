@@ -20,8 +20,7 @@
 		careerRegularSeasonWins: 147,
 		careerPythagoreanWins: 145,
 		careerLuckFactor: 2.04,
-		luckSeasons: 16,
-		latestSeason: 2026
+		luckSeasons: 16
 	};
 
 	// Trevor, unlucky over 21 seasons.
@@ -29,8 +28,7 @@
 		careerRegularSeasonWins: 153.5,
 		careerPythagoreanWins: 156.2,
 		careerLuckFactor: -2.69,
-		luckSeasons: 21,
-		latestSeason: 2026
+		luckSeasons: 21
 	};
 
 	// A manager in their first season: no finished season yet.
@@ -38,8 +36,7 @@
 		careerRegularSeasonWins: null,
 		careerPythagoreanWins: null,
 		careerLuckFactor: null,
-		luckSeasons: 0,
-		latestSeason: 2026
+		luckSeasons: 0
 	};
 </script>
 

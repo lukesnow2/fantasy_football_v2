@@ -19,15 +19,12 @@
 	 */
 	import { Card, EmptyValue, StatTip } from '$lib/components/ui';
 	import { formatLuck, luckTone, seasonCount } from '$lib/utils/power-rankings';
-	import type { CurrentSeasonLuck } from '$lib/manager-luck';
 
 	interface LuckSummary {
 		careerRegularSeasonWins?: number | null;
 		careerPythagoreanWins?: number | null;
 		careerLuckFactor?: number | null;
 		luckSeasons?: number | null;
-		latestSeason?: number | null;
-		currentSeason?: CurrentSeasonLuck | null;
 	}
 
 	interface Props {

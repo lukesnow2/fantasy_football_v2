@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import { afterNavigate, replaceState } from '$app/navigation';
@@ -81,6 +82,13 @@
 		const request = ++latestRequest;
 		loading = true;
 		failed = false;
+		// Another manager's profile: drop the one on screen, so its numbers
+		// don't sit under the new name while this loads. Untracked, so the
+		// effect below doesn't rerun when the data arrives.
+		if (untrack(() => managerData?.data?.meta?.requestedManager) !== name) {
+			managerData = null;
+			hallOfFame = [];
+		}
 		try {
 			const [perf, hof] = await Promise.allSettled([
 				fetch(`/api/managers/performance?manager=${encodeURIComponent(name)}&analysis=all`),
@@ -600,7 +608,7 @@
 		{:else if tab === 'head-to-head'}
 			<!-- S6.7 Head to head -->
 			<div class="first">
-				<StatStrip label="Head to head highlights">
+				<StatStrip label="Head to head highlights" stackOnPhones>
 					{#each tiles as t (t.label)}
 						<StatTile
 							layout="avatar"
@@ -638,11 +646,11 @@
 							stickyFirst={phone}
 						>
 							{#snippet cell(row, column)}
-								{@const left =
-									row.opponentLastSeason != null && row.opponentLastSeason < leagueLatest
-										? 'League alum'
-										: null}
 								{#if column.key === 'opponent'}
+									{@const left =
+										row.opponentLastSeason != null && row.opponentLastSeason < leagueLatest
+											? 'League alum'
+											: null}
 									{#if phone}
 										<svelte:element
 											this={withProfile.has(row.opponent) ? 'a' : 'span'}

@@ -465,9 +465,12 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			// Every finished title game the manager played (WP6 S6.8), newest
 			// first. A placeholder manager ('--hidden--', a Yahoo-private
-			// account) is no one to name, so its opponent is null.
-			try {
-				const titleResult = await db.execute(sql`
+			// account) is no one to name, so its opponent is null. Only for one
+			// manager: the Managers page asks for none.
+			data.titleGames = [];
+			if (manager) {
+				try {
+					const titleResult = await db.execute(sql`
 					SELECT
 						fm.season_year AS season_year,
 						CASE WHEN fm.manager1_key = dm.manager_key
@@ -486,16 +489,17 @@ export const GET: RequestHandler = async ({ url }) => {
 					  AND (fm.manager1_key = dm.manager_key OR fm.manager2_key = dm.manager_key)
 					ORDER BY fm.season_year DESC
 				`);
-				data.titleGames = Array.from(titleResult).map((r: any) => ({
-					seasonYear: Number(r.seasonYear),
-					points: num(r.points),
-					opponentPoints: num(r.opponentPoints),
-					opponent: r.opponent ?? null,
-					won: Boolean(r.won)
-				}));
-			} catch (titleError) {
-				console.error('[managers/performance] title games query failed:', titleError);
-				data.titleGames = [];
+					data.titleGames = Array.from(titleResult).map((r: any) => ({
+						seasonYear: Number(r.seasonYear),
+						points: num(r.points),
+						opponentPoints: num(r.opponentPoints),
+						opponent: r.opponent ?? null,
+						won: Boolean(r.won)
+					}));
+				} catch (titleError) {
+					console.error('[managers/performance] title games query failed:', titleError);
+					data.titleGames = [];
+				}
 			}
 
 			// Longest win/loss streaks from the manager's chronological game results

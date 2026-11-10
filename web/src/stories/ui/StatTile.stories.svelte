@@ -73,7 +73,7 @@
 <Story name="Avatar layout (profile Head to head)">
 	{#snippet template()}
 		<div style="max-width: 1152px">
-			<StatStrip label="Head to head highlights">
+			<StatStrip label="Head to head highlights" stackOnPhones>
 				<StatTile
 					layout="avatar"
 					avatar="Troy Colvin"

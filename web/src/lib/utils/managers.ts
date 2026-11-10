@@ -5,7 +5,7 @@
  */
 import type { TagVariant } from '$lib/components/ui';
 import { hofTier } from './hall-of-fame';
-import { spellNumber } from './power-rankings';
+import { joinNames, spellNumber } from './power-rankings';
 
 // ---------------------------------------------------------------------------
 // Shapes read from /api/managers/performance
@@ -146,12 +146,6 @@ export function fullRecord(wins: number, losses: number, ties: number): string {
 /** "1 title", "3 titles": the TitleFlags label. */
 export function titleCount(count: number): string {
 	return `${count} ${count === 1 ? 'title' : 'titles'}`;
-}
-
-/** "A", "A and B", "A, B and C". */
-function joinWithAnd(items: string[]): string {
-	if (items.length <= 1) return items.join('');
-	return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,7 +408,7 @@ export function winsChartLabel(bars: WinsBar[]): string {
 	const tail =
 		titles.length === 0
 			? 'No titles yet.'
-			: `${titles.length === 1 ? 'Title' : 'Titles'} in ${joinWithAnd(titles)}.`;
+			: `${titles.length === 1 ? 'Title' : 'Titles'} in ${joinNames(titles)}.`;
 	return `Wins per season, ${span}. ${tail}`;
 }
 
