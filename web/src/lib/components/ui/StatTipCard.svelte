@@ -19,6 +19,8 @@
 		floating?: boolean;
 		top?: number | null;
 		left?: number | null;
+		/** A floating card's width in px, when it spans an element. */
+		width?: number | null;
 		hidden?: boolean;
 		element?: HTMLSpanElement;
 	}
@@ -29,6 +31,7 @@
 		floating = false,
 		top = null,
 		left = null,
+		width = null,
 		hidden = false,
 		element = $bindable()
 	}: Props = $props();
@@ -43,6 +46,7 @@
 	{hidden}
 	style:top={floating && top !== null ? `${top}px` : undefined}
 	style:left={floating && left !== null ? `${left}px` : undefined}
+	style:width={floating && width !== null ? `${width}px` : undefined}
 	style:visibility={floating && top === null ? 'hidden' : undefined}
 >
 	<span class="name-row">
@@ -153,6 +157,16 @@
 		font-size: 13px;
 		font-weight: 700;
 		color: var(--color-pennant-light);
+	}
+
+	/* A full touch target on phones (Power Rankings phone board). */
+	@media (max-width: 639.98px) {
+		.more {
+			display: inline-flex;
+			align-items: center;
+			min-height: 44px;
+			margin-top: 2px;
+		}
 	}
 
 	/* The page's link hover (field) would vanish on the clubhouse fill. */

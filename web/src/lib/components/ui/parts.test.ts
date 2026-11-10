@@ -78,6 +78,29 @@ describe('placeCard', () => {
 		expect(placed.left + 358).toBeLessThanOrEqual(390 - 16);
 	});
 
+	it('right-aligns past the trigger and drops from its top, as Power Rankings draws Luck', () => {
+		const trigger = { top: 300, bottom: 316, left: 900, right: 940 };
+		expect(
+			placeCard(trigger, card, { width: 1280, height: 800 }, { endOffset: 40, topOffset: 26 })
+		).toEqual({ top: 326, left: 640 });
+	});
+
+	it('still pulls a right-aligned card back inside the screen', () => {
+		const trigger = { top: 300, bottom: 316, left: 1200, right: 1250 };
+		expect(placeCard(trigger, card, { width: 1280, height: 800 }, { endOffset: 40 }).left).toBe(
+			1280 - 16 - 340
+		);
+	});
+
+	it('spans a box, as the phone table draws the card', () => {
+		const trigger = { top: 400, bottom: 444, left: 300, right: 340 };
+		expect(
+			placeCard(trigger, { width: 340, height: 300 }, { width: 390, height: 844 }, {
+				span: { left: 33, width: 324 }
+			})
+		).toEqual({ top: 452, left: 33, width: 324 });
+	});
+
 	it('never starts left of the margin', () => {
 		const trigger = { top: 100, bottom: 120, left: 4, right: 40 };
 		expect(placeCard(trigger, card, { width: 1280, height: 800 }).left).toBe(16);

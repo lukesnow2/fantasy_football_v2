@@ -45,6 +45,13 @@
 		hideHeader?: boolean;
 		/** Below this width the table scrolls sideways instead of squeezing. */
 		minWidth?: string;
+		/** Body text size in px: 15 on the desktop boards, 14 on the phone boards. */
+		fontSize?: number;
+		/**
+		 * A header row this many px tall with no padding, its text centered, as
+		 * the phone boards draw it so a StatTip label is a 44px target.
+		 */
+		headerHeight?: number;
 		rowKey?: (row: Row, index: number) => string | number;
 		highlighted?: (row: Row, index: number) => boolean;
 		selected?: (row: Row, index: number) => boolean;
@@ -66,6 +73,8 @@
 		rowPadding = 9,
 		columnGap = 10,
 		minWidth,
+		fontSize = 15,
+		headerHeight,
 		hideHeader = false,
 		rowKey = (_row, index) => index,
 		highlighted,
@@ -80,6 +89,7 @@
 	<table
 		aria-label={label}
 		style:min-width={minWidth}
+		style:font-size="{fontSize}px"
 		style:--row-pad="{rowPadding}px"
 		style:--col-gap="{columnGap}px"
 	>
@@ -90,7 +100,9 @@
 						scope="col"
 						class:num={column.numeric}
 						class:bare={hideHeader}
+						class:fixed-height={headerHeight != null}
 						style:width={column.width}
+						style:height={headerHeight != null ? `${headerHeight}px` : undefined}
 						aria-label={column.ariaLabel}
 					>
 						<span class:sr-only={hideHeader}
@@ -157,9 +169,14 @@
 		white-space: nowrap;
 	}
 
-	th.bare {
+	th.bare,
+	th.fixed-height {
 		padding-top: 0;
 		padding-bottom: 0;
+	}
+
+	th.fixed-height {
+		vertical-align: middle;
 	}
 
 	td {

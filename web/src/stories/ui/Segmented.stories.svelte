@@ -16,7 +16,7 @@
 	let season = $state(2026);
 </script>
 
-<Story name="Week selector">
+<Story name="Week selector (Power Rankings: 38px, 44px below 640px)">
 	{#snippet template()}
 		<Segmented label="Week" options={weeks} bind:value={week} />
 		<p style="margin-top: 12px; font-size: 13px; color: var(--color-muted)">Chosen: Wk {week}</p>
