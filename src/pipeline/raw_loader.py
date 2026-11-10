@@ -454,6 +454,57 @@ def _bracket_weeks(conn, league_id: str) -> List[int]:
         "ORDER BY week"), {'l': league_id})]
 
 
+def _consolation_from_seeds(conn, league_id: str) -> None:
+    """Set is_consolation on the league's playoff games from Yahoo's final
+    seeds: a game between two teams seeded within num_playoff_teams is a
+    bracket game, a game between two teams outside it is consolation.
+
+    Yahoo marks every 2005-2007 playoff game is_consolation, so its own flag
+    can't tell 2007's 4-team bracket from its 4-team consolation bracket. The
+    seeds can: they match Yahoo's bracket pages team for team in every season
+    2005-2025. When the seeds can't place every game (no playoff-team count,
+    a seed missing, or a game between a seeded and an unseeded team), the
+    flags stay as Yahoo sent them.
+    """
+    n, seeded, games, mixed = conn.execute(text("""
+        WITH setting AS (
+            SELECT max(num_playoff_teams) AS n FROM public.leagues
+            WHERE league_id = :l),
+        bracket AS (
+            SELECT DISTINCT t.team_id FROM public.teams t, setting
+            WHERE t.league_id = :l AND t.playoff_seed BETWEEN 1 AND setting.n),
+        games AS (
+            SELECT m.team1_id IN (SELECT team_id FROM bracket) AS in1,
+                   m.team2_id IN (SELECT team_id FROM bracket) AS in2
+            FROM public.matchups m WHERE m.league_id = :l AND m.is_playoffs)
+        SELECT (SELECT n FROM setting), (SELECT count(*) FROM bracket),
+               (SELECT count(*) FROM games),
+               (SELECT count(*) FROM games WHERE in1 <> in2)"""),
+        {'l': league_id}).one()
+    if games == 0:
+        return
+    if n is None or seeded != n or mixed:
+        logger.warning(
+            "%s: seeds can't place the playoff games (num_playoff_teams %s, "
+            "%d seeded within it, %d game(s) between a seeded and an unseeded "
+            "team) - keeping Yahoo's consolation flags", league_id, n, seeded, mixed)
+        return
+    # No game is mixed, so team1 alone says which side a game is on.
+    changed = conn.execute(text("""
+        WITH bracket AS (
+            SELECT team_id FROM public.teams
+            WHERE league_id = :l AND playoff_seed BETWEEN 1 AND :n)
+        UPDATE public.matchups
+        SET is_consolation = team1_id NOT IN (SELECT team_id FROM bracket)
+        WHERE league_id = :l AND is_playoffs
+          AND is_consolation IS DISTINCT FROM
+              (team1_id NOT IN (SELECT team_id FROM bracket))"""),
+        {'l': league_id, 'n': n}).rowcount
+    if changed:
+        logger.info("%s: set is_consolation from the seeds on %d playoff game(s)",
+                    league_id, changed)
+
+
 def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
     """Recompute championship/semifinal/quarterfinal flags for a league
     from the matchup rows in the database.
@@ -466,8 +517,11 @@ def refresh_playoff_flags(conn, league_id: str) -> Optional[str]:
 
     Returns the championship matchup_id, or None when undeterminable.
     """
+    _consolation_from_seeds(conn, league_id)
     playoff_weeks = _bracket_weeks(conn, league_id)
 
+    # Only reached with every game still marked consolation when the seeds
+    # couldn't place the games (see _consolation_from_seeds).
     if not playoff_weeks:
         # Yahoo marks EVERY playoff game of the 2005-2007 seasons
         # is_consolation='1', the championship included (verified in the raw

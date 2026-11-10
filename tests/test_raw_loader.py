@@ -23,7 +23,7 @@ CREATE TABLE public.leagues (league_id text, name text, season text,
   game_code text, game_id text, num_teams bigint, current_week text,
   start_week text, end_week text, league_type text, draft_status text,
   is_pro_league boolean, is_cash_league boolean, url text, logo_url text,
-  extracted_at timestamp);
+  extracted_at timestamp, playoff_start_week integer, num_playoff_teams integer);
 CREATE TABLE public.teams (team_id text, league_id text, name text,
   manager_name text, wins bigint, losses bigint, ties bigint,
   points_for double precision, points_against double precision,
@@ -656,6 +656,70 @@ def test_real_consolation_games_are_left_alone(state):
                               "WHERE league_id = :l AND is_consolation"),
                          {'l': OLD_L}).scalar()
     assert n == 3
+
+
+def set_seeds(conn, league, num_playoff_teams, seeds):
+    """Give the league its playoff-team count and each team its final seed
+    (seeds[i] is team t.{i+1}'s seed)."""
+    conn.execute(text("INSERT INTO public.leagues (league_id, num_playoff_teams) "
+                      "VALUES (:l, :n)"), {'l': league, 'n': num_playoff_teams})
+    for i, seed in enumerate(seeds, start=1):
+        conn.execute(text("INSERT INTO public.teams (team_id, league_id, playoff_seed) "
+                          "VALUES (:t, :l, :s)"),
+                     {'t': f'{league}.t.{i}', 'l': league, 's': seed})
+
+
+def consolation_as_playoffs(conn, league):
+    """Yahoo sends a consolation game as is_playoffs and is_consolation both;
+    matchup_blob marks it is_consolation only."""
+    conn.execute(text("UPDATE public.matchups SET is_playoffs = true "
+                      "WHERE league_id = :l AND is_consolation"), {'l': league})
+
+
+def mark_all_consolation(conn, league):
+    """What Yahoo sends for 2005-2007: every playoff game is_consolation."""
+    consolation_as_playoffs(conn, league)
+    conn.execute(text("UPDATE public.matchups SET is_consolation = true, "
+                      "is_championship = false, is_semifinal = false "
+                      "WHERE league_id = :l AND is_playoffs"), {'l': league})
+
+
+def consolation_pairs(state, league):
+    with state.engine.connect() as conn:
+        return conn.execute(text(
+            "SELECT week, team1_id, team2_id FROM public.matchups "
+            "WHERE league_id = :l AND is_consolation ORDER BY week"),
+            {'l': league}).fetchall()
+
+
+def test_seeds_split_the_bracket_from_consolation(state):
+    """2007: a 4-team bracket and a 4-team consolation bracket, every game
+    marked consolation by Yahoo. Clearing the flag on all of them put the
+    consolation games in the bracket (four semifinals, all eight teams in the
+    playoffs). Yahoo's seeds say which games are which."""
+    seed_bracket(state, OLD_L, rounds=2)
+    with state.engine.begin() as conn:
+        set_seeds(conn, OLD_L, 4, [1, 2, 3, 4, 5, 6, 7, 8])
+        mark_all_consolation(conn, OLD_L)
+        raw_loader.refresh_playoff_flags(conn, OLD_L)
+
+    rows = flags(state, OLD_L)
+    assert [r[0] for r in rows if r[1]] == [16]           # one champion, week 16
+    assert sum(1 for r in rows if r[2]) == 2               # two semifinals
+    t5, t6 = f'{OLD_L}.t.5', f'{OLD_L}.t.6'
+    assert consolation_pairs(state, OLD_L) == [(15, t5, t6), (16, t5, t6)]
+
+
+def test_a_game_the_seeds_cannot_place_keeps_yahoos_flags(state):
+    """A game with one seeded team and one unseeded team means the seeds and
+    the games disagree, so nothing is decided from them."""
+    seed_bracket(state, NEW_L, rounds=3)
+    with state.engine.begin() as conn:
+        # t.7 v t.8 play consolation; seeding t.7 in makes that game mixed.
+        consolation_as_playoffs(conn, NEW_L)
+        set_seeds(conn, NEW_L, 6, [1, 2, 3, 4, 5, 7, 6, 8])
+        raw_loader.refresh_playoff_flags(conn, NEW_L)
+    assert len(consolation_pairs(state, NEW_L)) == 3       # as Yahoo sent them
 
 
 def test_reloading_a_week_keeps_the_team_it_was_played_with(state):
