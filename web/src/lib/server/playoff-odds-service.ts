@@ -77,7 +77,7 @@ export async function latestSeason(): Promise<number> {
  * movement compares it with the week before. Omitted, it is the latest week.
  */
 export async function getSeasonOdds(season: number, throughWeek?: number): Promise<SeasonOdds> {
-	return (await getSeasonOddsForSnapshot(season, throughWeek)).odds;
+	return (await getSeasonOddsWithFingerprint(season, throughWeek)).odds;
 }
 
 /**
@@ -87,7 +87,7 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
  * responses that return the odds whole don't carry it. Null when there are no
  * odds.
  */
-export async function getSeasonOddsForSnapshot(
+export async function getSeasonOddsWithFingerprint(
 	season: number,
 	throughWeek?: number
 ): Promise<{ odds: SeasonOdds; gamesFingerprint: string | null }> {

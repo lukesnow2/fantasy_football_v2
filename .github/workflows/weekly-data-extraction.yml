@@ -150,12 +150,15 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      # Installed in its own step, without the database secret: npm ci runs
-      # every dependency's install scripts.
+      # Installed in its own step, without the database secret, and with no
+      # install scripts: a script could otherwise rewrite node_modules for the
+      # next step to run with the secret. Only esbuild and @tailwindcss/oxide
+      # have install scripts, and both get their binaries from optional
+      # dependencies without them.
       - name: Install web dependencies
         if: github.event_name != 'schedule' || github.event.schedule != '0 15 1 * *'
         working-directory: web
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Snapshot playoff odds
         id: snapshot
@@ -192,6 +195,14 @@ jobs:
           Trigger: ${{ github.event_name }}
 
           The site is fine; only the saved forecast is missing. Fix the cause and re-run the workflow before the next game kicks off to save this week's forecast as live. After that it can only come back as a rebuild (captured_live = false). Check the log of the step that failed (setup-node, Install web dependencies or Snapshot playoff odds)."
+          elif [ "$LOAD_OUTCOME" = "success" ]; then
+            TITLE="Weekly pipeline step failed after a good load (run #${{ github.run_number }})"
+            BODY="The weekly load and the playoff-odds snapshot both succeeded, but a later step failed.
+
+          Run: $RUN_URL
+          Trigger: ${{ github.event_name }}
+
+          The data and the saved forecast are fine. Check the log of the step that failed (most likely Upload run snapshot)."
           else
             TITLE="Weekly data pipeline failed (run #${{ github.run_number }})"
             BODY="The scheduled pipeline run failed.

@@ -29,7 +29,7 @@ import { db } from '$lib/server/db';
 import {
 	PARAMS,
 	SIMS,
-	getSeasonOddsForSnapshot,
+	getSeasonOddsWithFingerprint,
 	latestSeason,
 	oddsSeed,
 	type SeasonOdds
@@ -132,7 +132,7 @@ async function main() {
 	const version = modelVersion({ sims: SIMS, seed: oddsSeed, params: PARAMS });
 	const sha = gitSha();
 
-	const latestRun = await getSeasonOddsForSnapshot(season);
+	const latestRun = await getSeasonOddsWithFingerprint(season);
 	const latest = latestRun.odds;
 	if (!latest.available) {
 		console.log(`${season}: no forecast to save (${latest.reason})`);
@@ -181,7 +181,7 @@ async function main() {
 		if (!live && saved.has(week)) continue;
 		const { odds, gamesFingerprint } = live
 			? latestRun
-			: await getSeasonOddsForSnapshot(season, week);
+			: await getSeasonOddsWithFingerprint(season, week);
 		// A league week with no games (2006 and 2007 started in week 2) has
 		// nothing new to forecast from.
 		if (!odds.available || gamesFingerprint == null || odds.throughWeek !== week) continue;
