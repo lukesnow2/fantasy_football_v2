@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "web", "run", "dev", "--", "--port", "5176"],
       "port": 5176
+    },
+    {
+      "name": "storybook",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web", "run", "storybook", "--", "--no-open"],
+      "port": 6006
     }
   ]
 }

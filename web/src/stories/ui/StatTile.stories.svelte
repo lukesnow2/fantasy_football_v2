@@ -1,0 +1,71 @@
+<script module>
+	import { defineMeta } from '@storybook/addon-svelte-csf';
+	import StatTile from '$lib/components/ui/StatTile.svelte';
+	import StatStrip from '$lib/components/ui/StatStrip.svelte';
+	import { SEASON_STATS, seedDefinitions } from './fixtures';
+
+	seedDefinitions();
+
+	const { Story } = defineMeta({ title: 'UI/StatTile', component: StatTile, tags: ['autodocs'] });
+</script>
+
+<Story name="Stat cell">
+	{#snippet template()}
+		<div style="max-width: 300px">
+			<StatTile label="Championships" value="7" sub="Trevor · 22 seasons" />
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Stat cell with a StatTip">
+	{#snippet template()}
+		<div style="max-width: 300px">
+			<StatTile label="Luck" metricId="luck_factor" value="-0.2" sub="Craig · wins" />
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Stat strip">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip label="This season at a glance">
+				{#each SEASON_STATS as stat (stat.label)}
+					<StatTile {...stat} />
+				{/each}
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Stat strip, three tiles">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip>
+				{#each SEASON_STATS.slice(0, 3) as stat (stat.label)}
+					<StatTile {...stat} />
+				{/each}
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Stat strip, value first">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip label="The league in numbers" twoUpOnPhones>
+				<StatTile valueFirst value="22" label="seasons, 2005 to 2026" />
+				<StatTile valueFirst value="20" label="managers all-time" />
+				<StatTile valueFirst value="10,612" label="transactions" />
+				<StatTile valueFirst value="1,595" label="matchups played" />
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Compact (This Season phone strip)">
+	{#snippet template()}
+		<div style="width: 180px">
+			<StatTile label="Most points · Craig" value="465.5" compact />
+		</div>
+	{/snippet}
+</Story>
