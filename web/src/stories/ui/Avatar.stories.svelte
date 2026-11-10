@@ -49,3 +49,33 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Ring as a shadow (Managers rail)">
+	{#snippet template()}
+		<div style="display: flex; gap: 16px; padding: 16px; background: var(--color-clubhouse)">
+			<Avatar
+				name="Gabe the Younger"
+				size={40}
+				ring={2}
+				ringStyle="shadow"
+				ringColor="var(--color-pennant-light)"
+				alt=""
+			/>
+			<Avatar name="Trevor" size={40} alt="" />
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Profile header sizes">
+	{#snippet template()}
+		<div
+			style="display: flex; gap: 16px; align-items: center; padding: 24px; background: var(--color-clubhouse)"
+		>
+			<Avatar name="Trevor" size={128} ring={4} ringColor="var(--color-pennant-light)" />
+			<Avatar name="Gabe the Younger" size={120} ring={4} ringColor="var(--color-pennant-light)" />
+			<Avatar name="Trevor" size={84} ring={3} ringColor="var(--color-pennant-light)" />
+			<Avatar name="Trevor" size={64} ring={3} ringColor="var(--color-pennant-light)" />
+			<Avatar name="Bobby" size={30} initialSize={13} />
+		</div>
+	{/snippet}
+</Story>

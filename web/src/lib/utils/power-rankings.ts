@@ -2,7 +2,6 @@
  * Pure rules behind the Power Rankings page and the luck card (WP5), kept out
  * of the components so tests hold what the page says (build spec G9, S5.9).
  */
-import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
 
 /** The parts of a power-rankings row the callouts read. */
 export interface CalloutRow {
@@ -106,7 +105,18 @@ export interface RankSeries {
 	points: { week: number; rank: number }[];
 }
 
-const SMALL_NUMBERS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+const SMALL_NUMBERS = [
+	'zero',
+	'one',
+	'two',
+	'three',
+	'four',
+	'five',
+	'six',
+	'seven',
+	'eight',
+	'nine'
+];
 
 /** One to nine spelled out, as the board writes "four spots"; 10 and up as digits. */
 export function spellNumber(n: number): string {
@@ -114,7 +124,7 @@ export function spellNumber(n: number): string {
 }
 
 /** "A", "A and B", "A, B and C". */
-function joinNames(names: string[]): string {
+export function joinNames(names: string[]): string {
 	if (names.length <= 1) return names.join('');
 	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
@@ -143,23 +153,6 @@ export function rankChartLabel(series: RankSeries[], weeks: number[]): string {
 	const names = rises.filter((r) => r.rise === top).map((r) => r.name);
 	const spots = top === 1 ? 'spot' : 'spots';
 	return `${opening} ${joinNames(names)} rose ${spellNumber(top)} ${spots} in week ${last}.`;
-}
-
-/**
- * A manager's luck for the luck card, with career totals from finished
- * seasons only (G8): summarizeLuck sums every season it's given and stays
- * frozen (G3), so the season in progress is held back from the career call.
- * It still shows on its own row, as `currentSeason`, which summarizeLuck
- * builds from the live rows alone.
- */
-export function summarizeManagerLuck(seasons: SeasonLuck[], latestSeason: number | null) {
-	const career = summarizeLuck(
-		seasons.filter((s) => !s.inProgress),
-		latestSeason
-	);
-	const live = seasons.filter((s) => s.inProgress);
-	if (live.length === 0) return career;
-	return { ...career, currentSeason: summarizeLuck(live, latestSeason).currentSeason };
 }
 
 /** "Career, 21 seasons" counts; one season reads "1 season". */

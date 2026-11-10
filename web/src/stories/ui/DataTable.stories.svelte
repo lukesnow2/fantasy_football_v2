@@ -127,7 +127,8 @@
 						/>{:else}{column.label}{/if}
 				{/snippet}
 				{#snippet cell(row, column)}
-					<span style="display: flex; align-items: center; min-height: 44px">{row[column.key]}</span>
+					<span style="display: flex; align-items: center; min-height: 44px">{row[column.key]}</span
+					>
 				{/snippet}
 			</DataTable>
 		</div>
@@ -145,6 +146,27 @@
 						/>{:else}{column.label}{/if}
 				{/snippet}
 			</DataTable>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Sticky first column (phone)">
+	{#snippet template()}
+		<div style="width: 358px">
+			<DataTable
+				label="Standings"
+				stickyFirst
+				minWidth="700px"
+				fontSize={14}
+				columns={[
+					{ key: 'name', label: 'Manager', width: '168px' },
+					{ key: 'wl', label: 'W-L', numeric: true, width: '60px' },
+					{ key: 'pf', label: 'PF', numeric: true, width: '80px' },
+					{ key: 'pa', label: 'PA', numeric: true, width: '80px' },
+					{ key: 'odds', label: 'Playoffs', numeric: true }
+				]}
+				rows={STANDINGS}
+			/>
 		</div>
 	{/snippet}
 </Story>

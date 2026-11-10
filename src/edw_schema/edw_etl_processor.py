@@ -5397,9 +5397,14 @@ class EdwEtlProcessor:
                     SUM(ms.season_ties) as total_ties,
                     SUM(ms.season_points) as total_points_scored,
                     SUM(ms.games_played) as total_games,
-                    -- Per season, matching total_seasons: rows are per team, and a
-                    -- manager's two teams in one year are still one season.
-                    SUM(ms.season_points) / NULLIF(COUNT(DISTINCT ms.season_year), 0) as avg_points_per_season,
+                    -- Per season: rows are per team, and a manager's two teams in
+                    -- one year are still one season. Finished seasons only, like
+                    -- the best and worst records below: four weeks of the season
+                    -- being played are not a season's worth of points.
+                    SUM(CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
+                             THEN ms.season_points END)
+                        / NULLIF(COUNT(DISTINCT CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
+                                                     THEN ms.season_year END), 0) as avg_points_per_season,
                     SUM(ms.championships) as championships_won,
                     SUM(ms.championship_games) as championship_appearances,
                     COALESCE(ps.playoff_seasons, 0) as playoff_appearances,

@@ -11,21 +11,43 @@
 	 *
 	 * `compact` is This Season's phone strip (WP4 S4.10): value first in slab
 	 * 24px, then the label in 12px muted, 12px 14px of padding.
+	 *
+	 * `layout="avatar"` is the profile Head to head strip (WP6 S6.7): an
+	 * optional 40px Avatar (`avatar`, a manager's name) 12px left of the text,
+	 * 18px 22px of padding, a 28px value 4px under the label and the sub 4px
+	 * under that; on phones 14px 16px and a 24px value. `tone` colors the value
+	 * (field, pennant, pennant-dark or ink), and a null value is EmptyValue
+	 * "None".
 	 */
 	import { getContext } from 'svelte';
+	import Avatar from './Avatar.svelte';
+	import EmptyValue from './EmptyValue.svelte';
 	import StatTip from './StatTip.svelte';
 	import { STAT_STRIP } from './stat-strip';
 
 	interface Props {
 		label: string;
-		value: string | number;
+		value: string | number | null;
 		sub?: string;
 		metricId?: string;
 		valueFirst?: boolean;
 		compact?: boolean;
+		layout?: 'stack' | 'avatar';
+		avatar?: string | null;
+		tone?: 'ink' | 'field' | 'pennant' | 'pennant-dark';
 	}
 
-	let { label, value, sub, metricId, valueFirst = false, compact = false }: Props = $props();
+	let {
+		label,
+		value,
+		sub,
+		metricId,
+		valueFirst = false,
+		compact = false,
+		layout = 'stack',
+		avatar,
+		tone
+	}: Props = $props();
 
 	const inStrip = getContext<boolean>(STAT_STRIP) === true;
 </script>
@@ -34,16 +56,42 @@
 	{#if metricId}<StatTip {metricId} {label} />{:else}{label}{/if}
 {/snippet}
 
-<div class="tile" class:in-strip={inStrip} class:value-first={valueFirst || compact} class:compact>
-	{#if valueFirst || compact}
-		<div class="value">{value}</div>
-		<div class="first-label">{@render labelText()}</div>
-	{:else}
-		<div class="label">{@render labelText()}</div>
-		<div class="value">{value}</div>
-	{/if}
-	{#if sub}<div class="sub">{sub}</div>{/if}
-</div>
+{#snippet valueText()}
+	{#if value == null}<EmptyValue />{:else}{value}{/if}
+{/snippet}
+
+{#if layout === 'avatar'}
+	<div class="tile avatar-tile" class:in-strip={inStrip}>
+		{#if avatar}<Avatar name={avatar} size={40} alt="" />{/if}
+		<div class="text">
+			<div class="label">{@render labelText()}</div>
+			<div class="value" style:color={tone ? `var(--color-${tone})` : undefined}>
+				{@render valueText()}
+			</div>
+			{#if sub}<div class="sub">{sub}</div>{/if}
+		</div>
+	</div>
+{:else}
+	<div
+		class="tile"
+		class:in-strip={inStrip}
+		class:value-first={valueFirst || compact}
+		class:compact
+	>
+		{#if valueFirst || compact}
+			<div class="value" style:color={tone ? `var(--color-${tone})` : undefined}>
+				{@render valueText()}
+			</div>
+			<div class="first-label">{@render labelText()}</div>
+		{:else}
+			<div class="label">{@render labelText()}</div>
+			<div class="value" style:color={tone ? `var(--color-${tone})` : undefined}>
+				{@render valueText()}
+			</div>
+		{/if}
+		{#if sub}<div class="sub">{sub}</div>{/if}
+	</div>
+{/if}
 
 <style>
 	.tile {
@@ -119,6 +167,52 @@
 
 		.in-strip.value-first {
 			padding: 14px 16px;
+		}
+	}
+
+	/* The profile Head to head strip. */
+	.avatar-tile {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.avatar-tile .text {
+		min-width: 0;
+	}
+
+	.tile.avatar-tile.in-strip {
+		padding: 18px 22px;
+	}
+
+	.avatar-tile .value,
+	.avatar-tile.in-strip .value {
+		margin-top: 4px;
+		font-size: 28px;
+	}
+
+	.avatar-tile .sub,
+	.avatar-tile.in-strip .sub {
+		margin-top: 4px;
+	}
+
+	@media (max-width: 639.98px) {
+		/* One tile per row (StatStrip's stackOnPhones), each with a rule under
+		   it but the last, as the phone board draws them. */
+		.tile.avatar-tile.in-strip {
+			margin: 0;
+			border: 0;
+			border-bottom: 1px solid var(--color-line);
+			padding: 14px 16px;
+		}
+
+		.tile.avatar-tile.in-strip:last-child {
+			border-bottom: 0;
+		}
+
+		.avatar-tile .value,
+		.avatar-tile.in-strip .value {
+			font-size: 24px;
 		}
 	}
 

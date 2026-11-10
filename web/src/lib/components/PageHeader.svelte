@@ -37,6 +37,8 @@
 		phoneActionGap?: number;
 		/** The title's size in px, from the page's board. 60 on most pages. */
 		size?: number;
+		/** The intro's max-width in px: 620 unless the board draws another (Managers, 640). */
+		introWidth?: number;
 		/** Deprecated: renders nothing. */
 		icon?: unknown;
 		/** Deprecated: renders nothing. */
@@ -55,6 +57,7 @@
 		hideActionOnPhone = false,
 		phoneActionGap = 20,
 		size = 60,
+		introWidth = 620,
 		children,
 		action
 	}: Props = $props();
@@ -81,7 +84,7 @@
 		{#if pending}
 			<p><span class="bar intro-bar"></span></p>
 		{:else if children}
-			<p>{@render children()}</p>
+			<p style:--intro-width="{introWidth}px">{@render children()}</p>
 		{/if}
 	</div>
 	{#if action && !pending}
@@ -127,7 +130,7 @@
 
 	p {
 		margin: 0;
-		max-width: 620px;
+		max-width: var(--intro-width, 620px);
 		font-size: 18px;
 		line-height: 1.5;
 		color: var(--color-ink-2);
