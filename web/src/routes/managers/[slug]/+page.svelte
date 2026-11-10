@@ -396,7 +396,6 @@
 				ring={phone || tab !== 'overview' ? 3 : 4}
 				ringColor="var(--color-pennant-light)"
 				alt={manager.managerName}
-				class="head-photo"
 			/>
 			<div class="head-main">
 				<div class="kicker">{kicker}</div>
@@ -849,11 +848,6 @@
 {/snippet}
 
 <style>
-	/* Main is 28px on top on every profile tab, as drawn (40px elsewhere). */
-	.profile {
-		margin-top: -12px;
-	}
-
 	.back {
 		display: inline-flex;
 		align-items: center;
@@ -922,12 +916,6 @@
 	}
 
 	/* ---------- The header (S6.4) ---------- */
-	/* Sits on its line like the board's <img>: an inline-block that clips
-	   puts its baseline under the ring, not under the photo inside it. */
-	.header :global(.head-photo) {
-		display: inline-block;
-	}
-
 	.header {
 		margin-top: 12px;
 		display: flex;
@@ -1464,10 +1452,6 @@
 
 	/* ---------- Phones (S6.9) ---------- */
 	@media (max-width: 639.98px) {
-		.profile {
-			margin-top: 0;
-		}
-
 		.back {
 			min-height: 44px;
 		}

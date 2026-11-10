@@ -318,7 +318,6 @@
 					ring={phone ? 3 : 4}
 					ringColor="var(--color-pennant-light)"
 					alt={current.managerName}
-					class="head-photo"
 				/>
 				<div class="hero-main">
 					{#if !phone && current.tierClassification}
@@ -619,12 +618,6 @@
 	}
 
 	/* ---------- The hero (S6.2) ---------- */
-	/* Sits on its line like the board's <img>: an inline-block that clips
-	   puts its baseline under the ring, not under the photo inside it. */
-	.hero :global(.head-photo) {
-		display: inline-block;
-	}
-
 	.hero {
 		display: flex;
 		flex-wrap: wrap;

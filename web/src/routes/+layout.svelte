@@ -25,6 +25,13 @@
 	 */
 	const FULL_BLEED_ROUTES = new Set(['/']);
 
+	/**
+	 * Routes whose boards draw <main> 28px from the band, not 40px: the manager
+	 * profile, on every tab (WP6 S6.4; build spec F1). Matched on the route id,
+	 * so every manager's URL counts. Phones keep the 20px every page has.
+	 */
+	const COMPACT_TOP_ROUTES = new Set(['/managers/[slug]']);
+
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 	// One open menu at a time, held here rather than in each dropdown, otherwise
@@ -37,6 +44,7 @@
 
 	const pathname = $derived(page.url.pathname);
 	const fullBleed = $derived(FULL_BLEED_ROUTES.has(pathname));
+	const compactTop = $derived(COMPACT_TOP_ROUTES.has(page.route?.id ?? ''));
 	const isCommissioner = $derived(data.member?.role === 'commissioner');
 	// The dropdown links to the manager's public stats page. Encoded because every
 	// name in the roster has a space in it ("Gabe the Younger", "Troy Colvin").
@@ -352,7 +360,12 @@
 		</nav>
 	</div>
 
-	<main class="content" class:full-bleed={fullBleed} inert={showMobileMenu}>
+	<main
+		class="content"
+		class:full-bleed={fullBleed}
+		class:compact-top={compactTop}
+		inert={showMobileMenu}
+	>
 		{@render children()}
 	</main>
 
@@ -761,6 +774,10 @@
 		padding: 0;
 	}
 
+	.content.compact-top {
+		padding-top: 28px;
+	}
+
 	.foot {
 		border-top: 1px solid var(--color-line);
 		background: var(--color-card);
@@ -790,7 +807,8 @@
 	}
 
 	@media (max-width: 639.98px) {
-		.content {
+		.content,
+		.content.compact-top {
 			padding: 20px 16px 48px;
 		}
 

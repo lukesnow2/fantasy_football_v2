@@ -77,11 +77,13 @@
 {/if}
 
 <style>
+	/* Inline-block that clips, so it sits on a line the way the boards' <img>
+	   does: its baseline is under the ring, not under the photo inside it
+	   (build spec F2). The initial is centered by line height. */
 	.avatar {
-		display: inline-flex;
+		display: inline-block;
 		flex: none;
-		align-items: center;
-		justify-content: center;
+		vertical-align: baseline;
 		box-sizing: content-box;
 		border: 0 solid var(--color-card);
 		border-radius: 50%;
@@ -94,8 +96,6 @@
 		height: 100%;
 	}
 
-	/* Centered by line height and text-align as well as flex, so a page that
-	   sets the avatar inline-block (to sit on a line like an <img>) keeps it. */
 	.initial {
 		text-align: center;
 		background: var(--color-wash);
