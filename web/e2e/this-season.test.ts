@@ -15,6 +15,7 @@ async function stub(page: Page, set: 'live' | 'final') {
 	await route(/\/api\/leagues\/overview/, f.overview);
 	await route(/\/api\/standings(\?|$)/, f.standings);
 	await route(/\/api\/standings\/start-history/, { week: 3, firstSeason: 2005, lastSeason: 2025, rows: [] });
+	await route(/\/api\/standings\/points-leaders/, { rows: [] });
 	await route(/\/api\/playoff-odds/, f.odds);
 	await route(/\/api\/power-rankings/, f.power);
 	await route(/\/api\/transactions/, f.transactions);

@@ -4,8 +4,7 @@ import { startHistory } from '$lib/start-history';
 
 /**
  * Against the dev database (WP4 S4.2): 3-0 after week 3 gives 32 teams, 30 of
- * them made the playoffs and four won the title, since 2005. That's the This
- * Season board's history tile. Skipped where no database is configured, as on
+ * them made the playoffs and four won the title, since 2005. Skipped where no database is configured, as on
  * CI; the counting itself is covered in start-history.test.ts.
  */
 const url = process.env.DATABASE_URL || loadEnv('development', process.cwd(), '').DATABASE_URL || '';

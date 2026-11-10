@@ -62,8 +62,8 @@ export const SEASON_STATS = [
 	{ label: 'Most points for', value: '465.5', sub: 'Craig' },
 	{ label: 'Only unbeaten', value: '3-0', sub: 'Israel' },
 	{
-		label: '3-0 starts that made the playoffs',
-		value: '30 of 32',
-		sub: 'Since 2005. Four won the title.'
+		label: 'Points leaders who won the title',
+		value: '8 of 21',
+		sub: 'Since 2005. All 21 made the playoffs.'
 	}
 ];

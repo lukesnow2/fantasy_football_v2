@@ -116,12 +116,11 @@ describe('statTiles', () => {
 		regularSeasonWeeks: 14,
 		playoffStartWeek: 15,
 		phase: 'regular',
-		throughWeek: 3,
 		standings,
 		history: {
-			label: '3-0 starts that made the playoffs',
-			value: '30 of 32',
-			sub: 'Since 2005. Four won the title.'
+			label: 'Points leaders who won the title',
+			value: '8 of 21',
+			sub: 'Since 2005. All 21 made the playoffs.'
 		}
 	};
 
@@ -136,10 +135,10 @@ describe('statTiles', () => {
 			{ label: 'Most points for', value: '465.5', sub: 'Craig', phone: 'Most points · Craig' },
 			{ label: 'Only unbeaten', value: '3-0', sub: 'Israel', phone: 'Unbeaten · Israel' },
 			{
-				label: '3-0 starts that made the playoffs',
-				value: '30 of 32',
-				sub: 'Since 2005. Four won the title.',
-				phone: '3-0 starts that made the playoffs'
+				label: 'Points leaders who won the title',
+				value: '8 of 21',
+				sub: 'Since 2005. All 21 made the playoffs.',
+				phone: 'Points leaders who won the title'
 			}
 		]);
 	});
@@ -190,15 +189,19 @@ describe('statTiles', () => {
 		expect(statTiles({ ...base, standings: tied })[1].sub).toBe('Craig and Nick');
 	});
 
-	it('reads "Playoffs" and drops the history tile in the postseason', () => {
+	it('reads "Playoffs" and keeps the history tile in the postseason', () => {
 		const tiles = statTiles({ ...base, phase: 'postseason', currentWeek: 16 });
-		expect(tiles).toHaveLength(3);
+		expect(tiles).toHaveLength(4);
 		expect(tiles[0]).toMatchObject({ value: 'Playoffs', sub: 'Week 16' });
+		expect(tiles[3].label).toBe('Points leaders who won the title');
 	});
 
-	it('drops the history tile before week 1, and the record tiles with no games', () => {
-		expect(statTiles({ ...base, throughWeek: 0 })).toHaveLength(3);
-		expect(statTiles({ ...base, throughWeek: 0, standings: [] })).toHaveLength(1);
+	it('keeps the history tile with no games, and drops it when it did not load', () => {
+		expect(statTiles({ ...base, standings: [] }).map((t) => t.label)).toEqual([
+			'Current week',
+			'Points leaders who won the title'
+		]);
+		expect(statTiles({ ...base, history: null })).toHaveLength(3);
 	});
 });
 

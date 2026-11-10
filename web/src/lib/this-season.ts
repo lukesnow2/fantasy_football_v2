@@ -7,7 +7,7 @@
 
 import { compareSeeding, type TeamOdds as EngineTeamOdds } from '$lib/playoff-odds';
 import { finishTag, formatOdds, formatRecord } from '$lib/home';
-import { historyTile, type HistoryTile } from '$lib/start-history';
+import type { HistoryTile } from '$lib/points-leaders';
 import type { TagVariant } from '$lib/components/ui/Tag.svelte';
 
 export { finishTag, formatOdds, formatRecord };
@@ -142,10 +142,8 @@ export interface StatTilesInput {
 	regularSeasonWeeks: number;
 	playoffStartWeek: number;
 	phase: 'regular' | 'postseason';
-	/** The odds' last simulated week. The history tile needs week 1 or later. */
-	throughWeek: number;
 	standings: StandingRow[];
-	/** The history tile, already worked out, or null when there's none. */
+	/** The history tile (how points leaders have done), or null when there's none. */
 	history: HistoryTile | null;
 }
 
@@ -204,9 +202,9 @@ function recordTile(rows: StandingRow[]): StatTileData | null {
 
 /**
  * The four tiles in the board's order: current week, most points for, the
- * unbeaten (or best record) tile, and the history tile. The history tile shows
- * in the regular season from week 1 on; before that and in the postseason the
- * strip has three. A season with no games yet has only the current week.
+ * unbeaten (or best record) tile, and the history tile. The history tile is
+ * about finished seasons, so it shows in every phase of the live season; a
+ * season with no games yet has the current week and the history tile.
  */
 export function statTiles(input: StatTilesInput): StatTileData[] {
 	const tiles: (StatTileData | null)[] = [
@@ -214,14 +212,9 @@ export function statTiles(input: StatTilesInput): StatTileData[] {
 		mostPointsTile(input.standings),
 		recordTile(input.standings)
 	];
-	if (input.phase === 'regular' && input.throughWeek >= 1 && input.history) {
-		tiles.push({ ...input.history, phone: input.history.label });
-	}
+	if (input.history) tiles.push({ ...input.history, phone: input.history.label });
 	return tiles.filter((t): t is StatTileData => t !== null);
 }
-
-/** The history tile for the standings leader's record, through start-history.ts. */
-export { historyTile };
 
 /* ---------- S4.3 Standings ---------- */
 
