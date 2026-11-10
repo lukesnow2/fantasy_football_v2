@@ -59,9 +59,9 @@
 	}
 
 	// Everything loads client-side, as before: overview, standings, odds,
-	// power rankings and transactions together, then the start history for
-	// the odds' week. The body draws once it all settles, so the live layout
-	// never draws and then swaps for the final one.
+	// power rankings and transactions together, then the start history after
+	// the leader's games played. The body draws once it all settles, so the
+	// live layout never draws and then swaps for the final one.
 	let status = $state<'loading' | 'ready' | 'error'>('loading');
 	let overview = $state<Overview | null>(null);
 	let standings = $state<StandingsResponse | null>(null);
@@ -102,11 +102,21 @@
 		odds = od.status === 'fulfilled' ? od.value : null;
 		power = pw.status === 'fulfilled' ? pw.value : null;
 		moves = tx.status === 'fulfilled' ? (tx.value.transactions ?? []) : [];
+		history = null;
 
-		if (seasonState(standings) === 'live' && odds?.available && odds.phase === 'regular' && odds.throughWeek >= 1) {
+		// Past records are matched after the same number of games the leader
+		// has played, which is the odds' week when every week is loaded in full.
+		const first = standings.standings[0];
+		const played = first ? first.wins + first.losses + first.ties : 0;
+		if (
+			seasonState(standings) === 'live' &&
+			odds?.available &&
+			odds.phase === 'regular' &&
+			played >= 1
+		) {
 			try {
 				const body = await getJson<{ rows: StartHistoryRow[] }>(
-					`/api/standings/start-history?week=${odds.throughWeek}`
+					`/api/standings/start-history?week=${played}`
 				);
 				history = body.rows;
 			} catch (err) {
@@ -157,9 +167,7 @@
 		})
 	);
 
-	const tableRows = $derived(
-		standingsRows(rows, oddsReady?.teams, playoffTeams).map((r) => ({ ...r }))
-	);
+	const tableRows = $derived(standingsRows(rows, oddsReady?.teams, playoffTeams));
 	const hasLastWeek = $derived(oddsReady?.teams.some((t) => t.previousOdds != null) ?? false);
 	const columns = $derived<Column[]>([
 		{ key: 'rank', label: '#', width: '32px' },
@@ -177,18 +185,13 @@
 			ariaLabel: hasLastWeek ? 'Change in playoff odds since last week' : undefined
 		}
 	]);
-	const standingsMeta = $derived(
-		[
-			standings?.dataUpdatedAt ? updatedAgo(standings.dataUpdatedAt, now) : null,
-			oddsReady ? `odds from ${thousands(oddsReady.sims)} sims` : null
-		]
-			.filter(Boolean)
-			.join(' · ')
-	);
-	// "odds from ..." starts lower case after "Updated ..."; alone, it leads.
-	const standingsNote = $derived(
-		standingsMeta.charAt(0).toUpperCase() + standingsMeta.slice(1)
-	);
+	// "Updated 2 hours ago · odds from 10,000 sims"; either half alone leads.
+	const standingsNote = $derived.by(() => {
+		const updated = standings?.dataUpdatedAt ? updatedAgo(standings.dataUpdatedAt, now) : null;
+		const sims = oddsReady ? `${thousands(oddsReady.sims)} sims` : null;
+		if (updated && sims) return `${updated} · odds from ${sims}`;
+		return updated ?? (sims ? `Odds from ${sims}` : '');
+	});
 
 	const powerRows = $derived(
 		[...(power?.rankings ?? [])].sort((a, b) => a.powerRank - b.powerRank)
@@ -218,7 +221,9 @@
 			: []
 	);
 
-	const moveRows = $derived(moves.filter((m) => m.managerName).slice(0, 8));
+	const moveRows = $derived(
+		moves.filter((m): m is Transaction & { managerName: string } => !!m.managerName).slice(0, 8)
+	);
 
 	/* ---------- After the final ---------- */
 
@@ -282,7 +287,9 @@
 {#if status === 'loading'}
 	<div class="skeleton" aria-busy="true" aria-label="Loading this season">
 		<div class="sk-card sk-strip">
-			{#each Array(4) as _, i (i)}<span class="sk-tile"><span class="sk-bar short"></span><span class="sk-bar tall"></span></span>{/each}
+			{#each Array(4) as _, i (i)}<span class="sk-tile"
+					><span class="sk-bar short"></span><span class="sk-bar tall"></span></span
+				>{/each}
 		</div>
 		<div class="sk-card">
 			{#each Array(10) as _, i (i)}<span class="sk-bar"></span>{/each}
@@ -521,8 +528,11 @@
 				{#snippet action()}
 					<!-- D5: Yahoo's league slug has no /transactions page (it 404s), so
 					     this opens the league, where the transactions list is a tab. -->
-					<a class="field-link card-link" href={YAHOO_LEAGUE_URL} target="_blank" rel="noopener noreferrer"
-						>All transactions →</a
+					<a
+						class="field-link card-link"
+						href={YAHOO_LEAGUE_URL}
+						target="_blank"
+						rel="noopener noreferrer">All transactions →</a
 					>
 				{/snippet}
 				{#if moveRows.length === 0}
@@ -532,9 +542,9 @@
 						{#each moveRows as tx, i (i)}
 							{@const line = moveLine(tx)}
 							<li>
-								<Avatar name={tx.managerName ?? ''} size={26} />
+								<Avatar name={tx.managerName} size={26} />
 								<span class="move-text"
-									><a class="move-name" href={profileHref(tx.managerName ?? '')}>{tx.managerName}</a>
+									><a class="move-name" href={profileHref(tx.managerName)}>{tx.managerName}</a>
 									<span class="verb">{line.verb}</span>
 									{line.player}</span
 								>
@@ -671,7 +681,7 @@
 		font-size: 13px;
 	}
 
-	:global(.retry) {
+	.first :global(.retry) {
 		margin-top: 14px;
 	}
 

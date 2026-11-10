@@ -12,6 +12,7 @@
 import { formatOdds, formatRecord } from '$lib/home';
 import { compareSeeding } from '$lib/playoff-odds';
 import { countWord, startHistory, type StartHistoryRow } from '$lib/start-history';
+import { nameList, sameRecord } from '$lib/this-season';
 
 export interface NoteManager {
 	name: string;
@@ -54,7 +55,18 @@ interface Template {
 const record = (m: NoteManager) => formatRecord(m.wins, m.losses, m.ties);
 const games = (m: NoteManager) => m.wins + m.losses + m.ties;
 
-const ORDINALS = ['', '', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'];
+const ORDINALS = [
+	'',
+	'',
+	'second',
+	'third',
+	'fourth',
+	'fifth',
+	'sixth',
+	'seventh',
+	'eighth',
+	'ninth'
+];
 
 /** Rank 1 by points for is the most, 2 the second-most. */
 function pointsRank(m: NoteManager, all: NoteManager[]): number {
@@ -64,12 +76,6 @@ function pointsRank(m: NoteManager, all: NoteManager[]): number {
 /** Rank 1 from the bottom is the fewest. */
 function pointsRankFromBottom(m: NoteManager, all: NoteManager[]): number {
 	return 1 + all.filter((o) => o.pointsFor < m.pointsFor).length;
-}
-
-/** "Craig", "Craig and Nick", "Craig, Nick and Omar". */
-function names(list: string[]): string {
-	if (list.length <= 2) return list.join(' and ');
-	return `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
 }
 
 /** Managers in current power-rank order, unranked last. */
@@ -110,7 +116,10 @@ const pointsAgainstLeader: Template = {
 };
 
 /** Everyone who shares the biggest rank move in one direction, if it's three or more. */
-function biggestMove(managers: NoteManager[], direction: 1 | -1): { who: NoteManager[]; n: number } | null {
+function biggestMove(
+	managers: NoteManager[],
+	direction: 1 | -1
+): { who: NoteManager[]; n: number } | null {
 	const moves = managers.filter((m) => m.rankChange != null && m.rankChange * direction > 0);
 	if (moves.length === 0) return null;
 	const n = Math.max(...moves.map((m) => m.rankChange! * direction));
@@ -126,7 +135,7 @@ const powerClimb: Template = {
 		const list = move.who.map((m) => m.name);
 		const verb = list.length === 1 ? 'climbed' : list.length === 2 ? 'both climbed' : 'all climbed';
 		return {
-			text: `${names(list)} ${verb} ${countWord(move.n)} spots in the power rankings.`,
+			text: `${nameList(list)} ${verb} ${countWord(move.n)} spots in the power rankings.`,
 			score: 36 + 8 * move.n,
 			subject: list[0]
 		};
@@ -141,7 +150,7 @@ const powerFall: Template = {
 		const list = move.who.map((m) => m.name);
 		const verb = list.length === 1 ? 'fell' : 'both fell';
 		return {
-			text: `${names(list)} ${verb} ${countWord(move.n)} spots in the power rankings.`,
+			text: `${nameList(list)} ${verb} ${countWord(move.n)} spots in the power rankings.`,
 			score: 30 + 6 * move.n,
 			subject: list[0]
 		};
@@ -195,16 +204,14 @@ const roughStartHistory: Template = {
 		const ordered = [...managers].sort(compareSeeding);
 		const worst = ordered[ordered.length - 1];
 		const leader = ordered[0];
-		const same = (a: NoteManager, b: NoteManager) =>
-			a.wins === b.wins && a.losses === b.losses && a.ties === b.ties;
-		if (same(worst, leader)) return null;
-		const sharing = managers.filter((m) => same(m, worst));
+		if (sameRecord(worst, leader)) return null;
+		const sharing = managers.filter((m) => sameRecord(m, worst));
 		if (sharing.length > 2) return null;
 		const past = startHistory(history, worst);
 		if (past.count < 5 || past.firstSeason === null) return null;
 		const wl = record(worst);
 		const who = byPowerRank(sharing).map((m) => m.name);
-		const lead = who.length === 1 ? `${who[0]} is ${wl}.` : `${names(who)} are ${wl}.`;
+		const lead = who.length === 1 ? `${who[0]} is ${wl}.` : `${nameList(who)} are ${wl}.`;
 		const since =
 			past.madePlayoffs === 0
 				? `Since ${past.firstSeason}, none of the ${countWord(past.count)} teams that started ${wl} made the playoffs.`

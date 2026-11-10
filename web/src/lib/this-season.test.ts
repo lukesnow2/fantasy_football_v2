@@ -36,15 +36,17 @@ const BOARD: [string, number, number, number, number, number, number][] = [
 	['Troy Colvin', 1, 2, 337.05, 460.0, 40, 39]
 ];
 
-const standings: StandingRow[] = BOARD.map(([managerName, wins, losses, pointsFor, pointsAgainst], i) => ({
-	rank: i + 1,
-	managerName,
-	wins,
-	losses,
-	ties: 0,
-	pointsFor,
-	pointsAgainst
-}));
+const standings: StandingRow[] = BOARD.map(
+	([managerName, wins, losses, pointsFor, pointsAgainst], i) => ({
+		rank: i + 1,
+		managerName,
+		wins,
+		losses,
+		ties: 0,
+		pointsFor,
+		pointsAgainst
+	})
+);
 
 function team(over: Partial<OddsTeam> & { managerName: string }): OddsTeam {
 	return {
@@ -125,7 +127,12 @@ describe('statTiles', () => {
 
 	it("draws the board's four tiles for one unbeaten team", () => {
 		expect(statTiles(base)).toEqual([
-			{ label: 'Current week', value: '3 of 14', sub: 'Playoffs start week 15', phone: 'Current week' },
+			{
+				label: 'Current week',
+				value: '3 of 14',
+				sub: 'Playoffs start week 15',
+				phone: 'Current week'
+			},
 			{ label: 'Most points for', value: '465.5', sub: 'Craig', phone: 'Most points · Craig' },
 			{ label: 'Only unbeaten', value: '3-0', sub: 'Israel', phone: 'Unbeaten · Israel' },
 			{
@@ -138,12 +145,26 @@ describe('statTiles', () => {
 	});
 
 	it('names two unbeaten teams under "Unbeaten"', () => {
-		const two = standings.map((r) => (r.managerName === 'Craig' ? { ...r, wins: 3, losses: 0 } : r));
+		const two = standings.map((r) =>
+			r.managerName === 'Craig' ? { ...r, wins: 3, losses: 0 } : r
+		);
 		expect(statTiles({ ...base, standings: two })[2]).toEqual({
 			label: 'Unbeaten',
 			value: '3-0',
 			sub: 'Israel and Craig',
 			phone: 'Unbeaten · Israel and Craig'
+		});
+	});
+
+	it('prints the best unbeaten record when games are uneven, naming only who has it', () => {
+		const uneven = standings.map((r) =>
+			r.managerName === 'Craig' ? { ...r, wins: 4, losses: 0 } : r
+		);
+		expect(statTiles({ ...base, standings: uneven })[2]).toEqual({
+			label: 'Unbeaten',
+			value: '4-0',
+			sub: 'Craig',
+			phone: 'Unbeaten · Craig'
 		});
 	});
 
@@ -153,7 +174,9 @@ describe('statTiles', () => {
 	});
 
 	it('falls back to the best record with none unbeaten', () => {
-		const none = standings.map((r) => (r.managerName === 'Israel' ? { ...r, wins: 2, losses: 1 } : r));
+		const none = standings.map((r) =>
+			r.managerName === 'Israel' ? { ...r, wins: 2, losses: 1 } : r
+		);
 		expect(statTiles({ ...base, standings: none })[2]).toEqual({
 			label: 'Best record',
 			value: '2-1',
@@ -206,7 +229,11 @@ describe('standingsRows', () => {
 	it('prints every move in playoff odds, as drawn', () => {
 		expect(rows[0].weekChangeText).toBe('▲ 6');
 		expect(rows[1].weekChangeText).toBe('▼ 3');
-		const same = standingsRows(standings, [team({ managerName: 'Israel', playoffOdds: 0.5, previousOdds: 0.5 })], 6);
+		const same = standingsRows(
+			standings,
+			[team({ managerName: 'Israel', playoffOdds: 0.5, previousOdds: 0.5 })],
+			6
+		);
 		expect(same[0].weekChangeText).toBe('Same');
 	});
 
@@ -221,9 +248,17 @@ describe('standingsRows', () => {
 	});
 
 	it('prints certainty only for a locked team', () => {
-		const locked = standingsRows(standings, [team({ managerName: 'Israel', playoffOdds: 1, clinched: true })], 6);
+		const locked = standingsRows(
+			standings,
+			[team({ managerName: 'Israel', playoffOdds: 1, clinched: true })],
+			6
+		);
 		expect(locked[0].oddsText).toBe('100%');
-		const nearly = standingsRows(standings, [team({ managerName: 'Israel', playoffOdds: 0.999 })], 6);
+		const nearly = standingsRows(
+			standings,
+			[team({ managerName: 'Israel', playoffOdds: 0.999 })],
+			6
+		);
 		expect(nearly[0].oddsText).toBe('>99%');
 	});
 });
@@ -387,7 +422,9 @@ describe('oddsMethod', () => {
 	});
 
 	it('describes other formats', () => {
-		expect(oddsMethod(10000, 4, 1)[1]).toMatch(/^The top 4 make it and the top seed gets a bye\. Back/);
+		expect(oddsMethod(10000, 4, 1)[1]).toMatch(
+			/^The top 4 make it and the top seed gets a bye\. Back/
+		);
 		expect(oddsMethod(10000, 8, 4)[1]).toMatch(/^The top 8 make it and the top 4 get byes\. Back/);
 		expect(oddsMethod(10000, 4, 0)[1]).toMatch(/^The top 4 make it\. Back/);
 	});
@@ -400,7 +437,9 @@ describe('moveLine', () => {
 		['add/drop', 'swapped in', 'Add/drop', 'eliminated'],
 		['trade', 'traded for', 'Trade', 'eliminated']
 	])('words a %s', (type, verb, tag, tone) => {
-		expect(moveLine({ type, playerName: 'Green Bay', managerName: 'Gabe Flores', faabBid: null })).toEqual({
+		expect(
+			moveLine({ type, playerName: 'Green Bay', managerName: 'Gabe Flores', faabBid: null })
+		).toEqual({
 			verb,
 			player: 'Green Bay',
 			tag,
@@ -410,7 +449,8 @@ describe('moveLine', () => {
 
 	it('adds a FAAB bid in whole dollars, $0 included', () => {
 		const line = (faabBid: number) =>
-			moveLine({ type: 'add', playerName: 'T.J. Hockenson', managerName: 'Gabe Flores', faabBid }).player;
+			moveLine({ type: 'add', playerName: 'T.J. Hockenson', managerName: 'Gabe Flores', faabBid })
+				.player;
 		expect(line(0)).toBe('T.J. Hockenson for $0 FAAB');
 		expect(line(12.4)).toBe('T.J. Hockenson for $12 FAAB');
 	});

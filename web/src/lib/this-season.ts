@@ -131,7 +131,8 @@ export function nameList(names: string[]): string {
 const recordOf = (r: { wins: number; losses: number; ties: number }) =>
 	formatRecord(r.wins, r.losses, r.ties);
 
-const sameRecord = (
+/** The same wins, losses and ties. */
+export const sameRecord = (
 	a: { wins: number; losses: number; ties: number },
 	b: { wins: number; losses: number; ties: number }
 ) => a.wins === b.wins && a.losses === b.losses && a.ties === b.ties;
@@ -171,23 +172,34 @@ function mostPointsTile(rows: StandingRow[]): StatTileData | null {
 	// Compared at one decimal, as printed, so a tie on the page is a tie here.
 	const leaders = rows.filter((r) => r.pointsFor.toFixed(1) === top.toFixed(1));
 	const names = nameList(leaders.map((r) => r.managerName));
-	return { label: 'Most points for', value: top.toFixed(1), sub: names, phone: `Most points · ${names}` };
+	return {
+		label: 'Most points for',
+		value: top.toFixed(1),
+		sub: names,
+		phone: `Most points · ${names}`
+	};
 }
 
 function recordTile(rows: StandingRow[]): StatTileData | null {
 	if (rows.length === 0) return null;
 	const unbeaten = rows.filter((r) => r.losses === 0 && r.ties === 0 && r.wins > 0);
 	if (unbeaten.length > 0) {
-		// Every unbeaten team has played the same weeks, so the first record is theirs.
-		const value = recordOf(unbeaten[0]);
-		const names = nameList(unbeaten.map((r) => r.managerName));
+		// The best unbeaten record and who has it. Teams are level on games in
+		// a fully loaded week; if they aren't, a 3-0 isn't printed as 4-0.
+		const top = [...unbeaten].sort(compareSeeding)[0];
+		const names = nameList(unbeaten.filter((r) => sameRecord(r, top)).map((r) => r.managerName));
 		const label = unbeaten.length === 1 ? 'Only unbeaten' : 'Unbeaten';
-		return { label, value, sub: names, phone: `Unbeaten · ${names}` };
+		return { label, value: recordOf(top), sub: names, phone: `Unbeaten · ${names}` };
 	}
 	const best = [...rows].sort(compareSeeding)[0];
 	const sharing = rows.filter((r) => sameRecord(r, best));
 	const names = nameList(sharing.map((r) => r.managerName));
-	return { label: 'Best record', value: recordOf(best), sub: names, phone: `Best record · ${names}` };
+	return {
+		label: 'Best record',
+		value: recordOf(best),
+		sub: names,
+		phone: `Best record · ${names}`
+	};
 }
 
 /**
@@ -213,7 +225,8 @@ export { historyTile };
 
 /* ---------- S4.3 Standings ---------- */
 
-export interface StandingsTableRow {
+/** A type, not an interface, so it fits DataTable's Record<string, unknown> rows. */
+export type StandingsTableRow = {
 	rank: number;
 	managerName: string;
 	record: string;
@@ -230,13 +243,16 @@ export interface StandingsTableRow {
 	weekChange: number | null;
 	/** "▲ 6", "▼ 3", "Same", or "" in week 1. */
 	weekChangeText: string;
-}
+};
 
 /**
  * PF minus PA at one decimal: "+43.6", "-3.5", "0.0". The board's rule: the
  * sign from the difference, then its size to one decimal.
  */
-export function formatDiff(pointsFor: number, pointsAgainst: number): {
+export function formatDiff(
+	pointsFor: number,
+	pointsAgainst: number
+): {
 	text: string;
 	negative: boolean;
 } {
@@ -377,7 +393,7 @@ export function oddsMethod(sims: number, playoffTeams: number, byes: number): [s
 				? `The top ${playoffTeams} make it and the top seed gets a bye.`
 				: byes > 0
 					? `The top ${playoffTeams} make it and the top ${byes} get byes.`
-				: `The top ${playoffTeams} make it.`;
+					: `The top ${playoffTeams} make it.`;
 	return [
 		first,
 		`${format} Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.`
@@ -463,7 +479,11 @@ export function championLine(champion: SeededTeam, runnerUp: SeededTeam | null):
 
 /* ---------- S4.9 Final standings ---------- */
 
-export type FinishGroup = 'Championship' | 'Semifinalists' | 'Quarterfinalists' | 'Consolation bracket';
+export type FinishGroup =
+	| 'Championship'
+	| 'Semifinalists'
+	| 'Quarterfinalists'
+	| 'Consolation bracket';
 
 /** The Playoff finish view's group for a tier. */
 export function finishGroup(tier: string | null | undefined): FinishGroup {
@@ -475,7 +495,12 @@ export function finishGroup(tier: string | null | undefined): FinishGroup {
 
 /** Rows in the API's final order, grouped under the board's labels. Empty groups drop. */
 export function finishGroups<T extends StandingRow>(rows: T[]): { name: FinishGroup; rows: T[] }[] {
-	const order: FinishGroup[] = ['Championship', 'Semifinalists', 'Quarterfinalists', 'Consolation bracket'];
+	const order: FinishGroup[] = [
+		'Championship',
+		'Semifinalists',
+		'Quarterfinalists',
+		'Consolation bracket'
+	];
 	return order
 		.map((name) => ({ name, rows: rows.filter((r) => finishGroup(r.playoffTier) === name) }))
 		.filter((g) => g.rows.length > 0);

@@ -60,7 +60,7 @@
 
 	{#if !canRead}
 		<!-- "You'll land right back here" is only true with this page as the redirect. -->
-		<SignedOutPanel redirectTo={page.url.pathname} />
+		<SignedOutPanel well redirectTo={page.url.pathname} />
 	{:else if loading}
 		<div class="rows" aria-busy="true">
 			{#each [70, 50, 62] as width (width)}
