@@ -212,7 +212,7 @@
 
 {#if loading && !hallOfFameData}
 	<!-- S7.6 Loading: blocks where the strip, the podium and the table sit. -->
-	<div class="skeleton" aria-busy="true" aria-label="Loading the Hall of Fame">
+	<div class="skeleton" role="status" aria-busy="true" aria-label="Loading the Hall of Fame">
 		<span class="sk sk-strip"></span>
 		<div class="sk-podium">
 			<span class="sk sk-first"></span>

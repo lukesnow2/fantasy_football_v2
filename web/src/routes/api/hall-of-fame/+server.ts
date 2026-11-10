@@ -183,7 +183,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			JOIN finished_leagues fl ON fl.league_key = dl.league_key
 		`);
 
-		// The four reads are independent, so they run at once.
+		// The four reads are independent. The pool holds one connection, so
+		// postgres.js pipelines them on it: one wait for the network, not four.
 		const [hallOfFameResult, analyticsResult, tiersResult, rangeResult] = await Promise.all([
 			hallOfFameQuery,
 			analyticsQuery,

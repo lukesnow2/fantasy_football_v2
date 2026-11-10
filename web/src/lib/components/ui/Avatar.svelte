@@ -66,7 +66,7 @@
 	<span
 		class="avatar initial {initialTone} {className}"
 		role={alt === '' ? undefined : 'img'}
-		aria-label={alt === '' ? undefined : name}
+		aria-label={alt === '' ? undefined : (alt ?? name)}
 		aria-hidden={alt === '' || undefined}
 		style:width="{size}px"
 		style:height="{size}px"

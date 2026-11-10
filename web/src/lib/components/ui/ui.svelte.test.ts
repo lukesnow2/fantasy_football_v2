@@ -7,6 +7,8 @@ import StatTip from './StatTip.svelte';
 import Movement from './Movement.svelte';
 import ButtonHarness from './ButtonHarness.test.svelte';
 import Card from './Card.svelte';
+import CardHarness from './CardHarness.test.svelte';
+import DataTableHarness from './DataTableHarness.test.svelte';
 import { resetStatTipData } from './stat-tip-data';
 
 const LUCK = {
@@ -180,5 +182,33 @@ describe('Card', () => {
 	it('is a region named by its title', async () => {
 		render(Card, { title: 'Standings' });
 		await expect.element(page.getByRole('region', { name: 'Standings' })).toBeInTheDocument();
+	});
+
+	it('sizes the action slot to its content, not to the card line', async () => {
+		const { container } = render(CardHarness);
+		const action = container.querySelector('.action') as HTMLElement;
+		const caption = action.firstElementChild as HTMLElement;
+		expect(action.getBoundingClientRect().height).toBe(caption.getBoundingClientRect().height);
+	});
+});
+
+describe('DataTable', () => {
+	it('draws a divider row from dividerCell, spanning every column', async () => {
+		const { container } = render(DataTableHarness);
+		const dividers = [...container.querySelectorAll('tr.divider')];
+		expect(dividers.map((d) => d.textContent?.trim())).toEqual([
+			'Hall of Fame Elite opens at Trevor',
+			'Hall of Fame opens at Nick'
+		]);
+		expect(dividers[0].querySelector('td')?.getAttribute('colspan')).toBe('2');
+		expect(container.querySelector('.divider-line')).toBeNull();
+	});
+
+	it('holds a fixedHeader column to its width when the header text is wider', async () => {
+		const { container } = render(DataTableHarness);
+		const th = container.querySelectorAll('th')[1] as HTMLElement;
+		const label = th.querySelector('span') as HTMLElement;
+		expect(label.getBoundingClientRect().width).toBe(40);
+		expect(label.scrollWidth).toBeGreaterThan(40);
 	});
 });
