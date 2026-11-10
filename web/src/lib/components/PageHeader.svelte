@@ -14,7 +14,9 @@
 	 * Below 640px it follows the build spec's Phones rules: a 12px kicker, a 38px
 	 * title 6px under it, and the intro 10px down at 16px with no max-width.
 	 * `phoneKicker` swaps in a shorter kicker there, and `hideActionOnPhone`
-	 * drops the action, as This Season's phone board draws it. `pending` shows
+	 * drops the action, as This Season's phone board draws it, and
+	 * `phoneActionGap` sets the px between the intro and an action that wraps
+	 * under it (14 on Power Rankings' phone board; 20 otherwise). `pending` shows
 	 * the kicker and intro as line-soft bars while the page loads.
 	 *
 	 * `icon` and `accent` are left over from the old centered header. They still
@@ -31,6 +33,8 @@
 		/** Kicker and intro as bars while the page's data loads. */
 		pending?: boolean;
 		hideActionOnPhone?: boolean;
+		/** Px between the intro and the action below 640px. */
+		phoneActionGap?: number;
 		/** The title's size in px, from the page's board. 60 on most pages. */
 		size?: number;
 		/** Deprecated: renders nothing. */
@@ -49,13 +53,18 @@
 		phoneKicker,
 		pending = false,
 		hideActionOnPhone = false,
+		phoneActionGap = 20,
 		size = 60,
 		children,
 		action
 	}: Props = $props();
 </script>
 
-<div class="page-header" aria-busy={pending || undefined}>
+<div
+	class="page-header"
+	aria-busy={pending || undefined}
+	style:--phone-action-gap="{phoneActionGap}px"
+>
 	<div class="block">
 		{#if pending}
 			<div class="kicker"><span class="bar kicker-bar"></span></div>
@@ -146,6 +155,10 @@
 	}
 
 	@media (max-width: 639.98px) {
+		.page-header {
+			row-gap: var(--phone-action-gap);
+		}
+
 		.kicker {
 			font-size: 12px;
 		}

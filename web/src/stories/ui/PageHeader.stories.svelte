@@ -125,3 +125,16 @@
 		</PageHeader>
 	{/snippet}
 </Story>
+
+<Story
+	name="Controls under the intro on phones (Power Rankings)"
+	parameters={{ viewport: { defaultViewport: 'mobile1' } }}
+>
+	{#snippet template()}
+		<PageHeader kicker="Rankings · 2026 · through week 3" title="Power Rankings" phoneActionGap={14}>
+			Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as much.
+			{#snippet action()}<Button variant="secondary" href="#">Season 2026</Button>{/snippet}
+		</PageHeader>
+	{/snippet}
+</Story>
+

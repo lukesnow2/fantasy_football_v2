@@ -19,6 +19,12 @@
 	 * warning. It never shows an empty card.
 	 *
 	 *   <StatTip metricId="luck_factor" label="Luck" />
+	 *
+	 * A board that draws the open card somewhere other than under the label's
+	 * left edge says where, and placeCard follows it inside the viewport:
+	 * `endOffset` and `topOffset` for Power Rankings' Luck header (its right
+	 * edge 40px past the label's, its top 26px below the label's top), `spanOf`
+	 * for its phone table (the card stretched across that element).
 	 */
 	import { onMount, tick, type Snippet } from 'svelte';
 	import { placeCard } from './parts';
@@ -36,6 +42,17 @@
 		iconOnly?: boolean;
 		/** Open the card. Bindable; a board that draws it open starts it open. */
 		open?: boolean;
+		/** Px the card's right edge sits past the label's right edge. */
+		endOffset?: number;
+		/** Px the card's top sits below the label's top, instead of 8px under it. */
+		topOffset?: number;
+		/** Stretch the card across this element's width. */
+		spanOf?: HTMLElement;
+		/**
+		 * Below 640px, make the label a 44px touch target, as the phone boards
+		 * draw a table header's StatTip. Off for a label inside a sentence.
+		 */
+		phoneTarget?: boolean;
 	}
 
 	let {
@@ -44,7 +61,11 @@
 		children,
 		icon = true,
 		iconOnly = false,
-		open = $bindable(false)
+		open = $bindable(false),
+		endOffset,
+		topOffset,
+		spanOf,
+		phoneTarget = false
 	}: Props = $props();
 
 	const id = $props.id();
@@ -62,7 +83,7 @@
 	let root: HTMLSpanElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
 	let card: HTMLSpanElement | undefined = $state();
-	let position: { top: number; left: number } | null = $state(null);
+	let position: { top: number; left: number; width?: number } | null = $state(null);
 	let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// 'ready' always comes with a definition.
@@ -91,14 +112,31 @@
 
 	onMount(() => () => clearTimeout(closeTimer));
 
-	async function place() {
-		if (!trigger || !card) return;
-		const box = trigger.getBoundingClientRect();
-		position = placeCard(
-			box,
+	function measure() {
+		if (!trigger || !card) return null;
+		const spanBox = spanOf?.getBoundingClientRect();
+		return placeCard(
+			trigger.getBoundingClientRect(),
 			{ width: card.offsetWidth, height: card.offsetHeight },
-			{ width: window.innerWidth, height: window.innerHeight }
+			{ width: window.innerWidth, height: window.innerHeight },
+			{
+				endOffset,
+				topOffset,
+				span: spanBox ? { left: spanBox.left, width: spanBox.width } : undefined
+			}
 		);
+	}
+
+	async function place() {
+		const placed = measure();
+		if (!placed) return;
+		position = placed;
+		// A spanned card rewraps at its new width, so its height changes: measure
+		// again at that width before deciding above or below.
+		if (placed.width != null && card && card.offsetWidth !== placed.width) {
+			await tick();
+			position = measure() ?? placed;
+		}
 	}
 
 	// Measure once the card is in the page, and follow the trigger while open.
@@ -197,6 +235,7 @@
 			bind:this={trigger}
 			type="button"
 			class="trigger"
+			class:phone-target={phoneTarget}
 			aria-describedby={definition ? cardId : undefined}
 			aria-expanded={showing}
 			{onclick}
@@ -215,6 +254,7 @@
 				hidden={!showing}
 				top={position?.top ?? null}
 				left={position?.left ?? null}
+				width={position?.width ?? null}
 			/>
 		{/if}
 	</span>
@@ -235,6 +275,12 @@
 		letter-spacing: inherit;
 		text-transform: inherit;
 		text-align: inherit;
+	}
+
+	@media (max-width: 639.98px) {
+		.trigger.phone-target {
+			min-height: 44px;
+		}
 	}
 
 	.trigger:focus-visible {
