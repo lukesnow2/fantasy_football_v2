@@ -29,7 +29,7 @@ import { db } from '$lib/server/db';
 import {
 	PARAMS,
 	SIMS,
-	getSeasonOdds,
+	getSeasonOddsForSnapshot,
 	latestSeason,
 	oddsSeed,
 	type SeasonOdds
@@ -57,7 +57,13 @@ function arg(name: string): string | undefined {
 
 async function saveSnapshot(
 	odds: Available,
-	opts: { version: string; capturedLive: boolean; sha: string | null; teamIds: Map<number, string> }
+	opts: {
+		version: string;
+		gamesFingerprint: string;
+		capturedLive: boolean;
+		sha: string | null;
+		teamIds: Map<number, string>;
+	}
 ): Promise<boolean> {
 	const teams = odds.teams.map((t) => {
 		const teamId = opts.teamIds.get(t.teamKey);
@@ -95,7 +101,7 @@ async function saveSnapshot(
 			) VALUES (
 				${odds.season}, ${odds.throughWeek}, ${odds.regularSeasonWeeks}, ${odds.playoffTeams},
 				${odds.byes}, ${odds.formatSource}, ${odds.sims}, ${odds.leagueAverage},
-				${opts.version}, ${JSON.stringify(params)}::jsonb, ${odds.gamesFingerprint},
+				${opts.version}, ${JSON.stringify(params)}::jsonb, ${opts.gamesFingerprint},
 				${opts.capturedLive}, ${opts.sha}
 			)
 			ON CONFLICT ON CONSTRAINT playoff_odds_snapshots_once DO NOTHING
@@ -126,7 +132,8 @@ async function main() {
 	const version = modelVersion({ sims: SIMS, seed: oddsSeed, params: PARAMS });
 	const sha = gitSha();
 
-	const latest = await getSeasonOdds(season);
+	const latestRun = await getSeasonOddsForSnapshot(season);
+	const latest = latestRun.odds;
 	if (!latest.available) {
 		console.log(`${season}: no forecast to save (${latest.reason})`);
 		return;
@@ -172,18 +179,21 @@ async function main() {
 		// Earlier weeks: one rebuild per version is enough. The current week:
 		// a new snapshot whenever its games changed.
 		if (!live && saved.has(week)) continue;
-		const odds = live ? latest : await getSeasonOdds(season, week);
+		const { odds, gamesFingerprint } = live
+			? latestRun
+			: await getSeasonOddsForSnapshot(season, week);
 		// A league week with no games (2006 and 2007 started in week 2) has
 		// nothing new to forecast from.
-		if (!odds.available || odds.throughWeek !== week) continue;
-		if (saved.get(week)?.has(odds.gamesFingerprint)) continue;
+		if (!odds.available || gamesFingerprint == null || odds.throughWeek !== week) continue;
+		if (saved.get(week)?.has(gamesFingerprint)) continue;
 
 		const line = odds.teams
 			.map((t) => `${t.teamName.slice(0, 14)} ${(t.playoffOdds * 100).toFixed(0)}%`)
 			.join(', ');
 		console.log(`  week ${week} ${live ? 'live    ' : 'rebuilt '} ${line}`);
 		if (dryRun) continue;
-		if (await saveSnapshot(odds, { version, capturedLive: live, sha, teamIds })) written++;
+		if (await saveSnapshot(odds, { version, gamesFingerprint, capturedLive: live, sha, teamIds }))
+			written++;
 	}
 	console.log(dryRun ? 'Dry run: nothing written.' : `Saved ${written} snapshot(s).`);
 }

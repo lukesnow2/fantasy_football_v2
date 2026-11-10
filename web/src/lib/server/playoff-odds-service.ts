@@ -27,8 +27,8 @@ type Row = Record<string, unknown>;
 
 export const SIMS = 10000;
 
-/** The model parameters the site runs with. */
-export const PARAMS: ModelParams = DEFAULT_PARAMS;
+/** The model parameters the site runs with (a copy: DEFAULT_PARAMS is shared). */
+export const PARAMS: Readonly<ModelParams> = Object.freeze({ ...DEFAULT_PARAMS });
 
 /**
  * The simulation seed for a season as it stood after `playedWeeks`: fixed, so
@@ -56,8 +56,6 @@ export type SeasonOdds =
 			playoffTeams: number;
 			byes: number;
 			leagueAverage: number;
-			/** Every game and score the forecast saw (see gamesFingerprint). */
-			gamesFingerprint: string;
 			teams: SeasonTeamOdds[];
 	  };
 
@@ -79,6 +77,20 @@ export async function latestSeason(): Promise<number> {
  * movement compares it with the week before. Omitted, it is the latest week.
  */
 export async function getSeasonOdds(season: number, throughWeek?: number): Promise<SeasonOdds> {
+	return (await getSeasonOddsForSnapshot(season, throughWeek)).odds;
+}
+
+/**
+ * getSeasonOdds plus the fingerprint of every game and score the forecast saw
+ * (playoff-odds.ts gamesFingerprint), for the saved snapshots
+ * (scripts/snapshot-playoff-odds.ts). Kept off SeasonOdds so the API
+ * responses that return the odds whole don't carry it. Null when there are no
+ * odds.
+ */
+export async function getSeasonOddsForSnapshot(
+	season: number,
+	throughWeek?: number
+): Promise<{ odds: SeasonOdds; gamesFingerprint: string | null }> {
 	const [matchupRows, teamRowsRaw, format] = await Promise.all([
 		db.execute(sql`
 			SELECT dw.week_number AS week,
@@ -135,9 +147,8 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 
 	if (teams.length < Math.max(2, format.playoffTeams)) {
 		return {
-			season,
-			available: false,
-			reason: 'Not enough teams loaded for this season yet.'
+			odds: { season, available: false, reason: 'Not enough teams loaded for this season yet.' },
+			gamesFingerprint: null
 		};
 	}
 
@@ -177,7 +188,7 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 	const byProj = [...now.teams].sort((a, b) => b.projectedPoints - a.projectedPoints);
 	const projRank = new Map(byProj.map((t, i) => [t.teamKey, i + 1]));
 
-	return {
+	const odds: SeasonOdds = {
 		season,
 		available: true,
 		throughWeek: now.throughWeek,
@@ -188,7 +199,6 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 		playoffTeams: now.playoffTeams,
 		byes: now.byes,
 		leagueAverage: now.leagueAverage,
-		gamesFingerprint: fingerprint,
 		teams: now.teams.map((t) => ({
 			...t,
 			teamName: info.get(t.teamKey)?.teamName ?? '',
@@ -197,4 +207,5 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 			previousOdds: prev ? (prevOdds.get(t.teamKey) ?? null) : null
 		}))
 	};
+	return { odds, gamesFingerprint: fingerprint };
 }

@@ -73,8 +73,8 @@ async function main() {
 				FROM model.playoff_odds_snapshots
 				ORDER BY season_year, captured_at DESC
 			)
-			SELECT s.season_year, s.through_week, s.regular_season_weeks, s.playoff_teams, s.byes,
-			       l.season_weeks, s.model_version, s.captured_live, v.first_seen,
+			SELECT s.season_year, s.through_week, s.playoff_teams, s.byes, l.season_weeks,
+			       s.model_version, s.captured_live, v.first_seen,
 			       COUNT(*) OVER (PARTITION BY s.snapshot_id) AS teams,
 			       t.team_id, t.playoff_odds::float, t.bye_odds::float, t.top_seed_odds::float,
 			       t.title_odds::float
@@ -144,7 +144,10 @@ async function main() {
 		groups.get(key)!.forecasts.push({
 			season: Number(r.seasonYear),
 			throughWeek: Number(r.throughWeek),
-			regularSeasonWeeks: Number(r.regularSeasonWeeks),
+			// The season's real length, not the one this forecast assumed:
+			// whether the standings were final, and how many weeks were left,
+			// are facts about the season.
+			regularSeasonWeeks: Number(r.seasonWeeks),
 			teams: Number(r.teams),
 			playoffTeams: Number(r.playoffTeams),
 			byes: Number(r.byes),

@@ -6,8 +6,9 @@ import { simulatePlayoffOdds, type ModelParams, type PlayedGame } from '$lib/pla
  * (model.playoff_odds_snapshots): a hash of what the model does, not of its
  * source. It runs the model on three fixed sample seasons, with the
  * parameters the site uses, and hashes every team's odds and projections,
- * along with the site's simulation count and seed rule. Refactors, comments, renames and exports leave it alone;
- * anything that changes a number starts a new version.
+ * along with the site's simulation count and seed rule. Refactors, comments,
+ * renames and exports leave it alone; anything that changes a number starts a
+ * new version.
  *
  * Not covered: how getSeasonOdds picks the games it passes in (regular season
  * only, finished games only). A change there is a change to the inputs, which
@@ -17,7 +18,7 @@ import { simulatePlayoffOdds, type ModelParams, type PlayedGame } from '$lib/pla
 export interface SiteSettings {
 	sims: number;
 	seed: (season: number, playedWeeks: number) => number;
-	params: ModelParams;
+	params: Readonly<ModelParams>;
 }
 
 type Simulate = typeof simulatePlayoffOdds;

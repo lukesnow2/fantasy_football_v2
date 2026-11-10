@@ -15,12 +15,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 			season = parsed;
 		}
-		const odds = await getSeasonOdds(season);
-		if (!odds.available) return json(odds);
-		// The games fingerprint is for the saved snapshots, not the page.
-		const { gamesFingerprint, ...body } = odds;
-		void gamesFingerprint;
-		return json(body);
+		return json(await getSeasonOdds(season));
 	} catch (error) {
 		console.error('Playoff odds API error:', error);
 		return json({ error: 'Failed to compute playoff odds' }, { status: 500 });
