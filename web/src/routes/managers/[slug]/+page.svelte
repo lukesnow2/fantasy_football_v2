@@ -221,6 +221,8 @@
 	const bars = $derived(winsBars(seasons, championshipSeasons));
 	const h2h = $derived(h2hRows(managerData?.data?.head_to_head ?? []));
 	const tiles = $derived(h2hTiles(h2h, titleGames));
+	// One record column width for the whole list, so the bars line up.
+	const h2hHasTies = $derived(h2h.some((r) => r.ties > 0));
 	// The league's latest season, as far as this page can see: a manager who
 	// left before it is marked "League alum", as on the Managers rail (Luke,
 	// 2026-11-10; the board wrote "Left after {season}").
@@ -507,7 +509,7 @@
 							<p class="muted-line tight">No rivalries of five or more games yet.</p>
 						{/if}
 						{#each h2h as row (row.opponent)}
-							<div class="share-row">
+							<div class="share-row" class:with-ties={h2hHasTies}>
 								<span class="share-name">{@render opponentName(row.opponent)}</span>
 								<span class="share-bar" aria-hidden="true">
 									<span
@@ -1188,8 +1190,7 @@
 
 	.share-row {
 		display: grid;
-		/* 52px as drawn, wider only for a record with ties ("14-15-1"). */
-		grid-template-columns: minmax(0, 1fr) 140px minmax(52px, auto);
+		grid-template-columns: minmax(0, 1fr) 140px 52px;
 		gap: 12px;
 		align-items: center;
 		padding: 8px 0;
@@ -1223,6 +1224,12 @@
 		width: 1px;
 		height: 14px;
 		background: var(--color-ink);
+	}
+
+	/* 52px as drawn; a list with a tied record ("14-15-1") widens every row
+	   alike, so the bars stay in one column. */
+	.share-row.with-ties {
+		grid-template-columns: minmax(0, 1fr) 140px 64px;
 	}
 
 	.share-record {
@@ -1555,10 +1562,14 @@
 		}
 
 		.share-row {
-			grid-template-columns: minmax(0, 1fr) 100px minmax(46px, auto);
+			grid-template-columns: minmax(0, 1fr) 100px 46px;
 			min-height: 44px;
 			padding: 0;
 			box-sizing: content-box;
+		}
+
+		.share-row.with-ties {
+			grid-template-columns: minmax(0, 1fr) 100px 60px;
 		}
 
 		.share-name .name-link {
