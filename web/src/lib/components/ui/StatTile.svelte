@@ -122,20 +122,18 @@
 		}
 	}
 
-	/* After the phone rules above, so it wins at every width. */
-	.tile.compact,
-	.tile.in-strip.compact {
+	/* After the strip and phone rules above, at the same specificity, so it
+	   wins at every width. */
+	.tile.compact {
 		padding: 12px 14px;
 	}
 
-	.compact .value,
-	.value-first.compact .value {
+	.compact .value {
 		font-size: 24px;
 		line-height: normal;
 	}
 
-	.compact .first-label,
-	.value-first.compact .first-label {
+	.compact .first-label {
 		margin-top: 0;
 		font-size: 12px;
 		color: var(--color-muted);

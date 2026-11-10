@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import PlayoffOdds from '$lib/components/PlayoffOdds.svelte';
 	import ChatPreview from '$lib/components/chat/ChatPreview.svelte';
@@ -73,7 +74,8 @@
 
 	// The body's phone layout (below 640px) differs in markup, not just in
 	// spacing, and the body only ever draws in the browser.
-	let phone = $state(false);
+	const phoneQuery = new MediaQuery('max-width: 639.98px', false);
+	const phone = $derived(phoneQuery.current);
 
 	async function getJson<T>(url: string): Promise<T> {
 		const res = await fetch(url);
@@ -127,14 +129,7 @@
 		status = 'ready';
 	}
 
-	onMount(() => {
-		const query = window.matchMedia('(max-width: 639.98px)');
-		phone = query.matches;
-		const onChange = (e: MediaQueryListEvent) => (phone = e.matches);
-		query.addEventListener('change', onChange);
-		load();
-		return () => query.removeEventListener('change', onChange);
-	});
+	onMount(load);
 
 	/* ---------- Derived ---------- */
 

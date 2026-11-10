@@ -81,7 +81,10 @@
 
 	// The board's state starts with the top row of the Playoffs sort open, and
 	// switching the metric keeps the same team open.
-	const open = $derived(chosen === undefined ? (sortBy('playoffOdds')[0]?.teamKey ?? null) : chosen);
+	const open = $derived.by(() => {
+		if (chosen !== undefined) return chosen;
+		return (metric === 'playoffOdds' ? sorted : sortBy('playoffOdds'))[0]?.teamKey ?? null;
+	});
 
 	// Final seeding, once the regular season is over: wins, then points for.
 	const seeds = $derived.by(() => {
@@ -98,7 +101,9 @@
 
 	const record = (t: TeamOdds) => formatRecord(t.wins, t.losses, t.ties);
 	const postseason = $derived(data?.available === true && data.phase === 'postseason');
-	const method = $derived(data?.available ? oddsMethod(data.sims, data.playoffTeams, data.byes) : null);
+	const method = $derived(
+		data?.available ? oddsMethod(data.sims, data.playoffTeams, data.byes) : null
+	);
 </script>
 
 <Card
@@ -211,7 +216,7 @@
 
 					{#if isOpen}
 						<dl class="detail">
-							{#each oddsDetail(t, data.regularSeasonWeeks) as row (row.term)}
+							{#each oddsDetail(t) as row (row.term)}
 								<div class="pair">
 									<dt>{row.term}</dt>
 									<dd>{row.value}</dd>

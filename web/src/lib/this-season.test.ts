@@ -383,6 +383,7 @@ describe('oddsDetail', () => {
 	it("prints Craig's open row as the board does", () => {
 		const craig = team({
 			managerName: 'Craig',
+			wins: 3,
 			projectedPoints: 141.94,
 			projectedPointsRank: 1,
 			allPlayWins: 20,
@@ -395,7 +396,7 @@ describe('oddsDetail', () => {
 			topSeedOdds: 0.25,
 			titleOdds: 0.19
 		});
-		expect(oddsDetail(craig, 14)).toEqual([
+		expect(oddsDetail(craig)).toEqual([
 			{ term: 'Projected score', value: '141.9 a week, #1' },
 			{ term: 'All-play record', value: '20-7' },
 			{ term: 'Luck', value: '-0.2 wins' },
@@ -405,9 +406,21 @@ describe('oddsDetail', () => {
 		]);
 	});
 
+	it('projects the finish over the games on the schedule, ties as half', () => {
+		const t = team({
+			managerName: 'A',
+			wins: 2,
+			losses: 1,
+			ties: 1,
+			remainingGames: 6,
+			projectedWins: 5.5
+		});
+		expect(oddsDetail(t).find((r) => r.term === 'Projected finish')?.value).toBe('5.5-4.5');
+	});
+
 	it('keeps a half game in the all-play record and signs positive luck', () => {
 		const t = team({ managerName: 'A', allPlayWins: 20.5, allPlayLosses: 6.5, luck: 1.06 });
-		const rows = oddsDetail(t, 14);
+		const rows = oddsDetail(t);
 		expect(rows[1].value).toBe('20.5-6.5');
 		expect(rows[2].value).toBe('+1.1 wins');
 	});

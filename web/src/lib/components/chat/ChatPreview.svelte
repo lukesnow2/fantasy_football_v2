@@ -97,7 +97,8 @@
 </Card>
 
 <style>
-	:global(.chat-preview) {
+	/* Card's root is outside this component's scope; .card keeps the rule on it. */
+	:global(.card.chat-preview) {
 		display: flex;
 		flex-direction: column;
 	}

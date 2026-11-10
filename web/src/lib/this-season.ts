@@ -349,10 +349,10 @@ const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 const signed = (x: number) => `${x >= 0 ? '+' : '-'}${Math.abs(x).toFixed(1)}`;
 
 /** The open row's details, in the board's order. */
-export function oddsDetail(
-	team: OddsTeam,
-	regularSeasonWeeks: number
-): { term: string; value: string }[] {
+export function oddsDetail(team: OddsTeam): { term: string; value: string }[] {
+	// Ties count half in projectedWins, so the rest of the schedule's games,
+	// played and left, are the projected losses.
+	const games = team.wins + team.losses + team.ties + team.remainingGames;
 	const rows: { term: string; value: string }[] = [
 		{
 			term: 'Projected score',
@@ -371,7 +371,7 @@ export function oddsDetail(
 	rows.push(
 		{
 			term: 'Projected finish',
-			value: `${team.projectedWins.toFixed(1)}-${(regularSeasonWeeks - team.projectedWins).toFixed(1)}`
+			value: `${team.projectedWins.toFixed(1)}-${(games - team.projectedWins).toFixed(1)}`
 		},
 		{
 			term: 'Bye · #1 seed · Title',
