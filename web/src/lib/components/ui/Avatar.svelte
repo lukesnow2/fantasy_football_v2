@@ -10,7 +10,8 @@
 	 * plus a 4px pennant-light ring). `ringStyle="shadow"` draws it as a
 	 * box-shadow instead, which takes no room (the Managers rail's 2px ring on
 	 * the selected manager). `alt` is the photo's alt text; pass "" where the
-	 * name is already beside it.
+	 * name is already beside it, which also hides the initial circle from
+	 * screen readers.
 	 */
 	import ManagerProfilePicture from '../ManagerProfilePicture.svelte';
 	import { getManagerProfilePicture } from '$lib/utils/managerUtils';
@@ -64,8 +65,9 @@
 {:else}
 	<span
 		class="avatar initial {initialTone} {className}"
-		role="img"
-		aria-label={name}
+		role={alt === '' ? undefined : 'img'}
+		aria-label={alt === '' ? undefined : name}
+		aria-hidden={alt === '' || undefined}
 		style:width="{size}px"
 		style:height="{size}px"
 		style:border-width={border}

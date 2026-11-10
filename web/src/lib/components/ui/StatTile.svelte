@@ -12,6 +12,11 @@
 	 * `compact` is This Season's phone strip (WP4 S4.10): value first in slab
 	 * 24px, then the label in 12px muted, 12px 14px of padding.
 	 *
+	 * `small` is the Hall of Fame strip (WP7 S7.2), value first: 16px 20px of
+	 * padding, a 30px value and the 13px ink-2 label 6px under it; on phones
+	 * 12px 14px, a 24px value and the label in 12px, its StatTip a 44px tap
+	 * target that doesn't grow the cell.
+	 *
 	 * `layout="avatar"` is the profile Head to head strip (WP6 S6.7): an
 	 * optional 40px Avatar (`avatar`, a manager's name) 12px left of the text,
 	 * 18px 22px of padding, a 28px value 4px under the label and the sub 4px
@@ -32,6 +37,7 @@
 		metricId?: string;
 		valueFirst?: boolean;
 		compact?: boolean;
+		small?: boolean;
 		layout?: 'stack' | 'avatar';
 		avatar?: string | null;
 		tone?: 'ink' | 'field' | 'pennant' | 'pennant-dark';
@@ -44,6 +50,7 @@
 		metricId,
 		valueFirst = false,
 		compact = false,
+		small = false,
 		layout = 'stack',
 		avatar,
 		tone
@@ -53,7 +60,11 @@
 </script>
 
 {#snippet labelText()}
-	{#if metricId}<StatTip {metricId} {label} />{:else}{label}{/if}
+	{#if metricId}<StatTip
+			{metricId}
+			{label}
+			phoneTap={small ? 'inline-small' : undefined}
+		/>{:else}{label}{/if}
 {/snippet}
 
 {#snippet valueText()}
@@ -75,10 +86,11 @@
 	<div
 		class="tile"
 		class:in-strip={inStrip}
-		class:value-first={valueFirst || compact}
+		class:value-first={valueFirst || compact || small}
 		class:compact
+		class:small
 	>
-		{#if valueFirst || compact}
+		{#if valueFirst || compact || small}
 			<div class="value" style:color={tone ? `var(--color-${tone})` : undefined}>
 				{@render valueText()}
 			</div>
@@ -231,5 +243,35 @@
 		margin-top: 0;
 		font-size: 12px;
 		color: var(--color-muted);
+	}
+
+	/* The Hall of Fame strip. */
+	.tile.small {
+		padding: 16px 20px;
+	}
+
+	.small .value {
+		font-size: 30px;
+	}
+
+	.small .first-label {
+		margin-top: 6px;
+		font-size: 13px;
+	}
+
+	@media (max-width: 639.98px) {
+		.tile.small {
+			padding: 12px 14px;
+		}
+
+		.small .value {
+			font-size: 24px;
+			line-height: normal;
+		}
+
+		.small .first-label {
+			margin-top: 0;
+			font-size: 12px;
+		}
 	}
 </style>

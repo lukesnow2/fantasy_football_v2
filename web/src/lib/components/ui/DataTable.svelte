@@ -8,6 +8,12 @@
 		width?: string;
 		/** An accessible name for the header when its text is a symbol ("Wk Δ"). */
 		ariaLabel?: string;
+		/**
+		 * Hold the column to `width` even when its header text is wider, letting
+		 * the text run over, as a board's grid column does ("Playoffs" in the
+		 * Hall of Fame's 64px column).
+		 */
+		fixedHeader?: boolean;
 	}
 </script>
 
@@ -20,7 +26,10 @@
 	 *
 	 * A row can be highlighted (pennant-wash, a title season or a won final) or
 	 * selected (field-tint). `divider` puts a labeled rule before a row, such as
-	 * the playoff line after 6th on the standings.
+	 * the playoff line after 6th on the standings. `dividerCell` draws that row's
+	 * content instead of the rule and label, for a divider with more in it (the
+	 * Hall of Fame's tier rows: a name, a count and the tier's numbers on the
+	 * right); the snippet brings its own padding.
 	 *
 	 *   <DataTable {columns} {rows} divider={(_, i) => (i === 6 ? 'Playoff line' : null)}>
 	 *     {#snippet cell(row, column)}...{/snippet}
@@ -57,6 +66,8 @@
 		selected?: (row: Row, index: number) => boolean;
 		/** A label for a rule drawn before this row, or null for none. */
 		divider?: (row: Row, index: number) => string | null;
+		/** Draws a divider row's content in place of the labeled rule. */
+		dividerCell?: Snippet<[string, Row & Record<string, unknown>, number]>;
 		/**
 		 * Draws a body cell. Without it a cell shows row[column.key], or "None"
 		 * when that's null or undefined (G6).
@@ -86,6 +97,7 @@
 		highlighted,
 		selected,
 		divider,
+		dividerCell,
 		cell,
 		header,
 		stickyFirst = false
@@ -113,7 +125,10 @@
 						style:height={headerHeight != null ? `${headerHeight}px` : undefined}
 						aria-label={column.ariaLabel}
 					>
-						<span class:sr-only={hideHeader}
+						<span
+							class:sr-only={hideHeader}
+							class:fixed-head={column.fixedHeader && column.width}
+							style:width={column.fixedHeader ? column.width : undefined}
 							>{#if header}{@render header(column)}{:else}{column.label}{/if}</span
 						>
 					</th>
@@ -123,7 +138,11 @@
 		<tbody>
 			{#each rows as row, index (rowKey(row, index))}
 				{@const rule = divider?.(row, index)}
-				{#if rule}
+				{#if rule && dividerCell}
+					<tr class="divider custom">
+						<td colspan={columns.length}>{@render dividerCell(rule, row, index)}</td>
+					</tr>
+				{:else if rule}
 					<tr class="divider">
 						<td colspan={columns.length}>
 							<span class="divider-line">
@@ -237,6 +256,14 @@
 	tr.divider td {
 		padding: 8px 0;
 		border-bottom: 0;
+	}
+
+	.fixed-head {
+		display: block;
+	}
+
+	tr.divider.custom td {
+		padding: 0;
 	}
 
 	.divider-line {

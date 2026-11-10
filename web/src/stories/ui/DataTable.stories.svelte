@@ -31,6 +31,20 @@
 	];
 	const systemRows = [{ rank: 1, name: 'Trevor', record: '187-145', pct: '.563' }];
 
+	// The Hall of Fame's rankings: tier rows with numbers on the right, and
+	// headers that run over their fixed columns as the board's grid does.
+	const hofColumns = [
+		{ key: 'rank', label: '#', width: '32px' },
+		{ key: 'name', label: 'Manager' },
+		{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '64px', fixedHeader: true },
+		{ key: 'seasons', label: 'Seasons', numeric: true, width: '60px', fixedHeader: true }
+	];
+	const hofRows = [
+		{ rank: 1, name: 'Trevor', playoffs: 18, seasons: 21, tier: 'Hall of Fame Elite' },
+		{ rank: 2, name: 'Gabe the Younger', playoffs: 12, seasons: 15, tier: null },
+		{ rank: 4, name: 'Nick', playoffs: 10, seasons: 14, tier: 'Hall of Fame' }
+	];
+
 	const luckColumns = [
 		{ key: 'name', label: 'Manager' },
 		{ key: 'luck', label: 'Luck', numeric: true, width: '80px' }
@@ -171,7 +185,40 @@
 	{/snippet}
 </Story>
 
+<Story name="Divider with its own content (Hall of Fame tiers)">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<DataTable
+				columns={hofColumns}
+				rows={hofRows}
+				columnGap={14}
+				rowPadding={11}
+				divider={(r) => r.tier}
+			>
+				{#snippet dividerCell(name)}
+					<div class="tier"><b>{name}</b><span>Avg titles <b>4.3</b></span></div>
+				{/snippet}
+			</DataTable>
+		</div>
+	{/snippet}
+</Story>
+
 <style>
+	.tier {
+		display: flex;
+		gap: 16px;
+		align-items: baseline;
+		padding: 18px 0 6px;
+		font-size: 12px;
+		color: var(--color-ink-2);
+	}
+
+	.tier > b {
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--color-pennant-dark);
+	}
+
 	.rank {
 		font-family: var(--font-slab);
 		font-weight: 700;

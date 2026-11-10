@@ -15,14 +15,16 @@
 		text?: string;
 		/** A fixed width for the number, right aligned (This Season's 38px). */
 		numberWidth?: number;
+		/** Px between the bar and the number: 10 unless the board draws another (8 on the Hall of Fame phone board). */
+		gap?: number;
 	}
 
-	let { percent, tone = 'field', text, numberWidth }: Props = $props();
+	let { percent, tone = 'field', text, numberWidth, gap }: Props = $props();
 
 	const width = $derived(clampPercent(percent));
 </script>
 
-<span class="odds">
+<span class="odds" style:gap={gap === undefined ? undefined : `${gap}px`}>
 	<span class="track" aria-hidden="true"
 		><span class="fill {tone}" style:width="{width}%"></span></span
 	>
