@@ -27,14 +27,14 @@ import { execSync } from 'node:child_process';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
+	PARAMS,
 	SIMS,
-	getSeasonOdds,
+	getSeasonOddsWithFingerprint,
 	latestSeason,
 	oddsSeed,
 	type SeasonOdds
 } from '$lib/server/playoff-odds-service';
 import { modelVersion } from '$lib/server/playoff-odds-version';
-import { DEFAULT_PARAMS } from '$lib/playoff-odds';
 
 type Row = Record<string, unknown>;
 type Available = Extract<SeasonOdds, { available: true }>;
@@ -57,7 +57,13 @@ function arg(name: string): string | undefined {
 
 async function saveSnapshot(
 	odds: Available,
-	opts: { version: string; capturedLive: boolean; sha: string | null; teamIds: Map<number, string> }
+	opts: {
+		version: string;
+		gamesFingerprint: string;
+		capturedLive: boolean;
+		sha: string | null;
+		teamIds: Map<number, string>;
+	}
 ): Promise<boolean> {
 	const teams = odds.teams.map((t) => {
 		const teamId = opts.teamIds.get(t.teamKey);
@@ -84,7 +90,7 @@ async function saveSnapshot(
 			eliminated: t.eliminated
 		};
 	});
-	const params = { ...DEFAULT_PARAMS };
+	const params = { ...PARAMS };
 
 	return db.transaction(async (tx) => {
 		const inserted = (await tx.execute(sql`
@@ -95,7 +101,7 @@ async function saveSnapshot(
 			) VALUES (
 				${odds.season}, ${odds.throughWeek}, ${odds.regularSeasonWeeks}, ${odds.playoffTeams},
 				${odds.byes}, ${odds.formatSource}, ${odds.sims}, ${odds.leagueAverage},
-				${opts.version}, ${JSON.stringify(params)}::jsonb, ${odds.gamesFingerprint},
+				${opts.version}, ${JSON.stringify(params)}::jsonb, ${opts.gamesFingerprint},
 				${opts.capturedLive}, ${opts.sha}
 			)
 			ON CONFLICT ON CONSTRAINT playoff_odds_snapshots_once DO NOTHING
@@ -123,10 +129,11 @@ async function main() {
 	const newest = await latestSeason();
 	const season = Number(arg('--season') ?? newest);
 	if (!Number.isInteger(season)) throw new Error(`Bad --season: ${arg('--season')}`);
-	const version = modelVersion({ sims: SIMS, seed: oddsSeed });
+	const version = modelVersion({ sims: SIMS, seed: oddsSeed, params: PARAMS });
 	const sha = gitSha();
 
-	const latest = await getSeasonOdds(season);
+	const latestRun = await getSeasonOddsWithFingerprint(season);
+	const latest = latestRun.odds;
 	if (!latest.available) {
 		console.log(`${season}: no forecast to save (${latest.reason})`);
 		return;
@@ -172,18 +179,21 @@ async function main() {
 		// Earlier weeks: one rebuild per version is enough. The current week:
 		// a new snapshot whenever its games changed.
 		if (!live && saved.has(week)) continue;
-		const odds = live ? latest : await getSeasonOdds(season, week);
+		const { odds, gamesFingerprint } = live
+			? latestRun
+			: await getSeasonOddsWithFingerprint(season, week);
 		// A league week with no games (2006 and 2007 started in week 2) has
 		// nothing new to forecast from.
-		if (!odds.available || odds.throughWeek !== week) continue;
-		if (saved.get(week)?.has(odds.gamesFingerprint)) continue;
+		if (!odds.available || gamesFingerprint == null || odds.throughWeek !== week) continue;
+		if (saved.get(week)?.has(gamesFingerprint)) continue;
 
 		const line = odds.teams
 			.map((t) => `${t.teamName.slice(0, 14)} ${(t.playoffOdds * 100).toFixed(0)}%`)
 			.join(', ');
 		console.log(`  week ${week} ${live ? 'live    ' : 'rebuilt '} ${line}`);
 		if (dryRun) continue;
-		if (await saveSnapshot(odds, { version, capturedLive: live, sha, teamIds })) written++;
+		if (await saveSnapshot(odds, { version, gamesFingerprint, capturedLive: live, sha, teamIds }))
+			written++;
 	}
 	console.log(dryRun ? 'Dry run: nothing written.' : `Saved ${written} snapshot(s).`);
 }

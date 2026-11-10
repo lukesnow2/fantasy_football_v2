@@ -4,10 +4,11 @@ import { simulatePlayoffOdds, type ModelParams, type PlayedGame } from '$lib/pla
 /**
  * The playoff-odds model's version, for the saved forecasts
  * (model.playoff_odds_snapshots): a hash of what the model does, not of its
- * source. It runs the model on three fixed sample seasons and hashes every
- * team's odds and projections, along with the simulation count and seed rule
- * the site uses. Refactors, comments, renames and exports leave it alone;
- * anything that changes a number starts a new version.
+ * source. It runs the model on three fixed sample seasons, with the
+ * parameters the site uses, and hashes every team's odds and projections,
+ * along with the site's simulation count and seed rule. Refactors, comments,
+ * renames and exports leave it alone; anything that changes a number starts a
+ * new version.
  *
  * Not covered: how getSeasonOdds picks the games it passes in (regular season
  * only, finished games only). A change there is a change to the inputs, which
@@ -17,6 +18,7 @@ import { simulatePlayoffOdds, type ModelParams, type PlayedGame } from '$lib/pla
 export interface SiteSettings {
 	sims: number;
 	seed: (season: number, playedWeeks: number) => number;
+	params: Readonly<ModelParams>;
 }
 
 type Simulate = typeof simulatePlayoffOdds;
@@ -68,11 +70,10 @@ const r6 = (x: number) => Math.round(x * 1e6) / 1e6;
 
 export function modelVersion(
 	settings: SiteSettings,
-	simulate: Simulate = simulatePlayoffOdds,
-	params?: Partial<ModelParams>
+	simulate: Simulate = simulatePlayoffOdds
 ): string {
 	const runs = FIXTURES.map((f, i) => {
-		const res = simulate({ ...f, sims: FIXTURE_SIMS, seed: 1000 + i, params });
+		const res = simulate({ ...f, sims: FIXTURE_SIMS, seed: 1000 + i, params: settings.params });
 		return {
 			byes: res.byes,
 			leagueAverage: r6(res.leagueAverage),

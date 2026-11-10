@@ -46,6 +46,8 @@ function line(label: string, g: Grade | null): string {
 
 async function main() {
 	const season = arg('--season') ? Number(arg('--season')) : null;
+	if (season != null && !Number.isInteger(season))
+		throw new Error(`Bad --season: ${arg('--season')}`);
 	const version = arg('--version') ?? null;
 
 	const rows = Array.from(
@@ -56,13 +58,29 @@ async function main() {
 				WHERE (${season}::int IS NULL OR season_year = ${season}::int)
 				  AND (${version}::text IS NULL OR model_version = ${version}::text)
 				ORDER BY season_year, through_week, model_version, captured_live, captured_at DESC
+			),
+			-- When each version was first saved, over every save, not just the
+			-- latest copy of each week.
+			versions AS (
+				SELECT model_version, MIN(captured_at) AS first_seen
+				FROM model.playoff_odds_snapshots
+				GROUP BY model_version
+			),
+			-- Each season's regular-season length as most recently saved: early
+			-- snapshots can carry an inferred length the stored settings replaced.
+			lengths AS (
+				SELECT DISTINCT ON (season_year) season_year, regular_season_weeks AS season_weeks
+				FROM model.playoff_odds_snapshots
+				ORDER BY season_year, captured_at DESC
 			)
-			SELECT s.season_year, s.through_week, s.regular_season_weeks, s.playoff_teams, s.byes,
-			       s.model_version, s.captured_live, MIN(s.captured_at) OVER (PARTITION BY s.model_version) AS first_seen,
+			SELECT s.season_year, s.through_week, s.playoff_teams, s.byes, l.season_weeks,
+			       s.model_version, s.captured_live, v.first_seen,
 			       COUNT(*) OVER (PARTITION BY s.snapshot_id) AS teams,
 			       t.team_id, t.playoff_odds::float, t.bye_odds::float, t.top_seed_odds::float,
 			       t.title_odds::float
 			FROM latest s
+			JOIN versions v USING (model_version)
+			JOIN lengths l USING (season_year)
 			JOIN model.playoff_odds_snapshot_teams t USING (snapshot_id)
 		`)
 	) as Row[];
@@ -91,9 +109,7 @@ async function main() {
 		`)
 	) as Row[];
 
-	const regularWeeks = new Map(
-		rows.map((r) => [Number(r.seasonYear), Number(r.regularSeasonWeeks)])
-	);
+	const regularWeeks = new Map(rows.map((r) => [Number(r.seasonYear), Number(r.seasonWeeks)]));
 	const results = new Map<number, SeasonResult>();
 	for (const s of seasons) {
 		const seasonGames: SeasonGame[] = games
@@ -128,7 +144,10 @@ async function main() {
 		groups.get(key)!.forecasts.push({
 			season: Number(r.seasonYear),
 			throughWeek: Number(r.throughWeek),
-			regularSeasonWeeks: Number(r.regularSeasonWeeks),
+			// The season's real length, not the one this forecast assumed:
+			// whether the standings were final, and how many weeks were left,
+			// are facts about the season.
+			regularSeasonWeeks: Number(r.seasonWeeks),
 			teams: Number(r.teams),
 			playoffTeams: Number(r.playoffTeams),
 			byes: Number(r.byes),

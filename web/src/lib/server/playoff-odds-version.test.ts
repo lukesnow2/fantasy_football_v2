@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { simulatePlayoffOdds } from '$lib/playoff-odds';
+import { DEFAULT_PARAMS, simulatePlayoffOdds } from '$lib/playoff-odds';
 import { modelVersion } from './playoff-odds-version';
 
-const site = { sims: 10000, seed: (season: number, weeks: number) => season * 100 + weeks };
+const site = {
+	sims: 10000,
+	seed: (season: number, weeks: number) => season * 100 + weeks,
+	params: DEFAULT_PARAMS
+};
 
 describe('modelVersion', () => {
 	it('is stable and short', () => {
@@ -17,8 +21,11 @@ describe('modelVersion', () => {
 	});
 
 	it('changes when a model parameter changes', () => {
-		expect(modelVersion(site, simulatePlayoffOdds, { shrinkage: 4 })).not.toBe(modelVersion(site));
-		expect(modelVersion(site, simulatePlayoffOdds, { drift: 0.25 })).not.toBe(modelVersion(site));
+		const withParams = (p: Partial<typeof DEFAULT_PARAMS>) =>
+			modelVersion({ ...site, params: { ...DEFAULT_PARAMS, ...p } });
+		expect(withParams({ shrinkage: 4 })).not.toBe(modelVersion(site));
+		expect(withParams({ drift: 0.25 })).not.toBe(modelVersion(site));
+		expect(withParams({})).toBe(modelVersion(site));
 	});
 
 	it('changes when the engine returns different numbers', () => {
