@@ -112,12 +112,11 @@
 
 	onMount(() => () => clearTimeout(closeTimer));
 
-	async function place() {
-		if (!trigger || !card) return;
-		const box = trigger.getBoundingClientRect();
+	function measure() {
+		if (!trigger || !card) return null;
 		const spanBox = spanOf?.getBoundingClientRect();
-		position = placeCard(
-			box,
+		return placeCard(
+			trigger.getBoundingClientRect(),
 			{ width: card.offsetWidth, height: card.offsetHeight },
 			{ width: window.innerWidth, height: window.innerHeight },
 			{
@@ -126,6 +125,18 @@
 				span: spanBox ? { left: spanBox.left, width: spanBox.width } : undefined
 			}
 		);
+	}
+
+	async function place() {
+		const placed = measure();
+		if (!placed) return;
+		position = placed;
+		// A spanned card rewraps at its new width, so its height changes: measure
+		// again at that width before deciding above or below.
+		if (placed.width != null && card && card.offsetWidth !== placed.width) {
+			await tick();
+			position = measure() ?? placed;
+		}
 	}
 
 	// Measure once the card is in the page, and follow the trigger while open.

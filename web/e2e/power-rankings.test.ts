@@ -60,6 +60,22 @@ test('picking another week changes the kicker and the table', async ({ page }) =
 	await expect(page.getByText('Week 3 is the last ranked week of 2026.')).toHaveCount(0);
 });
 
+test('Try again retries the week that failed, not the one still loaded', async ({ page }) => {
+	let failWeek1 = true;
+	await page.route(/\/api\/power-rankings\?.*week=1/, (route) => {
+		if (failWeek1) {
+			failWeek1 = false;
+			return route.fulfill({ status: 500, body: '{}' });
+		}
+		return route.fulfill({ contentType: 'application/json', body: JSON.stringify(fixtures.week1) });
+	});
+	await page.getByRole('radiogroup', { name: 'Week' }).getByRole('radio', { name: 'Wk 1' }).click();
+	await expect(page.getByText("Rankings didn't load")).toBeVisible();
+	await page.getByRole('button', { name: 'Try again' }).click();
+	await expect(page.getByText('Rankings · 2026 · through week 1')).toBeVisible();
+	await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Craig');
+});
+
 test('Escape closes the Luck StatTip after a click opens it', async ({ page }) => {
 	const luck = page.getByRole('columnheader').getByRole('button', { name: /Luck/ });
 	await expect(luck).toHaveAttribute('aria-expanded', 'false');

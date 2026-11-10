@@ -154,7 +154,6 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 15px;
 	}
 
 	th {

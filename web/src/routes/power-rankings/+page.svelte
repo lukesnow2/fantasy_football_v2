@@ -39,9 +39,13 @@
 	// Only the latest request may write: a slow response for a week the reader
 	// has already left must not replace the one they picked after it.
 	let latestRequest = 0;
+	// What the reader last asked for, so Try again retries the week they picked
+	// rather than the one still on screen.
+	let requested: { season?: number; week?: number } = {};
 
 	async function load(nextSeason?: number, nextWeek?: number) {
 		const request = ++latestRequest;
+		requested = { season: nextSeason, week: nextWeek };
 		loading = true;
 		error = '';
 		try {
@@ -60,6 +64,7 @@
 			weeks = data.weeks ?? [];
 			season = data.season;
 			week = data.week;
+			requestedSeason = null;
 			rankings = data.rankings ?? [];
 			trend = data.trend ?? [];
 		} catch (err) {
@@ -80,12 +85,17 @@
 		// Week numbers are not comparable across seasons, so let the API pick the
 		// latest week of the newly selected season rather than carrying this one over.
 		const next = Number((event.target as HTMLSelectElement).value);
+		requestedSeason = next;
 		load(next);
 	}
 
 	function onWeekChange(next: number) {
 		if (season != null) load(season, next);
 	}
+
+	// The select keeps the reader's pick while it loads and after a failed
+	// change, so it names the season Try again will load.
+	let requestedSeason = $state<number | null>(null);
 
 	const isFinalWeek = $derived(week != null && week === weeks[weeks.length - 1]);
 
@@ -161,21 +171,26 @@
 		end: { x: number; y: number };
 	}
 
-	const series = $derived.by<TeamSeries[]>(() => {
-		if (trend.length === 0 || weeks.length === 0) return [];
-
+	// One scale for the lines, the gridlines and the axis labels.
+	const scale = $derived.by(() => {
+		if (trend.length === 0 || weeks.length === 0) return null;
 		const maxRank = Math.max(...trend.map((r) => r.powerRank));
 		const firstWeek = weeks[0];
-		const lastWeek = weeks[weeks.length - 1];
-		const spanX = Math.max(1, lastWeek - firstWeek);
+		const spanX = Math.max(1, weeks[weeks.length - 1] - firstWeek);
 		const spanY = Math.max(1, maxRank - 1);
+		return {
+			maxRank,
+			x: (w: number) =>
+				CHART.padLeft + ((w - firstWeek) / spanX) * (CHART.width - CHART.padLeft - CHART.padRight),
+			// Rank 1 sits at the top, so the y scale is inverted.
+			y: (rank: number) =>
+				CHART.padTop + ((rank - 1) / spanY) * (CHART.height - CHART.padTop - CHART.padBottom)
+		};
+	});
 
-		const x = (w: number) =>
-			CHART.padLeft +
-			((w - firstWeek) / spanX) * (CHART.width - CHART.padLeft - CHART.padRight);
-		// Rank 1 sits at the top, so the y scale is inverted.
-		const y = (rank: number) =>
-			CHART.padTop + ((rank - 1) / spanY) * (CHART.height - CHART.padTop - CHART.padBottom);
+	const series = $derived.by<TeamSeries[]>(() => {
+		if (!scale) return [];
+		const { x, y } = scale;
 
 		const byTeam = new Map<number, PowerRankingRow[]>();
 		for (const row of trend) {
@@ -205,21 +220,12 @@
 	});
 
 	const chartTicks = $derived.by(() => {
-		if (trend.length === 0) return { xs: [] as { week: number; x: number }[], ys: [] as { rank: number; y: number }[] };
-		const maxRank = Math.max(...trend.map((r) => r.powerRank));
-		const firstWeek = weeks[0];
-		const lastWeek = weeks[weeks.length - 1];
-		const spanX = Math.max(1, lastWeek - firstWeek);
-		const spanY = Math.max(1, maxRank - 1);
+		if (!scale)
+			return { xs: [] as { week: number; x: number }[], ys: [] as { rank: number; y: number }[] };
+		const { x, y, maxRank } = scale;
 		return {
-			xs: weeks.map((w) => ({
-				week: w,
-				x: CHART.padLeft + ((w - firstWeek) / spanX) * (CHART.width - CHART.padLeft - CHART.padRight)
-			})),
-			ys: Array.from({ length: maxRank }, (_, i) => i + 1).map((rank) => ({
-				rank,
-				y: CHART.padTop + ((rank - 1) / spanY) * (CHART.height - CHART.padTop - CHART.padBottom)
-			}))
+			xs: weeks.map((w) => ({ week: w, x: x(w) })),
+			ys: Array.from({ length: maxRank }, (_, i) => ({ rank: i + 1, y: y(i + 1) }))
 		};
 	});
 
@@ -243,7 +249,7 @@
 			<div class="controls">
 				<label class="season">
 					Season
-					<select value={season} onchange={onSeasonChange}>
+					<select value={requestedSeason ?? season} onchange={onSeasonChange}>
 						{#each seasons as s (s)}
 							<option value={s}>{s}</option>
 						{/each}
@@ -257,8 +263,9 @@
 	{/snippet}
 </PageHeader>
 
-{#if loading}
-	<!-- S5.7 Loading: ten rows where the table sits. -->
+{#if loading && rankings.length === 0}
+	<!-- S5.7 Loading: ten rows where the table sits. A week change keeps the
+	     last week on screen, dimmed, so the page doesn't collapse and jump. -->
 	<div class="skeleton" aria-busy="true" aria-label="Loading power rankings">
 		{#each Array(10) as _, i (i)}<span class="sk-row"></span>{/each}
 	</div>
@@ -269,7 +276,7 @@
 			<Button
 				variant="secondary"
 				class="retry"
-				onclick={() => load(season ?? undefined, week ?? undefined)}>Try again</Button
+				onclick={() => load(requested.season, requested.week)}>Try again</Button
 			>
 		</Card>
 	</div>
@@ -280,219 +287,225 @@
 		</Card>
 	</div>
 {:else}
-	<!-- S5.2 Three callouts -->
-	<div class="callouts">
-		{#each callouts as c (c.key)}
-			{@const href = c.row ? profileHref(c.row) : null}
-			<Card padding="18px 20px" phonePadding="14px 16px" class="callout">
-				<div class="tile">
-					{#if c.row}
-						<Avatar name={c.row.managerName ?? ''} size={phone ? 44 : 52} />
-					{/if}
-					<div class="who">
-						<div class="tile-label">{c.label}</div>
-						{#if !c.row}
-							<div class="tile-name none">{c.empty}</div>
-						{:else if !c.row.managerName}
-							<div class="tile-name none">Unknown manager</div>
-						{:else if href}
-							<a class="tile-name tile-link" {href}>{c.row.managerName}</a>
-						{:else}
-							<div class="tile-name">{c.row.managerName}</div>
+	<div class="results" class:stale={loading} aria-busy={loading || undefined}>
+		<!-- S5.2 Three callouts -->
+		<div class="callouts">
+			{#each callouts as c (c.key)}
+				{@const href = c.row ? profileHref(c.row) : null}
+				<Card padding="18px 20px" phonePadding="14px 16px" class="callout">
+					<div class="tile">
+						{#if c.row}
+							<Avatar name={c.row.managerName ?? ''} size={phone ? 44 : 52} />
+						{/if}
+						<div class="who">
+							<div class="tile-label">{c.label}</div>
+							{#if !c.row}
+								<div class="tile-name none">{c.empty}</div>
+							{:else if !c.row.managerName}
+								<div class="tile-name none">Unknown manager</div>
+							{:else if href}
+								<a class="tile-name tile-link" {href}>{c.row.managerName}</a>
+							{:else}
+								<div class="tile-name">{c.row.managerName}</div>
+							{/if}
+						</div>
+						{#if c.row}
+							<span class="tile-value">
+								{#if c.key === 'luck'}
+									{formatLuck(c.row.luckFactor, 2)}
+								{:else}
+									<Movement change={c.row.rankChange} inherit />
+								{/if}
+							</span>
 						{/if}
 					</div>
-					{#if c.row}
-						<span class="tile-value">
-							{#if c.key === 'luck'}
-								{formatLuck(c.row.luckFactor, 2)}
+				</Card>
+			{/each}
+		</div>
+
+		<!-- S5.3 The rankings table -->
+		<div class="table-card">
+			<Card padding="22px 24px 12px" phonePadding="6px 16px 10px">
+				<div bind:this={tableWrap}>
+					<DataTable
+						{columns}
+						rows={tableRows}
+						label="Power rankings, week {week}"
+						rowPadding={phone ? 4 : 12}
+						columnGap={phone ? 10 : 14}
+						fontSize={phone ? 14 : 15}
+						headerHeight={phone ? 44 : undefined}
+						minWidth={phone ? undefined : '900px'}
+						rowKey={(r) => r.teamKey}
+					>
+						{#snippet header(column)}
+							{#if column.key === 'power'}
+								<StatTip metricId="power_score" label="Power score" />
+							{:else if column.key === 'pyth'}
+								<StatTip metricId="pythagorean_wins" label="Pyth W" />
+							{:else if column.key === 'luck'}
+								<span class="luck-head">
+									<StatTip
+										metricId="luck_factor"
+										label="Luck"
+										endOffset={phone ? undefined : 40}
+										topOffset={phone ? undefined : 26}
+										spanOf={phone ? tableWrap : undefined}
+										phoneTarget
+									/>
+								</span>
 							{:else}
-								<Movement change={c.row.rankChange} inherit />
+								{column.label}
 							{/if}
-						</span>
-					{/if}
+						{/snippet}
+						{#snippet cell(r, column)}
+							{#if column.key === 'rank'}
+								<span class="rank">{r.powerRank}</span>
+							{:else if column.key === 'move'}
+								<span class="move"><Movement change={r.rankChange} inherit /></span>
+							{:else if column.key === 'manager'}
+								{@const href = profileHref(r)}
+								{#if !r.managerName}
+									<span class="manager"><EmptyValue text="Unknown manager" /></span>
+								{:else}
+									<svelte:element this={href ? 'a' : 'span'} class="manager" {href}>
+										<Avatar name={r.managerName} size={phone ? 28 : 30} />
+										<span class="manager-text">
+											<span class="manager-name">{r.managerName}</span>
+											{#if phone}<span class="manager-record">{record(r)}</span>{/if}
+										</span>
+									</svelte:element>
+								{/if}
+							{:else if column.key === 'record'}
+								<span class="strong">{record(r)}</span>
+							{:else if column.key === 'power'}
+								{#if r.powerScore == null}
+									<EmptyValue />
+								{:else}
+									<OddsBar
+										percent={powerBarPct(r.powerScore)}
+										text={r.powerScore.toFixed(3)}
+										numberWidth={44}
+									/>
+								{/if}
+							{:else if column.key === 'points'}
+								{#if r.pointsRank == null}<EmptyValue />{:else}<span class="soft"
+										>{r.pointsRank}</span
+									>{/if}
+							{:else if column.key === 'pyth'}
+								{#if r.pythagoreanWins == null}<EmptyValue />{:else}<span class="soft"
+										>{r.pythagoreanWins.toFixed(1)}</span
+									>{/if}
+							{:else if column.key === 'luck'}
+								{@const text = formatLuck(r.luckFactor, 2)}
+								{#if text === null}<EmptyValue />{:else}<span
+										class="luck {luckTone(r.luckFactor, 2)}">{text}</span
+									>{/if}
+							{:else if column.key === 'playoffs'}
+								{#if r.playoffOdds == null}<EmptyValue text="Unknown" />{:else}<span class="strong"
+										>{Math.round(r.playoffOdds * 100)}%</span
+									>{/if}
+							{/if}
+						{/snippet}
+					</DataTable>
 				</div>
+				<!-- The 10,000 is SIMS in $lib/server/playoff-odds-service.ts. -->
+				<p class="footnote">
+					{#if isFinalWeek}Week {week} is the last ranked week of {season}.{' '}{/if}Power rankings
+					cover the regular season only. Luck is actual wins minus Pythagorean wins. Playoff odds
+					come from the same 10,000-sim model as This Season.
+				</p>
 			</Card>
-		{/each}
-	</div>
+		</div>
 
-	<!-- S5.3 The rankings table -->
-	<div class="table-card">
-		<Card padding="22px 24px 12px" phonePadding="6px 16px 10px">
-			<div bind:this={tableWrap}>
-				<DataTable
-					{columns}
-					rows={tableRows}
-					label="Power rankings, week {week}"
-					rowPadding={phone ? 4 : 12}
-					columnGap={phone ? 10 : 14}
-					fontSize={phone ? 14 : 15}
-					headerHeight={phone ? 44 : undefined}
-					minWidth={phone ? undefined : '900px'}
-					rowKey={(r) => r.teamKey}
+		<!-- S5.5 Rank through the season -->
+		{#if series.length > 0 && weeks.length > 1}
+			<div class="chart-card">
+				<Card
+					title="Rank through the season"
+					headGap={16}
+					phoneHeadGap={14}
+					headSpacing="8px 16px"
+					phoneHeadStack
 				>
-					{#snippet header(column)}
-						{#if column.key === 'power'}
-							<StatTip metricId="power_score" label="Power score" />
-						{:else if column.key === 'pyth'}
-							<StatTip metricId="pythagorean_wins" label="Pyth W" />
-						{:else if column.key === 'luck'}
-							<span class="luck-head">
-								<StatTip
-									metricId="luck_factor"
-									label="Luck"
-									endOffset={phone ? undefined : 40}
-									topOffset={phone ? undefined : 26}
-									spanOf={phone ? tableWrap : undefined}
-									phoneTarget
-								/>
-							</span>
-						{:else}
-							{column.label}
-						{/if}
+					{#snippet action()}
+						<span class="chart-note">Every ranked week of {season}. Rank 1 is at the top.</span>
 					{/snippet}
-					{#snippet cell(r, column)}
-						{#if column.key === 'rank'}
-							<span class="rank">{r.powerRank}</span>
-						{:else if column.key === 'move'}
-							<span class="move"><Movement change={r.rankChange} inherit /></span>
-						{:else if column.key === 'manager'}
-							{@const href = profileHref(r)}
-							{#if !r.managerName}
-								<span class="manager"><EmptyValue text="Unknown manager" /></span>
-							{:else}
-								<svelte:element this={href ? 'a' : 'span'} class="manager" {href}>
-									<Avatar name={r.managerName} size={phone ? 28 : 30} />
-									<span class="manager-text">
-										<span class="manager-name">{r.managerName}</span>
-										{#if phone}<span class="manager-record">{record(r)}</span>{/if}
-									</span>
-								</svelte:element>
-							{/if}
-						{:else if column.key === 'record'}
-							<span class="strong">{record(r)}</span>
-						{:else if column.key === 'power'}
-							{#if r.powerScore == null}
-								<EmptyValue />
-							{:else}
-								<OddsBar
-									percent={powerBarPct(r.powerScore)}
-									text={r.powerScore.toFixed(3)}
-									numberWidth={44}
-								/>
-							{/if}
-						{:else if column.key === 'points'}
-							{#if r.pointsRank == null}<EmptyValue />{:else}<span class="soft">{r.pointsRank}</span>{/if}
-						{:else if column.key === 'pyth'}
-							{#if r.pythagoreanWins == null}<EmptyValue />{:else}<span class="soft"
-									>{r.pythagoreanWins.toFixed(1)}</span
-								>{/if}
-						{:else if column.key === 'luck'}
-							{@const text = formatLuck(r.luckFactor, 2)}
-							{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(r.luckFactor, 2)}"
-									>{text}</span
-								>{/if}
-						{:else if column.key === 'playoffs'}
-							{#if r.playoffOdds == null}<EmptyValue text="Unknown" />{:else}<span class="strong"
-									>{Math.round(r.playoffOdds * 100)}%</span
-								>{/if}
-						{/if}
-					{/snippet}
-				</DataTable>
-			</div>
-			<!-- The 10,000 is SIMS in $lib/server/playoff-odds-service.ts. -->
-			<p class="footnote">
-				{#if isFinalWeek}Week {week} is the last ranked week of {season}.{' '}{/if}Power rankings
-				cover the regular season only. Luck is actual wins minus Pythagorean wins. Playoff odds come
-				from the same 10,000-sim model as This Season.
-			</p>
-		</Card>
-	</div>
-
-	<!-- S5.5 Rank through the season -->
-	{#if series.length > 0 && weeks.length > 1}
-		<div class="chart-card">
-			<Card
-				title="Rank through the season"
-				headGap={16}
-				phoneHeadGap={14}
-				headSpacing="8px 16px"
-				phoneHeadStack
-			>
-				{#snippet action()}
-					<span class="chart-note">Every ranked week of {season}. Rank 1 is at the top.</span>
-				{/snippet}
-				<div class="chart-row">
-					<div class="chart-scroll">
-						<div class="chart" role="img" aria-label={chartLabel}>
-							<svg viewBox="0 0 {CHART.width} {CHART.height}" aria-hidden="true">
+					<div class="chart-row">
+						<div class="chart-scroll">
+							<div class="chart" role="img" aria-label={chartLabel}>
+								<svg viewBox="0 0 {CHART.width} {CHART.height}" aria-hidden="true">
+									{#each chartTicks.ys as tick (tick.rank)}
+										<line
+											x1={CHART.padLeft}
+											y1={tick.y}
+											x2={CHART.width - CHART.padRight}
+											y2={tick.y}
+											style:stroke="var(--color-line-soft)"
+											stroke-width="1"
+										/>
+									{/each}
+									{#each series as s (s.teamKey)}
+										<path
+											d={s.path}
+											fill="none"
+											style:stroke={s.color}
+											stroke-width={hoveredTeam === s.teamKey ? 6 : 3}
+											stroke-opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey
+												? 0.18
+												: 0.9}
+											stroke-linejoin="round"
+											stroke-linecap="round"
+										/>
+									{/each}
+								</svg>
 								{#each chartTicks.ys as tick (tick.rank)}
-									<line
-										x1={CHART.padLeft}
-										y1={tick.y}
-										x2={CHART.width - CHART.padRight}
-										y2={tick.y}
-										style:stroke="var(--color-line-soft)"
-										stroke-width="1"
-									/>
+									<span class="axis rank-label" style:top={pctY(tick.y)}>#{tick.rank}</span>
 								{/each}
-								{#each series as s (s.teamKey)}
-									<path
-										d={s.path}
-										fill="none"
-										style:stroke={s.color}
-										stroke-width={hoveredTeam === s.teamKey ? 6 : 3}
-										stroke-opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey ? 0.18 : 0.9}
-										stroke-linejoin="round"
-										stroke-linecap="round"
-									/>
+								{#each chartTicks.xs as tick (tick.week)}
+									<span class="axis week-label" style:left={pctX(tick.x)}>Wk {tick.week}</span>
 								{/each}
-							</svg>
-							{#each chartTicks.ys as tick (tick.rank)}
-								<span class="axis rank-label" style:top={pctY(tick.y)}>#{tick.rank}</span>
-							{/each}
-							{#each chartTicks.xs as tick (tick.week)}
-								<span class="axis week-label" style:left={pctX(tick.x)}>Wk {tick.week}</span>
-							{/each}
-							<!-- Each line ends in its manager's picture (an initial when there
+								<!-- Each line ends in its manager's picture (an initial when there
 							     is none), ringed in the line's color. Hovering one highlights
 							     its line. -->
+								{#each series as s (s.teamKey)}
+									<span
+										class="end"
+										role="presentation"
+										title="{s.managerName ?? 'Unknown manager'}: #{s.finalRank}"
+										style:left={pctX(s.end.x)}
+										style:top={pctY(s.end.y)}
+										style:opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey ? 0.35 : 1}
+										onmouseenter={() => (hoveredTeam = s.teamKey)}
+										onmouseleave={() => (hoveredTeam = null)}
+									>
+										<Avatar name={s.managerName ?? ''} size={26} ring={2.5} ringColor={s.color} />
+									</span>
+								{/each}
+							</div>
+						</div>
+						<div class="legend" role="group" aria-label="Legend">
 							{#each series as s (s.teamKey)}
-								<span
-									class="end"
-									role="presentation"
-									title="{s.managerName ?? 'Unknown manager'}: #{s.finalRank}"
-									style:left={pctX(s.end.x)}
-									style:top={pctY(s.end.y)}
-									style:opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey ? 0.35 : 1}
+								<button
+									type="button"
+									class:on={hoveredTeam === s.teamKey}
 									onmouseenter={() => (hoveredTeam = s.teamKey)}
 									onmouseleave={() => (hoveredTeam = null)}
+									onfocus={() => (hoveredTeam = s.teamKey)}
+									onblur={() => (hoveredTeam = null)}
+									onclick={() => (hoveredTeam = s.teamKey)}
 								>
-									<Avatar name={s.managerName ?? ''} size={26} ring={2.5} ringColor={s.color} />
-								</span>
+									<span class="dot" style:background={s.color}></span>
+									<span class="legend-name">{s.managerName ?? 'Unknown manager'}</span>
+									<span class="legend-rank">#{s.finalRank}</span>
+								</button>
 							{/each}
 						</div>
 					</div>
-					<div class="legend" role="group" aria-label="Legend">
-						{#each series as s (s.teamKey)}
-							<button
-								type="button"
-								class:on={hoveredTeam === s.teamKey}
-								onmouseenter={() => (hoveredTeam = s.teamKey)}
-								onmouseleave={() => (hoveredTeam = null)}
-								onfocus={() => (hoveredTeam = s.teamKey)}
-								onblur={() => (hoveredTeam = null)}
-								onclick={() => (hoveredTeam = s.teamKey)}
-							>
-								<span class="dot" style:background={s.color}></span>
-								<span class="legend-name">{s.managerName ?? 'Unknown manager'}</span>
-								<span class="legend-rank">#{s.finalRank}</span>
-							</button>
-						{/each}
-					</div>
-				</div>
-			</Card>
-		</div>
-	{/if}
+				</Card>
+			</div>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -559,6 +572,20 @@
 
 	.first :global(.retry) {
 		margin-top: 14px;
+	}
+
+	.results {
+		transition: opacity 120ms ease;
+	}
+
+	.results.stale {
+		opacity: 0.55;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.results {
+			transition: none;
+		}
 	}
 
 	/* ---------- S5.2 Callouts ---------- */

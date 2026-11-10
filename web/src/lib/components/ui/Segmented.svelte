@@ -122,7 +122,6 @@
 		}
 
 		.size-toggle button {
-			min-height: 44px;
 			font-size: 14px;
 		}
 	}

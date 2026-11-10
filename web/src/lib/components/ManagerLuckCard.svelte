@@ -40,6 +40,11 @@
 	const seasons = $derived(manager?.luckSeasons ?? 0);
 	const latest = $derived(manager?.latestSeason ?? null);
 
+	// A manager in their first season has no finished season yet (G8 keeps the
+	// live one out of career), so the count drops rather than reading "0 seasons".
+	const careerCompact = $derived(seasons > 0 ? `Career, ${seasonCount(seasons)}` : 'Career');
+	const careerFull = $derived(seasons > 0 ? `Career · ${seasonCount(seasons)}` : 'Career');
+
 	function oneplace(value: number | null | undefined): string | null {
 		return value == null || !Number.isFinite(value) ? null : value.toFixed(1);
 	}
@@ -47,7 +52,8 @@
 
 {#snippet luck(value: number | null | undefined)}
 	{@const text = formatLuck(value, 1)}
-	{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(value, 1)}">{text} W</span>{/if}
+	{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(value, 1)}">{text} W</span
+		>{/if}
 {/snippet}
 
 {#snippet number(value: number | null | undefined)}
@@ -56,16 +62,25 @@
 {/snippet}
 
 {#if shape === 'compact'}
-	<Card tone="pennant" title="Expected wins & luck" level={3} titleSize={24} headGap={4} class="luck-card compact">
+	<Card
+		tone="pennant"
+		title="Expected wins & luck"
+		level={3}
+		titleSize={24}
+		headGap={4}
+		class="luck-card compact"
+	>
 		<p class="intro">Regular season. Luck is the gap between wins and expected wins.</p>
 		<div class="row">
-			<span>Career, {seasonCount(seasons)}</span>
+			<span>{careerCompact}</span>
 			<b>{@render luck(manager?.careerLuckFactor)}</b>
 		</div>
 		{#if current}
 			<div class="row">
 				<span
-					>{current.seasonYear}, {current.final ? 'final' : `through week ${current.throughWeek}`}</span
+					>{current.seasonYear}, {current.final
+						? 'final'
+						: `through week ${current.throughWeek}`}</span
 				>
 				<b>{@render luck(current.luckFactor)}</b>
 			</div>
@@ -76,7 +91,8 @@
 				</div>
 			{:else if !current.final}
 				<div class="row">
-					<span>Playoff odds</span>
+					<!-- G8 keeps the ⓘ the old card had, though the board doesn't draw it. -->
+					<span><StatTip metricId="playoff_probability" label="Playoff odds" /></span>
 					<b
 						>{#if current.playoffOdds == null}<EmptyValue text="Unknown" />{:else}{Math.round(
 								current.playoffOdds * 100
@@ -97,8 +113,10 @@
 		</p>
 		<div class="boxes">
 			<div class="box">
-				<div class="span">Career · {seasonCount(seasons)}</div>
-				<div class="line first"><span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b></div>
+				<div class="span">{careerFull}</div>
+				<div class="line first">
+					<span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b>
+				</div>
 				<div class="line">
 					<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
 						>{@render number(manager?.careerPythagoreanWins)}</b
@@ -111,7 +129,9 @@
 					<div class="span">
 						{current.seasonYear} · {current.final ? 'final' : `thru wk ${current.throughWeek}`}
 					</div>
-					<div class="line first"><span>Wins</span><b>{@render number(current.regularSeasonWins)}</b></div>
+					<div class="line first">
+						<span>Wins</span><b>{@render number(current.regularSeasonWins)}</b>
+					</div>
 					<div class="line">
 						<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
 							>{@render number(current.pythagoreanWins)}</b
