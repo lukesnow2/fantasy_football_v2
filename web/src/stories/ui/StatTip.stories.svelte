@@ -9,6 +9,11 @@
 	const { Story } = defineMeta({ title: 'UI/StatTip', component: StatTip, tags: ['autodocs'] });
 </script>
 
+<script>
+	// The phone story's table edge, for the card to span.
+	let spanEl = $state();
+</script>
+
 <Story name="Closed">
 	{#snippet template()}
 		<span class="header-label"><StatTip metricId="luck_factor" label="Luck" /></span>
@@ -45,6 +50,28 @@
 		<p style="font-size: 15px">
 			<StatTip metricId="not_in_the_dictionary" label="Mystery stat" /> shows its label and no ⓘ.
 		</p>
+	{/snippet}
+</Story>
+
+<Story name="Open as Power Rankings draws Luck">
+	{#snippet template()}
+		<div style="min-height: 360px; padding-left: 320px">
+			<span class="header-label"
+				><StatTip metricId="luck_factor" label="Luck" endOffset={40} topOffset={26} open /></span
+			>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Spanning a table on phones">
+	{#snippet template()}
+		<div style="max-width: 328px; min-height: 380px">
+			<div bind:this={spanEl} style="border-bottom: 2px solid var(--color-ink); text-align: right">
+				<span class="header-label"
+					><StatTip metricId="luck_factor" label="Luck" spanOf={spanEl} phoneTarget open /></span
+				>
+			</div>
+		</div>
 	{/snippet}
 </Story>
 

@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
-import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
+import type { SeasonLuck } from '$lib/manager-luck';
+import { summarizeManagerLuck } from '$lib/utils/power-rankings';
 import { getSeasonOdds } from '$lib/server/playoff-odds-service';
 
 /**
@@ -278,7 +279,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			),
 			// Starter points per FAAB dollar; null for a manager who never paid for a claim.
 			faabEfficiencyRating: num(mgr.faab_efficiency_rating ?? mgr.faabEfficiencyRating),
-			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
+			// Career luck counts finished seasons only (G8); the live one has its own row.
+			...summarizeManagerLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
 			seasonConsistencyScore: num(mgr.season_consistency_score ?? mgr.seasonConsistencyScore),
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,

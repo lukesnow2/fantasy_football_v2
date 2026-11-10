@@ -107,6 +107,33 @@
 	{/snippet}
 </Story>
 
+<Story name="Phone sizes (Power Rankings)">
+	{#snippet template()}
+		<div style="max-width: 328px">
+			<DataTable
+				label="Luck"
+				columns={luckColumns}
+				rows={luckRows}
+				rowPadding={4}
+				columnGap={10}
+				fontSize={14}
+				headerHeight={44}
+			>
+				{#snippet header(column)}
+					{#if column.key === 'luck'}<StatTip
+							metricId="luck_factor"
+							label="Luck"
+							phoneTarget
+						/>{:else}{column.label}{/if}
+				{/snippet}
+				{#snippet cell(row, column)}
+					<span style="display: flex; align-items: center; min-height: 44px">{row[column.key]}</span>
+				{/snippet}
+			</DataTable>
+		</div>
+	{/snippet}
+</Story>
+
 <Story name="Header with a StatTip">
 	{#snippet template()}
 		<div style="max-width: 360px">

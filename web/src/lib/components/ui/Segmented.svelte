@@ -1,7 +1,9 @@
 <script lang="ts" generics="Value extends string | number">
 	/**
-	 * The season and week selector (System board, "Season / week selector"): a
-	 * wash well with 3px of padding and 2px gaps, holding 36px buttons. The chosen
+	 * The season and week selector (Power Rankings board's week control; the
+	 * System board's sample draws it 2px shorter): a wash well with 3px of
+	 * padding, 10px corners and 2px gaps, holding 38px buttons, 44px below 640px
+	 * so each is a full touch target. The chosen
 	 * one is white with a 1px line border, ink, weight 700; the rest are ink-2 on
 	 * transparent, weight 600.
 	 *
@@ -89,7 +91,7 @@
 
 	button {
 		flex: none;
-		min-height: 36px;
+		min-height: 38px;
 		padding: 0 14px;
 		border: 0;
 		border-radius: var(--radius-control);
@@ -115,8 +117,11 @@
 	}
 
 	@media (max-width: 639.98px) {
-		.size-toggle button {
+		button {
 			min-height: 44px;
+		}
+
+		.size-toggle button {
 			font-size: 14px;
 		}
 	}

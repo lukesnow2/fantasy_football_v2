@@ -1,134 +1,267 @@
 <script lang="ts">
-	// Expected (Pythagorean) wins and luck for one manager: career, and the
-	// season being played. The numbers are the power rankings' own, carried
-	// over by /api/managers/performance, so the two pages always agree.
-	import { Dices } from 'lucide-svelte';
-	import MetricHelp from '$lib/components/MetricHelp.svelte';
-	import { formatLuck, getLuckColor } from '$lib/utils/managerUtils';
+	/**
+	 * Expected (Pythagorean) wins and luck for one manager: career, and the
+	 * season being played. The numbers are the power rankings' own, carried over
+	 * by /api/managers/performance, so the pages always agree. Career counts
+	 * finished seasons only; the live season has its own row (G8).
+	 *
+	 * - `variant="compact"` (Managers board): a pennant-tint card of rows, with
+	 *   the playoff line while the season runs.
+	 * - `variant="full"` (Manager profile Overview board): a white card with a
+	 *   career box and a season box, and no playoff line.
+	 *
+	 * `stacked` is left over from the old card. It still compiles and means
+	 * `variant="full"`, so callers keep working until WP6 moves them.
+	 */
+	import { Card, EmptyValue, StatTip } from '$lib/components/ui';
+	import { formatLuck, luckTone, seasonCount } from '$lib/utils/power-rankings';
+	import type { CurrentSeasonLuck } from '$lib/manager-luck';
 
-	export let manager: any;
-	// Stack career over this season, for narrow columns.
-	export let stacked = false;
+	interface LuckSummary {
+		careerRegularSeasonWins?: number | null;
+		careerPythagoreanWins?: number | null;
+		careerLuckFactor?: number | null;
+		luckSeasons?: number | null;
+		latestSeason?: number | null;
+		currentSeason?: CurrentSeasonLuck | null;
+	}
 
-	$: current = manager?.currentSeason ?? null;
+	interface Props {
+		manager: LuckSummary | null | undefined;
+		variant?: 'compact' | 'full';
+		/** Deprecated: use `variant="full"`. */
+		stacked?: boolean;
+	}
 
-	function fixed(value: number | null | undefined, digits = 1): string {
-		return value == null ? '—' : value.toFixed(digits);
+	let { manager, variant = 'full', stacked = false }: Props = $props();
+
+	const shape = $derived(stacked ? 'full' : variant);
+	const current = $derived(manager?.currentSeason ?? null);
+	const seasons = $derived(manager?.luckSeasons ?? 0);
+	const latest = $derived(manager?.latestSeason ?? null);
+
+	// A manager in their first season has no finished season yet (G8 keeps the
+	// live one out of career), so the count drops rather than reading "0 seasons".
+	const careerCompact = $derived(seasons > 0 ? `Career, ${seasonCount(seasons)}` : 'Career');
+	const careerFull = $derived(seasons > 0 ? `Career · ${seasonCount(seasons)}` : 'Career');
+
+	function oneplace(value: number | null | undefined): string | null {
+		return value == null || !Number.isFinite(value) ? null : value.toFixed(1);
 	}
 </script>
 
-<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-6">
-	<h3 class="mb-1 flex items-center text-lg font-bold text-white">
-		<Dices class="mr-2 h-5 w-5 text-teal-400" />
-		Expected Wins &amp; Luck
-	</h3>
-	<p class="mb-4 text-xs text-slate-400">
-		Regular season. Expected wins come from points scored and allowed; luck is the gap.
-	</p>
+{#snippet luck(value: number | null | undefined)}
+	{@const text = formatLuck(value, 1)}
+	{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(value, 1)}">{text} W</span
+		>{/if}
+{/snippet}
 
-	<div class="grid grid-cols-1 gap-4 {stacked ? '' : 'sm:grid-cols-2'}">
-		<div class="space-y-2 rounded-lg bg-slate-900/30 p-4">
-			<div class="text-xs tracking-wide text-slate-400 uppercase">
-				Career{manager?.luckSeasons ? ` · ${manager.luckSeasons} seasons` : ''}
-			</div>
-			<div class="flex justify-between">
-				<span class="text-slate-400">Wins</span>
-				<span class="font-bold text-white tabular-nums"
-					>{fixed(manager?.careerRegularSeasonWins, 1)}</span
-				>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-slate-400">
-					<MetricHelp
-						metricId="pythagorean_wins"
-						position="left"
-						theme="dark"
-						className="text-slate-400"
-						showIcon={false}
-					>
-						Expected wins
-					</MetricHelp>
-				</span>
-				<span class="font-bold text-white tabular-nums"
-					>{fixed(manager?.careerPythagoreanWins, 1)}</span
-				>
-			</div>
-			<div class="flex justify-between">
-				<span class="text-slate-400">
-					<MetricHelp
-						metricId="luck_factor"
-						position="left"
-						theme="dark"
-						className="text-slate-400"
-						showIcon={false}
-					>
-						Luck
-					</MetricHelp>
-				</span>
-				<span class="font-bold tabular-nums {getLuckColor(manager?.careerLuckFactor)}">
-					{formatLuck(manager?.careerLuckFactor)} W
-				</span>
-			</div>
+{#snippet number(value: number | null | undefined)}
+	{@const text = oneplace(value)}
+	{#if text === null}<EmptyValue />{:else}{text}{/if}
+{/snippet}
+
+{#if shape === 'compact'}
+	<Card
+		tone="pennant"
+		title="Expected wins & luck"
+		level={3}
+		titleSize={24}
+		headGap={4}
+		class="luck-card compact"
+	>
+		<p class="intro">Regular season. Luck is the gap between wins and expected wins.</p>
+		<div class="row">
+			<span>{careerCompact}</span>
+			<b>{@render luck(manager?.careerLuckFactor)}</b>
 		</div>
-
-		<div class="space-y-2 rounded-lg bg-slate-900/30 p-4">
+		{#if current}
+			<div class="row">
+				<span
+					>{current.seasonYear}, {current.final
+						? 'final'
+						: `through week ${current.throughWeek}`}</span
+				>
+				<b>{@render luck(current.luckFactor)}</b>
+			</div>
+			{#if !current.final && current.inPlayoffs != null}
+				<div class="row">
+					<span>Playoffs</span>
+					<b>{current.inPlayoffs ? 'In the bracket' : 'Missed'}</b>
+				</div>
+			{:else if !current.final}
+				<div class="row">
+					<!-- G8 keeps the ⓘ the old card had, though the board doesn't draw it. -->
+					<span><StatTip metricId="playoff_probability" label="Playoff odds" /></span>
+					<b
+						>{#if current.playoffOdds == null}<EmptyValue text="Unknown" />{:else}{Math.round(
+								current.playoffOdds * 100
+							)}%{/if}</b
+					>
+				</div>
+			{/if}
+		{:else if latest != null}
+			<!-- Between seasons this is the season just ended; a manager who
+			     left the league gets this line, not their own last season. -->
+			<div class="row"><span>Didn't play in {latest}.</span></div>
+		{/if}
+	</Card>
+{:else}
+	<Card title="Expected wins & luck" headGap={6} class="luck-card full">
+		<p class="intro">
+			Regular season. Expected wins come from points scored and allowed; luck is the gap.
+		</p>
+		<div class="boxes">
+			<div class="box">
+				<div class="span">{careerFull}</div>
+				<div class="line first">
+					<span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b>
+				</div>
+				<div class="line">
+					<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
+						>{@render number(manager?.careerPythagoreanWins)}</b
+					>
+				</div>
+				<div class="big">{@render luck(manager?.careerLuckFactor)}</div>
+			</div>
 			{#if current}
-				<div class="text-xs tracking-wide text-slate-400 uppercase">
-					{current.seasonYear} · {current.final ? 'final' : `through week ${current.throughWeek}`}
-				</div>
-				<div class="flex justify-between">
-					<span class="text-slate-400">Wins</span>
-					<span class="font-bold text-white tabular-nums"
-						>{fixed(current.regularSeasonWins, 1)}</span
-					>
-				</div>
-				<div class="flex justify-between">
-					<span class="text-slate-400">Expected wins</span>
-					<span class="font-bold text-white tabular-nums">{fixed(current.pythagoreanWins, 1)}</span>
-				</div>
-				<div class="flex justify-between">
-					<span class="text-slate-400">Luck</span>
-					<span class="font-bold tabular-nums {getLuckColor(current.luckFactor)}"
-						>{formatLuck(current.luckFactor)} W</span
-					>
-				</div>
-				{#if current.inPlayoffs != null}
-					<div class="flex justify-between">
-						<span class="text-slate-400">Playoffs</span>
-						<span
-							class="font-bold tabular-nums {current.inPlayoffs ? 'text-blue-400' : 'text-red-400'}"
+				<div class="box">
+					<div class="span">
+						{current.seasonYear} · {current.final ? 'final' : `thru wk ${current.throughWeek}`}
+					</div>
+					<div class="line first">
+						<span>Wins</span><b>{@render number(current.regularSeasonWins)}</b>
+					</div>
+					<div class="line">
+						<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
+							>{@render number(current.pythagoreanWins)}</b
 						>
-							{current.inPlayoffs ? 'In the bracket' : 'Missed'}
-						</span>
 					</div>
-				{:else if !current.final}
-					<div class="flex justify-between">
-						<span class="text-slate-400">
-							<MetricHelp
-								metricId="playoff_probability"
-								position="left"
-								theme="dark"
-								className="text-slate-400"
-								showIcon={false}
-							>
-								Playoff odds
-							</MetricHelp>
-						</span>
-						<span class="font-bold text-blue-400 tabular-nums">
-							{current.playoffOdds == null ? '—' : `${Math.round(current.playoffOdds * 100)}%`}
-						</span>
-					</div>
-				{/if}
-			{:else}
-				<!-- Between seasons this is the season just ended; a manager who
-				     left the league gets this line, not their own last season. -->
-				<div class="text-xs tracking-wide text-slate-400 uppercase">
-					{manager?.latestSeason ?? 'This season'}
+					<div class="big">{@render luck(current.luckFactor)}</div>
 				</div>
-				<div class="text-sm text-slate-400">
-					{manager?.latestSeason ? `Didn't play in ${manager.latestSeason}.` : 'Not available.'}
+			{:else if latest != null}
+				<div class="box">
+					<div class="span">{latest}</div>
+					<p class="sat-out">Didn't play in {latest}.</p>
 				</div>
 			{/if}
 		</div>
-	</div>
-</div>
+	</Card>
+{/if}
+
+<style>
+	.intro {
+		margin: 0;
+	}
+
+	/* ---------- Compact (Managers board) ---------- */
+	:global(.luck-card.compact) .intro {
+		margin-bottom: 10px;
+		font-size: 13px;
+		color: var(--color-ink-brown);
+	}
+
+	.row {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 0;
+		font-size: 15px;
+		color: var(--color-ink);
+	}
+
+	.row + .row {
+		border-top: 1px solid var(--color-pennant-line);
+	}
+
+	.row b {
+		font-weight: 700;
+	}
+
+	:global(.luck-card.compact) .luck.up {
+		color: var(--color-field);
+	}
+
+	:global(.luck-card.compact) .luck.down {
+		color: var(--color-pennant-dark);
+	}
+
+	:global(.luck-card.compact) .luck.flat {
+		color: var(--color-ink);
+	}
+
+	/* ---------- Full (profile Overview board) ---------- */
+	:global(.luck-card.full) .intro {
+		margin-bottom: 14px;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.boxes {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.box {
+		border: 1px solid var(--color-line);
+		border-radius: 10px;
+		padding: 14px 16px;
+		min-width: 0;
+	}
+
+	.span {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
+
+	.line {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		margin-top: 4px;
+		font-size: 14px;
+	}
+
+	.line.first {
+		margin-top: 8px;
+	}
+
+	.line > span {
+		color: var(--color-ink-2);
+	}
+
+	.line b {
+		font-weight: 700;
+		color: var(--color-ink);
+	}
+
+	.big {
+		margin-top: 8px;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 28px;
+	}
+
+	.sat-out {
+		margin: 8px 0 0;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	:global(.luck-card.full) .luck.up {
+		color: var(--color-field);
+	}
+
+	:global(.luck-card.full) .luck.down {
+		color: var(--color-pennant);
+	}
+
+	:global(.luck-card.full) .luck.flat {
+		color: var(--color-ink);
+	}
+</style>
