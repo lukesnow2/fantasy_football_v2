@@ -65,7 +65,7 @@ describe('rosterCounts', () => {
 });
 
 describe('railOrder', () => {
-	it('keeps active managers, by titles then win rate', () => {
+	it('lists active managers by titles then win rate, then alumni the same way', () => {
 		const order = railOrder([
 			mgr('Gabe the Younger', 2026, 3, 0.623),
 			mgr('Trevor', 2026, 7, 0.563),
@@ -73,9 +73,23 @@ describe('railOrder', () => {
 			mgr('Nick', 2026, 3, 0.486),
 			mgr('Erik Snow', 2026, 0, 0.5),
 			mgr('Bobby', 2018, 0, 0.429),
+			mgr('Justin', 2009, 1, 0.55),
 			mgr('Craig', 2026, 0, 0.459)
-		]).map((m) => m.managerName);
-		expect(order).toEqual(['Trevor', 'Gabe the Younger', 'Israel', 'Nick', 'Erik Snow', 'Craig']);
+		]).map((e) => [e.manager.managerName, e.alum]);
+		expect(order).toEqual([
+			['Trevor', false],
+			['Gabe the Younger', false],
+			['Israel', false],
+			['Nick', false],
+			['Erik Snow', false],
+			['Craig', false],
+			['Justin', true],
+			['Bobby', true]
+		]);
+	});
+
+	it('is empty with no seasons', () => {
+		expect(railOrder([])).toEqual([]);
 	});
 });
 

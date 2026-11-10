@@ -160,21 +160,31 @@ export function rosterCounts(rankings: RankingLike[]): { active: number; allTime
 	};
 }
 
+/** A rail entry: the manager, and whether they've left the league. */
+export interface RailEntry<R> {
+	manager: R;
+	/** Their last season is before the league's latest: a league alum. */
+	alum: boolean;
+}
+
 /**
- * The rail: active managers only, by titles, then career win rate, both
- * descending. Former managers stay reachable by URL (D6).
+ * The rail: active managers by titles, then career win rate, both
+ * descending, then former managers in the same order, kept as an honor and
+ * marked as alumni (Luke, 2026-11-10; the board draws only the active ten).
  */
-export function railOrder<R extends RankingLike>(rankings: R[]): R[] {
+export function railOrder<R extends RankingLike>(rankings: R[]): RailEntry<R>[] {
 	const named = rankings.filter((r) => r.managerName);
 	const seasons = named.map((r) => Number(r.lastSeason)).filter(Number.isFinite);
 	if (seasons.length === 0) return [];
 	const latest = Math.max(...seasons);
-	return named
-		.filter((r) => Number(r.lastSeason) === latest)
-		.sort(
-			(a, b) =>
-				n(b.totalChampionships) - n(a.totalChampionships) || n(b.winPercentage) - n(a.winPercentage)
-		);
+	const byRecord = (a: R, b: R) =>
+		n(b.totalChampionships) - n(a.totalChampionships) || n(b.winPercentage) - n(a.winPercentage);
+	const active = named.filter((r) => Number(r.lastSeason) === latest).sort(byRecord);
+	const alumni = named.filter((r) => Number(r.lastSeason) !== latest).sort(byRecord);
+	return [
+		...active.map((manager) => ({ manager, alum: false })),
+		...alumni.map((manager) => ({ manager, alum: true }))
+	];
 }
 
 export interface RankItem {

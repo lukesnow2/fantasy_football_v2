@@ -85,7 +85,7 @@
 	const rankings = $derived(
 		((managerData?.data?.rankings ?? []) as any[]).filter((m) => m.managerName != null)
 	);
-	const rail = $derived(railOrder(rankings));
+	const rail = $derived(railOrder(rankings).map((e) => ({ ...e.manager, alum: e.alum })));
 	const counts = $derived(rosterCounts(rankings));
 
 	/** `?manager=` when it names a manager, else the signed-in user's, else the rail's first. */
@@ -96,7 +96,7 @@
 		const asked = page.url.searchParams.get('manager');
 		if (has(asked)) return asked as string;
 		if (has(data.userManagerName)) return data.userManagerName as string;
-		return railOrder(all)[0]?.managerName ?? all[0]?.managerName ?? '';
+		return railOrder(all)[0]?.manager.managerName ?? all[0]?.managerName ?? '';
 	}
 
 	const current = $derived(rankings.find((m) => m.managerName === selectedName) ?? null);
@@ -302,6 +302,7 @@
 									pole={on ? 'white' : 'ink'}
 									flag={on ? 'pennant-light' : 'pennant'}
 								/>
+								{#if m.alum}<span class="alum">League alum</span>{/if}
 							</span>
 						</span>
 					</a>
@@ -589,8 +590,24 @@
 
 	.rail-flags {
 		display: flex;
+		align-items: center;
+		gap: 6px;
 		margin-top: 3px;
 		min-height: 13px;
+	}
+
+	/* Former managers stay on the rail as an honor (Luke, 2026-11-10). */
+	.alum {
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 13px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
+
+	.rail-item.on .alum {
+		color: var(--color-on-clubhouse-2);
 	}
 
 	.content {
