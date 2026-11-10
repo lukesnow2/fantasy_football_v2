@@ -4,10 +4,11 @@ import { startHistory } from '$lib/start-history';
 
 /**
  * Against the dev database (WP4 S4.2): 3-0 after week 3 gives 32 teams, 30 of
- * them made the playoffs and four won the title, since 2005. Skipped where no database is configured, as on
+ * them made the playoffs, since 2005. Skipped where no database is configured, as on
  * CI; the counting itself is covered in start-history.test.ts.
  */
-const url = process.env.DATABASE_URL || loadEnv('development', process.cwd(), '').DATABASE_URL || '';
+const url =
+	process.env.DATABASE_URL || loadEnv('development', process.cwd(), '').DATABASE_URL || '';
 const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
 // Only ever the local dev database: a remote URL in .env skips the test.
 if (local) process.env.DATABASE_URL = url;
@@ -19,7 +20,6 @@ describe.skipIf(!local)('getStartHistoryRows against the dev database', () => {
 		expect(startHistory(rows, { wins: 3, losses: 0, ties: 0 })).toMatchObject({
 			count: 32,
 			madePlayoffs: 30,
-			wonTitle: 4,
 			firstSeason: 2005
 		});
 	});

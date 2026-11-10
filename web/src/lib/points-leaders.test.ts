@@ -66,6 +66,8 @@ describe('pointsLeaderTile', () => {
 		expect(sub(7, 9)).toBe('Since 2005. Seven made the playoffs.');
 		expect(sub(9, 9)).toBe('Since 2005. All nine made the playoffs.');
 		expect(sub(0, 2)).toBe('Since 2005. None made the playoffs.');
+		expect(sub(2, 2)).toBe('Since 2005. Both made the playoffs.');
+		expect(sub(1, 1)).toBe('Since 2005. The leader made the playoffs.');
 	});
 
 	it('draws nothing without finished seasons', () => {

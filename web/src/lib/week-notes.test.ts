@@ -215,8 +215,7 @@ describe('rough-start-history', () => {
 			wins: 0,
 			losses: 2,
 			ties: 0,
-			madePlayoffs: i < made,
-			wonTitle: false
+			madePlayoffs: i < made
 		}));
 	const managers = league({ F: { wins: 0, losses: 2 }, A: { wins: 2, losses: 0 } });
 

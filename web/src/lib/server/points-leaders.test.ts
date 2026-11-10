@@ -17,7 +17,9 @@ if (local) process.env.DATABASE_URL = url;
 describe.skipIf(!local)('getPointsLeaderRows against the dev database', () => {
 	it('gives 8 of 21, all 21 in the playoffs, since 2005', async () => {
 		const { getPointsLeaderRows } = await import('./points-leaders');
-		expect(pointsLeaderHistory(await getPointsLeaderRows())).toEqual({
+		// Through 2025 only, so the test still holds once 2026 finishes.
+		const rows = (await getPointsLeaderRows()).filter((r) => r.season <= 2025);
+		expect(pointsLeaderHistory(rows)).toEqual({
 			seasons: 21,
 			madePlayoffs: 21,
 			wonTitle: 8,

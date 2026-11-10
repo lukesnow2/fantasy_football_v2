@@ -71,9 +71,16 @@ function capitalize(text: string): string {
  */
 export function pointsLeaderTile(history: PointsLeaderHistory): HistoryTile | null {
 	if (history.seasons === 0 || history.firstSeason === null) return null;
+	// "All one" and "All two" don't read, so one season and two get their own words.
+	const all =
+		history.seasons === 1
+			? 'The leader'
+			: history.seasons === 2
+				? 'Both'
+				: `All ${countWord(history.seasons)}`;
 	const made =
 		history.madePlayoffs === history.seasons
-			? `All ${countWord(history.seasons)} made the playoffs.`
+			? `${all} made the playoffs.`
 			: history.madePlayoffs === 0
 				? 'None made the playoffs.'
 				: `${capitalize(countWord(history.madePlayoffs))} made the playoffs.`;

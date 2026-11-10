@@ -6,17 +6,16 @@ function row(
 	wins: number,
 	losses: number,
 	ties = 0,
-	made = false,
-	won = false
+	made = false
 ): StartHistoryRow {
-	return { season, managerName: 'Someone', wins, losses, ties, madePlayoffs: made, wonTitle: won };
+	return { season, managerName: 'Someone', wins, losses, ties, madePlayoffs: made };
 }
 
 const rows: StartHistoryRow[] = [
-	row(2005, 3, 0, 0, true, true),
+	row(2005, 3, 0, 0, true),
 	row(2006, 3, 0, 0, true),
 	row(2007, 3, 0, 0, false),
-	row(2008, 3, 0, 1, true, true),
+	row(2008, 3, 0, 1, true),
 	row(2009, 2, 1),
 	row(2024, 0, 3)
 ];
@@ -25,16 +24,14 @@ describe('startHistory', () => {
 	it('counts an exact record match only: 3-0 is not 3-0-1', () => {
 		expect(startHistory(rows, { wins: 3, losses: 0, ties: 0 })).toMatchObject({
 			count: 3,
-			madePlayoffs: 2,
-			wonTitle: 1
+			madePlayoffs: 2
 		});
 		expect(startHistory(rows, { wins: 3, losses: 0, ties: 1 }).count).toBe(1);
 	});
 
-	it('reports the first and last seasons the rows cover, matched or not', () => {
+	it('reports the first season the rows cover, matched or not', () => {
 		expect(startHistory(rows, { wins: 3, losses: 0, ties: 0 })).toMatchObject({
-			firstSeason: 2005,
-			lastSeason: 2024
+			firstSeason: 2005
 		});
 	});
 
@@ -42,9 +39,7 @@ describe('startHistory', () => {
 		expect(startHistory([], { wins: 1, losses: 0, ties: 0 })).toEqual({
 			count: 0,
 			madePlayoffs: 0,
-			wonTitle: 0,
-			firstSeason: null,
-			lastSeason: null
+			firstSeason: null
 		});
 	});
 });
