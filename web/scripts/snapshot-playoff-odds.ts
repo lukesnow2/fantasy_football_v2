@@ -27,6 +27,7 @@ import { execSync } from 'node:child_process';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import {
+	PARAMS,
 	SIMS,
 	getSeasonOdds,
 	latestSeason,
@@ -34,7 +35,6 @@ import {
 	type SeasonOdds
 } from '$lib/server/playoff-odds-service';
 import { modelVersion } from '$lib/server/playoff-odds-version';
-import { DEFAULT_PARAMS } from '$lib/playoff-odds';
 
 type Row = Record<string, unknown>;
 type Available = Extract<SeasonOdds, { available: true }>;
@@ -84,7 +84,7 @@ async function saveSnapshot(
 			eliminated: t.eliminated
 		};
 	});
-	const params = { ...DEFAULT_PARAMS };
+	const params = { ...PARAMS };
 
 	return db.transaction(async (tx) => {
 		const inserted = (await tx.execute(sql`
@@ -123,7 +123,7 @@ async function main() {
 	const newest = await latestSeason();
 	const season = Number(arg('--season') ?? newest);
 	if (!Number.isInteger(season)) throw new Error(`Bad --season: ${arg('--season')}`);
-	const version = modelVersion({ sims: SIMS, seed: oddsSeed });
+	const version = modelVersion({ sims: SIMS, seed: oddsSeed, params: PARAMS });
 	const sha = gitSha();
 
 	const latest = await getSeasonOdds(season);

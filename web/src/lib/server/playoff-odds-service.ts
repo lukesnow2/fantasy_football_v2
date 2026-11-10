@@ -2,8 +2,10 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { getLeagueFormat } from '$lib/server/league-format';
 import {
+	DEFAULT_PARAMS,
 	gamesFingerprint,
 	simulatePlayoffOdds,
+	type ModelParams,
 	type OddsResult,
 	type PlayedGame,
 	type TeamOdds
@@ -24,6 +26,9 @@ import {
 type Row = Record<string, unknown>;
 
 export const SIMS = 10000;
+
+/** The model parameters the site runs with. */
+export const PARAMS: ModelParams = DEFAULT_PARAMS;
 
 /**
  * The simulation seed for a season as it stood after `playedWeeks`: fixed, so
@@ -156,7 +161,8 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 				regularSeasonWeeks,
 				playoffTeams,
 				sims: SIMS,
-				seed
+				seed,
+				params: PARAMS
 			});
 		sims = { now: run(playedWeeks), prev: playedWeeks > 0 ? run(playedWeeks - 1) : null };
 		// Superseded fingerprints are never read again; keep the map small.
