@@ -23,7 +23,13 @@ import {
 /** Rows come back camel-cased with numerics as strings; read them loosely. */
 type Row = Record<string, unknown>;
 
-const SIMS = 10000;
+export const SIMS = 10000;
+
+/**
+ * The simulation seed for a season as it stood after `playedWeeks`: fixed, so
+ * the same games always give the same odds.
+ */
+export const oddsSeed = (season: number, playedWeeks: number): number => season * 100 + playedWeeks;
 
 export interface SeasonTeamOdds extends TeamOdds {
 	teamName: string;
@@ -45,6 +51,8 @@ export type SeasonOdds =
 			playoffTeams: number;
 			byes: number;
 			leagueAverage: number;
+			/** Every game and score the forecast saw (see gamesFingerprint). */
+			gamesFingerprint: string;
 			teams: SeasonTeamOdds[];
 	  };
 
@@ -133,13 +141,14 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 	const { playoffTeams, source: formatSource } = format;
 
 	const keys = teams.map((t) => t.teamKey);
-	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${gamesFingerprint(games)}`;
+	const fingerprint = gamesFingerprint(games);
+	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}`;
 	let sims = cache.get(key);
 	if (!sims) {
 		// One seed for both runs: the engine draws each week's randomness from
 		// its own stream, so the two runs share draws for every week both
 		// simulate and the change mostly reflects last week's results.
-		const seed = season * 100 + playedWeeks;
+		const seed = oddsSeed(season, playedWeeks);
 		const run = (through: number): OddsResult =>
 			simulatePlayoffOdds({
 				teamKeys: keys,
@@ -173,6 +182,7 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 		playoffTeams: now.playoffTeams,
 		byes: now.byes,
 		leagueAverage: now.leagueAverage,
+		gamesFingerprint: fingerprint,
 		teams: now.teams.map((t) => ({
 			...t,
 			teamName: info.get(t.teamKey)?.teamName ?? '',

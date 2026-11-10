@@ -136,6 +136,28 @@ jobs:
           fi
           python scripts/incremental_load.py $ARGS
 
+      # Saves the week's playoff-odds forecast (model.playoff_odds_snapshots,
+      # migration 015) so it can be graded later. It runs the site's own odds
+      # code, so it needs the web app's dependencies. Idempotent: a run that
+      # loaded nothing new saves nothing. Node 24 matches the Mac that rebuilds
+      # past seasons, so both compute the same model version
+      # (web/src/lib/server/playoff-odds-version.ts).
+      - uses: actions/setup-node@v4
+        if: github.event_name != 'schedule' || github.event.schedule != '0 15 1 * *'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Snapshot playoff odds
+        if: github.event_name != 'schedule' || github.event.schedule != '0 15 1 * *'
+        working-directory: web
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run odds:snapshot
+
       - name: Upload run snapshot
         if: always()
         uses: actions/upload-artifact@v4
