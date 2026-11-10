@@ -222,7 +222,8 @@
 	const h2h = $derived(h2hRows(managerData?.data?.head_to_head ?? []));
 	const tiles = $derived(h2hTiles(h2h, titleGames));
 	// The league's latest season, as far as this page can see: a manager who
-	// left before it gets "Left after {season}".
+	// left before it is marked "League alum", as on the Managers rail (Luke,
+	// 2026-11-10; the board wrote "Left after {season}").
 	const leagueLatest = $derived(
 		Math.max(
 			Number(manager?.latestSeason ?? 0),
@@ -637,7 +638,7 @@
 							{#snippet cell(row, column)}
 								{@const left =
 									row.opponentLastSeason != null && row.opponentLastSeason < leagueLatest
-										? `Left after ${row.opponentLastSeason}`
+										? 'League alum'
 										: null}
 								{#if column.key === 'opponent'}
 									{#if phone}

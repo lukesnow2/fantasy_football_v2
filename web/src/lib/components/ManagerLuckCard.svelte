@@ -15,6 +15,7 @@
 	 */
 	import { Card, EmptyValue, StatTip } from '$lib/components/ui';
 	import { formatLuck, luckTone, seasonCount } from '$lib/utils/power-rankings';
+	import { formatOdds } from '$lib/utils/managers';
 	import type { CurrentSeasonLuck } from '$lib/manager-luck';
 
 	interface LuckSummary {
@@ -95,9 +96,9 @@
 					<!-- G8 keeps the ⓘ the old card had, though the board doesn't draw it. -->
 					<span><StatTip metricId="playoff_probability" label="Playoff odds" /></span>
 					<b
-						>{#if current.playoffOdds == null}<EmptyValue text="Unknown" />{:else}{Math.round(
-								current.playoffOdds * 100
-							)}%{/if}</b
+						>{#if current.playoffOdds == null}<EmptyValue text="Unknown" />{:else}{formatOdds(
+								current.playoffOdds
+							)}{/if}</b
 					>
 				</div>
 			{/if}

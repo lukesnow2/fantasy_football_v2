@@ -103,6 +103,19 @@ export function formatPercent1(value: number): string {
 	return `${(value * 100).toFixed(1)}%`;
 }
 
+/**
+ * Playoff odds to one place (Luke, 2026-11-10: a statistic isn't rounded to a
+ * whole number). The odds are a share of 10,000 simulated seasons, so 100%
+ * and 0% print only when every season agrees; 99.96% reads "99.9%", never
+ * "100.0%", and 0.04% reads "0.1%".
+ */
+export function formatOdds(odds: number): string {
+	if (odds >= 1) return '100%';
+	if (odds <= 0) return '0%';
+	const pct = Math.min(99.9, Math.max(0.1, Math.round(odds * 1000) / 10));
+	return `${pct.toFixed(1)}%`;
+}
+
 /** A whole number with thousands: 42974. */
 export function formatWhole(value: number): string {
 	return Math.round(value).toLocaleString('en-US');
@@ -484,7 +497,7 @@ export function seasonOutcome(
 		}
 		return season.playoffOdds != null
 			? {
-					label: `In progress · ${Math.round(season.playoffOdds * 100)}% playoff odds`,
+					label: `In progress · ${formatOdds(season.playoffOdds)} playoff odds`,
 					tag: 'in-progress',
 					champion: false
 				}

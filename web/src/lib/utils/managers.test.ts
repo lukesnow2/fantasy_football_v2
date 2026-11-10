@@ -4,6 +4,7 @@ import {
 	bestWorstSeason,
 	careerMarks,
 	draftRange,
+	formatOdds,
 	formatPct3,
 	formatSigned,
 	h2hCaption,
@@ -175,6 +176,16 @@ describe('words and numbers', () => {
 		expect(formatPct3(0.6251)).toBe('.625');
 		expect(formatPct3(1)).toBe('1.000');
 		expect(formatPct3(0)).toBe('.000');
+	});
+
+	it('prints playoff odds to one place, and 100% or 0% only when certain', () => {
+		expect(formatOdds(0.8019)).toBe('80.2%');
+		expect(formatOdds(0.614)).toBe('61.4%');
+		expect(formatOdds(0.5)).toBe('50.0%');
+		expect(formatOdds(0.9996)).toBe('99.9%');
+		expect(formatOdds(0.0004)).toBe('0.1%');
+		expect(formatOdds(1)).toBe('100%');
+		expect(formatOdds(0)).toBe('0%');
 	});
 
 	it('signs a differential with thousands', () => {
@@ -377,7 +388,7 @@ describe('seasonOutcome', () => {
 	it('shows odds while the regular season runs', () => {
 		expect(
 			seasonOutcome(season(2026, 2, 1, 0, { inProgress: true, playoffOdds: 0.614 }))
-		).toMatchObject({ label: 'In progress · 61% playoff odds', tag: 'in-progress' });
+		).toMatchObject({ label: 'In progress · 61.4% playoff odds', tag: 'in-progress' });
 		expect(seasonOutcome(season(2026, 2, 1, 0, { inProgress: true })).label).toBe('In progress');
 	});
 
