@@ -67,6 +67,7 @@
 		title="Expected wins & luck"
 		level={3}
 		titleSize={24}
+		phoneTitleSize={18}
 		headGap={4}
 		class="luck-card compact"
 	>
@@ -118,7 +119,7 @@
 					<span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b>
 				</div>
 				<div class="line">
-					<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
+					<span><StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline" /></span><b
 						>{@render number(manager?.careerPythagoreanWins)}</b
 					>
 				</div>
@@ -133,9 +134,8 @@
 						<span>Wins</span><b>{@render number(current.regularSeasonWins)}</b>
 					</div>
 					<div class="line">
-						<span><StatTip metricId="pythagorean_wins" label="Expected" /></span><b
-							>{@render number(current.pythagoreanWins)}</b
-						>
+						<span><StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline" /></span
+						><b>{@render number(current.pythagoreanWins)}</b>
 					</div>
 					<div class="big">{@render luck(current.luckFactor)}</div>
 				</div>
@@ -263,5 +263,29 @@
 
 	:global(.luck-card.full) .luck.flat {
 		color: var(--color-ink);
+	}
+
+	/* ---------- Phones (WP6 S6.9) ---------- */
+	@media (max-width: 639.98px) {
+		:global(.luck-card.compact) .intro {
+			line-height: 1.5;
+		}
+
+		:global(.luck-card.full) .intro {
+			margin-bottom: 12px;
+		}
+
+		.boxes {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 10px;
+		}
+
+		.box {
+			padding: 12px;
+		}
+
+		.big {
+			font-size: 24px;
+		}
 	}
 </style>
