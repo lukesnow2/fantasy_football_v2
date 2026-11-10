@@ -516,20 +516,22 @@
 						{#if h2h.length === 0}
 							<p class="muted-line tight">No rivalries of five or more games yet.</p>
 						{/if}
-						{#each h2h as row (row.opponent)}
-							<div class="share-row" class:with-ties={h2hHasTies}>
-								<span class="share-name">{@render opponentName(row.opponent)}</span>
-								<span class="share-bar" aria-hidden="true">
-									<span
-										class="share-fill"
-										style:width="{row.pct * 100}%"
-										style:background="var(--color-{row.bar.tone === 'up' ? 'field' : 'pennant'})"
-									></span>
-									<span class="share-tick"></span>
-								</span>
-								<span class="share-record">{row.record}</span>
-							</div>
-						{/each}
+						<div class="share-list">
+							{#each h2h as row (row.opponent)}
+								<div class="share-row">
+									<span class="share-name">{@render opponentName(row.opponent)}</span>
+									<span class="share-bar" aria-hidden="true">
+										<span
+											class="share-fill"
+											style:width="{row.pct * 100}%"
+											style:background="var(--color-{row.bar.tone === 'up' ? 'field' : 'pennant'})"
+										></span>
+										<span class="share-tick"></span>
+									</span>
+									<span class="share-record">{row.record}</span>
+								</div>
+							{/each}
+						</div>
 					</Card>
 				</div>
 			</div>
@@ -738,7 +740,7 @@
 						{#if titleGames.length === 0}
 							<p class="muted-line tight">No title games yet.</p>
 						{:else}
-							{#each titleGames as g (g.seasonYear)}
+							{#each titleGames as g, i (`${g.seasonYear}-${i}`)}
 								<div class="final" class:won={g.won}>
 									<span class="final-year">{g.seasonYear}</span>
 									<span class="final-flag">
@@ -1196,10 +1198,19 @@
 		text-align: right;
 	}
 
-	.share-row {
+	/* One grid for the list, each row a subgrid of it, so the record column
+	   is 52px as drawn and widens for every row alike when a record has ties
+	   ("14-15-1"), keeping the bars in one column. */
+	.share-list {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 140px 52px;
-		gap: 12px;
+		grid-template-columns: minmax(0, 1fr) 140px minmax(52px, max-content);
+		column-gap: 12px;
+	}
+
+	.share-row {
+		grid-column: 1 / -1;
+		display: grid;
+		grid-template-columns: subgrid;
 		align-items: center;
 		padding: 8px 0;
 		border-bottom: 1px solid var(--color-line-soft);
@@ -1232,12 +1243,6 @@
 		width: 1px;
 		height: 14px;
 		background: var(--color-ink);
-	}
-
-	/* 52px as drawn; a list with a tied record ("14-15-1") widens every row
-	   alike, so the bars stay in one column. */
-	.share-row.with-ties {
-		grid-template-columns: minmax(0, 1fr) 140px 64px;
 	}
 
 	.share-record {
@@ -1569,15 +1574,14 @@
 			height: 180px;
 		}
 
+		.share-list {
+			grid-template-columns: minmax(0, 1fr) 100px minmax(46px, max-content);
+		}
+
 		.share-row {
-			grid-template-columns: minmax(0, 1fr) 100px 46px;
 			min-height: 44px;
 			padding: 0;
 			box-sizing: content-box;
-		}
-
-		.share-row.with-ties {
-			grid-template-columns: minmax(0, 1fr) 100px 60px;
 		}
 
 		.share-name .name-link {

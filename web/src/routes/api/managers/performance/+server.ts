@@ -387,7 +387,14 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Get detailed season-by-season breakdown. fact_team_performance is per-week,
 		// so aggregate to one row per season (the old query returned per-week rows).
-		if (analysis === 'seasons' || analysis === 'all') {
+		// Per-manager history. With no manager (the Managers page) every query
+		// here can only come back empty, so skip them and send the empty shape.
+		if ((analysis === 'seasons' || analysis === 'all') && !manager) {
+			data.seasons = [];
+			data.championshipSeasons = [];
+			data.titleGames = [];
+			data.streaks = { longestWinStreak: 0, longestLossStreak: 0, totalGames: 0 };
+		} else if (analysis === 'seasons' || analysis === 'all') {
 			try {
 				// One row per team-season. A manager can run two teams in a year
 				// (Justin in 2007, Bobby in 2008); grouping by year alone merged
@@ -465,10 +472,8 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			// Every finished title game the manager played (WP6 S6.8), newest
 			// first. A placeholder manager ('--hidden--', a Yahoo-private
-			// account) is no one to name, so its opponent is null. Only for one
-			// manager: the Managers page asks for none.
-			data.titleGames = [];
-			if (manager) {
+			// account) is no one to name, so its opponent is null.
+			{
 				try {
 					const titleResult = await db.execute(sql`
 					SELECT
