@@ -85,25 +85,6 @@
 	{/snippet}
 </Story>
 
-<style>
-	/* The boards' main column: 1200px wide, 40px 24px 64px, 16px sides on phones. */
-	.frame {
-		width: 100%;
-		max-width: 1200px;
-		color: var(--color-ink);
-		margin: 0 auto;
-		padding: 40px 24px 64px;
-		box-sizing: border-box;
-	}
-
-	@media (max-width: 480px) {
-		.frame {
-			padding-left: 16px;
-			padding-right: 16px;
-		}
-	}
-</style>
-
 <Story name="Loading">
 	{#snippet template()}
 		<div style="max-width: 1152px">
@@ -131,10 +112,41 @@
 	parameters={{ viewport: { defaultViewport: 'mobile1' } }}
 >
 	{#snippet template()}
-		<PageHeader kicker="Rankings · 2026 · through week 3" title="Power Rankings" phoneActionGap={14}>
-			Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as much.
+		<PageHeader
+			kicker="Rankings · 2026 · through week 3"
+			title="Power Rankings"
+			phoneActionGap={14}
+		>
+			Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as
+			much.
 			{#snippet action()}<Button variant="secondary" href="#">Season 2026</Button>{/snippet}
 		</PageHeader>
 	{/snippet}
 </Story>
 
+<Story name="Wider intro (Managers)">
+	{#snippet template()}
+		<PageHeader kicker="The roster · 10 active, 20 all-time" title="Managers" introWidth={640}>
+			Career records, championships and season-by-season history for every manager in the league.
+		</PageHeader>
+	{/snippet}
+</Story>
+
+<style>
+	/* The boards' main column: 1200px wide, 40px 24px 64px, 16px sides on phones. */
+	.frame {
+		width: 100%;
+		max-width: 1200px;
+		color: var(--color-ink);
+		margin: 0 auto;
+		padding: 40px 24px 64px;
+		box-sizing: border-box;
+	}
+
+	@media (max-width: 480px) {
+		.frame {
+			padding-left: 16px;
+			padding-right: 16px;
+		}
+	}
+</style>

@@ -56,3 +56,54 @@
 		<Tag variant="bye" size="small">Bye</Tag>
 	{/snippet}
 </Story>
+
+<Story name="Season outcomes">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px; flex-wrap: wrap">
+			<Tag variant="champion" size="row">Champion</Tag>
+			<Tag variant="playoffs" size="row">Playoffs</Tag>
+			<Tag variant="missed" size="row">Missed playoffs</Tag>
+			<Tag variant="in-progress" size="row">In progress · 61% playoff odds</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Title game results">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px">
+			<Tag variant="champion-strong" size="row">Champion</Tag>
+			<Tag variant="runner-up" size="row">Runner-up</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Achievement chips">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px; flex-wrap: wrap">
+			<Tag variant="champion-strong" size="chip">Champion</Tag>
+			<Tag variant="clinched" size="chip">Consistent winner</Tag>
+			<Tag variant="bye" size="chip">High scorer</Tag>
+			<Tag variant="eliminated" size="chip">Long timer</Tag>
+			<Tag variant="band-champion" size="chip-badge">Dynasty builder</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="On the clubhouse card">
+	{#snippet template()}
+		<div style="display: flex; gap: 6px; padding: 16px; background: var(--color-clubhouse)">
+			<Tag variant="band-champion" caps>League legend</Tag>
+			<Tag variant="band-champion" size="chip-small">Champion</Tag>
+			<Tag variant="band" size="chip-small">High scorer</Tag>
+			<Tag variant="band" size="chip-small">Long timer</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Wraps on a phone">
+	{#snippet template()}
+		<div style="width: 150px">
+			<Tag variant="in-progress" size="row" wrapOnPhone>In progress · 61% playoff odds</Tag>
+		</div>
+	{/snippet}
+</Story>

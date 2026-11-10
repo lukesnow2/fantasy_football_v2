@@ -83,6 +83,19 @@
 	{/snippet}
 </Story>
 
+<Story name="Inline tap area on a phone">
+	{#snippet template()}
+		<div
+			style="display: flex; justify-content: space-between; align-items: center; min-height: 44px; width: 320px; font-size: 15px; border-bottom: 1px solid var(--color-line-soft)"
+		>
+			<span style="color: var(--color-ink-2)"
+				><StatTip metricId="luck_factor" label="Luck" phoneTap="inline" /></span
+			>
+			<b>+0.39</b>
+		</div>
+	{/snippet}
+</Story>
+
 <style>
 	.header-label {
 		font-size: 12px;

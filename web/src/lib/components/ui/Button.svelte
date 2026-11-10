@@ -5,6 +5,8 @@
 	 * - primary: field fill, white text ("Submit proposal")
 	 * - secondary: white, a 1px line-strong border, ink text ("Cancel")
 	 * - link: field text, weight 600, no box ("Full rankings →")
+	 * - band-white: white fill, clubhouse text, weight 700, for a button on a
+	 *   clubhouse card (the Managers hero's "Open full profile →")
 	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
@@ -21,7 +23,8 @@
 		| 'link'
 		| 'link-pennant'
 		| 'band-primary'
-		| 'band-outline';
+		| 'band-outline'
+		| 'band-white';
 	type Size = 'default' | 'large' | 'tap';
 
 	type Props = {
@@ -143,6 +146,16 @@
 		color: var(--color-clubhouse);
 	}
 
+	.band-white {
+		background: var(--color-white);
+		color: var(--color-clubhouse);
+		font-weight: 700;
+	}
+
+	.band-white:hover {
+		color: var(--color-clubhouse);
+	}
+
 	.band-outline {
 		border: 1px solid var(--color-clubhouse-line);
 		background: transparent;
@@ -173,7 +186,8 @@
 	}
 
 	.band-primary:focus-visible,
-	.band-outline:focus-visible {
+	.band-outline:focus-visible,
+	.band-white:focus-visible {
 		outline-color: var(--color-white);
 	}
 

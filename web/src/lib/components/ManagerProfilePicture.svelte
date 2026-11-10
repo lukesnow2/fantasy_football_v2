@@ -4,6 +4,8 @@
 	export let managerName: string;
 	export let size: 'small' | 'medium' | 'large' = 'medium';
 	export let className: string = '';
+	/** The photo's alt text. Pass "" where the name is already beside it. */
+	export let alt: string | undefined = undefined;
 
 	$: profilePicUrl = getManagerProfilePicture(managerName);
 	$: initials = getInitials(managerName);
@@ -16,13 +18,13 @@
 	}[size];
 </script>
 
-<div class="rounded-full overflow-hidden {sizeClasses} {className}">
+<div class="overflow-hidden rounded-full {sizeClasses} {className}">
 	{#if profilePicUrl}
 		<!-- Actual profile picture -->
-		<img 
-			src={profilePicUrl} 
-			alt="{managerName} profile picture"
-			class="w-full h-full object-cover"
+		<img
+			src={profilePicUrl}
+			alt={alt ?? `${managerName} profile picture`}
+			class="h-full w-full object-cover"
 			on:error={() => {
 				// If image fails to load, fall back to gradient
 				profilePicUrl = null;
@@ -30,8 +32,10 @@
 		/>
 	{:else}
 		<!-- Gradient fallback with initials -->
-		<div class="w-full h-full bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 flex items-center justify-center">
-			<span class="text-white font-bold">{initials}</span>
+		<div
+			class="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500"
+		>
+			<span class="font-bold text-white">{initials}</span>
 		</div>
 	{/if}
-</div> 
+</div>

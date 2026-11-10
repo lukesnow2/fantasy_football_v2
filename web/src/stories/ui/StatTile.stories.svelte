@@ -69,3 +69,43 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Avatar layout (profile Head to head)">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip label="Head to head highlights">
+				<StatTile
+					layout="avatar"
+					avatar="Troy Colvin"
+					label="Best against"
+					value="17-6"
+					sub="Troy Colvin, .739"
+					tone="field"
+				/>
+				<StatTile
+					layout="avatar"
+					avatar="Luke S"
+					label="Toughest"
+					value="19-21"
+					sub="Luke S, who has won the last 7"
+					tone="pennant"
+				/>
+				<StatTile
+					layout="avatar"
+					avatar="Omar"
+					label="Dead even"
+					value="14-14"
+					sub="Omar, over 28 games"
+					tone="ink"
+				/>
+				<StatTile
+					layout="avatar"
+					label="Title games"
+					value={null}
+					sub="No title games yet"
+					tone="pennant-dark"
+				/>
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>

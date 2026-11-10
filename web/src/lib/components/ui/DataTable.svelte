@@ -64,6 +64,12 @@
 		cell?: Snippet<[Row & Record<string, unknown>, Column, number]>;
 		/** Draws a header cell, such as a label with a StatTip. */
 		header?: Snippet<[Column]>;
+		/**
+		 * Keep the first column in place while the rest scroll sideways, with
+		 * a 1px line-soft rule on its right edge (the profile's phone Head to
+		 * head table).
+		 */
+		stickyFirst?: boolean;
 	}
 
 	let {
@@ -81,12 +87,14 @@
 		selected,
 		divider,
 		cell,
-		header
+		header,
+		stickyFirst = false
 	}: Props = $props();
 </script>
 
 <div class="scroll">
 	<table
+		class:sticky-first={stickyFirst}
 		aria-label={label}
 		style:min-width={minWidth}
 		style:font-size="{fontSize}px"
@@ -198,6 +206,15 @@
 
 	.num {
 		text-align: right;
+	}
+
+	.sticky-first th:first-child,
+	.sticky-first td:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: var(--color-card);
+		box-shadow: inset -1px 0 0 var(--color-line-soft);
 	}
 
 	tr.highlighted td {

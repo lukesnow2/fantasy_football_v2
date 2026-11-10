@@ -13,5 +13,8 @@ export { default as StatStrip } from './StatStrip.svelte';
 export { default as StatTile } from './StatTile.svelte';
 export { default as StatTip } from './StatTip.svelte';
 export { default as StatTipCard } from './StatTipCard.svelte';
+export { default as TabNav } from './TabNav.svelte';
+export type { TabItem } from './TabNav.svelte';
 export { default as Tag } from './Tag.svelte';
 export type { TagVariant } from './Tag.svelte';
+export { default as TitleFlags } from './TitleFlags.svelte';

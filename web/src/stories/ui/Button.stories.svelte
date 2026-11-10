@@ -68,3 +68,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="White on the clubhouse card">
+	{#snippet template()}
+		<div style="padding: 24px; background: var(--color-clubhouse)">
+			<Button variant="band-white" href="#">Open full profile →</Button>
+		</div>
+	{/snippet}
+</Story>

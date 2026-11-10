@@ -53,6 +53,13 @@
 		 * draw a table header's StatTip. Off for a label inside a sentence.
 		 */
 		phoneTarget?: boolean;
+		/**
+		 * Below 640px, pad the label's tap area to 44px without moving the
+		 * layout, as the phone boards draw an inline StatTip ("Expected ⓘ"):
+		 * `inline` is 12px of padding and a 20px line for 14px and 15px text,
+		 * `inline-small` 14px and a 16px line for 12px text.
+		 */
+		phoneTap?: 'inline' | 'inline-small';
 	}
 
 	let {
@@ -65,7 +72,8 @@
 		endOffset,
 		topOffset,
 		spanOf,
-		phoneTarget = false
+		phoneTarget = false,
+		phoneTap
 	}: Props = $props();
 
 	const id = $props.id();
@@ -236,6 +244,8 @@
 			type="button"
 			class="trigger"
 			class:phone-target={phoneTarget}
+			class:tap-inline={phoneTap === 'inline'}
+			class:tap-inline-small={phoneTap === 'inline-small'}
 			aria-describedby={definition ? cardId : undefined}
 			aria-expanded={showing}
 			{onclick}
@@ -280,6 +290,24 @@
 	@media (max-width: 639.98px) {
 		.trigger.phone-target {
 			min-height: 44px;
+		}
+
+		.trigger.tap-inline,
+		.trigger.tap-inline-small {
+			display: inline-block;
+			white-space: nowrap;
+		}
+
+		.trigger.tap-inline {
+			padding: 12px 0;
+			margin: -12px 0;
+			line-height: 20px;
+		}
+
+		.trigger.tap-inline-small {
+			padding: 14px 0;
+			margin: -14px 0;
+			line-height: 16px;
 		}
 	}
 
