@@ -1,8 +1,27 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { TrendingUp, TrendingDown, Minus, Trophy, Info } from 'lucide-svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { getManagerProfilePicture, getInitials } from '$lib/utils/managerUtils';
+	import {
+		Avatar,
+		Button,
+		Card,
+		DataTable,
+		EmptyValue,
+		Movement,
+		OddsBar,
+		Segmented,
+		StatTip,
+		type Column
+	} from '$lib/components/ui';
+	import {
+		formatLuck,
+		luckTone,
+		powerBarPct,
+		RANK_LINE_COLORS,
+		rankChartLabel,
+		rankingCallouts
+	} from '$lib/utils/power-rankings';
 	import type { PowerRankingRow } from '../api/power-rankings/+server';
 
 	let loading = $state(true);
@@ -14,8 +33,15 @@
 	let week = $state<number | null>(null);
 	let rankings = $state<PowerRankingRow[]>([]);
 	let trend = $state<PowerRankingRow[]>([]);
+	/** True until the first response, so the header knows its season and week. */
+	let firstLoad = $state(true);
+
+	// Only the latest request may write: a slow response for a week the reader
+	// has already left must not replace the one they picked after it.
+	let latestRequest = 0;
 
 	async function load(nextSeason?: number, nextWeek?: number) {
+		const request = ++latestRequest;
 		loading = true;
 		error = '';
 		try {
@@ -23,11 +49,13 @@
 			if (nextSeason != null) params.set('season', String(nextSeason));
 			if (nextWeek != null) params.set('week', String(nextWeek));
 			const response = await fetch(`/api/power-rankings?${params}`);
+			if (request !== latestRequest) return;
 			if (!response.ok) {
 				error = 'Could not load power rankings.';
 				return;
 			}
 			const data = await response.json();
+			if (request !== latestRequest) return;
 			seasons = data.seasons ?? [];
 			weeks = data.weeks ?? [];
 			season = data.season;
@@ -35,10 +63,14 @@
 			rankings = data.rankings ?? [];
 			trend = data.trend ?? [];
 		} catch (err) {
+			if (request !== latestRequest) return;
 			console.error('Error loading power rankings:', err);
 			error = 'Could not load power rankings.';
 		} finally {
-			loading = false;
+			if (request === latestRequest) {
+				loading = false;
+				firstLoad = false;
+			}
 		}
 	}
 
@@ -51,37 +83,71 @@
 		load(next);
 	}
 
-	function onWeekChange(event: Event) {
-		const next = Number((event.target as HTMLSelectElement).value);
+	function onWeekChange(next: number) {
 		if (season != null) load(season, next);
 	}
 
 	const isFinalWeek = $derived(week != null && week === weeks[weeks.length - 1]);
 
-	function formatPct(value: number | null): string {
-		return value == null ? '—' : `${(value * 100).toFixed(0)}%`;
-	}
+	// The phone layout (below 640px) drops columns and moves W-L under the
+	// name, which is markup, not spacing. The body only draws in the browser.
+	const phoneQuery = new MediaQuery('max-width: 639.98px', false);
+	const phone = $derived(phoneQuery.current);
 
-	function formatNum(value: number | null, digits = 2): string {
-		return value == null ? '—' : value.toFixed(digits);
-	}
+	const kicker = $derived(
+		season != null && week != null ? `Rankings · ${season} · through week ${week}` : undefined
+	);
+	const weekOptions = $derived(weeks.map((w) => ({ value: w, label: `Wk ${w}` })));
 
 	function record(row: PowerRankingRow): string {
 		return row.ties > 0 ? `${row.wins}-${row.losses}-${row.ties}` : `${row.wins}-${row.losses}`;
 	}
 
-	// ---- rank-over-time chart -------------------------------------------------
-	// Ten distinct hues, ordered so adjacent ranks don't get near-identical colors.
-	const TEAM_COLORS = [
-		'#f59e0b', '#38bdf8', '#a78bfa', '#34d399', '#fb7185',
-		'#facc15', '#60a5fa', '#f472b6', '#4ade80', '#c084fc'
-	];
+	function profileHref(row: PowerRankingRow): string | null {
+		return row.managerName && row.managerHasProfile
+			? `/managers/${encodeURIComponent(row.managerName)}`
+			: null;
+	}
 
+	// ---- S5.2 the three callouts --------------------------------------------
+	const callouts = $derived.by(() => {
+		const picks = rankingCallouts(rankings);
+		return [
+			{ key: 'riser', label: 'Biggest riser', row: picks.riser, empty: 'No one moved up' },
+			{ key: 'faller', label: 'Biggest faller', row: picks.faller, empty: 'No one moved down' },
+			{ key: 'luck', label: 'Luckiest so far', row: picks.luckiest, empty: 'No luck numbers yet' }
+		];
+	});
+
+	// ---- S5.3 the table -------------------------------------------------------
+	const desktopColumns: Column[] = [
+		{ key: 'rank', label: '#', width: '32px' },
+		{ key: 'move', label: 'Move', width: '52px' },
+		{ key: 'manager', label: 'Manager' },
+		{ key: 'record', label: 'W-L', numeric: true, width: '56px' },
+		{ key: 'power', label: 'Power score', width: '200px' },
+		{ key: 'points', label: 'Pts rk', numeric: true, width: '64px' },
+		{ key: 'pyth', label: 'Pyth W', numeric: true, width: '64px' },
+		{ key: 'luck', label: 'Luck', numeric: true, width: '64px' },
+		{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '72px' }
+	];
+	// The phone board keeps rank, manager, movement and luck, so the Luck
+	// StatTip stays in view without scrolling sideways.
+	const phoneColumns: Column[] = [
+		{ key: 'rank', label: '#', width: '20px' },
+		{ key: 'manager', label: 'Manager' },
+		{ key: 'move', label: 'Move', width: '44px' },
+		{ key: 'luck', label: 'Luck', numeric: true, width: '64px' }
+	];
+	const columns = $derived(phone ? phoneColumns : desktopColumns);
+	const tableRows = $derived(rankings as unknown as (PowerRankingRow & Record<string, unknown>)[]);
+	let tableWrap: HTMLDivElement | undefined = $state();
+
+	// ---- S5.5 rank through the season ----------------------------------------
 	// Taller than it was (360): ten lines crossing need room between ranks, and
 	// each line now ends in its manager's picture, which needs ~50 units per rank
 	// and a right margin to sit in.
 	const CHART = { width: 960, height: 550, padTop: 28, padRight: 36, padBottom: 52, padLeft: 40 };
-	const AVATAR_R = 17;
 
 	interface TeamSeries {
 		teamKey: number;
@@ -93,7 +159,6 @@
 		finalRank: number;
 		/** Where the line ends, for the manager's picture. */
 		end: { x: number; y: number };
-		picture: string | null;
 	}
 
 	const series = $derived.by<TeamSeries[]>(() => {
@@ -131,13 +196,12 @@
 				points,
 				path: points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.week)},${y(p.rank)}`).join(' '),
 				finalRank: last.powerRank,
-				end: { x: x(last.weekNumber), y: y(last.powerRank) },
-				picture: last.managerName ? getManagerProfilePicture(last.managerName) : null
+				end: { x: x(last.weekNumber), y: y(last.powerRank) }
 			};
 		});
 
 		built.sort((a, b) => a.finalRank - b.finalRank);
-		return built.map((s, i) => ({ ...s, color: TEAM_COLORS[i % TEAM_COLORS.length] }));
+		return built.map((s, i) => ({ ...s, color: RANK_LINE_COLORS[i % RANK_LINE_COLORS.length] }));
 	});
 
 	const chartTicks = $derived.by(() => {
@@ -159,256 +223,658 @@
 		};
 	});
 
+	const chartLabel = $derived(rankChartLabel(series, weeks));
+
 	let hoveredTeam = $state<number | null>(null);
+
+	/** Percent of the chart's width or height, for the HTML labels and avatars over the SVG. */
+	const pctX = (x: number) => `${(x / CHART.width) * 100}%`;
+	const pctY = (y: number) => `${(y / CHART.height) * 100}%`;
 </script>
 
 <svelte:head>
 	<title>Power Rankings · The League</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<PageHeader icon={TrendingUp} title="Power Rankings">
-		Ranked by power score, which blends record, scoring and recent form, not by standings alone.
-	</PageHeader>
-
-	{#if seasons.length > 0}
-		<div class="flex flex-wrap items-center gap-4 bg-slate-800/30 rounded-lg p-4">
-			<label class="text-slate-300 font-medium">
-				Season
-				<select
-					class="ml-2 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
-					value={season}
-					onchange={onSeasonChange}
-				>
-					{#each seasons as s}
-						<option value={s}>{s}</option>
-					{/each}
-				</select>
-			</label>
-
-			<label class="text-slate-300 font-medium">
-				Week <span class="text-slate-500 font-normal">(regular season)</span>
-				<select
-					class="ml-2 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
-					value={week}
-					onchange={onWeekChange}
-				>
-					{#each weeks as w}
-						<option value={w}>Week {w}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
-	{/if}
-
-	{#if loading}
-		<div class="space-y-3">
-			{#each Array(10) as _, i}
-				<div class="h-14 animate-pulse rounded-lg bg-slate-800/50" style="animation-delay: {i * 40}ms"></div>
-			{/each}
-		</div>
-	{:else if error}
-		<div class="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
-			<p class="text-red-300">{error}</p>
-			<button
-				class="mt-3 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
-				onclick={() => load(season ?? undefined, week ?? undefined)}
-			>
-				Try again
-			</button>
-		</div>
-	{:else if rankings.length === 0}
-		<div class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-12 text-center">
-			<Trophy class="mx-auto h-10 w-10 text-slate-600" />
-			<p class="mt-3 font-medium text-slate-300">No power rankings for this season yet.</p>
-			<p class="mt-1 text-sm text-slate-500">
-				Rankings are built by the data pipeline once a season has been played.
-			</p>
-		</div>
-	{:else}
-		{#if isFinalWeek}
-			<div class="flex items-start gap-2 rounded-lg border border-slate-700/50 bg-slate-800/40 px-4 py-3 text-sm text-slate-400">
-				<Info class="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-				<span>
-					Week {week} is the last ranked week of {season}. Power rankings cover the
-					regular season only — playoff weeks aren't ranked.
-				</span>
+<PageHeader {kicker} title="Power Rankings" pending={firstLoad} phoneActionGap={14}>
+	Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as much.
+	{#snippet action()}
+		{#if seasons.length > 0}
+			<div class="controls">
+				<label class="season">
+					Season
+					<select value={season} onchange={onSeasonChange}>
+						{#each seasons as s (s)}
+							<option value={s}>{s}</option>
+						{/each}
+					</select>
+				</label>
+				{#if weekOptions.length > 0}
+					<Segmented label="Week" options={weekOptions} value={week ?? 0} onchange={onWeekChange} />
+				{/if}
 			</div>
 		{/if}
+	{/snippet}
+</PageHeader>
 
-		<section class="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/50">
-			<div class="overflow-x-auto">
-				<table class="w-full min-w-[52rem] text-sm">
-					<thead>
-						<tr class="border-b border-slate-700 text-left text-xs uppercase tracking-wide text-slate-400">
-							<th class="px-4 py-3 font-medium">#</th>
-							<th class="px-2 py-3 font-medium" title="Change in power rank since last week">Move</th>
-							<th class="px-4 py-3 font-medium">Team</th>
-							<th class="px-4 py-3 font-medium">Record</th>
-							<th class="px-4 py-3 text-right font-medium" title="Blend of record, scoring and recent form. Higher is better.">Power</th>
-							<th class="px-4 py-3 text-right font-medium" title="Rank by points scored">Pts rank</th>
-							<th class="px-4 py-3 text-right font-medium" title="Expected wins given points for and against">Pyth. W</th>
-							<th class="px-4 py-3 text-right font-medium" title="Actual wins minus expected wins. Positive means the schedule has been kind.">Luck</th>
-							<th class="px-4 py-3 text-right font-medium" title="Modelled chance of making the playoffs as of this week">Playoffs</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each rankings as row (row.teamKey)}
-							<tr class="border-b border-slate-700/40 last:border-0 hover:bg-slate-700/20">
-								<td class="px-4 py-3 text-lg font-bold text-slate-300 tabular-nums">{row.powerRank}</td>
-								<td class="px-2 py-3">
-									{#if row.rankChange == null}
-										<span class="text-slate-600" title="No previous week">—</span>
-									{:else if row.rankChange > 0}
-										<span class="inline-flex items-center text-green-400 tabular-nums">
-											<TrendingUp class="mr-1 h-3.5 w-3.5" />{row.rankChange}
-										</span>
-									{:else if row.rankChange < 0}
-										<span class="inline-flex items-center text-red-400 tabular-nums">
-											<TrendingDown class="mr-1 h-3.5 w-3.5" />{Math.abs(row.rankChange)}
-										</span>
-									{:else}
-										<span class="inline-flex items-center text-slate-500">
-											<Minus class="h-3.5 w-3.5" />
-										</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3">
-									<div class="font-medium text-white">{row.teamName}</div>
-									{#if row.managerName && row.managerHasProfile}
-										<a
-											href="/managers/{encodeURIComponent(row.managerName)}"
-											class="text-xs text-slate-400 hover:text-amber-400"
-										>
-											{row.managerName}
-										</a>
-									{:else if row.managerName}
-										<span class="text-xs text-slate-500">{row.managerName}</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-slate-300 tabular-nums">{record(row)}</td>
-								<td class="px-4 py-3 text-right font-semibold text-amber-400 tabular-nums">{formatNum(row.powerScore, 3)}</td>
-								<td class="px-4 py-3 text-right text-slate-300 tabular-nums">{row.pointsRank ?? '—'}</td>
-								<td class="px-4 py-3 text-right text-slate-300 tabular-nums">{formatNum(row.pythagoreanWins, 1)}</td>
-								<td
-									class="px-4 py-3 text-right tabular-nums {row.luckFactor == null
-										? 'text-slate-500'
-										: row.luckFactor > 0
-											? 'text-green-400'
-											: row.luckFactor < 0
-												? 'text-red-400'
-												: 'text-slate-400'}"
-								>
-									{row.luckFactor != null && row.luckFactor > 0 ? '+' : ''}{formatNum(row.luckFactor, 2)}
-								</td>
-								<td class="px-4 py-3 text-right text-slate-300 tabular-nums">{formatPct(row.playoffOdds)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		</section>
-
-		{#if series.length > 0 && weeks.length > 1}
-			<section class="rounded-xl border border-slate-700/50 bg-slate-800/50 p-6">
-				<h2 class="mb-1 text-xl font-bold text-white">Rank through the season</h2>
-				<p class="mb-5 text-sm text-slate-400">Every ranked week of {season}. Rank 1 is at the top.</p>
-
-				<div class="overflow-x-auto">
-					<svg
-						viewBox="0 0 {CHART.width} {CHART.height}"
-						class="h-auto w-full min-w-[44rem]"
-						role="img"
-						aria-label="Line chart of each team's power rank by week"
-					>
-						<defs>
-							{#each series as s (s.teamKey)}
-								<clipPath id="pr-avatar-{s.teamKey}">
-									<circle cx={s.end.x} cy={s.end.y} r={AVATAR_R} />
-								</clipPath>
-							{/each}
-						</defs>
-						{#each chartTicks.ys as tick}
-							<line
-								x1={CHART.padLeft} y1={tick.y} x2={CHART.width - CHART.padRight} y2={tick.y}
-								stroke="#334155" stroke-width="1"
-							/>
-							<text x={CHART.padLeft - 10} y={tick.y + 4} text-anchor="end" fill="#64748b" font-size="11">
-								{tick.rank}
-							</text>
-						{/each}
-
-						{#each chartTicks.xs as tick}
-							<text x={tick.x} y={CHART.height - 10} text-anchor="middle" fill="#64748b" font-size="11">
-								{tick.week}
-							</text>
-						{/each}
-
-						{#each series as s (s.teamKey)}
-							<path
-								d={s.path}
-								fill="none"
-								stroke={s.color}
-								stroke-width={hoveredTeam === s.teamKey ? 3.5 : 2}
-								stroke-linejoin="round"
-								stroke-linecap="round"
-								opacity={hoveredTeam === null || hoveredTeam === s.teamKey ? 1 : 0.15}
-							/>
-						{/each}
-						<!-- Each line ends in its manager's picture (initials when there is
-						     none), ringed in the line's color. Drawn after every line so no
-						     line crosses a face; hovering one highlights its line. -->
-						{#each series as s (s.teamKey)}
-							<g
-								role="presentation"
-								opacity={hoveredTeam === null || hoveredTeam === s.teamKey ? 1 : 0.3}
-								onmouseenter={() => (hoveredTeam = s.teamKey)}
-								onmouseleave={() => (hoveredTeam = null)}
-							>
-								<title>{s.teamName}{s.managerName ? ` (${s.managerName})` : ''}: #{s.finalRank}</title>
-								<circle cx={s.end.x} cy={s.end.y} r={AVATAR_R + 2} fill="#0f172a" stroke={s.color} stroke-width="2.5" />
-								{#if s.picture}
-									<image
-										href={s.picture}
-										x={s.end.x - AVATAR_R}
-										y={s.end.y - AVATAR_R}
-										width={AVATAR_R * 2}
-										height={AVATAR_R * 2}
-										preserveAspectRatio="xMidYMid slice"
-										clip-path="url(#pr-avatar-{s.teamKey})"
-									/>
-								{:else}
-									<text x={s.end.x} y={s.end.y + 4} text-anchor="middle" fill={s.color} font-size="11" font-weight="700">
-										{getInitials(s.managerName ?? s.teamName).slice(0, 2)}
-									</text>
-								{/if}
-							</g>
-						{/each}
-					</svg>
+{#if loading}
+	<!-- S5.7 Loading: ten rows where the table sits. -->
+	<div class="skeleton" aria-busy="true" aria-label="Loading power rankings">
+		{#each Array(10) as _, i (i)}<span class="sk-row"></span>{/each}
+	</div>
+{:else if error}
+	<div class="first">
+		<Card title="Rankings didn't load">
+			<p class="muted-line">Check your connection, then try again.</p>
+			<Button
+				variant="secondary"
+				class="retry"
+				onclick={() => load(season ?? undefined, week ?? undefined)}>Try again</Button
+			>
+		</Card>
+	</div>
+{:else if rankings.length === 0}
+	<div class="first">
+		<Card title="No rankings yet">
+			<p class="muted-line">Rankings start once week 1 of a season is final.</p>
+		</Card>
+	</div>
+{:else}
+	<!-- S5.2 Three callouts -->
+	<div class="callouts">
+		{#each callouts as c (c.key)}
+			{@const href = c.row ? profileHref(c.row) : null}
+			<Card padding="18px 20px" phonePadding="14px 16px" class="callout">
+				<div class="tile">
+					{#if c.row}
+						<Avatar name={c.row.managerName ?? ''} size={phone ? 44 : 52} />
+					{/if}
+					<div class="who">
+						<div class="tile-label">{c.label}</div>
+						{#if !c.row}
+							<div class="tile-name none">{c.empty}</div>
+						{:else if !c.row.managerName}
+							<div class="tile-name none">Unknown manager</div>
+						{:else if href}
+							<a class="tile-name tile-link" {href}>{c.row.managerName}</a>
+						{:else}
+							<div class="tile-name">{c.row.managerName}</div>
+						{/if}
+					</div>
+					{#if c.row}
+						<span class="tile-value">
+							{#if c.key === 'luck'}
+								{formatLuck(c.row.luckFactor, 2)}
+							{:else}
+								<Movement change={c.row.rankChange} inherit />
+							{/if}
+						</span>
+					{/if}
 				</div>
+			</Card>
+		{/each}
+	</div>
 
-				<ul class="mt-4 flex flex-wrap gap-x-5 gap-y-2">
-					{#each series as s (s.teamKey)}
-						<li>
+	<!-- S5.3 The rankings table -->
+	<div class="table-card">
+		<Card padding="22px 24px 12px" phonePadding="6px 16px 10px">
+			<div bind:this={tableWrap}>
+				<DataTable
+					{columns}
+					rows={tableRows}
+					label="Power rankings, week {week}"
+					rowPadding={phone ? 4 : 12}
+					columnGap={phone ? 10 : 14}
+					fontSize={phone ? 14 : 15}
+					headerHeight={phone ? 44 : undefined}
+					minWidth={phone ? undefined : '900px'}
+					rowKey={(r) => r.teamKey}
+				>
+					{#snippet header(column)}
+						{#if column.key === 'power'}
+							<StatTip metricId="power_score" label="Power score" />
+						{:else if column.key === 'pyth'}
+							<StatTip metricId="pythagorean_wins" label="Pyth W" />
+						{:else if column.key === 'luck'}
+							<span class="luck-head">
+								<StatTip
+									metricId="luck_factor"
+									label="Luck"
+									endOffset={phone ? undefined : 40}
+									topOffset={phone ? undefined : 26}
+									spanOf={phone ? tableWrap : undefined}
+									phoneTarget
+								/>
+							</span>
+						{:else}
+							{column.label}
+						{/if}
+					{/snippet}
+					{#snippet cell(r, column)}
+						{#if column.key === 'rank'}
+							<span class="rank">{r.powerRank}</span>
+						{:else if column.key === 'move'}
+							<span class="move"><Movement change={r.rankChange} inherit /></span>
+						{:else if column.key === 'manager'}
+							{@const href = profileHref(r)}
+							{#if !r.managerName}
+								<span class="manager"><EmptyValue text="Unknown manager" /></span>
+							{:else}
+								<svelte:element this={href ? 'a' : 'span'} class="manager" {href}>
+									<Avatar name={r.managerName} size={phone ? 28 : 30} />
+									<span class="manager-text">
+										<span class="manager-name">{r.managerName}</span>
+										{#if phone}<span class="manager-record">{record(r)}</span>{/if}
+									</span>
+								</svelte:element>
+							{/if}
+						{:else if column.key === 'record'}
+							<span class="strong">{record(r)}</span>
+						{:else if column.key === 'power'}
+							{#if r.powerScore == null}
+								<EmptyValue />
+							{:else}
+								<OddsBar
+									percent={powerBarPct(r.powerScore)}
+									text={r.powerScore.toFixed(3)}
+									numberWidth={44}
+								/>
+							{/if}
+						{:else if column.key === 'points'}
+							{#if r.pointsRank == null}<EmptyValue />{:else}<span class="soft">{r.pointsRank}</span>{/if}
+						{:else if column.key === 'pyth'}
+							{#if r.pythagoreanWins == null}<EmptyValue />{:else}<span class="soft"
+									>{r.pythagoreanWins.toFixed(1)}</span
+								>{/if}
+						{:else if column.key === 'luck'}
+							{@const text = formatLuck(r.luckFactor, 2)}
+							{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(r.luckFactor, 2)}"
+									>{text}</span
+								>{/if}
+						{:else if column.key === 'playoffs'}
+							{#if r.playoffOdds == null}<EmptyValue text="Unknown" />{:else}<span class="strong"
+									>{Math.round(r.playoffOdds * 100)}%</span
+								>{/if}
+						{/if}
+					{/snippet}
+				</DataTable>
+			</div>
+			<!-- The 10,000 is SIMS in $lib/server/playoff-odds-service.ts. -->
+			<p class="footnote">
+				{#if isFinalWeek}Week {week} is the last ranked week of {season}.{' '}{/if}Power rankings
+				cover the regular season only. Luck is actual wins minus Pythagorean wins. Playoff odds come
+				from the same 10,000-sim model as This Season.
+			</p>
+		</Card>
+	</div>
+
+	<!-- S5.5 Rank through the season -->
+	{#if series.length > 0 && weeks.length > 1}
+		<div class="chart-card">
+			<Card
+				title="Rank through the season"
+				headGap={16}
+				phoneHeadGap={14}
+				headSpacing="8px 16px"
+				phoneHeadStack
+			>
+				{#snippet action()}
+					<span class="chart-note">Every ranked week of {season}. Rank 1 is at the top.</span>
+				{/snippet}
+				<div class="chart-row">
+					<div class="chart-scroll">
+						<div class="chart" role="img" aria-label={chartLabel}>
+							<svg viewBox="0 0 {CHART.width} {CHART.height}" aria-hidden="true">
+								{#each chartTicks.ys as tick (tick.rank)}
+									<line
+										x1={CHART.padLeft}
+										y1={tick.y}
+										x2={CHART.width - CHART.padRight}
+										y2={tick.y}
+										style:stroke="var(--color-line-soft)"
+										stroke-width="1"
+									/>
+								{/each}
+								{#each series as s (s.teamKey)}
+									<path
+										d={s.path}
+										fill="none"
+										style:stroke={s.color}
+										stroke-width={hoveredTeam === s.teamKey ? 6 : 3}
+										stroke-opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey ? 0.18 : 0.9}
+										stroke-linejoin="round"
+										stroke-linecap="round"
+									/>
+								{/each}
+							</svg>
+							{#each chartTicks.ys as tick (tick.rank)}
+								<span class="axis rank-label" style:top={pctY(tick.y)}>#{tick.rank}</span>
+							{/each}
+							{#each chartTicks.xs as tick (tick.week)}
+								<span class="axis week-label" style:left={pctX(tick.x)}>Wk {tick.week}</span>
+							{/each}
+							<!-- Each line ends in its manager's picture (an initial when there
+							     is none), ringed in the line's color. Hovering one highlights
+							     its line. -->
+							{#each series as s (s.teamKey)}
+								<span
+									class="end"
+									role="presentation"
+									title="{s.managerName ?? 'Unknown manager'}: #{s.finalRank}"
+									style:left={pctX(s.end.x)}
+									style:top={pctY(s.end.y)}
+									style:opacity={hoveredTeam !== null && hoveredTeam !== s.teamKey ? 0.35 : 1}
+									onmouseenter={() => (hoveredTeam = s.teamKey)}
+									onmouseleave={() => (hoveredTeam = null)}
+								>
+									<Avatar name={s.managerName ?? ''} size={26} ring={2.5} ringColor={s.color} />
+								</span>
+							{/each}
+						</div>
+					</div>
+					<div class="legend" role="group" aria-label="Legend">
+						{#each series as s (s.teamKey)}
 							<button
 								type="button"
-								class="flex items-center gap-2 text-xs text-slate-300 transition-opacity hover:text-white"
-								style="opacity: {hoveredTeam === null || hoveredTeam === s.teamKey ? 1 : 0.4}"
+								class:on={hoveredTeam === s.teamKey}
 								onmouseenter={() => (hoveredTeam = s.teamKey)}
 								onmouseleave={() => (hoveredTeam = null)}
 								onfocus={() => (hoveredTeam = s.teamKey)}
 								onblur={() => (hoveredTeam = null)}
+								onclick={() => (hoveredTeam = s.teamKey)}
 							>
-								<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background:{s.color}"></span>
-								<span class="max-w-[14rem] truncate">{s.teamName}</span>
-								{#if s.managerName}
-									<span class="text-slate-500">({s.managerName})</span>
-								{/if}
+								<span class="dot" style:background={s.color}></span>
+								<span class="legend-name">{s.managerName ?? 'Unknown manager'}</span>
+								<span class="legend-rank">#{s.finalRank}</span>
 							</button>
-						</li>
-					{/each}
-				</ul>
-			</section>
-		{/if}
+						{/each}
+					</div>
+				</div>
+			</Card>
+		</div>
 	{/if}
-</div>
+{/if}
+
+<style>
+	/* ---------- S5.1 Header controls ---------- */
+	.controls {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		align-items: center;
+	}
+
+	.season {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-ink-2);
+	}
+
+	/* The board draws the native select, arrow and all; preflight strips it. */
+	.season select {
+		appearance: auto;
+		min-height: 44px;
+		padding: 0 12px;
+		border-radius: var(--radius-control);
+		border: 1px solid var(--color-line-strong);
+		background: var(--color-card);
+		font-family: var(--font-sans);
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--color-ink);
+	}
+
+	.season select:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 1px;
+	}
+
+	/* ---------- S5.7 Loading, error, empty ---------- */
+	.skeleton {
+		margin-top: 28px;
+		display: grid;
+		gap: 12px;
+	}
+
+	.sk-row {
+		display: block;
+		height: 52px;
+		border-radius: var(--radius-control);
+		background: var(--color-line-soft);
+	}
+
+	.first {
+		margin-top: 28px;
+	}
+
+	.muted-line {
+		margin: 0;
+		font-size: 15px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.first :global(.retry) {
+		margin-top: 14px;
+	}
+
+	/* ---------- S5.2 Callouts ---------- */
+	.callouts {
+		margin-top: 28px;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 16px;
+	}
+
+	.tile {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+	}
+
+	.who {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.tile-label {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--color-muted);
+	}
+
+	.tile-name {
+		display: block;
+		margin-top: 2px;
+		font-size: 17px;
+		font-weight: 700;
+		color: var(--color-ink);
+	}
+
+	a.tile-name:hover {
+		color: var(--color-field);
+	}
+
+	.tile-name.none {
+		font-weight: 600;
+		color: var(--color-muted);
+	}
+
+	.tile-value {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 30px;
+		color: var(--color-ink);
+		white-space: nowrap;
+	}
+
+	/* ---------- S5.3 Table ---------- */
+	.table-card,
+	.chart-card {
+		margin-top: 20px;
+	}
+
+	.rank {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 20px;
+	}
+
+	.move {
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	.manager {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+		font-weight: 600;
+	}
+
+	.manager-text {
+		min-width: 0;
+	}
+
+	.manager-name {
+		display: block;
+	}
+
+	.manager-record {
+		display: block;
+		margin-top: 1px;
+		font-size: 12px;
+		font-weight: 400;
+		color: var(--color-muted);
+	}
+
+	.strong {
+		font-weight: 600;
+	}
+
+	.soft {
+		color: var(--color-ink-2);
+	}
+
+	.luck {
+		font-weight: 600;
+	}
+
+	.luck.up {
+		color: var(--color-field);
+	}
+
+	.luck.down {
+		color: var(--color-pennant);
+	}
+
+	.luck.flat {
+		color: var(--color-muted);
+	}
+
+	.footnote {
+		margin: 14px 0 6px;
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	/* ---------- S5.5 Chart ---------- */
+	.chart-note {
+		display: block;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.chart-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 20px;
+		align-items: flex-start;
+	}
+
+	.chart-scroll {
+		flex: 999 1 560px;
+		min-width: 0;
+		overflow-x: auto;
+	}
+
+	.chart {
+		position: relative;
+		min-width: 560px;
+	}
+
+	.chart svg {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.axis {
+		position: absolute;
+		font-family: var(--font-sans);
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+
+	.rank-label {
+		left: 0;
+		transform: translateY(-50%);
+	}
+
+	.week-label {
+		bottom: 0;
+		transform: translateX(-50%);
+	}
+
+	.end {
+		position: absolute;
+		display: inline-flex;
+		transform: translate(-50%, -50%);
+	}
+
+	.legend {
+		flex: 1 1 200px;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.legend button {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 34px;
+		padding: 0 10px;
+		border: 0;
+		border-radius: var(--radius-control);
+		background: transparent;
+		cursor: default;
+		font-family: var(--font-sans);
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-ink);
+		text-align: left;
+	}
+
+	.legend button.on {
+		background: var(--color-field-tint);
+	}
+
+	.legend button:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 1px;
+	}
+
+	.dot {
+		flex: none;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+	}
+
+	.legend-name {
+		flex: 1;
+	}
+
+	.legend-rank {
+		color: var(--color-muted);
+	}
+
+	/* ---------- S5.8 Phones ---------- */
+	@media (max-width: 639.98px) {
+		.season select {
+			min-height: 48px;
+			border-radius: 10px;
+			font-size: 16px;
+		}
+
+		.skeleton,
+		.first {
+			margin-top: 14px;
+		}
+
+		.callouts {
+			margin-top: 14px;
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		/* The whole tile is the link to the profile. */
+		.callouts :global(.callout) {
+			position: relative;
+		}
+
+		.tile-link::after {
+			content: '';
+			position: absolute;
+			inset: 0;
+			border-radius: var(--radius-card);
+		}
+
+		.tile {
+			gap: 12px;
+		}
+
+		.tile-name {
+			font-size: 16px;
+		}
+
+		.tile-value {
+			font-size: 26px;
+		}
+
+		.table-card,
+		.chart-card {
+			margin-top: 14px;
+		}
+
+		.rank {
+			font-size: 18px;
+		}
+
+		a.manager,
+		span.manager {
+			min-height: 44px;
+		}
+
+		.manager-name {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.footnote {
+			margin: 12px 0 4px;
+		}
+
+		.chart-row {
+			gap: 14px;
+		}
+
+		/* Opens scrolled to its right end, so the latest week shows first. */
+		.chart-scroll {
+			flex-basis: 100%;
+			direction: rtl;
+		}
+
+		.chart {
+			direction: ltr;
+		}
+
+		.legend {
+			flex-basis: 100%;
+		}
+
+		.legend button {
+			min-height: 44px;
+		}
+	}
+</style>
