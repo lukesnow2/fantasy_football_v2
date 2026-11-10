@@ -219,7 +219,48 @@ INSERT INTO metric_definitions (
 'Maximum of |Team A Points - Team B Points| across all games',
 'Biggest blowout: 156.8 vs 67.2 = 89.6 point difference',
 '80+ is historically lopsided, 60-80 is very lopsided, 40-60 is lopsided, under 40 is competitive.',
-'decimal', 'fantasy_points', '0-120', 50.0000, 80.0000, 'decimal_1', 21);
+'decimal', 'fantasy_points', '0-120', 50.0000, 80.0000, 'decimal_1', 21),
+
+-- Manager pages (WP6 S6.3, S6.8)
+('transactions', 'Transactions', 'trade_analysis',
+'Players a manager brought onto their roster: free-agent adds, waiver claims and trades.',
+'Every transaction in league history where the player went to this manager. Moves per season spreads that total over the seasons they played.',
+'Total moves: every add, claim and trade that sent a player to this manager. Moves per season: total moves divided by seasons played.',
+'A manager with 409 moves over 16 seasons: 409 ÷ 16 = 25.6 moves per season',
+'More moves means a busier manager, not a better one. Read it next to FAAB efficiency to see whether the activity paid off.',
+'integer', 'transactions', '0-800', null, null, 'integer', 22),
+
+('badge_championships', 'Championships badge', 'manager_performance',
+'A badge for the titles a manager has won.',
+'Named for the number of championships a manager has won in their career.',
+'3 or more titles: Dynasty builder. 2: Repeat champion. 1: Champion.',
+'A manager with 7 titles: Dynasty builder',
+'No badge until a manager wins a title.',
+'text', 'badge', null, null, null, 'text', 23),
+
+('badge_scoring', 'Scoring badge', 'manager_performance',
+'A badge for how much a manager scores per game over their career.',
+'Named for a manager''s career points per game, regular season and playoffs.',
+'130 or more points per game: Offensive powerhouse. 120 or more: High scorer.',
+'A manager averaging 129.1 points per game: High scorer',
+'No badge below 120 points per game.',
+'text', 'badge', null, null, null, 'text', 24),
+
+('badge_consistency', 'Consistency badge', 'manager_performance',
+'A badge for a manager''s career win rate.',
+'Named for a manager''s career win rate, ties counted as half a win.',
+'A win rate of .700 or better: Dominance. .600 or better: Consistent winner. .500 or better: Above average.',
+'A manager winning .563 of their games: Above average',
+'No badge below .500.',
+'text', 'badge', null, null, null, 'text', 25),
+
+('badge_longevity', 'Longevity badge', 'manager_performance',
+'A badge for how many seasons a manager has played.',
+'Named for the number of seasons a manager has played in the league.',
+'15 or more seasons: League veteran. 10 or more: Long timer. 5 or more: Established. Fewer: Newcomer.',
+'A manager in their 22nd season: League veteran',
+'Every manager has one; it only counts seasons, not results.',
+'text', 'badge', null, null, null, 'text', 26);
 
 -- ============================================================================
 -- POPULATE API ENDPOINT DEFINITIONS
