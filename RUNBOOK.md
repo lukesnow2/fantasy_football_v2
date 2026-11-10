@@ -209,10 +209,11 @@ finished within 6.5 days in-season. Run ledger: `public.pipeline_runs`.
 After each load the workflow saves the playoff-odds forecast the site is showing
 to `model.playoff_odds_snapshots` (one row per season, week and model version)
 and `model.playoff_odds_snapshot_teams` (each team's odds and record). The model
-version is a hash of `web/src/lib/playoff-odds.ts` and
-`web/src/lib/server/playoff-odds-service.ts`, so changing the model starts a new
-version by itself; the next run then rebuilds the season's earlier weeks under
-it (`captured_live = false`) so versions compare week for week. Only rows with
+version (`web/src/lib/server/playoff-odds-version.ts`) is a hash of what the
+model returns on three fixed sample seasons, plus the site's simulation count
+and seed rule. A change to the numbers starts a new version by itself, and a
+refactor, comment or new export doesn't. The next run after a new version
+rebuilds the season's earlier weeks under it (`captured_live = false`) so versions compare week for week. Only rows with
 `captured_live = true` were taken the week they were shown. A stat correction
 to the current week saves a second snapshot; grading uses the last.
 ```bash

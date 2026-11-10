@@ -23,7 +23,13 @@ import {
 /** Rows come back camel-cased with numerics as strings; read them loosely. */
 type Row = Record<string, unknown>;
 
-const SIMS = 10000;
+export const SIMS = 10000;
+
+/**
+ * The simulation seed for a season as it stood after `playedWeeks`: fixed, so
+ * the same games always give the same odds.
+ */
+export const oddsSeed = (season: number, playedWeeks: number): number => season * 100 + playedWeeks;
 
 export interface SeasonTeamOdds extends TeamOdds {
 	teamName: string;
@@ -142,7 +148,7 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
 		// One seed for both runs: the engine draws each week's randomness from
 		// its own stream, so the two runs share draws for every week both
 		// simulate and the change mostly reflects last week's results.
-		const seed = season * 100 + playedWeeks;
+		const seed = oddsSeed(season, playedWeeks);
 		const run = (through: number): OddsResult =>
 			simulatePlayoffOdds({
 				teamKeys: keys,

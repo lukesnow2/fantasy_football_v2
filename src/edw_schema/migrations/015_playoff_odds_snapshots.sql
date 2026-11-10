@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS model.playoff_odds_snapshots (
     format_source        TEXT NOT NULL,
     sims                 INTEGER NOT NULL,
     league_average       NUMERIC(8, 3) NOT NULL,
-    -- Hash of the model's source files: a change to the model starts a new
-    -- version, graded separately from the old one.
+    -- Hash of what the model returns on fixed sample seasons
+    -- (web/src/lib/server/playoff-odds-version.ts): a change to the numbers
+    -- starts a new version, graded separately from the old one.
     model_version        TEXT NOT NULL,
     model_params         JSONB NOT NULL,
     -- Every game and score the forecast saw (playoff-odds.ts

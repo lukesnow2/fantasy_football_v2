@@ -12,9 +12,10 @@
 //     in on the first run, and again under each new model version, so
 //     versions can be compared week for week. Marked not captured_live.
 //
-// The model version is a hash of the model's source, so changing the model
-// starts a new version on its own. Safe to re-run: unchanged weeks are
-// skipped.
+// The model version is a hash of what the model returns on fixed sample
+// seasons (src/lib/server/playoff-odds-version.ts), so a change to the
+// numbers starts a new version on its own and a refactor doesn't. Safe to
+// re-run: unchanged weeks are skipped.
 //
 // Usage (from web/; the ssr transform mode lets the server modules load):
 //   DATABASE_URL=... npx vite-node --options.transformMode.ssr='.*' \
@@ -22,25 +23,21 @@
 //
 // The weekly pipeline workflow runs it after each load.
 
-import { createHash } from 'node:crypto';
 import { execSync } from 'node:child_process';
-import fs from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
-import { getSeasonOdds, latestSeason, type SeasonOdds } from '$lib/server/playoff-odds-service';
+import {
+	SIMS,
+	getSeasonOdds,
+	latestSeason,
+	oddsSeed,
+	type SeasonOdds
+} from '$lib/server/playoff-odds-service';
+import { modelVersion } from '$lib/server/playoff-odds-version';
 import { DEFAULT_PARAMS } from '$lib/playoff-odds';
 
 type Row = Record<string, unknown>;
 type Available = Extract<SeasonOdds, { available: true }>;
-
-const MODEL_SOURCES = ['../src/lib/playoff-odds.ts', '../src/lib/server/playoff-odds-service.ts'];
-
-/** First 12 hex of a SHA-256 over the model's source files. */
-export function modelVersion(): string {
-	const h = createHash('sha256');
-	for (const rel of MODEL_SOURCES) h.update(fs.readFileSync(new URL(rel, import.meta.url)));
-	return h.digest('hex').slice(0, 12);
-}
 
 function gitSha(): string | null {
 	if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
@@ -126,7 +123,7 @@ async function main() {
 	const newest = await latestSeason();
 	const season = Number(arg('--season') ?? newest);
 	if (!Number.isInteger(season)) throw new Error(`Bad --season: ${arg('--season')}`);
-	const version = modelVersion();
+	const version = modelVersion({ sims: SIMS, seed: oddsSeed });
 	const sha = gitSha();
 
 	const latest = await getSeasonOdds(season);
