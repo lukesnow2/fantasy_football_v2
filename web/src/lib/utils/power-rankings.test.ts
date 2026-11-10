@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { SeasonLuck } from '$lib/manager-luck';
 import {
 	formatLuck,
 	luckTone,
@@ -9,13 +8,17 @@ import {
 	rankingCallouts,
 	seasonCount,
 	spellNumber,
-	summarizeManagerLuck,
 	type CalloutRow
 } from './power-rankings';
 
 type Row = CalloutRow & { name: string };
 
-function row(name: string, powerRank: number, rankChange: number | null, luckFactor: number | null): Row {
+function row(
+	name: string,
+	powerRank: number,
+	rankChange: number | null,
+	luckFactor: number | null
+): Row {
 	return { name, powerRank, rankChange, luckFactor };
 }
 
@@ -33,7 +36,7 @@ describe('rankingCallouts', () => {
 		expect(c.luckiest?.name).toBe('Israel');
 	});
 
-	it('breaks ties by this week\'s rank, whatever order the rows arrive in', () => {
+	it("breaks ties by this week's rank, whatever order the rows arrive in", () => {
 		const c = rankingCallouts([
 			row('Trevor', 4, 4, 0.5),
 			row('Omar', 6, -2, 0.1),
@@ -140,10 +143,17 @@ describe('rankChartLabel', () => {
 	it('names two tied risers, joined with "and", as the board does', () => {
 		expect(
 			rankChartLabel(
-				[s('Israel', [2, 1, 1]), s('Gabe Flores', [5, 7, 3]), s('Trevor', [8, 8, 4]), s('Luke S', [10, 9, 8])],
+				[
+					s('Israel', [2, 1, 1]),
+					s('Gabe Flores', [5, 7, 3]),
+					s('Trevor', [8, 8, 4]),
+					s('Luke S', [10, 9, 8])
+				],
 				weeks
 			)
-		).toBe('Power rank by week for weeks 1 to 3. Gabe Flores and Trevor rose four spots in week 3.');
+		).toBe(
+			'Power rank by week for weeks 1 to 3. Gabe Flores and Trevor rose four spots in week 3.'
+		);
 	});
 
 	it('says only the weeks when nobody rose', () => {
@@ -157,7 +167,13 @@ describe('rankChartLabel', () => {
 			'Power rank by week for weeks 1 to 3. Nick rose one spot in week 3.'
 		);
 		const long = Array.from({ length: 12 }, (_, i) => i + 1);
-		const climber = { managerName: 'Omar', points: [{ week: 11, rank: 12 }, { week: 12, rank: 1 }] };
+		const climber = {
+			managerName: 'Omar',
+			points: [
+				{ week: 11, rank: 12 },
+				{ week: 12, rank: 1 }
+			]
+		};
 		expect(rankChartLabel([climber], long)).toBe(
 			'Power rank by week for weeks 1 to 12. Omar rose 11 spots in week 12.'
 		);
@@ -172,62 +188,6 @@ describe('RANK_LINE_COLORS', () => {
 		expect(RANK_LINE_COLORS[0]).toBe('var(--color-field)');
 		expect(RANK_LINE_COLORS[9]).toBe('var(--color-chart-rose)');
 		for (const c of RANK_LINE_COLORS) expect(c).toMatch(/^var\(--color-[a-z-]+\)$/);
-	});
-});
-
-describe('summarizeManagerLuck', () => {
-	function season(seasonYear: number, over: Partial<SeasonLuck> = {}): SeasonLuck {
-		return {
-			seasonYear,
-			teamKey: seasonYear,
-			weekNumber: 14,
-			wins: 8,
-			ties: 0,
-			pythagoreanWins: 7,
-			luckFactor: 1,
-			playoffOdds: 0.9,
-			inProgress: false,
-			bracketSet: true,
-			madePlayoffs: false,
-			...over
-		};
-	}
-
-	it('never lets a live season reach the career totals', () => {
-		const live = season(2026, {
-			inProgress: true,
-			bracketSet: false,
-			weekNumber: 3,
-			wins: 2,
-			pythagoreanWins: 1.6,
-			luckFactor: 0.4,
-			playoffOdds: 0.45
-		});
-		const s = summarizeManagerLuck([season(2024), season(2025), live], 2026);
-		expect(s.luckSeasons).toBe(2);
-		expect(s.careerRegularSeasonWins).toBe(16);
-		expect(s.careerPythagoreanWins).toBe(14);
-		expect(s.careerLuckFactor).toBe(2);
-		// The live season still shows, on its own row.
-		expect(s.currentSeason).toMatchObject({
-			seasonYear: 2026,
-			throughWeek: 3,
-			final: false,
-			luckFactor: 0.4,
-			playoffOdds: 0.45
-		});
-	});
-
-	it('between seasons, counts every season and shows the last one as final', () => {
-		const s = summarizeManagerLuck([season(2024), season(2025)], 2025);
-		expect(s.luckSeasons).toBe(2);
-		expect(s.currentSeason).toMatchObject({ seasonYear: 2025, final: true });
-	});
-
-	it('gives a manager who sat out the latest season no current row', () => {
-		const s = summarizeManagerLuck([season(2018)], 2025);
-		expect(s.luckSeasons).toBe(1);
-		expect(s.currentSeason).toBeNull();
 	});
 });
 

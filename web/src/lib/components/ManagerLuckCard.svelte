@@ -2,7 +2,8 @@
 	/**
 	 * Expected (Pythagorean) wins and luck over a manager's career. The numbers
 	 * are the power rankings' own, carried over by /api/managers/performance, so
-	 * the pages always agree. Career counts finished seasons only (G8).
+	 * the pages always agree. Career adds up every season, the one in progress
+	 * too, as the career record does.
 	 *
 	 * Career only (Luke, 2026-11-10): the boards also drew the season being
 	 * played and its playoff odds, which read oddly among career figures. The
@@ -41,8 +42,8 @@
 	const shape = $derived(stacked ? 'full' : variant);
 	const seasons = $derived(manager?.luckSeasons ?? 0);
 
-	// A manager in their first season has no finished season yet (G8 keeps the
-	// live one out of career), so the count drops rather than reading "0 seasons".
+	// A manager with no ranked week yet has no seasons to count, so the count
+	// drops rather than reading "0 seasons".
 	const careerCompact = $derived(seasons > 0 ? `Career, ${seasonCount(seasons)}` : 'Career');
 	const careerFull = $derived(seasons > 0 ? `Career · ${seasonCount(seasons)}` : 'Career');
 

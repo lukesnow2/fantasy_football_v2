@@ -2,8 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
-import type { SeasonLuck } from '$lib/manager-luck';
-import { summarizeManagerLuck } from '$lib/utils/power-rankings';
+import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
 import { getSeasonOdds } from '$lib/server/playoff-odds-service';
 
 /**
@@ -279,8 +278,10 @@ export const GET: RequestHandler = async ({ url }) => {
 			),
 			// Starter points per FAAB dollar; null for a manager who never paid for a claim.
 			faabEfficiencyRating: num(mgr.faab_efficiency_rating ?? mgr.faabEfficiencyRating),
-			// Career luck counts finished seasons only (G8); the live one has its own row.
-			...summarizeManagerLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
+			// Career luck adds up every season, the one in progress too, like the
+			// career record (Luke, 2026-11-10: running totals count the live season;
+			// only season-level picks and outcomes wait for it to finish).
+			...summarizeLuck(luck.get(mgr.manager_name || mgr.managerName) ?? [], latestSeason),
 			seasonConsistencyScore: num(mgr.season_consistency_score ?? mgr.seasonConsistencyScore),
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,
@@ -498,11 +499,11 @@ export const GET: RequestHandler = async ({ url }) => {
 			}
 
 			// Longest win/loss streaks from the manager's chronological game results
-			// (one matchup per week; ordered by season then week_number). Finished
-			// seasons only (WP6 S6.5): a league counts once its title game is in.
+			// (one matchup per week; ordered by season then week_number). Every
+			// game counts, the season in progress too: a streak is a running total,
+			// not a season-level judgment (Luke, 2026-11-10, over S6.5's wording).
 			try {
 				const gamesResult = await db.execute(sql`
-					WITH league_state AS (${leagueState})
 					SELECT
 						CASE WHEN fm.winner_manager_key = dm.manager_key THEN 'W'
 							 WHEN fm.winner_manager_key IS NULL THEN 'T'
@@ -510,7 +511,6 @@ export const GET: RequestHandler = async ({ url }) => {
 					FROM edw.fact_matchup fm
 					JOIN edw.dim_week dw ON fm.week_key = dw.week_key
 					JOIN edw.dim_manager dm ON dm.manager_name = ${manager}
-					JOIN league_state ls ON ls.league_key = fm.league_key AND ls.finished
 					WHERE (fm.manager1_key = dm.manager_key OR fm.manager2_key = dm.manager_key)
 					-- Team within season, so a manager's two teams in one year
 					-- don't interleave week by week into one streak.

@@ -743,9 +743,9 @@ function seasonSub(pick: SeasonPick): string {
 }
 
 /**
- * Career marks, finished seasons only: the streaks (already finished-only
- * from the API), the best and worst seasons, playoff trips out of finished
- * seasons, and the playoff win rate with its league rank.
+ * Career marks: the streaks (running totals from the API, the season in
+ * progress included), then from finished seasons only the best and worst
+ * seasons and playoff trips, and the playoff win rate with its league rank.
  */
 export function careerMarks(input: {
 	streaks: { longestWinStreak: number; longestLossStreak: number } | null | undefined;
