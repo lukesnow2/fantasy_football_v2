@@ -97,8 +97,12 @@ const hallOfFameRows = sql`
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
-		const parsedLimit = parseInt(url.searchParams.get('limit') || '50', 10);
-		const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 50;
+		// Every ranked manager unless the caller asks for fewer. A default cap
+		// made the page's table, caption and bars cover fewer managers than
+		// `analytics` and `tiers`, which always count all of them, and hid
+		// anyone past the cap from the profile's kicker lookup.
+		const parsedLimit = parseInt(url.searchParams.get('limit') ?? '', 10);
+		const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null;
 		const manager = url.searchParams.get('manager');
 
 		// Main Hall of Fame query. `manager` is an exact match, bound as a
@@ -123,7 +127,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			FROM hof
 			${managerFilter}
 			ORDER BY hall_of_fame_rank ASC, manager_name ASC
-			LIMIT ${limit}
+			${limit == null ? sql`` : sql`LIMIT ${limit}`}
 		`);
 
 		// Analytics for the Hall of Fame, from the same finished-season rows.
