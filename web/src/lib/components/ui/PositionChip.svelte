@@ -8,7 +8,9 @@
 	 *   centered (Best value picks and Biggest busts, which don't use the
 	 *   position colors)
 	 *
-	 * A position outside the six (the 2005 IDP picks) is muted on solid.
+	 * A position outside the six (the 2005 IDP picks) is muted on solid, and
+	 * a pick with no position draws no chip, only an empty span that holds its
+	 * place in a grid row.
 	 */
 	import { positionKey } from '$lib/draft-display';
 
@@ -22,14 +24,14 @@
 	const key = $derived(positionKey(position));
 </script>
 
-<span
+{#if position}<span
 	class="pos {tone}"
 	style:background={tone === 'solid'
 		? key
 			? `var(--color-pos-${key})`
 			: 'var(--color-muted)'
-		: undefined}>{position ?? ''}</span
->
+		: undefined}>{position}</span
+>{:else}<span aria-hidden="true"></span>{/if}
 
 <style>
 	.pos {

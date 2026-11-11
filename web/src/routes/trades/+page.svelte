@@ -184,7 +184,7 @@
 
 {#if loadingTrades}
 	<div class="first">
-		<Card title="Loading trades" />
+		<Card title="Loading trades" headGap={0} />
 	</div>
 {:else if failed || !tradeData}
 	<div class="first">

@@ -424,7 +424,7 @@
 
 {#if loadingDrafts}
 	<div class="first">
-		<Card title="Loading drafts" />
+		<Card title="Loading drafts" headGap={0} />
 	</div>
 {:else if failed || !data}
 	<div class="first">
@@ -581,7 +581,7 @@
 	{/if}
 {:else if loadingSeason}
 	<div class="first">
-		<Card title="Loading the {selectedSeason} draft" />
+		<Card title="Loading the {selectedSeason} draft" headGap={0} />
 	</div>
 {:else if seasonFailed}
 	<div class="first">
@@ -1041,7 +1041,8 @@
 			padding: 10px 14px;
 		}
 
-		.pick-row {
+		.pick-row,
+		.pick-row.after-note {
 			flex-direction: column;
 			flex-wrap: nowrap;
 			gap: 14px;
