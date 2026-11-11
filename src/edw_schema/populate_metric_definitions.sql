@@ -44,11 +44,11 @@ INSERT INTO metric_definitions (
 -- Hall of Fame Index
 ('hall_of_fame_index', 'Hall of Fame Index', 'manager_performance',
 'Composite score ranking managers for Hall of Fame consideration',
-'A weighted combination of championships and career win rate. Titles carry most of the weight and are measured against the most titles any manager has won, so the index ranks managers against each other rather than against a fixed bar.',
+'A weighted combination of championship success and overall win rate. This metric balances peak achievement (championships) with sustained excellence (win percentage) to identify the most deserving Hall of Fame candidates.',
 '(Championships ÷ Max Championships × 0.6) + (Win Percentage × 0.4)',
 'Manager with 2 championships (max=3) and 65% win rate: (2÷3 × 0.6) + (0.65 × 0.4) = 0.660',
-'Higher is better. 1.000 would take the most titles in league history and a perfect record, so only the league''s title leader gets near the top of the scale. Titles carry 60% of the weight: one championship moves the index more than several winning seasons. Tiers go by rank, not by score: 1 to 3 Hall of Fame Elite, 4 to 6 Hall of Fame, 7 to 10 Hall of Very Good, 11 to 15 Solid Contributor, 16 and below Developing Legacy.',
-'decimal', 'index_score', '0.000-1.000', null, null, 'decimal_3', 1),
+'Higher values indicate stronger Hall of Fame credentials. 0.700+ is elite territory, 0.600+ is very strong, 0.500+ is solid consideration.',
+'decimal', 'index_score', '0.000-1.000', 0.6000, 0.7000, 'decimal_3', 1),
 
 -- Career Win Percentage
 ('career_win_percentage', 'Career Win Percentage', 'manager_performance',
