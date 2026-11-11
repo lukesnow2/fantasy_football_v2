@@ -134,3 +134,42 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Bet Board stage and bets">
+	{#snippet template()}
+		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; max-width: 900px">
+			<Card title="Live" titleSize={24} dot="field" stack={12}>
+				<Card tone="inset" padding="14px 16px" label="Gabe misses the playoffs">
+					<b>Gabe misses the playoffs</b>
+				</Card>
+				<Card tone="inset-pennant" padding="14px 16px" label="Awaiting a ruling">
+					<b>Awaiting a ruling</b>
+				</Card>
+			</Card>
+			<Card title="Settled" titleSize={24} dot="ink" stack={12}>
+				<p style="margin: 0; font-size: 14px; color: var(--color-muted)">Ruled on and counted in the ledger.</p>
+				<div style="margin-top: auto"><Card tone="dashed" padding="16px">Nothing has been ruled on yet.</Card></div>
+			</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Highlight (the open bet form)">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<Card title="Put it on the board" tone="highlight" padding="24px">
+				<p style="margin: 0; color: var(--color-ink-2)">The form.</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Tiles (the ledger)">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<Card title="The ledger" tone="pennant">
+				<Card tone="tile" padding="10px 12px">Craig · 0-0</Card>
+			</Card>
+		</div>
+	{/snippet}
+</Story>

@@ -135,3 +135,18 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Counts (Bet Board)">
+	{#snippet template()}
+		<div style="display: grid; gap: 16px; max-width: 380px">
+			<div style="display: flex; flex-wrap: wrap; gap: 8px">
+				<Tag variant="count" size="count">1 on the board</Tag>
+				<Tag variant="count" size="count">0 settled</Tag>
+			</div>
+			<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+				<Tag variant="count" size="count" center>1 on the board</Tag>
+				<Tag variant="count" size="count" center>1 awaiting a ruling</Tag>
+			</div>
+		</div>
+	{/snippet}
+</Story>

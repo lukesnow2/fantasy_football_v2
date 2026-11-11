@@ -17,7 +17,8 @@
 		| 'steal'
 		| 'value'
 		| 'letdown'
-		| 'bust';
+		| 'bust'
+		| 'count';
 </script>
 
 <script lang="ts">
@@ -57,6 +58,11 @@
 	 *   with pennant-dark text and a pennant border, `bust` ink with white. Two
 	 *   sizes, both with 4px corners: `sample` (1px 6px, 11px) inside a Show
 	 *   tags chip, and `cell` (0 5px, 10px) on a board cell
+	 *
+	 * The Bet Board (WP9) adds `count`, card fill with a 1px line border and
+	 * ink-2 text, at `size="count"`: a 999px pill, 6px 12px, 14px weight 600
+	 * ("1 on the board"). `center` centers the text when the tag is stretched
+	 * across a grid cell, as the phone board draws the counts.
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -71,16 +77,25 @@
 			| 'chip-badge'
 			| 'trade'
 			| 'sample'
-			| 'cell';
+			| 'cell'
+			| 'count';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
+		center?: boolean;
 		children: Snippet;
 	}
 
-	let { variant, size = 'default', caps = false, wrapOnPhone = false, children }: Props = $props();
+	let {
+		variant,
+		size = 'default',
+		caps = false,
+		wrapOnPhone = false,
+		center = false,
+		children
+	}: Props = $props();
 </script>
 
-<span class="tag {variant} size-{size}" class:caps class:wrap-phone={wrapOnPhone}
+<span class="tag {variant} size-{size}" class:caps class:wrap-phone={wrapOnPhone} class:center
 	>{@render children()}</span
 >
 
@@ -152,6 +167,18 @@
 		font-size: 10px;
 	}
 
+	.size-count {
+		padding: 6px 12px;
+		border-radius: 999px;
+		font-size: 14px;
+		font-weight: 600;
+		letter-spacing: normal;
+	}
+
+	.center {
+		text-align: center;
+	}
+
 	.caps {
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
@@ -162,6 +189,12 @@
 			white-space: normal;
 			line-height: 16px;
 		}
+	}
+
+	.count {
+		border: 1px solid var(--color-line);
+		background: var(--color-card);
+		color: var(--color-ink-2);
 	}
 
 	.clinched {

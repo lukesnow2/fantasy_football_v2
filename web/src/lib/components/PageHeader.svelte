@@ -43,6 +43,8 @@
 		size?: number;
 		/** The intro's max-width in px: 620 unless the board draws another (Managers, 640). */
 		introWidth?: number;
+		/** The title block's flex basis in px: 520 unless the board draws another (Bet Board, 560). */
+		blockBasis?: number;
 		/** Deprecated: renders nothing. */
 		icon?: unknown;
 		/** Deprecated: renders nothing. */
@@ -63,6 +65,7 @@
 		phoneActionFull = false,
 		size = 60,
 		introWidth = 620,
+		blockBasis = 520,
 		children,
 		action
 	}: Props = $props();
@@ -73,7 +76,7 @@
 	aria-busy={pending || undefined}
 	style:--phone-action-gap="{phoneActionGap}px"
 >
-	<div class="block">
+	<div class="block" style:--block-basis="{blockBasis}px">
 		{#if pending}
 			<div class="kicker"><span class="bar kicker-bar"></span></div>
 		{:else if kicker}
@@ -107,7 +110,7 @@
 	}
 
 	.block {
-		flex: 1 1 520px;
+		flex: 1 1 var(--block-basis, 520px);
 		min-width: 0;
 	}
 
