@@ -184,6 +184,14 @@ describe('tradeMargin', () => {
 	it('reads "1.4" and "points lost" for Trevor\'s 2025 trade, where his side scored 1.4 fewer', () => {
 		expect(tradeMargin(trevorNick2025)).toEqual({ text: '1.4', label: 'points lost', tone: 'pennant' });
 	});
+
+	it('reads a swing that rounds to zero as gained', () => {
+		expect(tradeMargin({ ...trevorNick2025, productionDifferential: -0.04 })).toEqual({
+			text: '+0.0',
+			label: 'points gained',
+			tone: 'field'
+		});
+	});
 });
 
 describe('winnerShare', () => {

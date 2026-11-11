@@ -5,6 +5,7 @@
  */
 
 import { pickVerdict, type PickVerdict } from '$lib/draft-value';
+import { formatSigned } from '$lib/utils/managers';
 
 /* ---------- Grades ---------- */
 
@@ -77,10 +78,16 @@ export function pickGradeColor(grade: string | null | undefined): ColorToken {
 	}
 }
 
-/** A signed number to `places` decimals: "+0.94", "-0.37", "0.00". */
+/**
+ * A signed number to `places` decimals: "+0.94", "-0.37". It rounds before it
+ * signs, so a value that rounds to zero reads "0.00", never "-0.00" or
+ * "+0.0". One place goes through formatSigned, the managers pages' rule.
+ */
 export function signed(v: number, places: number): string {
-	const text = v.toFixed(places);
-	return v > 0 ? `+${text}` : text;
+	if (places === 1) return formatSigned(v);
+	const r = Number(v.toFixed(places));
+	const text = Math.abs(r).toFixed(places);
+	return r > 0 ? `+${text}` : r < 0 ? `-${text}` : text;
 }
 
 export interface ValueBar {
@@ -99,7 +106,8 @@ export interface ValueBar {
  */
 export function draftValueBar(v: number): ValueBar {
 	const width = Math.min(Math.abs(v), 1) * 50;
-	const up = v >= 0;
+	// A value that prints as 0.00 reads as level, in field.
+	const up = Number(v.toFixed(2)) >= 0;
 	return {
 		left: up ? 50 : 50 - width,
 		width,

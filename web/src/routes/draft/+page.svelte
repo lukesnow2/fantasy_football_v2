@@ -27,6 +27,10 @@
 	// and 'No draft data available' showed until the scripts ran.
 	let loadingDrafts = $state(true);
 	let loadingSeason = $state(false);
+	let seasonFailed = $state(false);
+	// Only the latest season request may land: a slower earlier one would put
+	// one season's board under another season's header.
+	let seasonRequest = 0;
 	let failed = $state(false);
 	let selectedSeason = $state('all');
 	let selectedPick = $state<number | null>(null);
@@ -212,25 +216,33 @@
 
 	// Load specific season draft data
 	async function loadSpecificSeasonDraft(season: string) {
+		const request = ++seasonRequest;
 		selectedPick = null;
+		seasonFailed = false;
+		specificSeasonDraft = null;
 		if (season === 'all') {
-			specificSeasonDraft = null;
+			loadingSeason = false;
 			return;
 		}
 
 		loadingSeason = true;
-		specificSeasonDraft = null;
 		try {
 			const response = await fetch(`/api/draft?season=${season}&analysis=all`);
+			if (request !== seasonRequest) return;
 			if (response.ok) {
-				specificSeasonDraft = await response.json();
+				const body = await response.json();
+				if (request !== seasonRequest) return;
+				specificSeasonDraft = body;
 			} else {
+				seasonFailed = true;
 				console.error('Failed to fetch season draft data:', response.status, response.statusText);
 			}
 		} catch (err) {
+			if (request !== seasonRequest) return;
+			seasonFailed = true;
 			console.error('Error fetching season draft data:', err);
 		} finally {
-			loadingSeason = false;
+			if (request === seasonRequest) loadingSeason = false;
 		}
 	}
 
@@ -574,6 +586,15 @@
 {:else if loadingSeason}
 	<div class="first">
 		<Card title="Loading the {selectedSeason} draft" />
+	</div>
+{:else if seasonFailed}
+	<div class="first">
+		<Card title="The {selectedSeason} draft didn't load">
+			<p class="muted-line">Try again in a minute.</p>
+			<Button variant="secondary" onclick={() => loadSpecificSeasonDraft(selectedSeason)}
+				>Try again</Button
+			>
+		</Card>
 	</div>
 {:else if !board.length}
 	<div class="first">

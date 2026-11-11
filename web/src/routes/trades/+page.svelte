@@ -49,6 +49,12 @@
 	let failed = $state(false);
 	let selectedSeason = $state('all');
 	let expanded = $state(false);
+	// The season tradeData was loaded for, so the counts never sit under
+	// another season's label.
+	let loadedSeason = $state('all');
+	// Only the latest request may land: a slower earlier one would show one
+	// season's trades under another season's select.
+	let tradeRequest = 0;
 
 	onMount(() => {
 		loadTradeData();
@@ -56,21 +62,27 @@
 
 	// Load trade data
 	async function loadTradeData(season = 'all') {
+		const request = ++tradeRequest;
 		loadingTrades = true;
 		failed = false;
 		try {
 			const response = await fetch(`/api/trades?analysis=all&season=${season}`);
+			if (request !== tradeRequest) return;
 			if (response.ok) {
-				tradeData = await response.json();
+				const body = await response.json();
+				if (request !== tradeRequest) return;
+				tradeData = body;
+				loadedSeason = season;
 			} else {
 				failed = true;
 				console.error('Failed to fetch trade data:', response.status, response.statusText);
 			}
 		} catch (err) {
+			if (request !== tradeRequest) return;
 			failed = true;
 			console.error('Error fetching trade data:', err);
 		} finally {
-			loadingTrades = false;
+			if (request === tradeRequest) loadingTrades = false;
 		}
 	}
 
@@ -88,7 +100,7 @@
 
 	const seasons = $derived(tradeData?.meta?.availableSeasons ?? []);
 	const firstSeason = $derived(seasons.length ? Math.min(...seasons) : null);
-	const oneSeason = $derived(selectedSeason !== 'all');
+	const oneSeason = $derived(loadedSeason !== 'all');
 	const overview = $derived(tradeData?.analytics?.overview);
 	const total = $derived(Number(overview?.totalTrades ?? 0) || 0);
 
@@ -100,7 +112,7 @@
 	// ---- S8.1 the numbers ----------------------------------------------------
 	const stats = $derived(
 		[
-			{ label: oneSeason ? `Trades in ${selectedSeason}` : 'Trades, all time', value: String(total) },
+			{ label: oneSeason ? `Trades in ${loadedSeason}` : 'Trades, all time', value: String(total) },
 			oneSeason ? null : { label: 'Per season', value: perSeason(total, seasons.length) },
 			{
 				label: 'Swung a title',
@@ -148,9 +160,9 @@
 	phoneActionFull
 	pending={loadingTrades && !tradeData}
 >
-	{#if tradeData && firstSeason != null}
+	{#if tradeData && !failed && !loadingTrades && firstSeason != null}
 		{#if oneSeason}
-			All {total} trades in {selectedSeason}, each scored on how the players did after the deal.
+			All {total} trades in {loadedSeason}, each scored on how the players did after the deal.
 		{:else}
 			All {total} trades since {firstSeason}, each scored on how the players did after the deal.
 		{/if}

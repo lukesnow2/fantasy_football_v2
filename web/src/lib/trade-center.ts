@@ -110,7 +110,8 @@ export interface TradeMargin {
  */
 export function tradeMargin(trade: TradeRow): TradeMargin {
 	const pd = num(trade.productionDifferential);
-	const forWinner = winnerSide(trade) === 'A' ? pd : -pd;
+	// Rounded first, so a swing that prints as 0.0 reads as gained, not lost.
+	const forWinner = Math.round((winnerSide(trade) === 'A' ? pd : -pd) * 10) / 10;
 	return forWinner >= 0
 		? { text: `+${forWinner.toFixed(1)}`, label: 'points gained', tone: 'field' }
 		: { text: Math.abs(forWinner).toFixed(1), label: 'points lost', tone: 'pennant' };

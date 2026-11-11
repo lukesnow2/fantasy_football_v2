@@ -8,6 +8,7 @@ import {
 	hasLowestBustRate,
 	pickGradeColor,
 	pickTag,
+	signed,
 	positionKey,
 	tagCounts,
 	type BoardPick
@@ -164,5 +165,21 @@ describe('the lowest bust rate check', () => {
 
 	it('is false for a manager not in the list', () => {
 		expect(hasLowestBustRate('Bobby', managers)).toBe(false);
+	});
+});
+
+describe('signed', () => {
+	it('signs to the places asked', () => {
+		expect(signed(0.94, 2)).toBe('+0.94');
+		expect(signed(-0.37, 2)).toBe('-0.37');
+		expect(signed(199.94, 1)).toBe('+199.9');
+		expect(signed(-173.7, 1)).toBe('-173.7');
+	});
+
+	it('reads a value that rounds to zero as level, never "-0.0"', () => {
+		expect(signed(-0.003, 2)).toBe('0.00');
+		expect(signed(0.004, 2)).toBe('0.00');
+		expect(signed(-0.04, 1)).toBe('0.0');
+		expect(draftValueBar(-0.003)).toMatchObject({ tone: 'field', text: '0.00' });
 	});
 });
