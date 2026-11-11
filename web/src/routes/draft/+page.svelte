@@ -462,7 +462,7 @@
 		class="card-gap grades-card"
 	>
 		{#snippet action()}<span class="head-note"
-				>A is the top 15% of manager-seasons, F the bottom 10%</span
+				>A and F take a long record well clear of average. C means too close to call.</span
 			>{/snippet}
 		<DataTable
 			label="Career draft grades"

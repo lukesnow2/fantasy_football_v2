@@ -6,7 +6,7 @@ import {
 	lopsidedTrades,
 	perSeason,
 	recentTrades,
-	repeatLoserLine,
+	tradeMargin,
 	tradeScoreLine,
 	winnerShare,
 	type TradeRow
@@ -161,7 +161,7 @@ describe('lopsidedRow', () => {
 			winnerGot: 'Kyler Murray',
 			loser: 'Omar',
 			loserGot: 'Henry Ruggs III',
-			margin: '+308.9',
+			margin: { text: '+308.9', label: 'points gained', tone: 'field' },
 			winnerScore: '81.5',
 			loserScore: '18.5',
 			share: 82,
@@ -170,22 +170,19 @@ describe('lopsidedRow', () => {
 	});
 });
 
-describe('repeatLoserLine', () => {
-	it('names the manager on the losing end of three of these five', () => {
-		expect(repeatLoserLine(lopsidedTrades(five))).toBe(
-			'Omar is on the losing end of three of these five.'
-		);
+describe('tradeMargin', () => {
+	it('reads "+" and "points gained" when the winner\'s players scored more', () => {
+		// Israel is team B here, so the differential (A minus B) is negative.
+		expect(tradeMargin(israelOmar2020)).toEqual({
+			text: '+308.9',
+			label: 'points gained',
+			tone: 'field'
+		});
+		expect(tradeMargin(craigOmar2019).text).toBe('+291.2');
 	});
 
-	it('gives no line when no one loses twice', () => {
-		expect(repeatLoserLine([israelOmar2020, nickIsrael2020, trevorErik2025])).toBeNull();
-	});
-
-	it('takes whoever appears first on a tie', () => {
-		// Omar loses twice, then Israel loses twice.
-		expect(
-			repeatLoserLine([israelOmar2020, craigOmar2019, nickIsrael2020, justinIsrael2005])
-		).toBe('Omar is on the losing end of two of these four.');
+	it('reads "1.4" and "points lost" for Trevor\'s 2025 trade, where his side scored 1.4 fewer', () => {
+		expect(tradeMargin(trevorNick2025)).toEqual({ text: '1.4', label: 'points lost', tone: 'pennant' });
 	});
 });
 

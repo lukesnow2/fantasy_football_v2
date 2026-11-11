@@ -5,8 +5,6 @@
  * side's `...Gives`.
  */
 
-import { numberWord } from '$lib/utils/hall-of-fame';
-
 export interface TradeRow {
 	seasonYear: number | string;
 	transactionWeek: number | string | null;
@@ -96,12 +94,34 @@ export function winnerSide(trade: TradeRow): Side {
 	return finalScore(trade, 'A') >= finalScore(trade, 'B') ? 'A' : 'B';
 }
 
+export interface TradeMargin {
+	/** "+308.9" when the winner's players scored more, "1.4" when they scored less. */
+	text: string;
+	label: 'points gained' | 'points lost';
+	tone: 'field' | 'pennant';
+}
+
+/**
+ * A lopsided trade's margin, signed from the winner's side. The winner is
+ * picked by trade score (production, playoffs, what each side gave up and
+ * timing), not by points alone, so the winner's players can have scored less:
+ * Trevor won his 2025 trade with Nick on trade score while his side scored 1.4
+ * fewer points. That reads "1.4" in pennant over "points lost".
+ */
+export function tradeMargin(trade: TradeRow): TradeMargin {
+	const pd = num(trade.productionDifferential);
+	const forWinner = winnerSide(trade) === 'A' ? pd : -pd;
+	return forWinner >= 0
+		? { text: `+${forWinner.toFixed(1)}`, label: 'points gained', tone: 'field' }
+		: { text: Math.abs(forWinner).toFixed(1), label: 'points lost', tone: 'pennant' };
+}
+
 export interface LopsidedRow {
 	winner: string;
 	winnerGot: string;
 	loser: string;
 	loserGot: string;
-	margin: string;
+	margin: TradeMargin;
 	winnerScore: string;
 	loserScore: string;
 	share: number;
@@ -119,7 +139,7 @@ export function lopsidedRow(trade: TradeRow): LopsidedRow {
 		winnerGot: gotBy(trade, w),
 		loser: managerOf(trade, l),
 		loserGot: gotBy(trade, l),
-		margin: margin(trade.productionDifferential),
+		margin: tradeMargin(trade),
 		winnerScore: ws.toFixed(1),
 		loserScore: ls.toFixed(1),
 		share: winnerShare(ws, ls),
@@ -131,31 +151,6 @@ export function lopsidedRow(trade: TradeRow): LopsidedRow {
 export function winnerShare(ws: number, ls: number): number {
 	const total = ws + ls;
 	return total > 0 ? Math.round((ws / total) * 100) : 0;
-}
-
-/**
- * "Omar is on the losing end of three of these five." The manager who loses
- * most often among the rows, when that's two or more; on a tie, whoever loses
- * first in the list. Null otherwise.
- */
-export function repeatLoserLine(rows: TradeRow[]): string | null {
-	const counts = new Map<string, number>();
-	for (const t of rows) {
-		const loser = managerOf(t, other(winnerSide(t)));
-		counts.set(loser, (counts.get(loser) ?? 0) + 1);
-	}
-	let best: string | null = null;
-	let bestCount = 0;
-	// Map keeps first-seen order, so a strict > leaves a tie with the first.
-	for (const [name, count] of counts) {
-		if (count > bestCount) {
-			best = name;
-			bestCount = count;
-		}
-	}
-	if (!best || bestCount < 2) return null;
-	const word = (n: number) => numberWord(n).toLowerCase();
-	return `${best} is on the losing end of ${word(bestCount)} of these ${word(rows.length)}.`;
 }
 
 /* ---------- S8.3 Trades that won a title ---------- */

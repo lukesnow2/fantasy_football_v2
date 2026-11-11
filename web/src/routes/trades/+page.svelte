@@ -25,7 +25,6 @@
 		oneDecimal,
 		perSeason,
 		recentTrades,
-		repeatLoserLine,
 		tradeScoreLine,
 		type Side,
 		type TradeRow
@@ -118,7 +117,6 @@
 	// ---- S8.2 Most lopsided trades -------------------------------------------
 	const lopsided = $derived(lopsidedTrades(tradeData?.analytics?.bestTrades ?? []));
 	const lopsidedRows = $derived(lopsided.map(lopsidedRow));
-	const repeatLoser = $derived(repeatLoserLine(lopsided));
 
 	// ---- S8.3 Trades that won a title, and recent trades ---------------------
 	const titleTrades = $derived(
@@ -205,13 +203,13 @@
 			phoneHeadStack
 		>
 			{#snippet action()}
-				{#if repeatLoser}<span class="repeat-loser">{repeatLoser}</span>{/if}
+				<span class="head-note">Ranked by the points gap between the two sides.</span>
 			{/snippet}
 			{#each lopsidedRows as t, i (i)}
 				<div class="lopsided">
 					<div class="swing">
-						<span class="swing-value">{t.margin}</span>
-						<span class="swing-label">points gained</span>
+						<span class="swing-value {t.margin.tone}">{t.margin.text}</span>
+						<span class="swing-label">{t.margin.label}</span>
 					</div>
 					<div class="sides">
 						{#each [{ who: t.winner, got: t.winnerGot, won: true }, { who: t.loser, got: t.loserGot, won: false }] as side (side.who + side.won)}
@@ -346,10 +344,9 @@
 	}
 
 	/* ---- S8.2 Most lopsided trades ---- */
-	.repeat-loser {
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--color-pennant-dark);
+	.head-note {
+		font-size: 13px;
+		color: var(--color-muted);
 	}
 
 	.lopsided {
@@ -372,7 +369,14 @@
 		font-weight: 700;
 		font-size: 30px;
 		line-height: 1;
+	}
+
+	.swing-value.field {
 		color: var(--color-field);
+	}
+
+	.swing-value.pennant {
+		color: var(--color-pennant);
 	}
 
 	.swing-label {
