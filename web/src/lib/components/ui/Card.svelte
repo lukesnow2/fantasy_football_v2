@@ -24,6 +24,7 @@
 	 *   season draft's Best value), and "panel", a box inside a card with a
 	 *   line-soft border and 10px corners (Best drafters)
 	 * - `label`: an accessible name for a card with no title ("Selected pick")
+	 * - `element`: bindable, the card's <section>, for a page that scrolls to it
 	 * - `headAlign`, `headSpacing`: the header row's alignment and gap, when a
 	 *   board draws a control beside the title (This Season's Final standings:
 	 *   center, "10px 16px")
@@ -52,6 +53,8 @@
 		tone?: 'default' | 'borderless' | 'pennant' | 'clubhouse' | 'field' | 'panel';
 		/** An accessible name for a card with no title. */
 		label?: string;
+		/** The card's <section>, bindable. */
+		element?: HTMLElement | null;
 		headAlign?: 'baseline' | 'center';
 		headSpacing?: string;
 		phonePadding?: string;
@@ -75,6 +78,7 @@
 		headGap = 12,
 		tone = 'default',
 		label,
+		element = $bindable(null),
 		headAlign = 'baseline',
 		headSpacing = '8px 12px',
 		phonePadding = '16px',
@@ -92,6 +96,7 @@
 </script>
 
 <section
+	bind:this={element}
 	class="card {tone} {className}"
 	class:flush
 	style:--card-pad={padding}

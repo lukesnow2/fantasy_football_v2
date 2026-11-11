@@ -51,3 +51,41 @@ test('the 2025 board tags no kicker or defense, and a click shows that pick', as
 	await expect(target).toHaveAttribute('aria-pressed', 'true');
 	await expect(page.locator('button[aria-label^="Pick "][aria-pressed="true"]')).toHaveCount(1);
 });
+
+test('a failed season shows its own card, and Try again loads it', async ({ page }) => {
+	let fail = true;
+	await page.route(/\/api\/draft/, (r) => {
+		const season = new URL(r.request().url()).searchParams.get('season');
+		if (season === '2025' && fail) return r.fulfill({ status: 500, body: '{}' });
+		return r.fulfill({
+			contentType: 'application/json',
+			body: JSON.stringify(season === '2025' ? f.season2025 : f.all)
+		});
+	});
+	await page.goto('/draft');
+	await page.getByLabel('Season').selectOption('2025');
+	await expect(page.getByRole('heading', { name: "The 2025 draft didn't load" })).toBeVisible();
+	await expect(page.getByText('No draft for')).toHaveCount(0);
+
+	fail = false;
+	await page.getByRole('button', { name: 'Try again' }).click();
+	await expect(page.getByRole('region', { name: 'Selected pick' })).toBeVisible();
+});
+
+test('a slow earlier season never replaces the one picked last', async ({ page }) => {
+	await page.route(/\/api\/draft/, async (r) => {
+		const season = new URL(r.request().url()).searchParams.get('season');
+		// 2024 answers late with the 2025 fixture relabeled, so a stale landing shows.
+		if (season === '2024') await new Promise((done) => setTimeout(done, 1500));
+		const body = season ? structuredClone(f.season2025) : f.all;
+		if (season === '2024') body.data.draftBoard[0].playerName = 'Stale 2024 pick';
+		return r.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+	});
+	await page.goto('/draft');
+	await page.getByLabel('Season').selectOption('2024');
+	await page.getByLabel('Season').selectOption('2025');
+	await expect(page.getByRole('region', { name: 'Selected pick' })).toBeVisible();
+	await page.waitForTimeout(2000);
+	await expect(page.getByRole('heading', { name: 'The 2025 draft', exact: true })).toBeVisible();
+	await expect(page.getByText('Stale 2024 pick')).toHaveCount(0);
+});

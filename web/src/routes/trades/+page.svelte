@@ -207,9 +207,9 @@
 
 	<!-- S8.2 Most lopsided trades -->
 	{#if lopsidedRows.length > 0}
+		<div class="gap">
 		<Card
 			title="Most lopsided trades"
-			class="card-gap"
 			headGap={0}
 			headSpacing="8px 16px"
 			phoneHeadStack
@@ -259,6 +259,7 @@
 				</div>
 			{/each}
 		</Card>
+		</div>
 	{/if}
 
 	<!-- S8.3 Trades that won a title, and recent trades -->
@@ -351,7 +352,7 @@
 		color: var(--color-field);
 	}
 
-	:global(.card-gap) {
+	.gap {
 		margin-top: 20px;
 	}
 
@@ -569,7 +570,7 @@
 			margin-top: 14px;
 		}
 
-		:global(.card-gap) {
+		.gap {
 			margin-top: 14px;
 		}
 

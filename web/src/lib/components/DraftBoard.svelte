@@ -12,16 +12,14 @@
 	 * on the cells; they never hide a cell.
 	 */
 	import { Avatar, Button, Card, EmptyValue, GradeChip, Tag } from '$lib/components/ui';
-	import { pickGrade } from '$lib/draft-value';
 	import {
 		BOARD_TAGS,
+		boardCell,
 		boardColumns,
+		cellTagCounts,
 		pickGradeColor,
-		pickTag,
 		pointsOf,
-		positionKey,
 		signed,
-		tagCounts,
 		type BoardPick,
 		type BoardTag
 	} from '$lib/draft-display';
@@ -53,7 +51,9 @@
 	});
 
 	const layout = $derived(boardColumns(picks));
-	const counts = $derived(tagCounts(picks));
+	// Each pick's grade, tag, colors and text, worked out once per season.
+	const cells = $derived(new Map(picks.map((p) => [p.overallPick, boardCell(p)] as const)));
+	const counts = $derived(cellTagCounts(cells.values()));
 	const gradeOf = $derived(
 		new Map(
 			grades
@@ -61,22 +61,6 @@
 				.map((g) => [g.managerName, g] as const)
 		)
 	);
-
-	function gradeFor(pick: BoardPick): string | null {
-		return pickGrade(
-			pointsOf(pick),
-			pick.expectedPoints,
-			pick.highExpectation ?? false,
-			pick.primaryPosition
-		);
-	}
-
-	function cellColors(pick: BoardPick): { bg: string; bar: string } {
-		const key = positionKey(pick.primaryPosition);
-		return key
-			? { bg: `var(--color-pos-${key}-tint)`, bar: `var(--color-pos-${key})` }
-			: { bg: 'var(--color-wash)', bar: 'var(--color-muted)' };
-	}
 </script>
 
 <Card
@@ -90,7 +74,7 @@
 	class="draft-board"
 >
 	{#snippet action()}
-		<span class="legend" aria-label="Positions">
+		<span class="legend" role="group" aria-label="Positions">
 			{#each LEGEND as pos (pos)}
 				<span class="legend-item"
 					><span
@@ -149,33 +133,30 @@
 					<span class="round round-label">R{row.round}</span>
 					{#each row.cells as pick, i (pick?.overallPick ?? `empty-${i}`)}
 						{#if pick}
-							{@const grade = gradeFor(pick)}
-							{@const tag = pickTag(pick)}
-							{@const colors = cellColors(pick)}
+							{@const c = cells.get(pick.overallPick)!}
 							{@const on = pick.overallPick === selected}
 							<button
 								type="button"
 								class="cell"
 								class:on
 								aria-pressed={on}
-								aria-label="Pick {pick.overallPick}, {pick.playerName}, {pick.primaryPosition}, grade {grade ??
-									'none'}"
-								style:background={colors.bg}
-								style:--bar={colors.bar}
+								aria-label={c.label}
+								style:background={c.bg}
+								style:--bar={c.bar}
 								onclick={() => onpick(pick.overallPick)}
 							>
 								<span class="cell-top"
-									><span>{pick.overallPick} · {pick.primaryPosition}</span><span
+									><span>{c.slot}</span><span
 										class="cell-grade"
-										style:color="var(--color-{pickGradeColor(grade)})"
-										>{#if grade}{grade}{:else}<EmptyValue />{/if}</span
+										style:color="var(--color-{pickGradeColor(c.grade)})"
+										>{#if c.grade}{c.grade}{:else}<EmptyValue />{/if}</span
 									></span
 								>
 								<span class="cell-player">{pick.playerName}</span>
 								<span class="cell-bottom"
-									><span>{pointsOf(pick).toFixed(1)} pts</span>{#if tag && !hidden[tag]}<Tag
-											variant={tag}
-											size="cell">{BOARD_TAGS.find((t) => t.key === tag)?.label}</Tag
+									><span>{pointsOf(pick).toFixed(1)} pts</span>{#if c.tag && !hidden[c.tag]}<Tag
+											variant={c.tag}
+											size="cell">{c.tagLabel}</Tag
 										>{/if}</span
 								>
 							</button>

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+	boardCell,
 	boardColumns,
+	cellTagCounts,
+	pickMeta,
 	boardTag,
 	consistencyDetail,
 	draftValueBar,
@@ -181,5 +184,40 @@ describe('signed', () => {
 		expect(signed(0.004, 2)).toBe('0.00');
 		expect(signed(-0.04, 1)).toBe('0.0');
 		expect(draftValueBar(-0.003)).toMatchObject({ tone: 'field', text: '0.00' });
+	});
+});
+
+describe('boardCell', () => {
+	const base = { overallPick: 87, roundNumber: 9, managerName: 'Craig', playerName: 'Dak Prescott' };
+
+	it('works out the grade, tag, colors and text once', () => {
+		const c = boardCell({ ...base, primaryPosition: 'QB', seasonPoints: 466.9, expectedPoints: 267, highExpectation: false });
+		expect(c).toEqual({
+			grade: 'A+',
+			tag: 'steal',
+			tagLabel: 'Steal',
+			bg: 'var(--color-pos-qb-tint)',
+			bar: 'var(--color-pos-qb)',
+			slot: '87 · QB',
+			label: 'Pick 87, Dak Prescott, QB, grade A+'
+		});
+	});
+
+	it('leaves out a missing position instead of printing "null"', () => {
+		const c = boardCell({ ...base, primaryPosition: null, seasonPoints: 100, expectedPoints: null });
+		expect(c.slot).toBe('87');
+		expect(c.label).toBe('Pick 87, Dak Prescott, grade none');
+		expect(c.bg).toBe('var(--color-wash)');
+		expect(pickMeta({ ...base, primaryPosition: null })).toBe('R9 · #87 · Craig');
+		expect(pickMeta({ ...base, primaryPosition: 'QB' })).toBe('R9 · #87 · QB · Craig');
+	});
+
+	it('counts tags from the cells the same as from the picks', () => {
+		const picks = [
+			{ ...base, primaryPosition: 'RB', seasonPoints: 200, expectedPoints: 100, highExpectation: true },
+			{ ...base, overallPick: 88, primaryPosition: 'K', seasonPoints: 200, expectedPoints: 100, highExpectation: true },
+			{ ...base, overallPick: 89, primaryPosition: 'TE', seasonPoints: 40, expectedPoints: 100, highExpectation: true }
+		];
+		expect(cellTagCounts(picks.map(boardCell))).toEqual(tagCounts(picks));
 	});
 });

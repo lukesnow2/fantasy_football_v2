@@ -305,27 +305,25 @@
 	);
 
 	// ---- S8.5 Career draft grades -------------------------------------------
-	const desktopColumns: Column[] = [
-		{ key: 'name', label: 'Manager' },
-		{ key: 'grade', label: 'Grade', width: '60px', wrapHeader: true },
-		{ key: 'value', label: 'Draft value per season', width: '240px', fixedHeader: true },
-		{ key: 'steals', label: 'Steals', numeric: true, width: '64px', fixedHeader: true },
-		{ key: 'busts', label: 'Busts', numeric: true, width: '64px', fixedHeader: true },
-		{ key: 'hit', label: 'Hit rate', numeric: true, width: '72px', wrapHeader: true },
-		{ key: 'avg', label: 'Avg pick', numeric: true, width: '72px', fixedHeader: true }
+	// One list for both widths. The phone table is 786px wide: the Manager
+	// column's 16px inset sits inside its 172px and Avg pick's inside its 86px.
+	// Desktop's Grade and Hit rate headers wrap their ⓘ as the board draws it.
+	const GRADE_COLUMNS: (Omit<Column, 'width'> & { desktop?: string; phone: string; wrap?: boolean })[] = [
+		{ key: 'name', label: 'Manager', phone: '156px' },
+		{ key: 'grade', label: 'Grade', desktop: '60px', phone: '64px', wrap: true },
+		{ key: 'value', label: 'Draft value per season', desktop: '240px', phone: '200px' },
+		{ key: 'steals', label: 'Steals', numeric: true, desktop: '64px', phone: '56px' },
+		{ key: 'busts', label: 'Busts', numeric: true, desktop: '64px', phone: '56px' },
+		{ key: 'hit', label: 'Hit rate', numeric: true, desktop: '72px', phone: '80px', wrap: true },
+		{ key: 'avg', label: 'Avg pick', numeric: true, desktop: '72px', phone: '70px' }
 	];
-	// The phone table: 786px wide, the Manager column's 16px inset inside its
-	// 172px and Avg pick's inside its 86px.
-	const phoneColumns: Column[] = [
-		{ key: 'name', label: 'Manager', width: '156px', fixedHeader: true },
-		{ key: 'grade', label: 'Grade', width: '64px', fixedHeader: true },
-		{ key: 'value', label: 'Draft value per season', width: '200px', fixedHeader: true },
-		{ key: 'steals', label: 'Steals', numeric: true, width: '56px', fixedHeader: true },
-		{ key: 'busts', label: 'Busts', numeric: true, width: '56px', fixedHeader: true },
-		{ key: 'hit', label: 'Hit rate', numeric: true, width: '80px', fixedHeader: true },
-		{ key: 'avg', label: 'Avg pick', numeric: true, width: '70px', fixedHeader: true }
-	];
-	const columns = $derived(phone ? phoneColumns : desktopColumns);
+	const columns = $derived<Column[]>(
+		GRADE_COLUMNS.map(({ desktop, phone: phoneWidth, wrap, ...c }) => {
+			const width = phone ? phoneWidth : desktop;
+			const wraps = !phone && wrap;
+			return { ...c, width, wrapHeader: wraps, fixedHeader: width != null && !wraps };
+		})
+	);
 	const HEADER_TIPS: Record<string, string> = {
 		grade: 'draft_grade',
 		value: 'draft_value_per_season',
@@ -465,13 +463,13 @@
 	</div>
 
 	<!-- S8.5 Career draft grades -->
+	<div class="gap grades">
 	<Card
 		title="Career draft grades"
 		padding="22px 24px 12px"
 		phonePadding="16px 16px 8px"
 		headSpacing="8px 16px"
 		phoneHeadStack
-		class="card-gap grades-card"
 	>
 		{#snippet action()}<span class="head-note"
 				>A and F take a long record well clear of average. C means too close to call.</span
@@ -520,6 +518,7 @@
 			weigh the whole record, so getting off a C takes years of drafting that way.
 		</p>
 	</Card>
+	</div>
 
 	<!-- S8.6 Best value picks, biggest busts, best drafters -->
 	{#if draftValue}
@@ -546,12 +545,8 @@
 		</div>
 
 		{#if draftValue.byManager?.length}
-			<Card
-				title="Best drafters"
-				headSpacing="8px 16px"
-				phoneHeadStack
-				class="card-gap"
-			>
+			<div class="gap">
+			<Card title="Best drafters" headSpacing="8px 16px" phoneHeadStack>
 				{#snippet action()}<span class="head-note"
 						>Average points over expectation per pick, career</span
 					>{/snippet}
@@ -581,6 +576,7 @@
 					{/each}
 				</div>
 			</Card>
+			</div>
 		{/if}
 	{/if}
 {:else if loadingSeason}
@@ -616,8 +612,12 @@
 	<!-- S8.7 Selected pick, best and worst -->
 	<div class="pick-row" class:after-note={season?.seasonInProgress}>
 		{#if shownPick}
-			<div class="selected-wrap" bind:this={selectedCard}>
-				<Card label="Selected pick" padding="20px 22px" class="selected-card">
+				<Card
+					label="Selected pick"
+					padding="20px 22px"
+					class="selected-card"
+					bind:element={selectedCard}
+				>
 					<div class="selected">
 						<div class="selected-who">
 							<div class="selected-top">
@@ -662,13 +662,12 @@
 						</div>
 					</div>
 				</Card>
-			</div>
 		{/if}
 		<DraftAnalysis picks={seasonPicks} onpick={choosePick} />
 	</div>
 
 	<!-- S8.8 The draft board -->
-	<div class="card-gap">
+	<div class="gap">
 		<DraftBoard
 			picks={board}
 			season={selectedSeason}
@@ -697,7 +696,7 @@
 		color: var(--color-muted);
 	}
 
-	:global(.card-gap) {
+	.gap {
 		margin-top: 20px;
 	}
 
@@ -868,15 +867,11 @@
 		margin-top: 20px;
 	}
 
-	/* The board is content-box: the basis is the card's content width. */
-	.selected-wrap {
-		display: flex;
-		flex: 2 1 calc(460px + 46px);
-		min-width: 0;
-	}
-
-	.selected-wrap :global(.selected-card) {
-		flex: 1;
+	/* The board is content-box: the basis is the card's content width, with
+	   its padding outside it, as on the Trade Center. */
+	.pick-row :global(.selected-card) {
+		box-sizing: content-box;
+		flex: 2 1 460px;
 		display: flex;
 		align-items: center;
 	}
@@ -971,7 +966,7 @@
 			margin-top: 14px;
 		}
 
-		:global(.card-gap) {
+		.gap {
 			margin-top: 14px;
 		}
 
@@ -987,11 +982,11 @@
 		}
 
 		/* The table runs flush to the card's sides and scrolls inside it. */
-		:global(.grades-card .scroll) {
+		.grades :global(.scroll) {
 			margin: 12px -16px 0;
 		}
 
-		:global(.grades-card .head) {
+		.grades :global(.head) {
 			margin-bottom: 0;
 		}
 
@@ -1053,11 +1048,9 @@
 			margin-top: 14px;
 		}
 
-		.selected-wrap {
+		.pick-row :global(.selected-card) {
+			box-sizing: border-box;
 			flex: none;
-		}
-
-		.selected-wrap :global(.selected-card) {
 			display: block;
 		}
 

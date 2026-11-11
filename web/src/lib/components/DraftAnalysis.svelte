@@ -10,7 +10,7 @@
 	 * counted on, and never a kicker or defense.
 	 */
 	import { Card } from '$lib/components/ui';
-	import { signed } from '$lib/draft-display';
+	import { pickMeta, signed } from '$lib/draft-display';
 
 	interface SeasonPick {
 		overallPick: number;
@@ -55,9 +55,7 @@
 						<span>{p.playerName}</span>
 						<span class="value">{signed(Number(p.valueOverExpected ?? 0), 1)}</span>
 					</span>
-					<span class="row-meta"
-						>R{p.roundNumber} · #{p.overallPick} · {p.primaryPosition} · {p.managerName}</span
-					>
+					<span class="row-meta">{pickMeta(p)}</span>
 				</button>
 			{/each}
 		</Card>

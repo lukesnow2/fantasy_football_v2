@@ -4,7 +4,7 @@
  * and the callouts' wording. The analysis itself stays in $lib/draft-value.
  */
 
-import { pickVerdict, type PickVerdict } from '$lib/draft-value';
+import { pickGrade, pickVerdict, type PickVerdict } from '$lib/draft-value';
 import { formatSigned } from '$lib/utils/managers';
 
 /* ---------- Grades ---------- */
@@ -189,12 +189,76 @@ export function pickTag(pick: BoardPick): BoardTag | null {
 
 /** How many picks carry each tag. Kickers and defenses are never counted. */
 export function tagCounts(picks: BoardPick[]): Record<BoardTag, number> {
+	return countTags(picks.map(pickTag));
+}
+
+function countTags(tags: (BoardTag | null)[]): Record<BoardTag, number> {
 	const counts: Record<BoardTag, number> = { steal: 0, value: 0, letdown: 0, bust: 0 };
-	for (const p of picks) {
-		const tag = pickTag(p);
-		if (tag) counts[tag] += 1;
-	}
+	for (const tag of tags) if (tag) counts[tag] += 1;
 	return counts;
+}
+
+const TAG_LABEL: Record<BoardTag, string> = Object.fromEntries(
+	BOARD_TAGS.map((t) => [t.key, t.label])
+) as Record<BoardTag, string>;
+
+export interface BoardCell {
+	grade: string | null;
+	tag: BoardTag | null;
+	tagLabel: string | null;
+	/** Fill and top bar, as CSS values. */
+	bg: string;
+	bar: string;
+	/** "87 · QB", or "87" for a pick with no position. */
+	slot: string;
+	/** The button's accessible name. */
+	label: string;
+}
+
+/**
+ * Everything a board cell draws, worked out once per pick: the grade and tag
+ * (from the same verdict as every count), the position colors (wash and a
+ * muted bar outside the six), and the text, which leaves out a missing
+ * position rather than printing "null".
+ */
+export function boardCell(pick: BoardPick & { playerName?: string }): BoardCell {
+	const grade = pickGrade(
+		pointsOf(pick),
+		pick.expectedPoints,
+		pick.highExpectation ?? false,
+		pick.primaryPosition
+	);
+	const tag = pickTag(pick);
+	const key = positionKey(pick.primaryPosition);
+	const pos = pick.primaryPosition || null;
+	return {
+		grade,
+		tag,
+		tagLabel: tag ? TAG_LABEL[tag] : null,
+		bg: key ? `var(--color-pos-${key}-tint)` : 'var(--color-wash)',
+		bar: key ? `var(--color-pos-${key})` : 'var(--color-muted)',
+		slot: pos ? `${pick.overallPick} · ${pos}` : String(pick.overallPick),
+		label: [`Pick ${pick.overallPick}`, pick.playerName, pos, `grade ${grade ?? 'none'}`]
+			.filter(Boolean)
+			.join(', ')
+	};
+}
+
+/** Tag counts from cells already worked out, so no verdict runs twice. */
+export function cellTagCounts(cells: Iterable<BoardCell>): Record<BoardTag, number> {
+	return countTags([...cells].map((c) => c.tag));
+}
+
+/** "R9 · #87 · QB · Craig", leaving out any part that's missing. */
+export function pickMeta(p: {
+	roundNumber: number;
+	overallPick: number;
+	primaryPosition?: string | null;
+	managerName: string;
+}): string {
+	return [`R${p.roundNumber}`, `#${p.overallPick}`, p.primaryPosition, p.managerName]
+		.filter(Boolean)
+		.join(' · ');
 }
 
 /* ---------- The board's columns ---------- */
