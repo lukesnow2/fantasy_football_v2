@@ -288,6 +288,7 @@
 
 		<Card title="Recent trades" class="recent-card" headGap={0} headSpacing="12px">
 			{#snippet action()}<span class="total">{totalReturned} total</span>{/snippet}
+			<div id="recent-trades-list">
 			{#each shownTrades as trade, i (i)}
 				<div class="recent">
 					<div class="recent-top">
@@ -315,12 +316,14 @@
 					</div>
 				</div>
 			{/each}
+			</div>
 			{#if allTrades.length > 3}
 				<Button
 					variant="link"
 					size="tap"
 					class="all-trades"
 					aria-expanded={expanded}
+					aria-controls="recent-trades-list"
 					onclick={() => (expanded = !expanded)}
 				>
 					{expanded ? 'Show the latest three' : `All ${totalReturned} trades →`}

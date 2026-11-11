@@ -358,6 +358,11 @@
 			: null
 	);
 
+	// Colored from the rounded value, so "0.0" never reads as a miss.
+	const vsBelow = $derived(
+		shownPick?.valueOverExpected != null && Math.round(Number(shownPick.valueOverExpected) * 10) < 0
+	);
+
 	async function choosePick(overallPick: number) {
 		selectedPick = overallPick;
 		// Below 640px the card can sit 2,000px above the tapped cell.
@@ -600,7 +605,7 @@
 	</div>
 {:else}
 	{#if season?.seasonInProgress}
-		<div class="first">
+		<div class="first season-note">
 			<Card title="Season in progress">
 				<p class="muted-line last">
 					This season is still being played: grades and tags are judged on points so far.
@@ -643,11 +648,7 @@
 								<div class="stat-label">Expected</div>
 							</div>
 							<div>
-								<div
-									class="stat-value"
-									class:up={Number(shownPick.valueOverExpected) >= 0}
-									class:down={Number(shownPick.valueOverExpected) < 0}
-								>
+								<div class="stat-value" class:up={!vsBelow} class:down={vsBelow}>
 									{#if shownPick.valueOverExpected == null}<EmptyValue />{:else}{signed(
 											Number(shownPick.valueOverExpected),
 											1
@@ -681,6 +682,11 @@
 <style>
 	.first {
 		margin-top: 28px;
+	}
+
+	/* The season view's first block sits 24px under the header, as on the board. */
+	.first.season-note {
+		margin-top: 24px;
 	}
 
 	.muted-line {
@@ -962,6 +968,7 @@
 	/* ---- S8.10 phones ---- */
 	@media (max-width: 639.98px) {
 		.first,
+		.first.season-note,
 		.callouts {
 			margin-top: 14px;
 		}
