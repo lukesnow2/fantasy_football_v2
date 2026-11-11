@@ -128,3 +128,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Compact, tight (Trade Center phone)">
+	{#snippet template()}
+		<div style="width: 180px; border: 1px solid var(--color-line); border-radius: 12px">
+			<StatTile compact tight label="Trades, all time" value="104" />
+		</div>
+	{/snippet}
+</Story>

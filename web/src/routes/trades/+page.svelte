@@ -1,30 +1,74 @@
 <script lang="ts">
-	import { TrendingUp, Trophy, Calendar, BarChart3, Target } from 'lucide-svelte';
 	import { onMount } from 'svelte';
-	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	
-	let tradeData: any = null;
-	let loading = true;
-	let loadingTrades = false;
-	let selectedSeason = 'all';
+	import {
+		Avatar,
+		Button,
+		Card,
+		OddsBar,
+		Pennant,
+		Select,
+		StatStrip,
+		StatTile,
+		Tag
+	} from '$lib/components/ui';
+	import { profileHref } from '$lib/home';
+	import {
+		championSide,
+		gotBy,
+		inProgress,
+		lopsidedRow,
+		lopsidedTrades,
+		managerOf,
+		margin,
+		oneDecimal,
+		perSeason,
+		recentTrades,
+		repeatLoserLine,
+		tradeScoreLine,
+		type Side,
+		type TradeRow
+	} from '$lib/trade-center';
 
-	onMount(async () => {
-		loading = false;
+	interface TradeResponse {
+		trades: TradeRow[];
+		analytics: {
+			overview?: {
+				totalTrades?: number | string;
+				championshipImpactTrades?: number | string;
+				avgProductionImpact?: number | string;
+			};
+			bestTrades?: TradeRow[];
+			championshipTrades?: TradeRow[];
+		};
+		meta: { totalReturned: number; availableSeasons: number[] };
+	}
+
+	let tradeData = $state<TradeResponse | null>(null);
+	let loadingTrades = $state(true);
+	let failed = $state(false);
+	let selectedSeason = $state('all');
+	let expanded = $state(false);
+
+	onMount(() => {
 		loadTradeData();
 	});
 
 	// Load trade data
 	async function loadTradeData(season = 'all') {
 		loadingTrades = true;
+		failed = false;
 		try {
 			const response = await fetch(`/api/trades?analysis=all&season=${season}`);
 			if (response.ok) {
 				tradeData = await response.json();
 			} else {
+				failed = true;
 				console.error('Failed to fetch trade data:', response.status, response.statusText);
 			}
 		} catch (err) {
+			failed = true;
 			console.error('Error fetching trade data:', err);
 		} finally {
 			loadingTrades = false;
@@ -33,258 +77,582 @@
 
 	// Handle season filter change
 	function handleSeasonChange() {
+		expanded = false;
 		loadTradeData(selectedSeason);
 	}
 
-	// Helper function to get trade score color
-	function getScoreColor(score: number): string {
-		if (score >= 70) return 'text-green-400';
-		if (score >= 55) return 'text-blue-400';
-		if (score >= 45) return 'text-amber-400';
-		return 'text-red-400';
-	}
+	// The phone layout (below 640px) makes each avatar and name block the link,
+	// which is markup, not spacing. The data loads in the browser, so the body
+	// never renders on the server.
+	const phoneQuery = new MediaQuery('max-width: 639.98px', false);
+	const phone = $derived(phoneQuery.current);
 
-	// Helper function to get trade grade
-	function getTradeGrade(score: number): string {
-		if (score >= 85) return 'A+';
-		if (score >= 80) return 'A';
-		if (score >= 75) return 'A-';
-		if (score >= 70) return 'B+';
-		if (score >= 65) return 'B';
-		if (score >= 60) return 'B-';
-		if (score >= 55) return 'C+';
-		if (score >= 50) return 'C';
-		if (score >= 45) return 'C-';
-		if (score >= 40) return 'D+';
-		if (score >= 35) return 'D';
-		return 'F';
-	}
+	const seasons = $derived(tradeData?.meta?.availableSeasons ?? []);
+	const firstSeason = $derived(seasons.length ? Math.min(...seasons) : null);
+	const oneSeason = $derived(selectedSeason !== 'all');
+	const overview = $derived(tradeData?.analytics?.overview);
+	const total = $derived(Number(overview?.totalTrades ?? 0) || 0);
+
+	const seasonOptions = $derived([
+		{ value: 'all', label: 'All seasons' },
+		...seasons.map((s) => ({ value: String(s), label: String(s) }))
+	]);
+
+	// ---- S8.1 the numbers ----------------------------------------------------
+	const stats = $derived(
+		[
+			{ label: oneSeason ? `Trades in ${selectedSeason}` : 'Trades, all time', value: String(total) },
+			oneSeason ? null : { label: 'Per season', value: perSeason(total, seasons.length) },
+			{
+				label: 'Swung a title',
+				value: String(Number(overview?.championshipImpactTrades ?? 0) || 0)
+			},
+			{
+				label: 'Average impact',
+				value: oneDecimal(overview?.avgProductionImpact),
+				metricId: 'production_differential'
+			}
+		].filter((s) => s != null)
+	);
+
+	// ---- S8.2 Most lopsided trades -------------------------------------------
+	const lopsided = $derived(lopsidedTrades(tradeData?.analytics?.bestTrades ?? []));
+	const lopsidedRows = $derived(lopsided.map(lopsidedRow));
+	const repeatLoser = $derived(repeatLoserLine(lopsided));
+
+	// ---- S8.3 Trades that won a title, and recent trades ---------------------
+	const titleTrades = $derived(
+		(tradeData?.analytics?.championshipTrades ?? []).map((t) => {
+			const side = championSide(t);
+			return {
+				champion: managerOf(t, side),
+				year: t.seasonYear,
+				got: gotBy(t, side),
+				margin: margin(t.productionDifferential)
+			};
+		})
+	);
+	const allTrades = $derived(tradeData?.trades ?? []);
+	const totalReturned = $derived(tradeData?.meta?.totalReturned ?? allTrades.length);
+	const shownTrades = $derived(recentTrades(allTrades, expanded));
+	const SIDES: Side[] = ['A', 'B'];
 </script>
 
 <svelte:head>
-	<title>Trade Center - The League</title>
+	<title>Trade Center · The League</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<PageHeader icon={Target} title="Trade Center" accent="amber">
-		Complete trade analysis and history. Explore deal winners, championship impact trades, and
-		comprehensive transaction analytics across all seasons.
-	</PageHeader>
-
-	<!-- Trade Analysis Content -->
-	{#if loadingTrades}
-		<div class="flex items-center justify-center h-64">
-			<div class="text-slate-400">Loading comprehensive trade analysis...</div>
-		</div>
-	{:else if tradeData}
-		<div class="space-y-8">
-			<!-- Season Filter -->
-			<div class="flex items-center justify-between bg-slate-800/30 rounded-lg p-4">
-				<div>
-					<label for="season-filter" class="text-slate-300 font-medium">Filter by Season:</label>
-					<select 
-						id="season-filter"
-						bind:value={selectedSeason} 
-						on:change={handleSeasonChange}
-						class="bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
-					>
-						<option value="all">All Seasons</option>
-						{#each (tradeData?.meta?.availableSeasons || []) as season}
-							<option value={season}>{season}</option>
-						{/each}
-					</select>
-				</div>
-				<div class="text-slate-400 text-sm">
-					{tradeData.meta?.totalReturned || 0} trades • {selectedSeason === 'all' ? 'All seasons' : selectedSeason}
-				</div>
-			</div>
-
-			<!-- Trade Analytics Overview -->
-			{#if tradeData.analytics?.overview}
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<BarChart3 class="w-6 h-6 text-blue-400 mr-3" />
-						Trade Analytics Overview
-					</h2>
-					
-					<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-						<div class="text-center">
-							<div class="text-3xl font-bold text-blue-400">{tradeData.analytics.overview.totalTrades || 0}</div>
-							<div class="text-slate-400">Total Trades</div>
-						</div>
-						<div class="text-center">
-							<div class="text-3xl font-bold text-green-400">{tradeData.analytics.overview.avgTradesPerSeason ? parseFloat(tradeData.analytics.overview.avgTradesPerSeason).toFixed(1) : (tradeData.meta?.availableSeasons?.length ? (parseInt(tradeData.analytics.overview.totalTrades) / tradeData.meta.availableSeasons.length).toFixed(1) : '—')}</div>
-							<div class="text-slate-400">Per Season</div>
-						</div>
-						<div class="text-center">
-							<div class="text-3xl font-bold text-amber-400">{tradeData.analytics.overview.championshipImpactTrades || 0}</div>
-							<div class="text-slate-400">Championship Impact</div>
-						</div>
-						<div class="text-center">
-							<div class="text-3xl font-bold text-purple-400">{parseFloat(tradeData.analytics.overview.avgProductionImpact || 0).toFixed(1)}</div>
-							<div class="text-slate-400">
-								<MetricHelp metricId="production_differential" position="top" theme="dark" className="text-slate-400" showIcon={false}>
-									Avg Impact
-								</MetricHelp>
-							</div>
-						</div>
-					</div>
-				</section>
-			{/if}
-
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-							<!-- Best Trades -->
-			{#if tradeData.analytics?.bestTrades}
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<TrendingUp class="w-6 h-6 text-green-400 mr-3" />
-						Most Decisive Trades ({tradeData.analytics.bestTrades.length})
-					</h2>
-					
-					<div class="space-y-4">
-						{#each tradeData.analytics.bestTrades as trade, index}
-								{@const winnerScore = parseFloat(trade.teamAFinalScore || 0) > parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
-								{@const loserScore = parseFloat(trade.teamAFinalScore || 0) < parseFloat(trade.teamBFinalScore || 0) ? parseFloat(trade.teamAFinalScore || 0) : parseFloat(trade.teamBFinalScore || 0)}
-								<div class="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-									<div class="flex items-center justify-between mb-2">
-										<span class="font-bold text-white">{trade.tradeWinner}</span>
-										<div class="flex items-center space-x-2">
-											<span class="bg-green-500 text-white px-2 py-1 rounded text-sm font-bold">
-												+{parseFloat(trade.productionDifferential || 0).toFixed(1)}
-											</span>
-											<span class="text-xs text-slate-400">{trade.seasonYear}</span>
-										</div>
-									</div>
-									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-blue-400">{trade.teamAManager}:</span> {trade.teamAGives}
-									</div>
-									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-purple-400">{trade.teamBManager}:</span> {trade.teamBGives}
-									</div>
-									<div class="flex justify-between text-xs">
-										<span class="text-slate-500">Week {trade.transactionWeek}</span>
-										<span class="text-green-400 font-bold">
-											Final: {winnerScore.toFixed(1)} - {loserScore.toFixed(1)}
-										</span>
-									</div>
-									<div class="text-xs text-slate-400 mt-2">{trade.tradeAnalysis}</div>
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- Championship Impact Trades -->
-				{#if tradeData.analytics?.championshipTrades}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-							Championship Impact Trades
-						</h2>
-						
-						<div class="text-sm text-slate-400 mb-4">
-							Showing trades with positive 50+ point production differentials that involved championship winners
-						</div>
-						
-						<div class="space-y-4">
-							{#each tradeData.analytics.championshipTrades as trade}
-								{@const champion = trade.teamAChampion ? trade.teamAManager : trade.teamBManager}
-								<div class="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-									<div class="flex items-center justify-between mb-2">
-										<span class="font-bold text-white">{champion} 🏆</span>
-										<div class="flex items-center space-x-2">
-											<span class="bg-amber-500 text-black px-2 py-1 rounded text-sm font-bold">
-												CHAMP
-											</span>
-											<span class="text-xs text-slate-400">{trade.seasonYear}</span>
-										</div>
-									</div>
-									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-blue-400">{trade.teamAManager}:</span> {trade.teamAGives}
-									</div>
-									<div class="text-sm text-slate-300 mb-2">
-										<span class="text-purple-400">{trade.teamBManager}:</span> {trade.teamBGives}
-									</div>
-									<div class="flex justify-between text-xs">
-										<span class="text-slate-500">Week {trade.transactionWeek}</span>
-										<span class="text-amber-400 font-bold">
-											Production: {parseFloat(trade.productionDifferential || 0) > 0 ? '+' : ''}{parseFloat(trade.productionDifferential || 0).toFixed(1)}
-										</span>
-									</div>
-									<div class="text-xs text-slate-400 mt-2">{trade.tradeAnalysis}</div>
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-			</div>
-
-			<!-- Recent Trades -->
-			{#if tradeData.trades}
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<Calendar class="w-6 h-6 text-blue-400 mr-3" />
-						Recent Trade History ({tradeData.trades.length} total)
-					</h2>
-					
-					<div class="space-y-3">
-						{#each tradeData.trades.slice(0, 10) as trade, index}
-							<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 
-								{trade.tradeWinner === 'Even Trade' ? 'border-amber-400' :
-								 trade.teamAFinalScore > trade.teamBFinalScore ? 'border-green-400' : 'border-blue-400'}">
-								<div class="flex items-center justify-between mb-2">
-									<div class="flex items-center space-x-3">
-										<span class="text-white font-bold">{trade.tradeType}</span>
-										<span class="text-slate-400 text-sm">Week {trade.transactionWeek}, {trade.seasonYear}</span>
-									</div>
-									<span class="text-xs px-2 py-1 rounded
-										{trade.tradeWinner === 'Even Trade' ? 'bg-amber-500 bg-opacity-20 text-amber-300' :
-										 'bg-green-500 bg-opacity-20 text-green-300'}">
-										{trade.tradeWinner}
-									</span>
-								</div>
-								
-								<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-									<div>
-										<span class="text-blue-400 font-medium">{trade.teamAManager}:</span>
-										<span class="text-slate-300">{trade.teamAGives}</span>
-										<div class="text-xs text-slate-500 mt-1">
-											Score: {parseFloat(trade.teamAFinalScore || 0).toFixed(1)} 
-											{#if trade.teamAMadePlayoffs} | Made Playoffs{/if}
-											{#if trade.teamAChampion} | 🏆 Champion{/if}
-										</div>
-									</div>
-									<div>
-										<span class="text-purple-400 font-medium">{trade.teamBManager}:</span>
-										<span class="text-slate-300">{trade.teamBGives}</span>
-										<div class="text-xs text-slate-500 mt-1">
-											Score: {parseFloat(trade.teamBFinalScore || 0).toFixed(1)}
-											{#if trade.teamBMadePlayoffs} | Made Playoffs{/if}
-											{#if trade.teamBChampion} | 🏆 Champion{/if}
-										</div>
-									</div>
-								</div>
-								
-								{#if parseFloat(trade.productionDifferential || 0) !== 0}
-									<div class="mt-2 text-xs text-slate-400">
-										Production Impact: {parseFloat(trade.productionDifferential || 0) > 0 ? '+' : ''}{parseFloat(trade.productionDifferential || 0).toFixed(1)} points
-									</div>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				</section>
-			{/if}
-		</div>
-	{:else}
-		<div class="text-center py-8">
-			<div class="text-slate-400">No trade data available</div>
-			<button 
-				on:click={() => loadTradeData()}
-				class="mt-4 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm"
-			>
-				Retry Loading
-			</button>
-		</div>
+<PageHeader
+	kicker="Activity · every season"
+	title="Trade Center"
+	introWidth={640}
+	phoneActionGap={14}
+	phoneActionFull
+	pending={loadingTrades && !tradeData}
+>
+	{#if tradeData && firstSeason != null}
+		{#if oneSeason}
+			All {total} trades in {selectedSeason}, each scored on how the players did after the deal.
+		{:else}
+			All {total} trades since {firstSeason}, each scored on how the players did after the deal.
+		{/if}
 	{/if}
-</div> 
+	{#snippet action()}
+		{#if tradeData}
+			<Select
+				label="Season"
+				options={seasonOptions}
+				bind:value={selectedSeason}
+				onchange={handleSeasonChange}
+			/>
+		{/if}
+	{/snippet}
+</PageHeader>
+
+<!-- A manager's name, linked to their profile. -->
+{#snippet name(manager: string)}<a class="name-link" href={profileHref(manager)}>{manager}</a>{/snippet}
+
+{#if loadingTrades}
+	<div class="first">
+		<Card title="Loading trades" />
+	</div>
+{:else if failed || !tradeData}
+	<div class="first">
+		<Card title="Trades didn't load">
+			<p class="muted-line">Try again in a minute.</p>
+			<Button variant="secondary" class="retry" onclick={() => loadTradeData(selectedSeason)}>
+				Try again
+			</Button>
+		</Card>
+	</div>
+{:else}
+	<!-- S8.1 The numbers -->
+	<div class="strip">
+		<StatStrip label="Trades in numbers" twoUpOnPhones>
+			{#each stats as s (s.label)}
+				<StatTile label={s.label} value={s.value} metricId={s.metricId} compact={phone} tight />
+			{/each}
+		</StatStrip>
+	</div>
+
+	<!-- S8.2 Most lopsided trades -->
+	{#if lopsidedRows.length > 0}
+		<Card
+			title="Most lopsided trades"
+			class="card-gap"
+			headGap={0}
+			headSpacing="8px 16px"
+			phoneHeadStack
+		>
+			{#snippet action()}
+				{#if repeatLoser}<span class="repeat-loser">{repeatLoser}</span>{/if}
+			{/snippet}
+			{#each lopsidedRows as t, i (i)}
+				<div class="lopsided">
+					<div class="swing">
+						<span class="swing-value">{t.margin}</span>
+						<span class="swing-label">points gained</span>
+					</div>
+					<div class="sides">
+						{#each [{ who: t.winner, got: t.winnerGot, won: true }, { who: t.loser, got: t.loserGot, won: false }] as side (side.who + side.won)}
+							<svelte:element
+								this={phone ? 'a' : 'div'}
+								class="side"
+								class:loser={!side.won}
+								href={phone ? profileHref(side.who) : undefined}
+							>
+								<Avatar name={side.who} size={36} alt="" initialTone="field" initialSize={16} />
+								<span class="side-text">
+									<span class="side-name"
+										>{#if phone}{side.who}{:else}{@render name(side.who)}{/if}
+										{#if side.won}<span class="won">WON</span>{/if}</span
+									>
+									<span class="got">got {side.got}</span>
+								</span>
+							</svelte:element>
+						{/each}
+					</div>
+					<div class="score">
+						<div class="scores">
+							<span>{t.winnerScore}</span><span class="loser-score">{t.loserScore}</span>
+						</div>
+						<div class="bar">
+							<OddsBar
+								percent={t.share}
+								track="pennant"
+								bare
+								label="{t.winner} {t.winnerScore}, {t.loser} {t.loserScore}"
+							/>
+						</div>
+						<div class="when">{t.when}</div>
+					</div>
+				</div>
+			{/each}
+		</Card>
+	{/if}
+
+	<!-- S8.3 Trades that won a title, and recent trades -->
+	<div class="bottom">
+		{#if titleTrades.length > 0}
+			<Card title="Trades that won a title" tone="pennant" class="title-card" headGap={0}>
+				<p class="title-sub">50+ point swings that went to that year's champion.</p>
+				{#each titleTrades as c, i (i)}
+					<div class="title-row">
+						<Pennant width={14} height={20} />
+						<svelte:element
+							this={phone ? 'a' : 'div'}
+							class="title-text"
+							href={phone ? profileHref(c.champion) : undefined}
+						>
+							<span class="title-who"
+								>{#if phone}{c.champion}{:else}{@render name(c.champion)}{/if} · {c.year}</span
+							>
+							<span class="got">got {c.got}</span>
+						</svelte:element>
+						<span class="title-margin">{c.margin}</span>
+					</div>
+				{/each}
+			</Card>
+		{/if}
+
+		<Card title="Recent trades" class="recent-card" headGap={0} headSpacing="12px">
+			{#snippet action()}<span class="total">{totalReturned} total</span>{/snippet}
+			{#each shownTrades as trade, i (i)}
+				<div class="recent">
+					<div class="recent-top">
+						<span>Week {trade.transactionWeek}, {trade.seasonYear} · {trade.tradeType}</span>
+						{#if inProgress(trade)}
+							<Tag variant="pending" size="trade">In progress</Tag>
+						{:else}
+							<Tag variant="final" size="trade">Final</Tag>
+						{/if}
+					</div>
+					<div class="recent-sides">
+						{#each SIDES as side (side)}
+							{@const who = managerOf(trade, side)}
+							{@const line = tradeScoreLine(trade, side)}
+							<svelte:element
+								this={phone ? 'a' : 'div'}
+								class="recent-side"
+								href={phone ? profileHref(who) : undefined}
+							>
+								<b>{#if phone}{who}{:else}{@render name(who)}{/if}</b>
+								<span class="got-inline">got {gotBy(trade, side)}</span>
+								<span class="score-line {line.tone}">{line.text}</span>
+							</svelte:element>
+						{/each}
+					</div>
+				</div>
+			{/each}
+			{#if allTrades.length > 3}
+				<Button
+					variant="link"
+					size="tap"
+					class="all-trades"
+					aria-expanded={expanded}
+					onclick={() => (expanded = !expanded)}
+				>
+					{expanded ? 'Show the latest three' : `All ${totalReturned} trades →`}
+				</Button>
+			{/if}
+		</Card>
+	</div>
+{/if}
+
+<style>
+	.first,
+	.strip {
+		margin-top: 28px;
+	}
+
+	/* The board draws no ⓘ in the strip; G8 adds one to Average impact. Its
+	   glyph comes from a fallback font with a taller line, so hold it to the
+	   label's line and the strip keeps the board's height. */
+	.strip :global(.i) {
+		line-height: 1;
+	}
+
+	.muted-line {
+		margin: 0 0 16px;
+		color: var(--color-muted);
+	}
+
+	.name-link:hover {
+		color: var(--color-field);
+	}
+
+	:global(.card-gap) {
+		margin-top: 20px;
+	}
+
+	/* ---- S8.2 Most lopsided trades ---- */
+	.repeat-loser {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-pennant-dark);
+	}
+
+	.lopsided {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 14px 28px;
+		align-items: center;
+		padding: 18px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+	}
+
+	.swing {
+		display: flex;
+		flex-direction: column;
+		width: 110px;
+	}
+
+	.swing-value {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 30px;
+		line-height: 1;
+		color: var(--color-field);
+	}
+
+	.swing-label {
+		margin-top: 4px;
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.sides {
+		flex: 1 1 520px;
+		min-width: 0;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+	}
+
+	.side {
+		display: flex;
+		gap: 10px;
+		align-items: flex-start;
+	}
+
+	.side.loser :global(.avatar) {
+		opacity: 0.85;
+	}
+
+	.side-text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.side-name {
+		font-weight: 700;
+	}
+
+	.won {
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--color-field);
+	}
+
+	.got {
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	.score {
+		width: 180px;
+	}
+
+	.scores {
+		display: flex;
+		justify-content: space-between;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.loser-score {
+		color: var(--color-muted);
+	}
+
+	.bar {
+		margin-top: 5px;
+	}
+
+	.when {
+		margin-top: 5px;
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	/* ---- S8.3 the bottom row ---- */
+	.bottom {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 20px;
+		margin-top: 20px;
+		align-items: flex-start;
+	}
+
+	/* The boards are content-box: the flex basis is the content's width. */
+	.bottom :global(.title-card) {
+		box-sizing: content-box;
+		flex: 1 1 360px;
+	}
+
+	.bottom :global(.recent-card) {
+		box-sizing: content-box;
+		flex: 2 1 520px;
+	}
+
+	.title-sub {
+		margin: 6px 0 8px;
+		font-size: 14px;
+		color: var(--color-ink-brown);
+	}
+
+	.title-row {
+		display: flex;
+		gap: 14px;
+		align-items: center;
+		padding: 12px 0;
+		border-bottom: 1px solid var(--color-pennant-line);
+	}
+
+	.title-row :global(.pennant) {
+		flex: none;
+	}
+
+	.title-text {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.title-who {
+		font-weight: 700;
+	}
+
+	.title-margin {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 22px;
+	}
+
+	.total {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.recent {
+		padding: 14px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+	}
+
+	.recent-top {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 8px;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.recent-sides {
+		margin-top: 8px;
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+		font-size: 15px;
+	}
+
+	.got-inline {
+		color: var(--color-ink-2);
+	}
+
+	.score-line {
+		display: block;
+		margin-top: 2px;
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	.score-line.field {
+		color: var(--color-field);
+	}
+
+	.score-line.muted {
+		color: var(--color-muted);
+	}
+
+	/* ---- S8.10 phones ---- */
+	@media (max-width: 639.98px) {
+		.first,
+		.strip {
+			margin-top: 14px;
+		}
+
+		:global(.card-gap) {
+			margin-top: 14px;
+		}
+
+		.lopsided {
+			flex-direction: column;
+			flex-wrap: nowrap;
+			align-items: stretch;
+			gap: 12px;
+			padding: 14px 0;
+		}
+
+		.swing {
+			flex-direction: row;
+			align-items: baseline;
+			gap: 8px;
+			width: auto;
+		}
+
+		.swing-value {
+			font-size: 26px;
+		}
+
+		.swing-label {
+			margin-top: 0;
+		}
+
+		/* Winner and loser stack as their own rows, each a 44px link. */
+		.sides {
+			display: contents;
+		}
+
+		.side {
+			min-height: 44px;
+		}
+
+		.side-name {
+			font-size: 15px;
+		}
+
+		.score {
+			width: auto;
+		}
+
+		.bottom {
+			flex-direction: column;
+			flex-wrap: nowrap;
+			align-items: stretch;
+			gap: 14px;
+			margin-top: 14px;
+		}
+
+		.bottom :global(.title-card),
+		.bottom :global(.recent-card) {
+			box-sizing: border-box;
+			flex: none;
+		}
+
+		.title-row {
+			gap: 12px;
+		}
+
+		.title-text {
+			min-height: 44px;
+			justify-content: center;
+		}
+
+		.title-who {
+			font-size: 15px;
+		}
+
+		.title-margin {
+			flex: none;
+		}
+
+		.recent-top {
+			flex-wrap: nowrap;
+			align-items: center;
+		}
+
+		.recent-top :global(.tag) {
+			flex: none;
+		}
+
+		.recent-sides {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.recent-side {
+			display: block;
+			min-height: 44px;
+		}
+
+		.bottom :global(.all-trades) {
+			display: flex;
+			justify-content: flex-start;
+			width: 100%;
+			margin-top: 4px;
+		}
+	}
+</style>

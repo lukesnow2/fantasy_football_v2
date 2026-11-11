@@ -45,7 +45,10 @@
 		color: var(--color-ink-2);
 	}
 
+	/* The native control and its chevron, as the boards draw it (the base
+	   styles turn appearance off for every select). */
 	select {
+		appearance: auto;
 		min-height: 44px;
 		padding: 0 12px;
 		border-radius: var(--radius-control);
