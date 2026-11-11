@@ -72,7 +72,7 @@
 			// Steals/busts/hits judged against what the pick's position and round were
 			// expected to score (expectedOf); busts only among picks expected to beat
 			// an average pick.
-			const verdictOf = (p: any) => pickVerdict(p.points, expectedOf(p.pick), p.pick.highExpectation);
+			const verdictOf = (p: any) => pickVerdict(p.points, expectedOf(p.pick), p.pick.highExpectation, p.pick.primaryPosition);
 			const steals = manager.picks.filter((p: any) => verdictOf(p) === 'steal').length;
 
 			// Only picks the draft counted on can be busts (see pickVerdict).
@@ -147,7 +147,7 @@
 				managerStats[manager] = { name: manager, steals: 0, totalValue: 0 };
 			}
 
-			if (pickVerdict(points, expected, pick.highExpectation) === 'steal') managerStats[manager].steals++;
+			if (pickVerdict(points, expected, pick.highExpectation, pick.primaryPosition) === 'steal') managerStats[manager].steals++;
 			managerStats[manager].totalValue += value;
 		});
 		

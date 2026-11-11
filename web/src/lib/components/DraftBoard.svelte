@@ -72,12 +72,12 @@
 	const pointsOf = (pick: any) => parseFloat(pick.seasonPoints || 0);
 
 	function getPerformanceGrade(pick: any): { grade: string; color: string } {
-		const grade = pickGrade(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		const grade = pickGrade(pointsOf(pick), pick.expectedPoints, pick.highExpectation, pick.primaryPosition);
 		return grade ? { grade, color: GRADE_COLORS[grade] } : { grade: '—', color: 'text-slate-400' };
 	}
 
 	function getValueIndicator(pick: any): string {
-		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation);
+		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation, pick.primaryPosition);
 		// Nothing to judge against is shown as nothing, not as "fair".
 		return verdict ? VERDICT_ICONS[verdict] : '—';
 	}

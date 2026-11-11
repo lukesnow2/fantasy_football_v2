@@ -67,12 +67,12 @@ describe('valueDraftPicks', () => {
 		expect(busts).not.toContain('2025-K-14');
 	});
 
-	it('a kicker reached for in an early round carries that round expectation', () => {
+	it('a kicker reached for in an early round carries that round expectation, but is never a bust', () => {
 		const reach: Pick = {
 			seasonYear: 2025,
 			roundNumber: 4,
 			position: 'K',
-			seasonPoints: 110,
+			seasonPoints: 0,
 			name: 'reach'
 		};
 		const v = valueDraftPicks([...history, ...season(2025), reach], done);
@@ -81,9 +81,9 @@ describe('valueDraftPicks', () => {
 		expect(
 			topBusts(
 				v.filter((p) => p.seasonYear === 2025),
-				1
-			)[0].name
-		).toBe('reach');
+				50
+			).map((p) => p.name)
+		).not.toContain('reach');
 	});
 
 	it('a late breakout is the top steal', () => {
@@ -131,29 +131,74 @@ describe('valueDraftPicks', () => {
 
 describe('pickVerdict and pickGrade', () => {
 	it('reads a pick against its expectation', () => {
-		expect(pickVerdict(160, 100, true)).toBe('steal');
-		expect(pickVerdict(120, 100, true)).toBe('good');
-		expect(pickVerdict(100, 100, true)).toBe('fair');
-		expect(pickVerdict(70, 100, true)).toBe('disappointing');
-		expect(pickVerdict(40, 100, true)).toBe('bust');
+		expect(pickVerdict(160, 100, true, 'RB')).toBe('steal');
+		expect(pickVerdict(120, 100, true, 'RB')).toBe('good');
+		expect(pickVerdict(100, 100, true, 'RB')).toBe('fair');
+		expect(pickVerdict(70, 100, true, 'RB')).toBe('disappointing');
+		expect(pickVerdict(40, 100, true, 'RB')).toBe('bust');
 	});
 
 	it('keeps bust and F for picks the draft counted on', () => {
-		expect(pickVerdict(5, 100, false)).toBe('disappointing');
-		expect(pickGrade(5, 100, false)).toBe('D');
-		expect(pickGrade(5, 100, true)).toBe('F');
+		expect(pickVerdict(5, 100, false, 'WR')).toBe('disappointing');
+		expect(pickGrade(5, 100, false, 'WR')).toBe('D');
+		expect(pickGrade(5, 100, true, 'WR')).toBe('F');
 	});
 
 	it('half the expectation is a disappointment, not yet a bust', () => {
 		// The board and the page used to disagree exactly here.
-		expect(pickVerdict(50, 100, true)).toBe('disappointing');
+		expect(pickVerdict(50, 100, true, 'TE')).toBe('disappointing');
 	});
 
 	it('gives no verdict without an expectation', () => {
-		expect(pickVerdict(100, null, true)).toBeNull();
-		expect(pickGrade(100, 0, true)).toBeNull();
+		expect(pickVerdict(100, null, true, 'QB')).toBeNull();
+		expect(pickGrade(100, 0, true, 'QB')).toBeNull();
 		expect(isHit(100, null)).toBe(false);
 		expect(isHit(80, 100)).toBe(true);
+	});
+});
+
+describe('kickers and defenses get no verdict (S8.9)', () => {
+	it('returns null for K, DEF, D/ST and DEFENSE at any ratio', () => {
+		for (const position of ['K', 'DEF', 'D/ST', 'DEFENSE', 'def', ' k ']) {
+			for (const points of [0, 40, 100, 160, 500]) {
+				expect(pickVerdict(points, 100, true, position)).toBeNull();
+				expect(pickVerdict(points, 100, false, position)).toBeNull();
+			}
+		}
+	});
+
+	it('still returns steal and bust for a QB', () => {
+		expect(pickVerdict(160, 100, true, 'QB')).toBe('steal');
+		expect(pickVerdict(40, 100, true, 'QB')).toBe('bust');
+	});
+
+	it('topSteals and topBusts never return a K or DEF', () => {
+		// A breakout kicker and a defense reached for early and shut out.
+		const kicker: Pick = { seasonYear: 2025, roundNumber: 15, position: 'K', seasonPoints: 400, name: 'big-k' };
+		const defense: Pick = { seasonYear: 2025, roundNumber: 3, position: 'DEF', seasonPoints: 0, name: 'zero-def' };
+		const v = valueDraftPicks([...history, ...season(2025), kicker, defense], done).filter(
+			(p) => p.seasonYear === 2025
+		);
+		const named = (list: Pick[]) => list.map((p) => p.name);
+		const steals = topSteals(v, 200);
+		const busts = topBusts(v, 200);
+		expect(named(steals)).not.toContain('big-k');
+		expect(named(busts)).not.toContain('zero-def');
+		for (const p of [...steals, ...busts]) expect(['K', 'DEF']).not.toContain(p.position);
+	});
+
+	it('pickGrade gives a 0-point round 5 kicker a D, not an F', () => {
+		const kicker: Pick = { seasonYear: 2025, roundNumber: 5, position: 'K', seasonPoints: 0, name: 'k5' };
+		const v = valueDraftPicks([...history, ...season(2025), kicker], done);
+		const k = v.find((p) => p.name === 'k5')!;
+		expect(k.highExpectation).toBe(true);
+		expect(pickGrade(k.seasonPoints, k.expectedPoints, k.highExpectation, k.position)).toBe('D');
+		// The same miss at a skill position is an F.
+		expect(pickGrade(0, k.expectedPoints, true, 'RB')).toBe('F');
+	});
+
+	it('keeps hits unchanged: a kicker can still be a hit', () => {
+		expect(isHit(100, 100)).toBe(true);
 	});
 });
 

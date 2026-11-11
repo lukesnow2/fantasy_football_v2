@@ -48,7 +48,7 @@
 					</p>
 				{/if}
 				<p class="mb-4 text-sm text-slate-400">
-					Judged against what players at the same position, taken around the same round, have scored in this league. Busts are picks from rounds 1–8 expected to beat an average pick, so late kickers, defenses and fliers don't count; a kicker or defense reached for early does.
+					Judged against what players at the same position, taken around the same round, have scored in this league. Busts are picks from rounds 1–8 expected to beat an average pick, so late fliers don't count. Kickers and defenses are never steals or busts.
 				</p>
 				
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
