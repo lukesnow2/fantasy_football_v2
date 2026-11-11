@@ -76,3 +76,12 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Toggle chips (Show tags)">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px">
+			<Button variant="chip" aria-pressed="true">29 picks</Button>
+			<Button variant="chip" aria-pressed="false">27 picks</Button>
+		</div>
+	{/snippet}
+</Story>

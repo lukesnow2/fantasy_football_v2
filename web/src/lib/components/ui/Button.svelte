@@ -7,6 +7,10 @@
 	 * - link: field text, weight 600, no box ("Full rankings →")
 	 * - band-white: white fill, clubhouse text, weight 700, for a button on a
 	 *   clubhouse card (the Managers hero's "Open full profile →")
+	 * - chip: a toggle pill (Draft Central's Show tags), 36px tall (44px below
+	 *   640px) with 0 12px 0 8px of padding, 8px between its parts, 13px weight
+	 *   600 ink. Pass `aria-pressed`: on is card fill with a line-strong border,
+	 *   off is ground fill with a line border at 0.55 opacity
 	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
@@ -24,7 +28,8 @@
 		| 'link-pennant'
 		| 'band-primary'
 		| 'band-outline'
-		| 'band-white';
+		| 'band-white'
+		| 'chip';
 	type Size = 'default' | 'large' | 'tap';
 
 	type Props = {
@@ -165,6 +170,33 @@
 	.band-outline:hover {
 		background: var(--color-clubhouse-3);
 		color: var(--color-white);
+	}
+
+	.chip {
+		gap: 8px;
+		min-height: 36px;
+		padding: 0 12px 0 8px;
+		border: 1px solid var(--color-line-strong);
+		border-radius: 999px;
+		background: var(--color-card);
+		color: var(--color-ink);
+		font-size: 13px;
+	}
+
+	.chip:hover {
+		color: var(--color-ink);
+	}
+
+	.chip[aria-pressed='false'] {
+		border-color: var(--color-line);
+		background: var(--color-ground);
+		opacity: 0.55;
+	}
+
+	@media (max-width: 639.98px) {
+		.chip {
+			min-height: 44px;
+		}
 	}
 
 	.size-large {

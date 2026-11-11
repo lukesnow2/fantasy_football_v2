@@ -81,6 +81,14 @@
 		 * head table).
 		 */
 		stickyFirst?: boolean;
+		/** Draw the 1px rule on the sticky column's edge (Draft Central's phone table draws none). */
+		stickyRule?: boolean;
+		/**
+		 * Px of padding on the first column's left and the last column's right,
+		 * for a table that runs flush to its card's sides but keeps its text
+		 * inset (Draft Central's phone table: 16).
+		 */
+		edgeInset?: number;
 	}
 
 	let {
@@ -100,13 +108,18 @@
 		dividerCell,
 		cell,
 		header,
-		stickyFirst = false
+		stickyFirst = false,
+		stickyRule = true,
+		edgeInset
 	}: Props = $props();
 </script>
 
 <div class="scroll">
 	<table
 		class:sticky-first={stickyFirst}
+		class:no-sticky-rule={!stickyRule}
+		class:inset={edgeInset != null}
+		style:--edge-inset={edgeInset != null ? `${edgeInset}px` : undefined}
 		aria-label={label}
 		style:min-width={minWidth}
 		style:font-size="{fontSize}px"
@@ -234,6 +247,21 @@
 		z-index: 1;
 		background: var(--color-card);
 		box-shadow: inset -1px 0 0 var(--color-line-soft);
+	}
+
+	.no-sticky-rule th:first-child,
+	.no-sticky-rule td:first-child {
+		box-shadow: none;
+	}
+
+	.inset th:first-child,
+	.inset td:first-child {
+		padding-left: var(--edge-inset);
+	}
+
+	.inset th:last-child,
+	.inset td:last-child {
+		padding-right: var(--edge-inset);
 	}
 
 	tr.highlighted td {

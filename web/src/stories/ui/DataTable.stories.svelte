@@ -241,3 +241,26 @@
 		font-weight: 600;
 	}
 </style>
+
+<Story name="Sticky, no rule, inset edges (Draft Central phone)">
+	{#snippet template()}
+		<div style="width: 358px; border: 1px solid var(--color-line); border-radius: 12px; padding: 16px 0 8px">
+			<DataTable
+				label="Standings"
+				stickyFirst
+				stickyRule={false}
+				edgeInset={16}
+				minWidth="600px"
+				fontSize={14}
+				columns={[
+					{ key: 'name', label: 'Manager', width: '156px' },
+					{ key: 'wl', label: 'W-L', numeric: true, width: '64px' },
+					{ key: 'pf', label: 'PF', numeric: true, width: '80px' },
+					{ key: 'pa', label: 'PA', numeric: true, width: '80px' },
+					{ key: 'odds', label: 'Playoffs', numeric: true, width: '86px' }
+				]}
+				rows={STANDINGS}
+			/>
+		</div>
+	{/snippet}
+</Story>
