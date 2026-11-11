@@ -109,3 +109,22 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Stat strip, small (Hall of Fame)">
+	{#snippet template()}
+		<div style="max-width: 1152px">
+			<StatStrip
+				label="The Hall of Fame in numbers"
+				minColumn={170}
+				twoUpOnPhones
+				phoneRowRules="all"
+			>
+				<StatTile small value="12" label="managers ranked" />
+				<StatTile small value="1.8" label="titles per manager" />
+				<StatTile small value="50.4%" label="average win rate" />
+				<StatTile small value="15.3" label="seasons per manager" />
+				<StatTile small value="0.352" label="average HoF index" metricId="hall_of_fame_index" />
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>

@@ -1,28 +1,81 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Crown, Trophy, Target, TrendingUp, Award, BarChart3, Users, Medal } from 'lucide-svelte';
-	import ManagerProfilePicture from '$lib/components/ManagerProfilePicture.svelte';
-	import MetricHelp from '$lib/components/MetricHelp.svelte';
+	import { MediaQuery } from 'svelte/reactivity';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	
-	let hallOfFameData: any = null;
-	let loading = true;
-	let error = '';
+	import {
+		Avatar,
+		Button,
+		Card,
+		DataTable,
+		EmptyValue,
+		OddsBar,
+		StatStrip,
+		StatTile,
+		StatTip,
+		TitleFlags,
+		type Column
+	} from '$lib/components/ui';
+	import {
+		fixed,
+		groupByTier,
+		indexBarPct,
+		managerCount,
+		numberWord,
+		podiumStyle,
+		tierKey,
+		toNumber
+	} from '$lib/utils/hall-of-fame';
+	import { formatPct3, formatPercent1, profileHref } from '$lib/utils/managers';
+	import { formatCount, formatRecord } from '$lib/home';
+
+	type HallOfFameRow = {
+		managerName: string;
+		totalSeasons: number;
+		championshipsWon: number;
+		careerWins: number;
+		careerLosses: number;
+		careerTies: number;
+		careerWinPercentage: number | string;
+		avgPointsPerGame: number | string;
+		playoffAppearances: number;
+		hallOfFameIndex: number | string;
+		hallOfFameRank: number;
+	};
+
+	type TierRow = {
+		tier: string;
+		avgChampionships: number | string;
+		avgWinPct: number | string;
+		avgHallOfFameIndex: number | string;
+		totalWins: number | string;
+		totalLosses: number | string;
+	};
+
+	interface HallOfFameResponse {
+		hallOfFame: HallOfFameRow[];
+		analytics: Record<string, number | string | null>;
+		tiers: TierRow[];
+		seasonRange?: { first: number | null; last: number | null };
+	}
+
+	let hallOfFameData = $state<HallOfFameResponse | null>(null);
+	let loading = $state(true);
+	let error = $state(false);
 
 	// Load Hall of Fame data
 	async function loadHallOfFameData() {
 		loading = true;
+		error = false;
 		try {
 			const response = await fetch('/api/hall-of-fame');
 			if (response.ok) {
 				hallOfFameData = await response.json();
-				console.log('Hall of Fame data loaded:', hallOfFameData);
 			} else {
-				error = 'Failed to load Hall of Fame data';
+				error = true;
 				console.error('Failed to fetch Hall of Fame data:', response.status, response.statusText);
 			}
 		} catch (err) {
-			error = 'Error loading Hall of Fame data';
+			error = true;
 			console.error('Error fetching Hall of Fame data:', err);
 		} finally {
 			loading = false;
@@ -31,390 +84,764 @@
 
 	onMount(loadHallOfFameData);
 
-	// Helper functions
-	function getTierColor(rank: number): string {
-		if (rank <= 3) return 'from-amber-500 to-yellow-400'; // Hall of Fame Elite
-		if (rank <= 6) return 'from-purple-500 to-indigo-400'; // Hall of Fame
-		if (rank <= 10) return 'from-blue-500 to-cyan-400'; // Hall of Very Good
-		if (rank <= 15) return 'from-green-500 to-emerald-400'; // Solid Contributor
-		return 'from-slate-500 to-gray-400'; // Developing Legacy
+	// The phone layout (below 640px) drops table columns and moves the titles
+	// under the name, which is markup, not spacing. The data only loads in the
+	// browser, so the body never renders on the server.
+	const phoneQuery = new MediaQuery('max-width: 639.98px', false);
+	const phone = $derived(phoneQuery.current);
+
+	const managers = $derived(hallOfFameData?.hallOfFame ?? []);
+	const analytics = $derived(hallOfFameData?.analytics ?? {});
+	const tiers = $derived(hallOfFameData?.tiers ?? []);
+	const range = $derived(hallOfFameData?.seasonRange);
+
+	const totalManagers = $derived(Number(analytics.totalManagers) || 0);
+
+	/** Win % as the board writes it (".563"), or null when missing. */
+	function rate(value: number | string | null | undefined): string | null {
+		const n = toNumber(value);
+		return n == null ? null : formatPct3(n);
 	}
 
-	function getTierBadge(rank: number): string {
-		if (rank <= 3) return '👑'; // Hall of Fame Elite
-		if (rank <= 6) return '🏆'; // Hall of Fame
-		if (rank <= 10) return '🥇'; // Hall of Very Good
-		if (rank <= 15) return '🥈'; // Solid Contributor
-		return '🥉'; // Developing Legacy
+	/** A rate as a percent to one place ("57.5%"), or null when missing. */
+	function percent(value: number | string | null | undefined): string | null {
+		const n = toNumber(value);
+		return n == null ? null : formatPercent1(n);
 	}
 
-	function getTierName(rank: number): string {
-		if (rank <= 3) return 'Hall of Fame Elite';
-		if (rank <= 6) return 'Hall of Fame';
-		if (rank <= 10) return 'Hall of Very Good';
-		if (rank <= 15) return 'Solid Contributor';
-		return 'Developing Legacy';
+	/** W-L(-T), or null when the wins or losses are missing. */
+	function record(
+		wins: number | string | null | undefined,
+		losses: number | string | null | undefined,
+		ties: number | string | null | undefined = 0
+	): string | null {
+		const w = toNumber(wins);
+		const l = toNumber(losses);
+		return w == null || l == null ? null : formatRecord(w, l, toNumber(ties) ?? 0);
 	}
 
-	function getWinPercentageColor(winPct: number): string {
-		if (winPct >= 0.7) return 'text-green-400';
-		if (winPct >= 0.6) return 'text-blue-400';
-		if (winPct >= 0.5) return 'text-yellow-400';
-		if (winPct >= 0.4) return 'text-orange-400';
-		return 'text-red-400';
-	}
+	// ---- S7.2 header and strip ----------------------------------------------
+	const kicker = $derived(
+		range?.first != null && range?.last != null
+			? `Rankings · all time · ${range.first} to ${range.last}`
+			: undefined
+	);
 
-	function getIndexColor(rank: number, totalManagers: number): string {
-		const percentage = rank / totalManagers;
-		if (percentage <= 0.2) return 'text-amber-400';
-		if (percentage <= 0.4) return 'text-purple-400';
-		if (percentage <= 0.6) return 'text-blue-400';
-		if (percentage <= 0.8) return 'text-green-400';
-		return 'text-slate-400';
-	}
+	const stats = $derived([
+		{ label: 'managers ranked', value: String(totalManagers) },
+		{ label: 'titles per manager', value: fixed(analytics.avgChampionships, 1) },
+		{ label: 'average win rate', value: percent(analytics.avgWinPercentage) },
+		{ label: 'seasons per manager', value: fixed(analytics.avgSeasonsPlayed, 1) },
+		{
+			label: 'average HoF index',
+			value: fixed(analytics.avgHallOfFameIndex, 3),
+			metricId: 'hall_of_fame_index'
+		}
+	]);
 
-	$: managers = hallOfFameData?.hallOfFame || [];
-	$: analytics = hallOfFameData?.analytics || {};
-	$: tiers = hallOfFameData?.tiers || [];
+	// ---- S7.3 the podium ----------------------------------------------------
+	// Styled by rank, not by position, so managers tied for a place get the
+	// same card.
+	const podium = $derived(
+		managers.slice(0, 3).map((m) => ({ m, style: podiumStyle(m.hallOfFameRank, phone) }))
+	);
+
+	// ---- S7.4 official rankings ---------------------------------------------
+	const totalTitles = $derived(
+		managers.reduce((sum, m) => sum + (Number(m.championshipsWon) || 0), 0)
+	);
+	const caption = $derived(
+		`${managerCount(totalManagers)} · ${formatCount(analytics.totalCareerWins)} wins · ${totalTitles} ${totalTitles === 1 ? 'title' : 'titles'}`
+	);
+
+	const topIndex = $derived(
+		managers.reduce((top, m) => Math.max(top, Number(m.hallOfFameIndex) || 0), 0)
+	);
+
+	const groups = $derived(groupByTier(managers));
+	const tierStats = $derived(new Map(tiers.map((t) => [t.tier, t])));
+
+	/** Every row, with the tier it opens when it's its group's first. */
+	const tableRows = $derived(
+		groups.flatMap((g) =>
+			g.rows.map((m, i) => ({
+				...m,
+				opens: i === 0 ? { name: g.name, color: g.color, count: g.rows.length } : null
+			}))
+		)
+	);
+
+	const desktopColumns: Column[] = [
+		{ key: 'rank', label: '#', width: '32px' },
+		{ key: 'manager', label: 'Manager' },
+		{ key: 'titles', label: 'Titles', width: '120px' },
+		{ key: 'record', label: 'Record', numeric: true, width: '92px' },
+		{ key: 'pct', label: 'Win %', numeric: true, width: '56px' },
+		{ key: 'ppg', label: 'Pts/G', numeric: true, width: '56px' },
+		{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '64px', fixedHeader: true },
+		{ key: 'seasons', label: 'Seasons', numeric: true, width: '60px', fixedHeader: true },
+		{ key: 'index', label: 'HoF index', width: '160px' }
+	];
+
+	const phoneColumns: Column[] = [
+		{ key: 'rank', label: '#', width: '24px' },
+		{ key: 'manager', label: 'Manager' },
+		{ key: 'pct', label: 'Win %', numeric: true, width: '38px' },
+		{ key: 'index', label: 'HoF index', width: '86px' }
+	];
+
+	const columns = $derived(phone ? phoneColumns : desktopColumns);
 </script>
 
+<!-- A missing number reads "None", never a blank or a dash (G6). -->
+{#snippet orNone(text: string | null)}{#if text == null}<EmptyValue />{:else}{text}{/if}{/snippet}
+
 <svelte:head>
-	<title>Hall of Fame - The League</title>
+	<title>Hall of Fame · The League</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<PageHeader icon={Crown} title="Hall of Fame" accent="amber">
-		Celebrating the greatest managers in league history. Based on championships, consistency, and
-		overall excellence.
-	</PageHeader>
-
-	{#if loading}
-		<div class="flex items-center justify-center h-64">
-			<div class="text-slate-400">Loading Hall of Fame...</div>
-		</div>
-	{:else if error}
-		<div class="flex items-center justify-center h-64">
-			<div class="text-red-400">{error}</div>
-		</div>
-	{:else if hallOfFameData}
-		<!-- Overall Statistics -->
-		<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-			<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-				<BarChart3 class="w-6 h-6 text-blue-400 mr-3" />
-				Hall of Fame Overview
-			</h2>
-			
-			<div class="grid grid-cols-2 md:grid-cols-5 gap-6">
-				<div class="text-center">
-					<div class="text-3xl font-bold text-blue-400">{analytics.totalManagers || 0}</div>
-					<div class="text-slate-400">Total Managers</div>
-				</div>
-				<div class="text-center">
-					<div class="text-3xl font-bold text-amber-400">{parseFloat(analytics.avgChampionships || 0).toFixed(1)}</div>
-					<div class="text-slate-400">Avg Championships</div>
-				</div>
-				<div class="text-center">
-					<div class="text-3xl font-bold text-green-400">{(parseFloat(analytics.avgWinPercentage || 0) * 100).toFixed(1)}%</div>
-					<div class="text-slate-400">
-						<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400">
-							Avg Win Rate
-						</MetricHelp>
-					</div>
-				</div>
-				<div class="text-center">
-					<div class="text-3xl font-bold text-purple-400">{parseFloat(analytics.avgSeasonsPlayed || 0).toFixed(1)}</div>
-					<div class="text-slate-400">Avg Seasons</div>
-				</div>
-				<div class="text-center">
-					<div class="text-3xl font-bold text-cyan-400">{parseFloat(analytics.avgHallOfFameIndex || 0).toFixed(3)}</div>
-					<div class="text-slate-400">
-						<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400">
-							Avg HoF Index
-						</MetricHelp>
-					</div>
-				</div>
-			</div>
-			
-			<!-- Additional Analytics Row -->
-			<div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6 pt-6 border-t border-slate-700/50">
-				<div class="text-center">
-					<div class="text-2xl font-bold text-orange-400">{parseFloat(analytics.avgPointsPerGame || 0).toFixed(1)}</div>
-					<div class="text-slate-400">Avg Pts/Game</div>
-				</div>
-				<div class="text-center">
-					<div class="text-2xl font-bold text-emerald-400">{parseInt(analytics.totalCareerWins || 0).toLocaleString()}</div>
-					<div class="text-slate-400">Total Wins</div>
-				</div>
-				<div class="text-center">
-					<div class="text-2xl font-bold text-red-400">{parseInt(analytics.totalCareerLosses || 0).toLocaleString()}</div>
-					<div class="text-slate-400">Total Losses</div>
-				</div>
-				<div class="text-center">
-					<div class="text-2xl font-bold text-yellow-400">{parseInt(analytics.totalCareerTies || 0)}</div>
-					<div class="text-slate-400">Total Ties</div>
-				</div>
-			</div>
-		</section>
-
-		<!-- Tier Breakdown -->
-		{#if tiers.length > 0}
-			<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-				<h2 class="text-2xl font-bold text-white mb-4 flex items-center">
-					<Medal class="w-6 h-6 text-yellow-400 mr-3" />
-					Hall of Fame Tiers
-				</h2>
-				
-				<div class="overflow-x-auto">
-					<table class="w-full text-sm">
-						<thead>
-							<tr class="border-b border-slate-600/50">
-								<th class="text-left py-2 text-slate-300 font-medium">Tier</th>
-								<th class="text-center py-2 text-slate-300 font-medium">Managers</th>
-								<th class="text-center py-2 text-slate-300 font-medium">Avg Championships</th>
-								<th class="text-center py-2 text-slate-300 font-medium">Win %</th>
-								<th class="text-center py-2 text-slate-300 font-medium">HoF Index</th>
-								<th class="text-center py-2 text-slate-300 font-medium">Record</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each tiers as tier}
-								<tr class="border-b border-slate-700/30 hover:bg-slate-700/20">
-									<td class="py-3">
-										<div class="flex items-center space-x-2">
-											<span class="text-lg">
-												{#if tier.tier === 'Hall of Fame Elite'}👑
-												{:else if tier.tier === 'Hall of Fame'}🏆
-												{:else if tier.tier === 'Hall of Very Good'}🥇
-												{:else if tier.tier === 'Solid Contributor'}🥈
-												{:else}🥉{/if}
-											</span>
-											<span class="text-white font-medium">{tier.tier}</span>
-										</div>
-									</td>
-									<td class="py-3 text-center">
-										<span class="text-white font-bold">{tier.managerCount || tier.manager_count}</span>
-									</td>
-									<td class="py-3 text-center">
-										<span class="text-amber-400 font-bold">{parseFloat(tier.avgChampionships || 0).toFixed(1)}</span>
-									</td>
-									<td class="py-3 text-center">
-										<span class="text-green-400 font-bold">{(parseFloat(tier.avgWinPct || 0) * 100).toFixed(1)}%</span>
-									</td>
-									<td class="py-3 text-center">
-										<span class="text-cyan-400 font-bold">{parseFloat(tier.avgHallOfFameIndex || 0).toFixed(3)}</span>
-									</td>
-									<td class="py-3 text-center">
-										<span class="text-slate-300 font-medium text-xs">{parseInt(tier.totalWins || 0)}-{parseInt(tier.totalLosses || 0)}</span>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			</section>
+<PageHeader
+	{kicker}
+	title="Hall of Fame"
+	introWidth={640}
+	phoneActionGap={14}
+	pending={loading && !hallOfFameData}
+>
+	{#if managers.length > 0}
+		{numberWord(totalManagers)}
+		{totalManagers === 1 ? 'manager' : 'managers'} ranked by the Hall of Fame index, which is built from
+		championships and consistency.
+	{/if}
+	{#snippet action()}
+		{#if managers.length > 0}
+			<Button variant="secondary" href="#how-the-index-works">How the index works</Button>
 		{/if}
+	{/snippet}
+</PageHeader>
 
-		<!-- Hall of Fame Rankings -->
-		<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-			<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-				<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-				Official Rankings
-			</h2>
-			
-			<div class="space-y-3">
-				{#each managers as manager, index}
-					<div class="bg-gradient-to-r {getTierColor(manager.hallOfFameRank)} p-[1px] rounded-xl">
-						<div class="bg-slate-800 rounded-xl p-4 sm:p-6">
-							<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-								<!-- Left Side: Rank and Manager Info -->
-								<div class="flex items-center space-x-4 min-w-0">
-									<div class="flex-shrink-0 text-center">
-										<div class="text-3xl font-bold text-white">#{manager.hallOfFameRank}</div>
-										<div class="text-lg">{getTierBadge(manager.hallOfFameRank)}</div>
-									</div>
-									
-									<div class="flex items-center space-x-4">
-										{#if manager.managerName}
-										<ManagerProfilePicture 
-												managerName={manager.managerName} 
-											className="w-16 h-16" 
-										/>
-										{:else}
-											<div class="w-16 h-16 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center">
-												<span class="text-white font-bold text-lg">?</span>
-											</div>
-										{/if}
-										<div>
-											<h3 class="text-xl font-bold text-white">{manager.managerName || 'Unknown Manager'}</h3>
-											<div class="text-sm text-slate-400">{getTierName(manager.hallOfFameRank)}</div>
-											<div class="flex items-center gap-2 mt-1">
-												{#if manager.championshipsWon > 0}
-													<span class="flex items-center text-amber-400 text-sm">
-														<Trophy class="w-4 h-4 mr-1" />
-														{manager.championshipsWon} Championship{manager.championshipsWon > 1 ? 's' : ''}
-													</span>
-												{/if}
-											</div>
-										</div>
-									</div>
-								</div>
+{#if loading && !hallOfFameData}
+	<!-- S7.6 Loading: blocks where the strip, the podium and the table sit. -->
+	<div class="skeleton" role="status" aria-busy="true" aria-label="Loading the Hall of Fame">
+		<span class="sk sk-strip"></span>
+		<div class="sk-podium">
+			<span class="sk sk-first"></span>
+			<span class="sk sk-second"></span>
+			<span class="sk sk-third"></span>
+		</div>
+		<span class="sk sk-table"></span>
+	</div>
+{:else if error}
+	<div class="first">
+		<Card title="The Hall of Fame didn't load">
+			<p class="muted-line">Check your connection, then try again.</p>
+			<Button variant="secondary" class="retry" onclick={loadHallOfFameData}>Try again</Button>
+		</Card>
+	</div>
+{:else if managers.length === 0}
+	<div class="first">
+		<Card title="No one's ranked yet">
+			<p class="muted-line">Managers join the Hall of Fame after three finished seasons.</p>
+		</Card>
+	</div>
+{:else}
+	<!-- S7.2 The league strip -->
+	<div class="strip">
+		<StatStrip
+			label="The Hall of Fame in numbers"
+			minColumn={170}
+			twoUpOnPhones
+			phoneRowRules="all"
+		>
+			{#each stats as s (s.label)}
+				<StatTile small label={s.label} value={s.value} metricId={s.metricId} />
+			{/each}
+		</StatStrip>
+	</div>
 
-								<!-- Right Side: Stats Grid -->
-								<div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-									<div>
-										<div class="text-lg font-bold {getIndexColor(manager.hallOfFameRank, analytics.totalManagers)}">
-											#{manager.hallOfFameRank}
-										</div>
-										<div class="text-xs text-slate-400">HoF Rank</div>
-									</div>
-									<div>
-										<div class="text-lg font-bold text-cyan-400">
-											{parseFloat(manager.hallOfFameIndex || 0).toFixed(3)}
-										</div>
-										<div class="text-xs text-slate-400">
-											<MetricHelp metricId="hall_of_fame_index" position="top" theme="dark" className="text-slate-400" showIcon={false}>
-												HoF Index
-											</MetricHelp>
-										</div>
-									</div>
-									<div>
-										<div class="text-lg font-bold {getWinPercentageColor(manager.careerWinPercentage)}">
-											{(manager.careerWinPercentage * 100).toFixed(1)}%
-										</div>
-										<div class="text-xs text-slate-400">
-											<MetricHelp metricId="career_win_percentage" position="top" theme="dark" className="text-slate-400" showIcon={false}>
-												Win Rate
-											</MetricHelp>
-										</div>
-									</div>
-									<div>
-										<div class="text-lg font-bold text-emerald-400">
-											{manager.careerWins}-{manager.careerLosses}
-											{#if manager.careerTies > 0}-{manager.careerTies}{/if}
-										</div>
-										<div class="text-xs text-slate-400">Career Record</div>
-									</div>
-									<div>
-										<div class="text-lg font-bold text-blue-400">
-											{parseFloat(manager.totalPointsScored).toLocaleString()}
-										</div>
-										<div class="text-xs text-slate-400">Career Points</div>
-									</div>
-								</div>
-							</div>
+	<!-- S7.3 The podium -->
+	<ol class="podium" aria-label="The top three">
+		{#each podium as { m, style } (m.managerName)}
+			<li>
+				<a
+					class="podium-card"
+					href={profileHref(m.managerName)}
+					style:--bg="var(--color-{style.bg})"
+					style:--fg="var(--color-{style.fg})"
+					style:--border="var(--color-{style.border})"
+					style:--accent="var(--color-{style.accent})"
+					style:--muted="var(--color-{style.muted})"
+					style:--pad-y="{style.padY}px"
+					style:--rank-size="{style.rankSize}px"
+					style:--name-size="{style.nameSize}px"
+					style:--stat-size="{style.statSize}px"
+				>
+					<span class="podium-rank">{m.hallOfFameRank}</span>
+					<Avatar
+						name={m.managerName}
+						size={style.avatar}
+						ring={phone ? 3 : 4}
+						ringColor="var(--color-{style.ring})"
+						initialTone="field"
+						alt=""
+					/>
+					<span class="podium-name-block">
+						<span class="podium-name">{m.managerName}</span>
+						{#if Number(m.championshipsWon) > 0}
+							<span class="podium-flags">
+								<TitleFlags
+									count={Number(m.championshipsWon)}
+									width={14}
+									height={20}
+									pole={style.pole}
+									flag={style.flag}
+									gap={4}
+								/>
+							</span>
+						{/if}
+					</span>
+					<span class="podium-stats">
+						<span>
+							<span class="podium-value">{@render orNone(fixed(m.hallOfFameIndex, 3))}</span>
+							<span class="podium-label">HoF index</span>
+						</span>
+						<span>
+							<span class="podium-value">{@render orNone(rate(m.careerWinPercentage))}</span>
+							<span class="podium-label">Win %</span>
+						</span>
+						<span>
+							<span class="podium-value">{Number(m.championshipsWon) || 0}</span>
+							<span class="podium-label">Titles</span>
+						</span>
+					</span>
+				</a>
+			</li>
+		{/each}
+	</ol>
 
-							<!-- Additional Stats Row -->
-							<div class="mt-4 pt-4 border-t border-slate-700/50">
-								<div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-									<div class="flex justify-between">
-										<span class="text-slate-400">Avg Points/Game:</span>
-										<span class="font-medium text-green-400">{parseFloat(manager.avgPointsPerGame).toFixed(1)}</span>
-									</div>
-									<div class="flex justify-between">
-										<span class="text-slate-400">Playoff Apps:</span>
-										<span class="font-medium text-cyan-400">{manager.playoffAppearances}</span>
-									</div>
-									<div class="flex justify-between">
-										<span class="text-slate-400">Seasons Played:</span>
-										<span class="font-medium text-orange-400">{manager.totalSeasons}</span>
-									</div>
-									<div class="flex justify-between">
-										<span class="text-slate-400">
-											<MetricHelp metricId="season_consistency_score" position="top" theme="dark" className="text-slate-400" showIcon={false}>
-												Consistency:
-											</MetricHelp>
-										</span>
-										<span class="font-medium text-rose-400">{parseFloat(manager.seasonConsistencyScore || 0).toFixed(3)}</span>
-									</div>
-								</div>
-							</div>
-						</div>
+	<!-- S7.4 Official rankings -->
+	<div class="rankings">
+		<Card
+			title="Official rankings"
+			padding="22px 24px 12px"
+			phonePadding="16px 16px 8px"
+			phoneHeadStack
+		>
+			{#snippet action()}<span class="caption">{caption}</span>{/snippet}
+			<DataTable
+				{columns}
+				rows={tableRows}
+				label="Official rankings"
+				rowPadding={phone ? 4 : 11}
+				columnGap={phone ? 6 : 14}
+				fontSize={phone ? 14 : 15}
+				minWidth={phone ? undefined : '900px'}
+				rowKey={(r) => r.managerName}
+				divider={(r) => r.opens?.name ?? null}
+			>
+				{#snippet header(column)}
+					{#if column.key === 'index'}
+						<StatTip metricId="hall_of_fame_index" label="HoF index" phoneTap="inline-small" />
+					{:else}
+						{column.label}
+					{/if}
+				{/snippet}
+				{#snippet dividerCell(name, r)}
+					{@const stat = tierStats.get(name)}
+					<div class="tier-row">
+						<span class="tier-name" style:color="var(--color-{r.opens?.color})">{name}</span>
+						<span class="tier-count">{managerCount(r.opens?.count ?? 0)}</span>
+						{#if stat}
+							<span class="tier-stats">
+								<span>Avg titles <b>{@render orNone(fixed(stat.avgChampionships, 1))}</b></span>
+								<span>Win % <b>{@render orNone(percent(stat.avgWinPct))}</b></span>
+								<span>Index <b>{@render orNone(fixed(stat.avgHallOfFameIndex, 3))}</b></span>
+								<span>Record <b>{@render orNone(record(stat.totalWins, stat.totalLosses))}</b></span>
+							</span>
+						{/if}
+					</div>
+				{/snippet}
+				{#snippet cell(r, column)}
+					{@const titles = Number(r.championshipsWon) || 0}
+					{#if column.key === 'rank'}
+						<span class="rank">{r.hallOfFameRank}</span>
+					{:else if column.key === 'manager'}
+						<a class="manager" href={profileHref(r.managerName)}>
+							<Avatar
+								name={r.managerName}
+								size={phone ? 26 : 30}
+								initialTone="field"
+								initialSize={phone ? 12 : 13}
+								alt=""
+							/>
+							{#if phone}
+								<span class="manager-text">
+									<span class="manager-name">{r.managerName}</span>
+									<span class="manager-flags">
+										<TitleFlags count={titles} width={9} height={13} stroke={1.8} gap={2} />
+									</span>
+								</span>
+							{:else}
+								{r.managerName}
+							{/if}
+						</a>
+					{:else if column.key === 'titles'}
+						{#if titles > 0}
+							<span class="titles"
+								><TitleFlags count={titles} width={10} height={16} gap={2} /></span
+							>
+						{:else}
+							<EmptyValue />
+						{/if}
+					{:else if column.key === 'record'}
+						<span class="strong"
+								>{@render orNone(record(r.careerWins, r.careerLosses, r.careerTies))}</span
+							>
+					{:else if column.key === 'pct'}
+						{@render orNone(rate(r.careerWinPercentage))}
+					{:else if column.key === 'ppg'}
+						<span class="soft">{@render orNone(fixed(r.avgPointsPerGame, 1))}</span>
+					{:else if column.key === 'playoffs'}
+						<span class="soft">{r.playoffAppearances}</span>
+					{:else if column.key === 'seasons'}
+						<span class="soft">{r.totalSeasons}</span>
+					{:else if column.key === 'index'}
+						{@const index = fixed(r.hallOfFameIndex, 3)}
+						{#if index == null}
+							<EmptyValue />
+						{:else}
+							<OddsBar
+								percent={indexBarPct(Number(r.hallOfFameIndex), topIndex)}
+								text={index}
+								numberWidth={phone ? 38 : 40}
+								gap={phone ? 8 : 10}
+							/>
+						{/if}
+					{/if}
+				{/snippet}
+			</DataTable>
+		</Card>
+	</div>
+
+	<!-- S7.5 How the index works, and the tiers -->
+	<div class="explain">
+		<div class="how" id="how-the-index-works">
+			<Card title="How the index works" titleSize={26} class="fill">
+				<code class="formula"
+					>HoF index = 60% × (titles ÷ most titles by anyone) + 40% × win rate</code
+				>
+				<p class="note">
+					Only managers with three or more seasons are ranked. Titles are divided by the current
+					league best, so every new championship rescales everyone's score a little.
+				</p>
+			</Card>
+		</div>
+		<div class="tiers">
+			<Card title="Tiers" titleSize={26} headGap={6} class="fill">
+				{#each tierKey() as k (k.name)}
+					<div class="tier-key">
+						<span class="tier-key-name" style:color="var(--color-{k.color})">{k.name}</span>
+						<span class="tier-key-ranks">{k.ranks}</span>
 					</div>
 				{/each}
-			</div>
-		</section>
+			</Card>
+		</div>
+	</div>
+{/if}
 
-		<!-- Hall of Fame Criteria -->
-		<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-			<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-				<Award class="w-6 h-6 text-purple-400 mr-3" />
-				Hall of Fame Criteria
-			</h2>
-			
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-				<div>
-					<h3 class="text-lg font-bold text-white mb-4">How the Index is Calculated</h3>
-					<div class="space-y-3 text-sm text-slate-300">
-						<div class="bg-slate-700/30 rounded-lg p-3 border border-slate-600/50 mb-4">
-							<div class="font-bold text-cyan-400 mb-2">Hall of Fame Index Formula:</div>
-							<div class="text-xs text-slate-300">
-								HoF Index = (60% × Championship Score) + (40% × Win Percentage)
-							</div>
-						</div>
-						<div class="flex items-start">
-							<Trophy class="w-4 h-4 text-amber-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Championships (60%):</strong> Multiple titles significantly boost ranking with diminishing returns</span>
-						</div>
-						<div class="flex items-start">
-							<Target class="w-4 h-4 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Win Percentage (40%):</strong> Consistent success over entire career</span>
-						</div>
-						<div class="flex items-start">
-							<TrendingUp class="w-4 h-4 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Playoff Success:</strong> Making and succeeding in playoffs</span>
-						</div>
-						<div class="flex items-start">
-							<BarChart3 class="w-4 h-4 text-purple-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Consistency:</strong> Avoiding bad seasons, maintaining high performance</span>
-						</div>
-						<div class="flex items-start">
-							<Users class="w-4 h-4 text-cyan-400 mr-2 mt-0.5 flex-shrink-0" />
-							<span><strong>Longevity:</strong> Sustained excellence over multiple seasons</span>
-						</div>
-					</div>
-				</div>
-				
-				<div>
-					<h3 class="text-lg font-bold text-white mb-4">Tier Breakdown</h3>
-					<div class="space-y-3 text-sm">
-						<div class="flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/20 to-yellow-400/20 rounded-lg border border-amber-500/30">
-							<span class="flex items-center">
-								<span class="text-lg mr-2">👑</span>
-								<span class="font-medium text-white">Hall of Fame Elite</span>
-							</span>
-							<span class="text-amber-400 font-bold">Top 3</span>
-						</div>
-						<div class="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500/20 to-indigo-400/20 rounded-lg border border-purple-500/30">
-							<span class="flex items-center">
-								<span class="text-lg mr-2">🏆</span>
-								<span class="font-medium text-white">Hall of Fame</span>
-							</span>
-							<span class="text-purple-400 font-bold">Ranks 4-6</span>
-						</div>
-						<div class="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/20 to-cyan-400/20 rounded-lg border border-blue-500/30">
-							<span class="flex items-center">
-								<span class="text-lg mr-2">🥇</span>
-								<span class="font-medium text-white">Hall of Very Good</span>
-							</span>
-							<span class="text-blue-400 font-bold">Ranks 7-10</span>
-						</div>
-						<div class="flex items-center justify-between p-3 bg-gradient-to-r from-green-500/20 to-emerald-400/20 rounded-lg border border-green-500/30">
-							<span class="flex items-center">
-								<span class="text-lg mr-2">🥈</span>
-								<span class="font-medium text-white">Solid Contributor</span>
-							</span>
-							<span class="text-green-400 font-bold">Ranks 11-15</span>
-						</div>
-						<div class="flex items-center justify-between p-3 bg-gradient-to-r from-slate-500/20 to-gray-400/20 rounded-lg border border-slate-500/30">
-							<span class="flex items-center">
-								<span class="text-lg mr-2">🥉</span>
-								<span class="font-medium text-white">Developing Legacy</span>
-							</span>
-							<span class="text-slate-400 font-bold">Ranks 16+</span>
-						</div>
-					</div>
-				</div>
-			</div>
-		</section>
-	{/if}
-</div> 
+<style>
+	/* ---- S7.6 loading, error and empty ---- */
+	.skeleton {
+		margin-top: 28px;
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+
+	.sk {
+		display: block;
+		border-radius: var(--radius-card);
+		background: var(--color-line-soft);
+	}
+
+	.sk-strip {
+		height: 87px;
+	}
+
+	.sk-podium {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.sk-first {
+		height: 182px;
+	}
+
+	.sk-second {
+		height: 130px;
+	}
+
+	.sk-third {
+		height: 106px;
+	}
+
+	.sk-table {
+		margin-top: 4px;
+		height: 860px;
+	}
+
+	.first {
+		margin-top: 28px;
+	}
+
+	.muted-line {
+		margin: 0;
+		font-size: 15px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.first :global(.retry) {
+		margin-top: 14px;
+	}
+
+	/* ---- S7.2 the strip ---- */
+	.strip {
+		margin-top: 28px;
+	}
+
+	/* ---- S7.3 the podium ---- */
+	.podium {
+		margin: 20px 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.podium-card {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 16px 24px;
+		background: var(--bg);
+		color: var(--fg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-card);
+		padding: var(--pad-y) 28px;
+		text-decoration: none;
+	}
+
+	.podium-card:hover,
+	.podium-card:focus-visible {
+		color: var(--fg);
+	}
+
+	.podium-card:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+	}
+
+	.podium-rank {
+		width: 64px;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: var(--rank-size);
+		line-height: 1;
+		color: var(--accent);
+	}
+
+	.podium-name-block {
+		flex: 999 1 220px;
+		min-width: 0;
+	}
+
+	.podium-name {
+		display: block;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: var(--name-size);
+		line-height: 1.05;
+	}
+
+	.podium-flags {
+		margin-top: 10px;
+		display: flex;
+	}
+
+	.podium-stats {
+		flex: 1 1 320px;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
+		text-align: right;
+	}
+
+	.podium-value {
+		display: block;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: var(--stat-size);
+		line-height: 1;
+	}
+
+	.podium-label {
+		display: block;
+		margin-top: 4px;
+		font-size: 12px;
+		color: var(--muted);
+	}
+
+	/* ---- S7.4 official rankings ---- */
+	.rankings {
+		margin-top: 24px;
+	}
+
+	.caption {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.tier-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 16px;
+		padding: 18px 0 6px;
+	}
+
+	.tier-name {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+
+	.tier-count {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.tier-stats {
+		margin-left: auto;
+		display: flex;
+		gap: 14px;
+		font-size: 12px;
+		color: var(--color-ink-2);
+	}
+
+	.tier-stats b {
+		font-weight: 700;
+	}
+
+	.rank {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 20px;
+	}
+
+	.manager {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 600;
+		color: var(--color-ink);
+		text-decoration: none;
+	}
+
+	.manager:hover {
+		color: var(--color-field);
+	}
+
+	/* A block, so the flags center in the row like the board's grid cell
+	   instead of riding the text baseline. */
+	.titles {
+		display: flex;
+	}
+
+	.strong {
+		font-weight: 600;
+	}
+
+	.soft {
+		color: var(--color-ink-2);
+	}
+
+	/* ---- S7.5 how the index works, and the tiers ---- */
+	.explain {
+		margin-top: 20px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 20px;
+	}
+
+	/* The board's bases are on content-box cards (22px 24px of padding and a
+	   1px border), so each adds 50px here. */
+	.how {
+		flex: 2 1 470px;
+		min-width: 0;
+	}
+
+	.tiers {
+		flex: 1 1 330px;
+		min-width: 0;
+	}
+
+	.explain :global(.fill) {
+		height: 100%;
+	}
+
+	.formula {
+		display: block;
+		padding: 12px 14px;
+		border-radius: var(--radius-control);
+		background: var(--color-ground);
+		font-size: 14px;
+		line-height: normal;
+		color: var(--color-ink);
+	}
+
+	.note {
+		margin: 12px 0 0;
+		font-size: 14px;
+		line-height: 1.55;
+		color: var(--color-ink-2);
+	}
+
+	.tier-key {
+		display: flex;
+		justify-content: space-between;
+		padding: 8px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+		font-size: 14px;
+	}
+
+	.tier-key-name {
+		font-weight: 600;
+	}
+
+	.tier-key-ranks {
+		color: var(--color-ink-2);
+	}
+
+	/* ---- S7.7 phones ---- */
+	@media (max-width: 639.98px) {
+		.skeleton {
+			margin-top: 20px;
+			gap: 14px;
+		}
+
+		.sk-strip {
+			height: 158px;
+		}
+
+		.sk-first {
+			height: 200px;
+		}
+
+		.sk-second {
+			height: 156px;
+		}
+
+		.sk-third {
+			height: 142px;
+		}
+
+		.sk-table {
+			margin-top: 0;
+			height: 940px;
+		}
+
+		.first {
+			margin-top: 20px;
+		}
+
+		.strip {
+			margin-top: 20px;
+		}
+
+		.podium {
+			margin-top: 14px;
+		}
+
+		.podium-card {
+			gap: 14px 12px;
+			padding: var(--pad-y) 16px;
+		}
+
+		.podium-rank {
+			width: 40px;
+			flex: none;
+		}
+
+		.podium-name-block {
+			flex: 1 1 0;
+		}
+
+		.podium-flags {
+			margin-top: 8px;
+		}
+
+		.podium-stats {
+			flex: 1 1 100%;
+			text-align: left;
+		}
+
+		.rankings {
+			margin-top: 14px;
+		}
+
+		.tier-row {
+			gap: 4px 12px;
+			padding: 16px 0 6px;
+		}
+
+		.tier-stats {
+			flex: 1 1 100%;
+			margin-left: 0;
+			display: grid;
+			grid-template-columns: repeat(2, max-content);
+			gap: 2px 16px;
+		}
+
+		.rank {
+			font-size: 18px;
+		}
+
+		.manager {
+			gap: 8px;
+			min-height: 44px;
+			min-width: 0;
+		}
+
+		.manager-text {
+			min-width: 0;
+		}
+
+		.manager-name {
+			display: block;
+		}
+
+		.manager-flags {
+			display: flex;
+			margin-top: 3px;
+			min-height: 13px;
+		}
+
+		.explain {
+			margin-top: 14px;
+			flex-direction: column;
+			gap: 14px;
+		}
+
+		.how,
+		.tiers {
+			flex: none;
+		}
+
+		.formula {
+			line-height: 1.5;
+		}
+	}
+</style>

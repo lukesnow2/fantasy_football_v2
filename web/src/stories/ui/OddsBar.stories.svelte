@@ -39,3 +39,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Tighter gap (Hall of Fame phone)">
+	{#snippet template()}
+		<div style="width: 86px">
+			<OddsBar percent={62} text="0.510" numberWidth={38} gap={8} />
+		</div>
+	{/snippet}
+</Story>

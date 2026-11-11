@@ -333,7 +333,7 @@ export function profileKicker(
 	firstSeason: number | string | null | undefined
 ): string {
 	if (hallOfFameRank != null && Number.isFinite(hallOfFameRank)) {
-		return `${hofTier(hallOfFameRank)} · No. ${hallOfFameRank} all-time`;
+		return `${hofTier(hallOfFameRank).name} · No. ${hallOfFameRank} all-time`;
 	}
 	return `Manager since ${firstSeason}`;
 }

@@ -158,6 +158,18 @@
 		padding: 22px 24px 0;
 	}
 
+	/* A flex box, so whatever sits in the action slot is as tall as its own
+	   line and no taller. As a plain block, it put a line of the card's own
+	   size around a 13px caption, so a stacked phone header came out 4px
+	   taller than the boards, which draw the caption as a bare flex item.
+	   Its baseline is its first item's, so the header still aligns on it. */
+	.action {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		min-width: 0;
+	}
+
 	.title {
 		margin: 0;
 		font-family: var(--font-slab);

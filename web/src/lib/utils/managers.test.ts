@@ -218,7 +218,7 @@ describe('words and numbers', () => {
 	});
 
 	it('names Hall of Fame tiers by rank', () => {
-		expect([1, 3, 4, 6, 7, 10, 11, 15, 16].map(hofTier)).toEqual([
+		expect([1, 3, 4, 6, 7, 10, 11, 15, 16].map((r) => hofTier(r).name)).toEqual([
 			'Hall of Fame Elite',
 			'Hall of Fame Elite',
 			'Hall of Fame',
