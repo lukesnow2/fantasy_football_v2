@@ -1,217 +1,408 @@
 <script lang="ts">
-	import { pickGrade, pickVerdict, type PickVerdict } from '$lib/draft-value';
-	import { onMount } from 'svelte';
+	/**
+	 * A season's draft as a grid (WP8 S8.8): one column per manager in round
+	 * 1's pick order (boardColumns in $lib/draft-display), each manager's season
+	 * draft grade under their name, and one cell per pick, tinted by position.
+	 * Each cell is a button that hands its pick to `onpick`; the selected one
+	 * carries an ink ring and aria-pressed.
+	 *
+	 * Grades and tags judge a pick against what its position and round were
+	 * expected to score (pickGrade and pickVerdict in $lib/draft-value). Kickers
+	 * and defenses get a grade but never a tag. The Show tags chips hide a tag
+	 * on the cells; they never hide a cell.
+	 */
+	import { Avatar, Button, Card, EmptyValue, GradeChip, Tag } from '$lib/components/ui';
+	import { pickGrade } from '$lib/draft-value';
+	import {
+		BOARD_TAGS,
+		boardColumns,
+		pickGradeColor,
+		pickTag,
+		pointsOf,
+		positionKey,
+		signed,
+		tagCounts,
+		type BoardPick,
+		type BoardTag
+	} from '$lib/draft-display';
 
-	export let draftData: any[] = [];
-	export let season: string = '';
-	export let numTeams: number = 10;
-
-	let selectedPick: any = null;
-	let draftBoard: any[][] = [];
-
-	// Calculate draft board layout
-	function createDraftBoard(picks: any[]) {
-		if (!picks.length) return [];
-		
-		const rounds = Math.max(...picks.map(p => p.roundNumber));
-		const board: any[][] = [];
-		
-		// Sort all picks by overallPick to ensure correct order
-		const sortedPicks = [...picks].sort((a, b) => a.overallPick - b.overallPick);
-		
-		for (let round = 1; round <= rounds; round++) {
-			const roundPicks = sortedPicks.filter(p => p.roundNumber === round);
-			
-			// Snake draft - odd rounds go left to right, even rounds go right to left
-			if (round % 2 === 0) {
-				roundPicks.reverse();
-			}
-			
-			board.push(roundPicks);
-		}
-		
-		return board;
+	interface SeasonGrade {
+		managerName: string;
+		seasonYear: number | string;
+		grade: string;
+		score: number;
 	}
 
-	function getPositionStyle(position: string): string {
-		// Normalize position (trim whitespace, handle null/undefined)
-		const normalizedPosition = position?.toString().trim().toUpperCase() || '';
-		
-		switch (normalizedPosition) {
-			case 'QB': 
-				return 'background-color: rgba(220, 38, 38, 0.2); border-color: rgb(239, 68, 68); color: rgb(252, 165, 165);';
-			case 'RB': 
-				return 'background-color: rgba(37, 99, 235, 0.2); border-color: rgb(59, 130, 246); color: rgb(147, 197, 253);';
-			case 'WR': 
-				return 'background-color: rgba(22, 163, 74, 0.2); border-color: rgb(34, 197, 94); color: rgb(134, 239, 172);';
-			case 'TE': 
-				return 'background-color: rgba(234, 179, 8, 0.3); border-color: rgb(250, 204, 21); color: rgb(254, 240, 138);';
-			case 'K': 
-				return 'background-color: rgba(120, 53, 15, 0.3); border-color: rgb(146, 64, 14); color: rgb(254, 215, 170);';
-			case 'DEF': 
-			case 'DEFENSE':
-			case 'D/ST': 
-				return 'background-color: rgba(147, 51, 234, 0.3); border-color: rgb(168, 85, 247); color: rgb(221, 214, 254);';
-			default: 
-				return 'background-color: rgba(107, 114, 128, 0.2); border-color: rgb(156, 163, 175); color: rgb(209, 213, 219);';
-		}
+	interface Props {
+		picks: (BoardPick & { playerName: string })[];
+		season: string;
+		grades: SeasonGrade[];
+		selected: number | null;
+		onpick: (overallPick: number) => void;
 	}
 
-	// Grades and value icons judge a pick against what its position and round
-	// were expected to score: pickGrade / pickVerdict in $lib/draft-value, the
-	// same reading the draft page's steal and bust counts use. They used to use
-	// raw points (200+ = A+, under 40 = F) and the round's all-position average,
-	// so a round-15 kicker that was cut got a bust skull.
-	const GRADE_COLORS: Record<string, string> = {
-		'A+': 'text-green-400', A: 'text-green-300', 'B+': 'text-blue-400', B: 'text-blue-300',
-		'C+': 'text-yellow-400', C: 'text-yellow-300', D: 'text-orange-400', F: 'text-red-400'
-	};
-	const VERDICT_ICONS: Record<PickVerdict, string> = {
-		steal: '🔥', good: '⭐', fair: '✓', disappointing: '⚠️', bust: '💀'
-	};
-	const pointsOf = (pick: any) => parseFloat(pick.seasonPoints || 0);
+	let { picks, season, grades, selected, onpick }: Props = $props();
 
-	function getPerformanceGrade(pick: any): { grade: string; color: string } {
-		const grade = pickGrade(pointsOf(pick), pick.expectedPoints, pick.highExpectation, pick.primaryPosition);
-		return grade ? { grade, color: GRADE_COLORS[grade] } : { grade: '—', color: 'text-slate-400' };
+	const LEGEND = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'];
+
+	let hidden = $state<Record<BoardTag, boolean>>({
+		steal: false,
+		value: false,
+		letdown: false,
+		bust: false
+	});
+
+	const layout = $derived(boardColumns(picks));
+	const counts = $derived(tagCounts(picks));
+	const gradeOf = $derived(
+		new Map(
+			grades
+				.filter((g) => String(g.seasonYear) === String(season))
+				.map((g) => [g.managerName, g] as const)
+		)
+	);
+
+	function gradeFor(pick: BoardPick): string | null {
+		return pickGrade(
+			pointsOf(pick),
+			pick.expectedPoints,
+			pick.highExpectation ?? false,
+			pick.primaryPosition
+		);
 	}
 
-	function getValueIndicator(pick: any): string {
-		const verdict = pickVerdict(pointsOf(pick), pick.expectedPoints, pick.highExpectation, pick.primaryPosition);
-		// Nothing to judge against is shown as nothing, not as "fair".
-		return verdict ? VERDICT_ICONS[verdict] : '—';
+	function cellColors(pick: BoardPick): { bg: string; bar: string } {
+		const key = positionKey(pick.primaryPosition);
+		return key
+			? { bg: `var(--color-pos-${key}-tint)`, bar: `var(--color-pos-${key})` }
+			: { bg: 'var(--color-wash)', bar: 'var(--color-muted)' };
 	}
-
-	$: draftBoard = createDraftBoard(draftData);
 </script>
 
-<div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
-	<div class="flex items-center justify-between mb-6">
-		<h3 class="text-2xl font-bold text-white">
-			{season} Draft Board Recreation
-		</h3>
-		<div class="text-sm text-slate-400">
-			{numTeams} Teams • {draftData.length} Total Picks
-		</div>
-	</div>
+<Card
+	title="Draft board"
+	padding="20px 20px 16px"
+	headAlign="center"
+	headSpacing="10px 16px"
+	phoneHeadStack
+	phoneHeadStackGap={10}
+	phoneHeadGap={14}
+	class="draft-board"
+>
+	{#snippet action()}
+		<span class="legend" aria-label="Positions">
+			{#each LEGEND as pos (pos)}
+				<span class="legend-item"
+					><span
+						class="swatch"
+						aria-hidden="true"
+						style:background="var(--color-pos-{pos.toLowerCase()}-tint)"
+						style:box-shadow="inset 0 3px 0 var(--color-pos-{pos.toLowerCase()})"
+					></span>{pos}</span
+				>
+			{/each}
+		</span>
+	{/snippet}
 
-	<!-- Position Legend -->
-	<div class="flex items-center gap-2 mb-6 text-xs">
-		<span class="text-slate-400">Positions:</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('QB')}>QB</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('RB')}>RB</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('WR')}>WR</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('TE')}>TE</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('DEF')}>DEF</span>
-		<span class="px-2 py-1 rounded border" style={getPositionStyle('K')}>K</span>
+	<div class="tags" role="group" aria-label="Show tags">
+		<span class="tags-label">Show tags</span>
+		{#each BOARD_TAGS as t (t.key)}
+			<Button
+				variant="chip"
+				aria-pressed={!hidden[t.key]}
+				onclick={() => (hidden = { ...hidden, [t.key]: !hidden[t.key] })}
+			>
+				<Tag variant={t.key} size="sample">{t.label}</Tag>{counts[t.key]} picks
+			</Button>
+		{/each}
+		<span class="tags-note"
+			>No tag for picks that scored about what their slot usually does, or for kickers and
+			defenses.</span
+		>
 	</div>
+	<p class="how">
+		The letter under each name is that manager's {season} draft grade, graded against every draft in
+		league history. One column per manager in draft order. Snake order, so the pick numbers run back
+		and forth. <span class="click">Click any pick to see it above.</span><span class="tap"
+			>Tap any pick to see it above.</span
+		>
+	</p>
 
-	<!-- Draft Board -->
-	<div class="overflow-x-auto">
-		<div class="min-w-full">
-			{#each draftBoard as round, roundIndex}
-				<div class="mb-4">
-					<div class="flex items-center gap-2 mb-2">
-						<span class="text-sm font-bold text-slate-300">Round {roundIndex + 1}</span>
-						<div class="flex-1 h-px bg-slate-600"></div>
-					</div>
-					
-					<div class="grid gap-2" style="grid-template-columns: repeat({numTeams}, minmax(140px, 1fr));">
-						{#each round as pick}
+	<div class="scroller">
+		<div class="grid-box" style:--cols={layout.columns.length}>
+			<div class="grid head">
+				<span class="round"></span>
+				{#each layout.columns as manager (manager)}
+					{@const g = gradeOf.get(manager)}
+					<span class="col-head">
+						<Avatar name={manager} size={34} alt="" initialTone="field" initialSize={13} />
+						<span class="col-name">{manager}</span>
+						<span class="col-grade" title="{season} draft grade"
+							>{#if g}<GradeChip grade={g.grade} shape="inline" />{signed(g.score, 2)}{:else}<EmptyValue
+								/>{/if}</span
+						>
+					</span>
+				{/each}
+			</div>
+			{#each layout.rows as row (row.round)}
+				<div class="grid">
+					<span class="round round-label">R{row.round}</span>
+					{#each row.cells as pick, i (pick?.overallPick ?? `empty-${i}`)}
+						{#if pick}
+							{@const grade = gradeFor(pick)}
+							{@const tag = pickTag(pick)}
+							{@const colors = cellColors(pick)}
+							{@const on = pick.overallPick === selected}
 							<button
-								class="p-3 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer"
-								style={getPositionStyle(pick.primaryPosition)}
-								on:click={() => selectedPick = selectedPick?.overallPick === pick.overallPick ? null : pick}
+								type="button"
+								class="cell"
+								class:on
+								aria-pressed={on}
+								aria-label="Pick {pick.overallPick}, {pick.playerName}, {pick.primaryPosition}, grade {grade ??
+									'none'}"
+								style:background={colors.bg}
+								style:--bar={colors.bar}
+								onclick={() => onpick(pick.overallPick)}
 							>
-								<div class="text-xs font-bold mb-1">#{pick.overallPick}</div>
-								<div class="font-bold text-white text-sm mb-1 truncate" title={pick.playerName}>
-									{pick.playerName}
-								</div>
-								<div class="text-xs opacity-75 mb-1">{pick.primaryPosition}{pick.nflTeam && pick.nflTeam !== 'Unknown' ? ` • ${pick.nflTeam}` : ''}</div>
-								<div class="text-xs text-slate-300 truncate" title={pick.managerName}>
-									{pick.managerName}
-								</div>
-								<div class="flex items-center justify-between mt-2">
-									<span class="text-xs font-bold {getPerformanceGrade(pick).color}">
-										{getPerformanceGrade(pick).grade}
-									</span>
-									<span class="text-sm">
-										{getValueIndicator(pick)}
-									</span>
-								</div>
-								{#if pick.isKeeperPick}
-									<div class="text-xs text-amber-400 mt-1">🔒 Keeper</div>
-								{/if}
+								<span class="cell-top"
+									><span>{pick.overallPick} · {pick.primaryPosition}</span><span
+										class="cell-grade"
+										style:color="var(--color-{pickGradeColor(grade)})"
+										>{#if grade}{grade}{:else}<EmptyValue />{/if}</span
+									></span
+								>
+								<span class="cell-player">{pick.playerName}</span>
+								<span class="cell-bottom"
+									><span>{pointsOf(pick).toFixed(1)} pts</span>{#if tag && !hidden[tag]}<Tag
+											variant={tag}
+											size="cell">{BOARD_TAGS.find((t) => t.key === tag)?.label}</Tag
+										>{/if}</span
+								>
 							</button>
-						{/each}
-					</div>
+						{:else}
+							<span></span>
+						{/if}
+					{/each}
 				</div>
 			{/each}
 		</div>
 	</div>
+</Card>
 
-	<!-- Pick Detail Modal -->
-	{#if selectedPick}
-		<div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => selectedPick = null}>
-			<div class="bg-slate-800 rounded-xl p-6 border border-slate-700 max-w-md mx-4" on:click|stopPropagation>
-				<div class="flex items-center justify-between mb-4">
-					<h4 class="text-xl font-bold text-white">Pick #{selectedPick.overallPick}</h4>
-					<button class="text-slate-400 hover:text-white" on:click={() => selectedPick = null}>✕</button>
-				</div>
-				
-				<div class="space-y-4">
-					<div class="text-center">
-						<div class="text-lg font-bold text-white mb-1">{selectedPick.playerName}</div>
-						<div class="text-sm text-slate-400">{selectedPick.primaryPosition}{selectedPick.nflTeam && selectedPick.nflTeam !== 'Unknown' ? ` • ${selectedPick.nflTeam}` : ''}</div>
-						<div class="text-sm text-blue-400">{selectedPick.managerName} ({selectedPick.teamName})</div>
-					</div>
-					
-					<div class="grid grid-cols-2 gap-4 text-sm">
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">Round</div>
-							<div class="font-bold text-white">{selectedPick.roundNumber}.{selectedPick.pickInRound}</div>
-						</div>
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">Season Points</div>
-							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
-								{parseFloat(selectedPick.seasonPoints || 0).toFixed(1)}
-							</div>
-						</div>
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">Expected</div>
-							<div class="font-bold text-white">
-								{selectedPick.expectedPoints != null ? Number(selectedPick.expectedPoints).toFixed(1) : '—'}
-							</div>
-						</div>
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">vs expected</div>
-							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
-								{selectedPick.valueOverExpected != null ? `${selectedPick.valueOverExpected > 0 ? '+' : ''}${Number(selectedPick.valueOverExpected).toFixed(1)}` : '—'}
-							</div>
-						</div>
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">Grade</div>
-							<div class="font-bold {getPerformanceGrade(selectedPick).color}">
-								{getPerformanceGrade(selectedPick).grade}
-							</div>
-						</div>
-						<div class="bg-slate-700/50 p-3 rounded">
-							<div class="text-slate-400">Value</div>
-							<div class="text-lg">{getValueIndicator(selectedPick)}</div>
-						</div>
-					</div>
-					
-					{#if selectedPick.isKeeperPick}
-						<div class="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-center">
-							<span class="text-amber-400">🔒 Keeper Pick</span>
-						</div>
-					{/if}
-					
-					<div class="text-xs text-slate-500 text-center">
-						Click outside to close
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
-</div> 
+<style>
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 12px;
+		align-items: center;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.legend-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.swatch {
+		width: 14px;
+		height: 14px;
+		border-radius: 4px;
+	}
+
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.tags-label {
+		margin-right: 2px;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--color-ink-2);
+	}
+
+	.tags-note,
+	.how {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.how {
+		margin: 8px 0 0;
+	}
+
+	.tap {
+		display: none;
+	}
+
+	@media (hover: none) {
+		.click {
+			display: none;
+		}
+
+		.tap {
+			display: inline;
+		}
+	}
+
+	.scroller {
+		overflow-x: auto;
+		margin-top: 14px;
+	}
+
+	.grid-box {
+		min-width: 1100px;
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: 34px repeat(var(--cols), minmax(0, 1fr));
+		gap: 6px;
+		padding-top: 6px;
+	}
+
+	.grid.head {
+		padding-top: 0;
+		padding-bottom: 8px;
+		border-bottom: 2px solid var(--color-ink);
+	}
+
+	.col-head {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		text-align: center;
+	}
+
+	.col-name {
+		font-size: 12px;
+		font-weight: 700;
+		line-height: 1.2;
+	}
+
+	.col-grade {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 11px;
+		color: var(--color-ink-2);
+	}
+
+	.round-label {
+		align-self: center;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 16px;
+		color: var(--color-muted);
+	}
+
+	/* A button, so border-box as the board's are: 92px with the padding. */
+	.cell {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		min-width: 0;
+		min-height: 92px;
+		padding: 9px 8px 7px;
+		border: 0;
+		border-radius: 8px;
+		box-shadow:
+			inset 0 3px 0 var(--bar),
+			0 0 0 0 transparent;
+		text-align: left;
+		cursor: pointer;
+		font-family: var(--font-sans);
+		color: var(--color-ink);
+	}
+
+	.cell.on {
+		box-shadow:
+			inset 0 3px 0 var(--bar),
+			0 0 0 2.5px var(--color-ink);
+	}
+
+	.cell:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+	}
+
+	.cell-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		font-size: 11px;
+		font-weight: 700;
+		color: var(--color-ink-2);
+	}
+
+	.cell-grade {
+		font-family: var(--font-slab);
+		font-size: 14px;
+	}
+
+	.cell-player {
+		display: block;
+		flex: 1;
+		font-weight: 700;
+		font-size: 13px;
+		line-height: 1.22;
+		overflow-wrap: anywhere;
+	}
+
+	.cell-bottom {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: center;
+		gap: 2px 4px;
+		font-size: 11px;
+		color: var(--color-ink-2);
+	}
+
+	/* ---- S8.10 phones ---- */
+	@media (max-width: 639.98px) {
+		.tags-label {
+			flex: 1 1 100%;
+			margin-right: 0;
+		}
+
+		.tags-note {
+			flex: 1 1 100%;
+		}
+
+		.scroller {
+			margin: 14px -16px 0;
+		}
+
+		.grid-box {
+			width: 1002px;
+			min-width: 0;
+		}
+
+		.grid {
+			grid-template-columns: 48px repeat(var(--cols), 88px);
+			gap: 0 6px;
+		}
+
+		/* The round column stays put while the managers slide under it. */
+		.round {
+			position: sticky;
+			left: 0;
+			z-index: 1;
+			padding-left: 16px;
+			background: var(--color-card);
+		}
+
+		.round-label {
+			align-self: stretch;
+			display: flex;
+			align-items: center;
+		}
+	}
+</style>

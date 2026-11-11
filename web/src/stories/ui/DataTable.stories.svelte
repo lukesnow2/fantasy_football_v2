@@ -264,3 +264,20 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Wrapping header, top aligned (Draft Central)">
+	{#snippet template()}
+		<div style="max-width: 420px">
+			<DataTable
+				label="Standings"
+				headerAlign="top"
+				columns={[
+					{ key: 'name', label: 'Manager' },
+					{ key: 'wl', label: 'Win loss', width: '40px', wrapHeader: true },
+					{ key: 'pf', label: 'PF', numeric: true, width: '60px' }
+				]}
+				rows={STANDINGS}
+			/>
+		</div>
+	{/snippet}
+</Story>

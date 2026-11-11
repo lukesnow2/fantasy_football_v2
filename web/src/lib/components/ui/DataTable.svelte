@@ -14,6 +14,11 @@
 		 * Hall of Fame's 64px column).
 		 */
 		fixedHeader?: boolean;
+		/**
+		 * Let the header text wrap inside `width`, as a board's grid cell does
+		 * ("Grade ⓘ" in Draft Central's 60px column puts the ⓘ on a second line).
+		 */
+		wrapHeader?: boolean;
 	}
 </script>
 
@@ -89,6 +94,8 @@
 		 * inset (Draft Central's phone table: 16).
 		 */
 		edgeInset?: number;
+		/** Where header text sits when the header row is two lines tall. */
+		headerAlign?: 'top' | 'middle' | 'bottom';
 	}
 
 	let {
@@ -110,7 +117,8 @@
 		header,
 		stickyFirst = false,
 		stickyRule = true,
-		edgeInset
+		edgeInset,
+		headerAlign
 	}: Props = $props();
 </script>
 
@@ -134,6 +142,8 @@
 						class:num={column.numeric}
 						class:bare={hideHeader}
 						class:fixed-height={headerHeight != null}
+						class:wrap={column.wrapHeader}
+						style:vertical-align={headerAlign}
 						style:width={column.width}
 						style:height={headerHeight != null ? `${headerHeight}px` : undefined}
 						aria-label={column.ariaLabel}
@@ -206,6 +216,10 @@
 		color: var(--color-ink-2);
 		text-align: left;
 		white-space: nowrap;
+	}
+
+	th.wrap {
+		white-space: normal;
 	}
 
 	th.bare,
