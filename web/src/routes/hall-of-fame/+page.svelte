@@ -109,8 +109,15 @@
 		return n == null ? null : formatPercent1(n);
 	}
 
-	function record(wins: unknown, losses: unknown, ties: unknown = 0): string {
-		return formatRecord(Number(wins) || 0, Number(losses) || 0, Number(ties) || 0);
+	/** W-L(-T), or null when the wins or losses are missing. */
+	function record(
+		wins: number | string | null | undefined,
+		losses: number | string | null | undefined,
+		ties: number | string | null | undefined = 0
+	): string | null {
+		const w = toNumber(wins);
+		const l = toNumber(losses);
+		return w == null || l == null ? null : formatRecord(w, l, toNumber(ties) ?? 0);
 	}
 
 	// ---- S7.2 header and strip ----------------------------------------------
@@ -133,8 +140,10 @@
 	]);
 
 	// ---- S7.3 the podium ----------------------------------------------------
+	// Styled by rank, not by position, so managers tied for a place get the
+	// same card.
 	const podium = $derived(
-		managers.slice(0, 3).map((m, i) => ({ m, style: podiumStyle(i + 1, phone) }))
+		managers.slice(0, 3).map((m) => ({ m, style: podiumStyle(m.hallOfFameRank, phone) }))
 	);
 
 	// ---- S7.4 official rankings ---------------------------------------------
@@ -346,7 +355,7 @@
 								<span>Avg titles <b>{@render orNone(fixed(stat.avgChampionships, 1))}</b></span>
 								<span>Win % <b>{@render orNone(percent(stat.avgWinPct))}</b></span>
 								<span>Index <b>{@render orNone(fixed(stat.avgHallOfFameIndex, 3))}</b></span>
-								<span>Record <b>{record(stat.totalWins, stat.totalLosses)}</b></span>
+								<span>Record <b>{@render orNone(record(stat.totalWins, stat.totalLosses))}</b></span>
 							</span>
 						{/if}
 					</div>
@@ -384,7 +393,9 @@
 							<EmptyValue />
 						{/if}
 					{:else if column.key === 'record'}
-						<span class="strong">{record(r.careerWins, r.careerLosses, r.careerTies)}</span>
+						<span class="strong"
+								>{@render orNone(record(r.careerWins, r.careerLosses, r.careerTies))}</span
+							>
 					{:else if column.key === 'pct'}
 						{@render orNone(rate(r.careerWinPercentage))}
 					{:else if column.key === 'ppg'}

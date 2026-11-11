@@ -92,8 +92,8 @@
 		try {
 			const [perf, hof] = await Promise.allSettled([
 				fetch(`/api/managers/performance?manager=${encodeURIComponent(name)}&analysis=all`),
-				// The kicker's tier and rank. Matched by exact name below, not with
-				// the API's `?manager=`, which is a substring match.
+				// The kicker's tier and rank, and the full list "Most in the
+				// league" checks for a tie, so no `?manager=` filter.
 				fetch('/api/hall-of-fame')
 			]);
 			if (request !== latestRequest) return;
