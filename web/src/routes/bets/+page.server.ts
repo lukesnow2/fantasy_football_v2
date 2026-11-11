@@ -67,7 +67,7 @@ export const actions: Actions = {
 
 		if (!title) return fail(400, { error: 'Give the bet a name.' });
 		if (!terms) return fail(400, { error: 'Spell out what has to happen for you to win.' });
-		if (!stake) return fail(400, { error: "Say what's at stake — $20, wings, bragging rights." });
+		if (!stake) return fail(400, { error: "Say what's at stake: $20, wings, bragging rights." });
 
 		// Bounded, not just parsed. season_year is int4, so an unbounded parseInt
 		// lets "99999999999" through to Postgres, which raises 22003 and turns a
