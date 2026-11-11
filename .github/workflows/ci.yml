@@ -62,6 +62,18 @@ jobs:
         # The client half of the suite runs in vitest browser mode, which
         # drives a real Chromium. Without this the run dies before any test
         # executes, reporting only "failed to scan for dependencies".
-        run: npx playwright install --with-deps chromium
+        # The browser comes from Playwright's CDN, not apt.
+        run: npx playwright install chromium
+      - name: Install Chromium's system packages
+        # On ubuntu-24.04 the libraries Chromium needs are already on the
+        # image; apt only adds nine font packages, which no test depends on.
+        # On 11-11 the runners couldn't resolve azure.archive.ubuntu.com for
+        # over an hour and the job died here before any test ran, so apt
+        # gets short timeouts and a failure here doesn't stop the tests.
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          echo 'Acquire::Retries "1"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99-fail-fast
+          npx playwright install-deps chromium
       - name: Run unit tests
         run: npm run test:unit -- --run

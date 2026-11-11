@@ -16,7 +16,9 @@
 	 * `phoneKicker` swaps in a shorter kicker there, and `hideActionOnPhone`
 	 * drops the action, as This Season's phone board draws it, and
 	 * `phoneActionGap` sets the px between the intro and an action that wraps
-	 * under it (14 on Power Rankings' phone board; 20 otherwise). `pending` shows
+	 * under it (14 on Power Rankings' phone board; 20 otherwise), and
+	 * `phoneActionFull` stretches the action across the column (Trade Center's
+	 * and Draft Central's Season select). `pending` shows
 	 * the kicker and intro as line-soft bars while the page loads.
 	 *
 	 * `icon` and `accent` are left over from the old centered header. They still
@@ -35,6 +37,8 @@
 		hideActionOnPhone?: boolean;
 		/** Px between the intro and the action below 640px. */
 		phoneActionGap?: number;
+		/** Below 640px, the action runs the full width of the column. */
+		phoneActionFull?: boolean;
 		/** The title's size in px, from the page's board. 60 on most pages. */
 		size?: number;
 		/** The intro's max-width in px: 620 unless the board draws another (Managers, 640). */
@@ -56,6 +60,7 @@
 		pending = false,
 		hideActionOnPhone = false,
 		phoneActionGap = 20,
+		phoneActionFull = false,
 		size = 60,
 		introWidth = 620,
 		children,
@@ -88,7 +93,7 @@
 		{/if}
 	</div>
 	{#if action && !pending}
-		<div class="action" class:hide-phone={hideActionOnPhone}>{@render action()}</div>
+		<div class="action" class:hide-phone={hideActionOnPhone} class:full-phone={phoneActionFull}>{@render action()}</div>
 	{/if}
 </div>
 
@@ -189,6 +194,15 @@
 
 		.intro-bar {
 			height: 48px;
+		}
+
+		.action.full-phone {
+			flex: 1 1 100%;
+			min-width: 0;
+		}
+
+		.action.full-phone > :global(*) {
+			width: 100%;
 		}
 
 		.desktop-only,

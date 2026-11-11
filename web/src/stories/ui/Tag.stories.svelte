@@ -107,3 +107,31 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Trade status (Trade Center)">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px">
+			<Tag variant="pending" size="trade">In progress</Tag>
+			<Tag variant="final" size="trade">Final</Tag>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Draft board tags">
+	{#snippet template()}
+		<div style="display: grid; gap: 12px">
+			<div style="display: flex; gap: 8px">
+				<Tag variant="steal" size="sample">Steal</Tag>
+				<Tag variant="value" size="sample">Value</Tag>
+				<Tag variant="letdown" size="sample">Letdown</Tag>
+				<Tag variant="bust" size="sample">Bust</Tag>
+			</div>
+			<div style="display: flex; gap: 8px">
+				<Tag variant="steal" size="cell">Steal</Tag>
+				<Tag variant="value" size="cell">Value</Tag>
+				<Tag variant="letdown" size="cell">Letdown</Tag>
+				<Tag variant="bust" size="cell">Bust</Tag>
+			</div>
+		</div>
+	{/snippet}
+</Story>

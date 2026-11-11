@@ -11,7 +11,13 @@
 		| 'in-progress'
 		| 'runner-up'
 		| 'band-champion'
-		| 'band';
+		| 'band'
+		| 'final'
+		| 'pending'
+		| 'steal'
+		| 'value'
+		| 'letdown'
+		| 'bust';
 </script>
 
 <script lang="ts">
@@ -42,12 +48,30 @@
 	 * - `wrapOnPhone`: below 640px the text may wrap inside the tag, at a 16px
 	 *   line height, as Season history's phone table draws "In progress · 61%
 	 *   playoff odds"
+	 *
+	 * Trades and the draft (WP8) add:
+	 * - `final` field-tint with clubhouse and `pending` wash with ink-2: a
+	 *   trade's status in Recent trades, at `size="trade"` (2px 8px, 13px)
+	 * - the draft board's four tags, each with a 1px border: `steal` field with
+	 *   white, `value` card with field text and a field border, `letdown` card
+	 *   with pennant-dark text and a pennant border, `bust` ink with white. Two
+	 *   sizes, both with 4px corners: `sample` (1px 6px, 11px) inside a Show
+	 *   tags chip, and `cell` (0 5px, 10px) on a board cell
 	 */
 	import type { Snippet } from 'svelte';
 
 	interface Props {
 		variant: TagVariant;
-		size?: 'default' | 'row' | 'small' | 'chip' | 'chip-small' | 'chip-badge';
+		size?:
+			| 'default'
+			| 'row'
+			| 'small'
+			| 'chip'
+			| 'chip-small'
+			| 'chip-badge'
+			| 'trade'
+			| 'sample'
+			| 'cell';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
 		children: Snippet;
@@ -103,6 +127,29 @@
 	.size-chip-badge {
 		padding: 4px 10px;
 		font-size: 13px;
+	}
+
+	.size-trade {
+		padding: 2px 8px;
+		font-size: 13px;
+		letter-spacing: normal;
+	}
+
+	.size-sample,
+	.size-cell {
+		border: 1px solid transparent;
+		border-radius: 4px;
+		letter-spacing: normal;
+	}
+
+	.size-sample {
+		padding: 1px 6px;
+		font-size: 11px;
+	}
+
+	.size-cell {
+		padding: 0 5px;
+		font-size: 10px;
 	}
 
 	.caps {
@@ -170,6 +217,40 @@
 	.band-champion {
 		background: var(--color-pennant-light);
 		color: var(--color-clubhouse);
+	}
+
+	.final {
+		background: var(--color-field-tint);
+		color: var(--color-clubhouse);
+	}
+
+	.pending {
+		background: var(--color-wash);
+		color: var(--color-ink-2);
+	}
+
+	.steal {
+		background: var(--color-field);
+		border-color: var(--color-field);
+		color: var(--color-white);
+	}
+
+	.value {
+		background: var(--color-card);
+		border-color: var(--color-field);
+		color: var(--color-field);
+	}
+
+	.letdown {
+		background: var(--color-card);
+		border-color: var(--color-pennant);
+		color: var(--color-pennant-dark);
+	}
+
+	.bust {
+		background: var(--color-ink);
+		border-color: var(--color-ink);
+		color: var(--color-white);
 	}
 
 	.band {

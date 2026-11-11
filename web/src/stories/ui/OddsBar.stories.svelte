@@ -47,3 +47,11 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Bare, pennant track (Trade Center)">
+	{#snippet template()}
+		<div style="width: 180px">
+			<OddsBar percent={82} track="pennant" bare label="Winner's share 82%" />
+		</div>
+	{/snippet}
+</Story>

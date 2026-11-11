@@ -20,6 +20,11 @@
 	 *   week), "pennant" for a pennant-tint card with a pennant-line border
 	 *   (Home's Biggest rivalry), "clubhouse" for the dark card with white text
 	 *   (This Season's champion)
+	 *   WP8 adds "field", a field-tint card with a field-line border (the
+	 *   season draft's Best value), and "panel", a box inside a card with a
+	 *   line-soft border and 10px corners (Best drafters)
+	 * - `label`: an accessible name for a card with no title ("Selected pick")
+	 * - `element`: bindable, the card's <section>, for a page that scrolls to it
 	 * - `headAlign`, `headSpacing`: the header row's alignment and gap, when a
 	 *   board draws a control beside the title (This Season's Final standings:
 	 *   center, "10px 16px")
@@ -45,7 +50,11 @@
 		flush?: boolean;
 		padding?: string;
 		headGap?: number;
-		tone?: 'default' | 'borderless' | 'pennant' | 'clubhouse';
+		tone?: 'default' | 'borderless' | 'pennant' | 'clubhouse' | 'field' | 'panel';
+		/** An accessible name for a card with no title. */
+		label?: string;
+		/** The card's <section>, bindable. */
+		element?: HTMLElement | null;
 		headAlign?: 'baseline' | 'center';
 		headSpacing?: string;
 		phonePadding?: string;
@@ -68,6 +77,8 @@
 		padding = '22px 24px',
 		headGap = 12,
 		tone = 'default',
+		label,
+		element = $bindable(null),
 		headAlign = 'baseline',
 		headSpacing = '8px 12px',
 		phonePadding = '16px',
@@ -85,6 +96,7 @@
 </script>
 
 <section
+	bind:this={element}
 	class="card {tone} {className}"
 	class:flush
 	style:--card-pad={padding}
@@ -97,6 +109,7 @@
 	style:--card-head-spacing={headSpacing}
 	style:--card-head-stack-gap={`${phoneHeadStackGap}px`}
 	aria-labelledby={title ? `card-${headingId}` : undefined}
+	aria-label={title ? undefined : label}
 >
 	{#if title || action}
 		<div
@@ -137,6 +150,16 @@
 	.card.pennant {
 		background: var(--color-pennant-tint);
 		border-color: var(--color-pennant-line);
+	}
+
+	.card.field {
+		background: var(--color-field-tint);
+		border-color: var(--color-field-line);
+	}
+
+	.card.panel {
+		border-color: var(--color-line-soft);
+		border-radius: 10px;
 	}
 
 	.card.clubhouse {

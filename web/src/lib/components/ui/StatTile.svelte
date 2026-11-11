@@ -12,6 +12,9 @@
 	 * `compact` is This Season's phone strip (WP4 S4.10): value first in slab
 	 * 24px, then the label in 12px muted, 12px 14px of padding.
 	 *
+	 * `tight` with `compact` is the Trade Center phone strip (WP8 S8.10): the
+	 * value at line-height 1 and the label 4px under it.
+	 *
 	 * `small` is the Hall of Fame strip (WP7 S7.2), value first: 16px 20px of
 	 * padding, a 30px value and the 13px ink-2 label 6px under it; on phones
 	 * 12px 14px, a 24px value and the label in 12px, its StatTip a 44px tap
@@ -37,6 +40,8 @@
 		metricId?: string;
 		valueFirst?: boolean;
 		compact?: boolean;
+		/** With compact: a line-height 1 value and the label 4px under it. */
+		tight?: boolean;
 		small?: boolean;
 		layout?: 'stack' | 'avatar';
 		avatar?: string | null;
@@ -50,6 +55,7 @@
 		metricId,
 		valueFirst = false,
 		compact = false,
+		tight = false,
 		small = false,
 		layout = 'stack',
 		avatar,
@@ -88,6 +94,7 @@
 		class:in-strip={inStrip}
 		class:value-first={valueFirst || compact || small}
 		class:compact
+		class:tight={compact && tight}
 		class:small
 	>
 		{#if valueFirst || compact || small}
@@ -243,6 +250,14 @@
 		margin-top: 0;
 		font-size: 12px;
 		color: var(--color-muted);
+	}
+
+	.tight .value {
+		line-height: 1;
+	}
+
+	.tight .first-label {
+		margin-top: 4px;
 	}
 
 	/* The Hall of Fame strip. */

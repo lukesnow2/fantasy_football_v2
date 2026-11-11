@@ -110,3 +110,27 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Field tone (season draft's Best value)">
+	{#snippet template()}
+		<div style="max-width: 300px">
+			<Card tone="field" padding="12px 12px 8px">Dak Prescott +199.9</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Panel (Best drafters)">
+	{#snippet template()}
+		<div style="max-width: 240px">
+			<Card tone="panel" padding="12px 14px">Gabe the Younger +8.2</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="No title, with a label">
+	{#snippet template()}
+		<div style="max-width: 460px">
+			<Card label="Selected pick" padding="20px 22px">Pick 87 · Round 9</Card>
+		</div>
+	{/snippet}
+</Story>

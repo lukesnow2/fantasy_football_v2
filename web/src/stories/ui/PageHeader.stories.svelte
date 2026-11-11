@@ -1,6 +1,7 @@
 <script module>
 	import { defineMeta } from '@storybook/addon-svelte-csf';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import Select from '$lib/components/ui/Select.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import StatStrip from '$lib/components/ui/StatStrip.svelte';
 	import StatTile from '$lib/components/ui/StatTile.svelte';
@@ -150,3 +151,14 @@
 		}
 	}
 </style>
+
+<Story name="Season select, full width on phones (Trade Center)">
+	{#snippet template()}
+		<PageHeader kicker="Activity · every season" title="Trade Center" introWidth={640} phoneActionGap={14} phoneActionFull>
+			All 104 trades since 2005, each scored on how the players did after the deal.
+			{#snippet action()}
+				<Select label="Season" value="all" options={[{ value: 'all', label: 'All seasons' }, { value: '2026', label: '2026' }]} />
+			{/snippet}
+		</PageHeader>
+	{/snippet}
+</Story>

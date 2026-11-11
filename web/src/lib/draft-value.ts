@@ -9,9 +9,11 @@
  *    pick in round 1, still ~1x in round 15), so one curve for all positions
  *    makes every QB a steal and none a bust.
  *  - Round, not raw points. Kickers and defenses go in the last rounds and score
- *    like the other late picks (0.5-0.9x average). Judged against their slot they
- *    are expected to score little, so a dropped one is no "bust"; a kicker
- *    reached for in round 5 carries a round-5 expectation and can be.
+ *    like the other late picks (0.5-0.9x average), so their slot expects little
+ *    of them. They still get an expectation and a grade, but never a verdict:
+ *    a kicker or defense is never a steal or a bust, wherever it was taken
+ *    (NO_VERDICT_POSITIONS). A late kicker that hit is no heist, and one reached
+ *    for early is no draft disaster.
  *
  * Points are measured relative to each season's average drafted pick, so seasons
  * with different scoring, and the season still being played (partial totals),
@@ -128,15 +130,35 @@ export function valueDraftPicks<T extends DraftPickInput>(
 	});
 }
 
-/** Steals: the picks that beat their expectation by the most. */
-export function topSteals<T extends PickValue>(picks: T[], n: number): T[] {
-	return [...picks].sort((a, b) => b.valueOverExpected - a.valueOverExpected).slice(0, n);
+/**
+ * Positions that never get a verdict (steal, value, letdown, bust): kickers and
+ * defenses, in every spelling the data and the board use. Their points swing on
+ * things a draft can't call, so a verdict on them says nothing about the pick.
+ */
+export const NO_VERDICT_POSITIONS: ReadonlySet<string> = new Set(['K', 'DEF', 'D/ST', 'DEFENSE']);
+
+/** Whether a pick at this position can be judged a steal or a bust. */
+export function getsVerdict(position: string | null | undefined): boolean {
+	return !NO_VERDICT_POSITIONS.has(String(position ?? '').trim().toUpperCase());
 }
 
-/** Busts: picks the draft counted on (highExpectation) that missed by the most. */
-export function topBusts<T extends PickValue>(picks: T[], n: number): T[] {
+type Positioned = { position?: string | null };
+
+/** Steals: the picks that beat their expectation by the most. Never a kicker or defense. */
+export function topSteals<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
 	return picks
-		.filter((p) => p.highExpectation)
+		.filter((p) => getsVerdict(p.position))
+		.sort((a, b) => b.valueOverExpected - a.valueOverExpected)
+		.slice(0, n);
+}
+
+/**
+ * Busts: picks the draft counted on (highExpectation) that missed by the most.
+ * Never a kicker or defense.
+ */
+export function topBusts<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
+	return picks
+		.filter((p) => p.highExpectation && getsVerdict(p.position))
 		.sort((a, b) => a.valueOverExpected - b.valueOverExpected)
 		.slice(0, n);
 }
@@ -159,12 +181,17 @@ function ratio(points: number, expected: number | null | undefined): number | nu
 	return expected != null && expected > 0 ? points / expected : null;
 }
 
-/** Null when the pick has no expectation to judge against. */
+/**
+ * Null when the pick has no expectation to judge against, or is a kicker or
+ * defense (NO_VERDICT_POSITIONS).
+ */
 export function pickVerdict(
 	points: number,
 	expected: number | null | undefined,
-	highExpectation: boolean
+	highExpectation: boolean,
+	position: string | null | undefined
 ): PickVerdict | null {
+	if (!getsVerdict(position)) return null;
 	const r = ratio(points, expected);
 	if (r == null) return null;
 	if (r > STEAL_RATIO) return 'steal';
@@ -180,11 +207,16 @@ export function isHit(points: number, expected: number | null | undefined): bool
 	return r != null && r >= HIT_RATIO;
 }
 
-/** Letter grade against expectation. F is kept for busts; anything else bottoms out at D. */
+/**
+ * Letter grade against expectation. F is kept for busts; anything else bottoms
+ * out at D. Kickers and defenses are graded too, but can't be busts, so their
+ * floor is D.
+ */
 export function pickGrade(
 	points: number,
 	expected: number | null | undefined,
-	highExpectation: boolean
+	highExpectation: boolean,
+	position: string | null | undefined
 ): string | null {
 	const r = ratio(points, expected);
 	if (r == null) return null;
@@ -194,7 +226,7 @@ export function pickGrade(
 	if (r >= 0.95) return 'B';
 	if (r >= 0.8) return 'C+';
 	if (r >= 0.65) return 'C';
-	return pickVerdict(points, expected, highExpectation) === 'bust' ? 'F' : 'D';
+	return pickVerdict(points, expected, highExpectation, position) === 'bust' ? 'F' : 'D';
 }
 
 // ---- Manager draft grades ---------------------------------------------------
