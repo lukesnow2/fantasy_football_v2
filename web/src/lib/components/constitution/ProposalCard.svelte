@@ -162,8 +162,12 @@
 						action="?/vote"
 						use:enhance={() => {
 							submitting = true;
-							return async ({ update }) => {
-								await update();
+							return async ({ result, update }) => {
+								// No form reset: it would uncheck the radios while
+								// selectedVote still holds the choice, so "Change my
+								// vote" could post no vote at all.
+								await update({ reset: false });
+								if (result.type === 'success') comment = '';
 								submitting = false;
 							};
 						}}

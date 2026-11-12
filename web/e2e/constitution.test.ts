@@ -31,8 +31,13 @@ test('Contents reads I to IX then A1, and each link lands on its article', async
 		const atEnd = await page.evaluate(
 			() => Math.ceil(window.scrollY + window.innerHeight) >= document.documentElement.scrollHeight
 		);
-		if (!atEnd) expect(Math.abs(top - 16)).toBeLessThanOrEqual(2);
-		else expect(top).toBeLessThan(900);
+		if (!atEnd) {
+			expect(Math.abs(top - 16)).toBeLessThanOrEqual(2);
+			// The article you landed on is the current one.
+			await expect(link).toHaveAttribute('aria-current', 'location');
+		} else {
+			expect(top).toBeLessThan(900);
+		}
 	}
 });
 

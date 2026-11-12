@@ -78,14 +78,17 @@
 	}
 
 	// Contents: the current item is the last article whose top has scrolled
-	// past the top of the viewport, or the first one before any has.
+	// past the top of the viewport, or the first one before any has. A Contents
+	// link lands an article its scroll margin (16px) below the top, so that
+	// counts as past it.
+	const SCROLL_MARGIN = 16;
 	let current = '';
 
 	function updateCurrent() {
 		let found = data.sections[0]?.sectionId ?? '';
 		for (const s of data.sections) {
 			const el = document.getElementById(s.sectionId);
-			if (el && el.getBoundingClientRect().top <= 1) found = s.sectionId;
+			if (el && el.getBoundingClientRect().top <= SCROLL_MARGIN + 1) found = s.sectionId;
 		}
 		current = found;
 	}

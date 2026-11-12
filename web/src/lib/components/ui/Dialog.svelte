@@ -61,6 +61,9 @@
 		};
 	});
 
+	// On the window, not the dialog: a click on the backdrop or on plain text
+	// can leave focus outside the controls, and Escape and Tab still have to
+	// work from there.
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			event.stopPropagation();
@@ -73,18 +76,20 @@
 		const first = all[0];
 		const last = all[all.length - 1];
 		const active = document.activeElement;
-		if (event.shiftKey && (active === first || !box?.contains(active))) {
+		const outside = !box?.contains(active) || active === box;
+		if (event.shiftKey && (active === first || outside)) {
 			event.preventDefault();
 			last.focus();
-		} else if (!event.shiftKey && active === last) {
+		} else if (!event.shiftKey && (active === last || outside)) {
 			event.preventDefault();
 			first.focus();
 		}
 	}
 </script>
 
+<svelte:window {onkeydown} />
+
 <div class="backdrop">
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		bind:this={box}
 		class="dialog"
@@ -92,7 +97,6 @@
 		aria-modal="true"
 		aria-labelledby={titleId}
 		tabindex="-1"
-		{onkeydown}
 	>
 		<div class="head">
 			<div class="titles">
