@@ -1,42 +1,63 @@
 <script lang="ts">
-	import { getInitials, getManagerProfilePicture } from '$lib/utils/managerUtils';
+	/**
+	 * A chat author's photo: the WP1 Avatar circle at the board's size (WP12
+	 * S12.2), in place of the old rounded square with gradient initials. A
+	 * warehouse photo URL wins when there is one (edw.dim_manager carries none
+	 * today), then Avatar's checked-in photo, then its initial circle.
+	 */
+	import Avatar from '../ui/Avatar.svelte';
 
 	interface Props {
 		managerName: string | null;
 		displayName: string;
 		/** From edw.dim_manager. Currently NULL for every manager, hence the fallbacks. */
 		profileImageUrl?: string | null;
-		size?: 'sm' | 'md';
+		/** The size in px: 40 in the feed, 32 in a thread and on a phone, 26 in the mention list. */
+		size?: number;
+		/** The size below 640px, when the phone board draws another. */
+		phoneSize?: number;
 		class?: string;
 	}
 
-	let { managerName, displayName, profileImageUrl = null, size = 'md', class: className = '' }: Props = $props();
+	let {
+		managerName,
+		displayName,
+		profileImageUrl = null,
+		size = 40,
+		phoneSize,
+		class: className = ''
+	}: Props = $props();
 
-	// Three steps down: the warehouse column, then the checked-in photo map in
-	// /static/manager-profiles, then initials. The middle one carries all ten
-	// active managers today; the first carries none of them.
-	const localPhoto = $derived(getManagerProfilePicture(managerName ?? displayName));
 	let broken = $state(false);
-	const src = $derived(broken ? null : (profileImageUrl || localPhoto));
-
-	const sizeClass = $derived(size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-9 w-9 text-xs');
 </script>
 
-<div class="shrink-0 overflow-hidden rounded-lg {sizeClass} {className}">
-	{#if src}
-		<img
-			{src}
-			alt=""
-			class="h-full w-full object-cover"
-			loading="lazy"
-			onerror={() => (broken = true)}
-		/>
-	{:else}
-		<div
-			class="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 font-bold text-white"
-			aria-hidden="true"
-		>
-			{getInitials(displayName)}
-		</div>
-	{/if}
-</div>
+{#if profileImageUrl && !broken}
+	<img
+		src={profileImageUrl}
+		alt=""
+		class="photo {className}"
+		style:--avatar-size="{size}px"
+		style:--avatar-phone-size={phoneSize == null ? undefined : `${phoneSize}px`}
+		loading="lazy"
+		onerror={() => (broken = true)}
+	/>
+{:else}
+	<Avatar name={managerName ?? displayName} {size} {phoneSize} alt="" class={className} />
+{/if}
+
+<style>
+	.photo {
+		flex: none;
+		width: var(--avatar-size);
+		height: var(--avatar-size);
+		border-radius: 50%;
+		object-fit: cover;
+	}
+
+	@media (max-width: 639.98px) {
+		.photo {
+			width: var(--avatar-phone-size, var(--avatar-size));
+			height: var(--avatar-phone-size, var(--avatar-size));
+		}
+	}
+</style>

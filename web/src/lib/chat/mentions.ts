@@ -143,9 +143,9 @@ export function applyMentionMarkup(
 
 			const span = document.createElement('span');
 			span.className =
-				key === meManagerKey
-					? 'rounded bg-amber-500/30 px-1 font-medium text-amber-200'
-					: 'rounded bg-amber-500/15 px-1 text-amber-300';
+				// Styled by MessageRow's .chat-markdown rules: a pennant chip for a
+				// mention of you, bold field text for anyone else (WP12 S12.2).
+				key === meManagerKey ? 'mention mention-me' : 'mention';
 			span.textContent = match[0];
 			fragment.appendChild(span);
 

@@ -9,6 +9,7 @@ import { splitEras } from '$lib/league-trends';
 import { formatCount, formatRecord } from '$lib/home';
 import { oneDecimal } from '$lib/trade-center';
 import { joinNames } from '$lib/utils/power-rankings';
+import { LEAGUE_TIME_ZONE, formatShortDate } from '$lib/utils/time-zone';
 
 export { oneDecimal };
 
@@ -616,16 +617,18 @@ export function recordBook(records: ApiRecord[], chip: string, liveSeason: numbe
 	};
 }
 
-/** "Nov 7, 2026". */
-export function shortDate(iso: string | null | undefined): string {
-	const d = iso ? new Date(iso) : null;
-	if (!d || Number.isNaN(d.getTime())) return '';
-	return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/** "Nov 7, 2026" in the given zone, or '' when there's no date. */
+export function shortDate(iso: string | null | undefined, timeZone: string = LEAGUE_TIME_ZONE): string {
+	return formatShortDate(iso, timeZone) ?? '';
 }
 
 /** The footnote under the last card, word for word from the board. */
-export function recordFootnote(liveSeason: number | null | undefined, lastUpdated: string | null | undefined): string {
-	const when = shortDate(lastUpdated);
+export function recordFootnote(
+	liveSeason: number | null | undefined,
+	lastUpdated: string | null | undefined,
+	timeZone: string = LEAGUE_TIME_ZONE
+): string {
+	const when = shortDate(lastUpdated, timeZone);
 	const season = liveSeason
 		? `Season records, titles and playoff appearances only count finished seasons, so ${liveSeason} joins them after the championship.`
 		: 'Season records, titles and playoff appearances only count finished seasons.';

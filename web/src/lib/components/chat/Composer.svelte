@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Send, Smile } from 'lucide-svelte';
 	import MentionMenu from './MentionMenu.svelte';
 	import EmojiPickerPopover from './EmojiPickerPopover.svelte';
 	import { MAX_MESSAGE_LENGTH } from '$lib/chat/constants';
@@ -14,6 +13,14 @@
 		onSend: (content: string) => void;
 		/** Up-arrow on an empty composer edits your last message, Slack-style. */
 		onEditLast?: () => void;
+		/**
+		 * `small` is the Thread card's reply box: a 44px box with the buttons
+		 * inside it at 36px, no hint line, and no padding or rule of its own
+		 * (the card gives it both).
+		 */
+		size?: 'default' | 'small';
+		/** The textarea's accessible name: "Message", or "Reply in thread" in a thread. */
+		label?: string;
 	}
 
 	let {
@@ -23,12 +30,15 @@
 		disabledReason = null,
 		autofocus = false,
 		onSend,
-		onEditLast
+		onEditLast,
+		size = 'default',
+		label = 'Message'
 	}: Props = $props();
 
 	let value = $state('');
 	let textarea = $state<HTMLTextAreaElement | null>(null);
 	let emojiAnchor = $state<HTMLElement | null>(null);
+	let box = $state<HTMLDivElement | null>(null);
 
 	// Mention autocomplete state. `mentionStart` is the index of the '@'.
 	let mentionStart = $state(-1);
@@ -76,7 +86,10 @@
 		// A textarea, not an input — shift+enter for a newline is impossible in an
 		// input, which is what the old composer used. Capped at eight rows so a long
 		// message can't eat the whole panel.
-		const maxHeight = 8 * 20 + 16;
+		const style = getComputedStyle(textarea);
+		const line = parseFloat(style.lineHeight) || 24;
+		const pad = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+		const maxHeight = 8 * line + pad;
 		textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
 	}
 
@@ -192,70 +205,63 @@
 	}
 </script>
 
-<div class="border-t border-slate-700/60 bg-slate-800/60 p-3">
+<div class="composer {size}">
 	{#if disabled && disabledReason}
-		<p class="mb-2 rounded-lg border border-amber-600/40 bg-amber-900/20 px-3 py-2 text-xs text-amber-200">
-			{disabledReason}
-		</p>
+		<p class="disabled-reason">{disabledReason}</p>
 	{/if}
 
-	<div class="flex items-end gap-2">
-		<div class="relative flex-1">
-			<textarea
-				bind:this={textarea}
-				bind:value
-				{placeholder}
-				{disabled}
-				rows="1"
-				aria-label="Message"
-				oninput={() => {
-					autosize();
-					refreshMentionState();
-				}}
-				onclick={refreshMentionState}
-				onkeydown={onKeydown}
-				onblur={() => (mentionStart = -1)}
-				{...autofocus ? { autofocus: true } : {}}
-				class="max-h-44 w-full resize-none rounded-lg border border-slate-600 bg-slate-700 px-3 py-2.5 text-sm text-white placeholder-slate-400 focus:border-amber-500 focus:outline-none disabled:opacity-50"
-			></textarea>
+	<MentionMenu anchor={box} {matches} activeIndex={mentionIndex} onPick={acceptMention} />
 
-			<MentionMenu
-				anchor={textarea}
-				{matches}
-				activeIndex={mentionIndex}
-				onPick={acceptMention}
-			/>
-		</div>
+	<div class="box" bind:this={box}>
+		<textarea
+			bind:this={textarea}
+			bind:value
+			{placeholder}
+			{disabled}
+			rows="1"
+			aria-label={label}
+			oninput={() => {
+				autosize();
+				refreshMentionState();
+			}}
+			onclick={refreshMentionState}
+			onkeydown={onKeydown}
+			onblur={() => (mentionStart = -1)}
+			{...autofocus ? { autofocus: true } : {}}
+		></textarea>
 
 		<button
 			bind:this={emojiAnchor}
 			type="button"
+			class="icon emoji"
 			{disabled}
 			aria-label="Insert an emoji"
 			title="Insert an emoji"
 			onclick={() => (pickerOpen = !pickerOpen)}
-			class="rounded-lg border border-slate-600 bg-slate-700 p-2.5 text-slate-300 transition-colors hover:bg-slate-600 hover:text-white disabled:opacity-50"
 		>
-			<Smile class="h-4 w-4" />
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"
+				><circle cx="12" cy="12" r="9"></circle><path d="M8.5 14.5c1 1.3 2.2 2 3.5 2s2.5-.7 3.5-2"></path><path
+					d="M9 9.5h.01M15 9.5h.01"
+					stroke-width="2.6"
+				></path></svg
+			>
 		</button>
 
-		<button
-			type="button"
-			disabled={!canSend}
-			onclick={submit}
-			aria-label="Send message"
-			class="rounded-lg bg-amber-500 px-4 py-2.5 font-medium text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
-		>
-			<Send class="h-4 w-4" />
+		<button type="button" class="icon send" disabled={!canSend} onclick={submit} aria-label="Send message">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+				><path d="M5 12h14M13 6l6 6-6 6"></path></svg
+			>
 		</button>
 	</div>
 
-	<div class="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
-		<span>Enter to send · Shift+Enter for a new line · @ to mention</span>
-		{#if remaining < 200}
-			<span class:text-red-400={overLimit} class="tabular-nums">{remaining}</span>
-		{/if}
-	</div>
+	{#if size === 'default' || remaining < 200}
+		<div class="foot">
+			{#if size === 'default'}<span>Enter to send · Shift+Enter for a new line · @ to mention</span>{/if}
+			{#if remaining < 200}
+				<span class="remaining" class:over={overLimit}>{remaining}</span>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 {#if pickerOpen}
@@ -268,3 +274,194 @@
 		onClose={() => (pickerOpen = false)}
 	/>
 {/if}
+
+<style>
+	.composer {
+		flex: none;
+		padding: 16px 20px 18px;
+		border-top: 1px solid var(--color-line);
+	}
+
+	.composer.small {
+		padding: 0;
+		border-top: 0;
+	}
+
+	.disabled-reason {
+		margin: 0 0 10px;
+		padding: 8px 12px;
+		border-radius: 10px;
+		background: var(--color-pennant-tint);
+		font-size: 13px;
+		color: var(--color-pennant-dark);
+	}
+
+	/* The board draws the focused box with a 1.5px field border; the extra
+	   half pixel is an inset shadow so the box doesn't shift on focus. */
+	.box {
+		display: flex;
+		gap: 10px;
+		align-items: flex-end;
+		padding: 8px 8px 8px 14px;
+		border: 1px solid var(--color-line-strong);
+		border-radius: 12px;
+		background: var(--color-card);
+	}
+
+	.box:focus-within {
+		border-color: var(--color-field);
+		box-shadow: inset 0 0 0 0.5px var(--color-field);
+	}
+
+	textarea {
+		flex: 1;
+		min-width: 0;
+		display: block;
+		box-sizing: border-box;
+		resize: none;
+		border: 0;
+		outline: none;
+		padding: 6px 0;
+		background: transparent;
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.5;
+		color: var(--color-ink);
+	}
+
+	/* The forms plugin draws a ring on focus; the box shows focus instead. */
+	textarea:focus {
+		box-shadow: none;
+		outline: none;
+	}
+
+	textarea::placeholder {
+		color: var(--color-faint);
+	}
+
+	textarea:disabled {
+		opacity: 0.5;
+	}
+
+	.icon {
+		flex: none;
+		width: 44px;
+		height: 44px;
+		padding: 0;
+		border: 0;
+		border-radius: 10px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+	}
+
+	.icon:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+	}
+
+	.emoji {
+		background: var(--color-ground);
+		color: var(--color-ink-2);
+	}
+
+	.emoji:hover {
+		background: var(--color-wash);
+	}
+
+	.send {
+		background: var(--color-field);
+		color: var(--color-white);
+	}
+
+	.icon:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	.foot {
+		margin-top: 8px;
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		font-size: 13px;
+		line-height: 1.4;
+		color: var(--color-muted);
+	}
+
+	.remaining {
+		margin-left: auto;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.remaining.over {
+		color: var(--color-pennant-dark);
+	}
+
+	/* The Thread card's reply box: 44px at rest, 10px radius, 15px, with the
+	   two buttons inside it at 36px. */
+	.small .box {
+		align-items: flex-end;
+		gap: 6px;
+		padding: 3px 3px 3px 14px;
+		border-radius: 10px;
+	}
+
+	.small textarea {
+		font-size: 15px;
+		padding: 7px 0;
+	}
+
+	.small .icon {
+		width: 36px;
+		height: 36px;
+		border-radius: 8px;
+	}
+
+	.small .emoji {
+		background: transparent;
+	}
+
+	.small .emoji svg {
+		width: 20px;
+		height: 20px;
+	}
+
+	.small .send svg {
+		width: 18px;
+		height: 18px;
+	}
+
+	@media (max-width: 639.98px) {
+		.composer {
+			padding: 12px 14px 14px;
+		}
+
+		textarea {
+			min-height: 44px;
+			padding: 10px 0;
+		}
+
+		.small textarea {
+			font-size: 16px;
+		}
+
+		/* At 44px the buttons are tap targets; the box grows to hold them. */
+		.small .box {
+			padding: 0 0 0 14px;
+			gap: 2px;
+		}
+
+		.small textarea {
+			min-height: 44px;
+			padding: 10px 0;
+		}
+
+		.small .icon {
+			width: 44px;
+			height: 44px;
+			border-radius: 9px;
+		}
+	}
+</style>

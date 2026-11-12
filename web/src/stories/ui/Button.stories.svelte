@@ -157,3 +157,16 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Sign in (WP12)">
+	{#snippet template()}
+		<div style="display: grid; gap: 14px; width: 388px">
+			<div style="text-align: center"><Button variant="pill">Load earlier messages</Button></div>
+			<Button size="xl" type="submit">Email me a sign-in link</Button>
+			<div><Button size="xl" href="#">Send me a new link</Button></div>
+			<div style="display: flex; gap: 14px; align-items: center; justify-content: flex-end">
+				<Button height={46} padX={20} bold>Save preferences</Button>
+			</div>
+		</div>
+	{/snippet}
+</Story>

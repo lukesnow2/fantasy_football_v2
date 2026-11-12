@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Lock } from 'lucide-svelte';
 	import Button from '../ui/Button.svelte';
 
 	interface Props {
@@ -8,7 +7,8 @@
 		redirectTo?: string;
 		/**
 		 * Drawn as This Season's League chat well (WP4 S4.7). Without it, the
-		 * full chat panel's look, until WP12 restyles that panel to the Chat board.
+		 * state inside Chat's messages card (WP12 S12.9): centered, a slab title
+		 * and one muted line.
 		 */
 		well?: boolean;
 	}
@@ -20,25 +20,18 @@
      state. The previous panel fetched regardless, swallowed the 401 behind
      `if (response.ok)`, and left a silently empty box with no explanation. -->
 {#if !well}
-	<div class="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-		<Lock class="h-8 w-8 text-slate-600" />
-
+	<div class="panel">
 		{#if reason === 'not-a-member'}
-			<p class="text-sm font-medium text-slate-300">Your account isn't on the league roster yet.</p>
-			<p class="max-w-xs text-xs text-slate-500">
-				Ask the commissioner to add you, then sign in again.
-			</p>
+			<p class="panel-title">Your account isn't on the league roster yet.</p>
+			<p class="panel-line">Ask the commissioner to add you, then sign in again.</p>
 		{:else}
-			<p class="text-sm font-medium text-slate-300">League chat is for managers.</p>
-			<p class="max-w-xs text-xs text-slate-500">
-				Sign in with your league email and you'll land right back here.
-			</p>
-			<a
-				href="/login?redirect={encodeURIComponent(redirectTo)}"
-				class="mt-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-amber-400"
+			<p class="panel-title">League chat is for managers.</p>
+			<p class="panel-line">Sign in with your league email and you'll land right back here.</p>
+			<Button
+				variant="primary"
+				class="sign-in"
+				href="/login?redirect={encodeURIComponent(redirectTo)}">Sign in</Button
 			>
-				Sign in
-			</a>
 		{/if}
 	</div>
 {:else}
@@ -73,6 +66,34 @@
 {/if}
 
 <style>
+	.panel {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 48px;
+		text-align: center;
+	}
+
+	.panel-title {
+		margin: 0;
+		font-family: var(--font-slab);
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--color-ink);
+	}
+
+	.panel-line {
+		margin: 6px 0 0;
+		font-size: 15px;
+		color: var(--color-muted);
+	}
+
+	.panel :global(.sign-in) {
+		margin-top: 18px;
+	}
+
 	.signed-out {
 		flex: 1;
 		margin: 0;
@@ -108,6 +129,10 @@
 	}
 
 	@media (max-width: 639.98px) {
+		.panel {
+			padding: 40px 20px;
+		}
+
 		.signed-out {
 			padding: 22px 16px;
 		}

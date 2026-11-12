@@ -93,7 +93,9 @@
 			| 'inset-pennant'
 			| 'dashed'
 			| 'tile'
-			| 'raised';
+			| 'raised'
+			| 'wash'
+			| 'sheet';
 		/** A dot of this color token beside the title. */
 		dot?: 'sage' | 'field' | 'pennant' | 'ink' | 'muted';
 		/** Px between the header and each child, as a flex column. */
@@ -292,6 +294,19 @@
 	.card.tile > :global(*) {
 		flex: 1;
 		min-width: 0;
+	}
+
+	/* A note on wash with no border (Settings' "Signing in", WP12). */
+	.card.wash {
+		border: 0;
+		background: var(--color-wash);
+	}
+
+	/* A sign-in card on the clubhouse ground: white, no border, a 16px
+	   radius (the Sign in board, WP12). */
+	.card.sheet {
+		border: 0;
+		border-radius: 16px;
 	}
 
 	.card.raised {

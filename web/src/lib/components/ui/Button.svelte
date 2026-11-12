@@ -24,6 +24,10 @@
 	 * `tone="pennant"` turns primary into a pennant fill with white text ("Record
 	 * the ruling") and text into pennant-dark.
 	 *
+	 * - pill (WP12): card fill, a 1px line border, a 999px radius, 13px weight
+	 *   600 ink-2, 36px tall with 0 14px of padding (44px below 640px): Chat's
+	 *   "Load earlier messages"
+	 *
 	 * Sizes beyond the default (WP9 adds the last two):
 	 * - `large`: 48px with 0 22px of padding at 16px, content-box (Home's band)
 	 * - `lg`: 48px with 0 22px of padding at 16px weight 700 ("Post a bet");
@@ -31,6 +35,14 @@
 	 * - `sm`: 40px at 14px (44px below 640px, the phone tap target). Primary and
 	 *   outline are 0 16px at weight 700, secondary 0 14px at 600, text 0 12px at
 	 *   600, and the pennant text button is 13px ("Take it", "Pass", "Pull it")
+	 * - `xl` (WP12): 50px with 0 22px of padding, a 10px radius, 16px weight
+	 *   700: the sign-in cards' "Email me a sign-in link" and "Send me a new
+	 *   link"; `padX` sets another side padding
+	 * - `row` (WP12): a control inside a table row (the Commissioner page).
+	 *   Secondary is 34px with 0 10px of padding at 13px weight 600 ink-2, and
+	 *   with `tone="field"` a field border and field text at 700 ("Resend
+	 *   link"); icon is a 30px square with a 1px line border, a 6px radius and
+	 *   field text at 700 (the "Save email" ✓). Both are 44px below 640px
 	 * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
 	 *   640px): League History's "Save image" and "Show table"
 	 *
@@ -69,13 +81,14 @@
 		| 'band-outline'
 		| 'band-white'
 		| 'chip'
+		| 'pill'
 		| 'outline'
 		| 'text'
 		| 'filter'
 		| 'dashed'
 		| 'icon';
-	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm' | 'xs';
-	type Tone = 'default' | 'pennant' | 'muted';
+	type Size = 'default' | 'large' | 'tap' | 'lg' | 'xl' | 'sm' | 'xs' | 'row';
+	type Tone = 'default' | 'pennant' | 'muted' | 'field';
 
 	type Props = {
 		variant?: Variant;
@@ -234,6 +247,32 @@
 		color: var(--color-white);
 	}
 
+	.pill {
+		min-height: 36px;
+		padding: 0 14px;
+		border: 1px solid var(--color-line);
+		border-radius: 999px;
+		background: var(--color-card);
+		color: var(--color-ink-2);
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.pill:hover {
+		color: var(--color-ink);
+	}
+
+	.pill:disabled {
+		cursor: default;
+		opacity: 0.6;
+	}
+
+	@media (max-width: 639.98px) {
+		.pill {
+			min-height: 44px;
+		}
+	}
+
 	.chip {
 		gap: 8px;
 		min-height: 36px;
@@ -348,6 +387,14 @@
 		font-weight: 700;
 	}
 
+	.size-xl {
+		min-height: 50px;
+		padding: 0 var(--btn-pad-x, 22px);
+		border-radius: 10px;
+		font-size: 16px;
+		font-weight: 700;
+	}
+
 	.size-sm {
 		min-height: 40px;
 		padding: 0 var(--btn-pad-x, 16px);
@@ -452,6 +499,41 @@
 		height: 15px;
 	}
 
+	.secondary.size-row {
+		min-height: 34px;
+		padding: 0 10px;
+		font-size: 13px;
+		color: var(--color-ink-2);
+	}
+
+	.secondary.size-row.tone-field {
+		border-color: var(--color-field);
+		color: var(--color-field);
+		font-weight: 700;
+	}
+
+	.icon.size-row {
+		width: 30px;
+		height: 30px;
+		border-color: var(--color-line);
+		border-radius: 6px;
+		color: var(--color-field);
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	@media (max-width: 639.98px) {
+		.secondary.size-row {
+			min-height: 44px;
+		}
+
+		.icon.size-row {
+			width: 44px;
+			height: 44px;
+			font-size: 15px;
+		}
+	}
+
 	@media (hover: none) {
 		.icon {
 			width: 44px;
@@ -492,5 +574,11 @@
 	.btn[aria-disabled='true'] {
 		cursor: not-allowed;
 		opacity: 0.55;
+	}
+
+	/* A row control that can't act right now (an invite to a deactivated
+	   member) fades further, as the Commissioner board draws it. */
+	.size-row:disabled {
+		opacity: 0.4;
 	}
 </style>

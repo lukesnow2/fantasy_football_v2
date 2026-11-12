@@ -9,9 +9,11 @@ import { emailService, generateMagicLinkEmail } from '$lib/server/email';
 import { describeMailConfig, requireOrigin } from '$lib/server/env';
 import { issueLoginToken } from '$lib/server/login-token';
 import { consumeLoginEmailBudget } from '$lib/server/rate-limit';
+import { requestTimeZone } from '$lib/utils/time-zone';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async (event) => {
+	const { locals } = event;
 	// Checked here as well as in hooks.server.ts. A guard you cannot see from the
 	// route file is a guard someone later removes by accident.
 	requireCommissioner(locals);
@@ -39,7 +41,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		// back to console mode and a missing EMAIL_FROM is refused by the
 		// provider, both reported only to a serverless log nobody reads. The
 		// commissioner is the one person who looks at this page and can fix it.
-		mailConfig: describeMailConfig()
+		mailConfig: describeMailConfig(),
+		// The reader's zone for the Invited and First login dates, so the server
+		// writes the day they'd see on their own clock.
+		timeZone: requestTimeZone(event)
 	};
 };
 
@@ -211,7 +216,7 @@ export const actions: Actions = {
 		// a fresh token and both links work.
 		if (!sent) {
 			return fail(502, {
-				error: `The invite to ${member.email} could not be confirmed — the mail provider did not accept it, or did not answer in time. Check that the Resend domain is verified, then try again.`
+				error: `The invite to ${member.email} couldn't be confirmed. The mail provider didn't accept it or didn't answer in time. Check that the Resend domain is verified, then try again.`
 			});
 		}
 

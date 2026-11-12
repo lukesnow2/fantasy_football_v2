@@ -6,6 +6,7 @@ import { requireOrigin } from '$lib/server/env';
 import { escapeHtml } from '$lib/server/html';
 import { parsePreferences, type NotificationPreferences } from '$lib/server/auth-manager';
 import type { Outcome } from '$lib/server/constitution/outcome';
+import { LEAGUE_TIME_ZONE } from '$lib/utils/time-zone';
 
 /**
  * Notification fan-out for the constitution module.
@@ -118,11 +119,15 @@ export async function notifyNewProposal(proposalKey: number): Promise<void> {
 		const list = await recipients((p) => p.emailOnNewProposal, proposal.submittedBy);
 		if (list.length === 0) return;
 
+		// In the league's zone: an email can't correct itself in the reader's
+		// browser, and the server runs in UTC, which would push a late-evening
+		// deadline onto the next day.
 		const closes = proposal.votingEndDate
 			? proposal.votingEndDate.toLocaleDateString('en-US', {
 					weekday: 'long',
 					month: 'long',
-					day: 'numeric'
+					day: 'numeric',
+					timeZone: LEAGUE_TIME_ZONE
 				})
 			: 'soon';
 

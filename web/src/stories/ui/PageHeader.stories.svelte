@@ -177,3 +177,30 @@
 		</PageHeader>
 	{/snippet}
 </Story>
+
+<Story name="Members only (WP12)">
+	{#snippet template()}
+		<div style="display: grid; gap: 48px; max-width: 1152px">
+			<PageHeader
+				kicker="Members only · 10 managers"
+				title="Chat"
+				titleSuffix="#general"
+				size={48}
+				tight
+				phoneActionBesideTitle
+			>
+				Trash talk, trade offers and grievances. Reply in a thread to keep side arguments out of the main feed.
+				{#snippet action()}<span
+						style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--color-field-tint); color: var(--color-clubhouse); font-size: 13px; font-weight: 700"
+						>Live</span
+					>{/snippet}
+			</PageHeader>
+			<PageHeader kicker="Your account" title="Settings" size={56}>
+				Your profile and how the league gets in touch with you.
+			</PageHeader>
+			<PageHeader kicker="Commissioner only" kickerTone="pennant" title="League members" size={56} introWidth={640}>
+				The allowlist. Only these addresses can sign in, and there's no registration.
+			</PageHeader>
+		</div>
+	{/snippet}
+</Story>

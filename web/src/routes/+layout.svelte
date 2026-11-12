@@ -32,6 +32,14 @@
 	 */
 	const COMPACT_TOP_ROUTES = new Set(['/managers/[slug]']);
 
+	/**
+	 * Routes that fill one screen: Chat, whose board draws <main> at 28px 24px
+	 * 40px so the feed and composer fit the viewport, and 16px all round on a
+	 * phone, where the page is exactly the screen under the band (WP12 S12.1,
+	 * S12.10).
+	 */
+	const SCREEN_ROUTES = new Set(['/chat']);
+
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 	// One open menu at a time, held here rather than in each dropdown, otherwise
@@ -45,6 +53,14 @@
 	const pathname = $derived(page.url.pathname);
 	const fullBleed = $derived(FULL_BLEED_ROUTES.has(pathname));
 	const compactTop = $derived(COMPACT_TOP_ROUTES.has(page.route?.id ?? ''));
+	const screen = $derived(SCREEN_ROUTES.has(page.route?.id ?? ''));
+
+	/**
+	 * Sign in, check your email and the link problem page sit on the clubhouse
+	 * ground under a band with only the wordmark: no nav, no account pill, no
+	 * menu button and no footer (WP12 S12.8, the Sign in board).
+	 */
+	const bare = $derived(pathname === '/login' || pathname.startsWith('/login/'));
 	const isCommissioner = $derived(data.member?.role === 'commissioner');
 	// The dropdown links to the manager's public stats page. Encoded because every
 	// name in the roster has a space in it ("Gabe the Younger", "Troy Colvin").
@@ -57,6 +73,9 @@
 	const profileCurrent = $derived(isActivePath(pathname, profileHref));
 	const settingsCurrent = $derived(isActivePath(pathname, '/settings'));
 	const adminCurrent = $derived(isActivePath(pathname, '/admin/members'));
+	// On the commissioner's pages the pill says whose hat you're wearing: the
+	// Commissioner board draws "Commissioner ▾" in place of the name (WP12 S12.7).
+	const commissionerPill = $derived(isCommissioner && pathname.startsWith('/admin'));
 
 	// Any navigation closes every menu, including one a link didn't close itself
 	// (the back button, a link in the page behind an open menu).
@@ -159,7 +178,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="shell">
+<div class="shell" class:bare>
 	<header class="band" class:menu-open={showMobileMenu}>
 		<div class="band-row">
 			<!-- With the phone panel open this row is the panel's top row, so the
@@ -169,212 +188,228 @@
 				<span class="brand-est">Est. 2005</span>
 			</a>
 
-			<nav aria-label="Main" class="band-nav">
-				{#each directLinks as item (item.href)}
-					{@const active = isActivePath(pathname, item.href)}
-					<a
-						href={item.href}
-						class="band-link"
-						class:on={active}
-						aria-current={active ? 'page' : undefined}>{item.name}</a
-					>
-				{/each}
-
-				{#each navGroups as group (group.label)}
-					<NavDropdown
-						label={group.label}
-						items={group.items}
-						open={openNavMenu}
-						onToggle={setNavMenu}
-					/>
-				{/each}
-			</nav>
-
-			<div class="band-account">
-				{#if data.user && data.authenticatedManager}
-					<button
-						bind:this={userButton}
-						type="button"
-						class="pill"
-						class:open={showUserMenu}
-						onclick={toggleUserMenu}
-						aria-expanded={showUserMenu}
-						aria-haspopup="menu"
-					>
-						<Avatar name={data.authenticatedManager.managerName} size={30} />
-						<span
-							>{data.authenticatedManager.displayName}<span aria-hidden="true"
-								>&nbsp;{showUserMenu ? '▴' : '▾'}</span
-							></span
+			{#if !bare}
+				<nav aria-label="Main" class="band-nav">
+					{#each directLinks as item (item.href)}
+						{@const active = isActivePath(pathname, item.href)}
+						<a
+							href={item.href}
+							class="band-link"
+							class:on={active}
+							aria-current={active ? 'page' : undefined}>{item.name}</a
 						>
-					</button>
+					{/each}
 
-					{#if showUserMenu}
-						<div
-							bind:this={userMenu}
-							class="account-menu"
-							role="menu"
-							aria-label="Account"
-							tabindex="-1"
-							use:clickOutside={{ onOutside: closeUserMenu, ignore: [userButton] }}
-							onkeydown={onUserMenuKeydown}
-							onfocusout={onUserMenuFocusout}
+					{#each navGroups as group (group.label)}
+						<NavDropdown
+							label={group.label}
+							items={group.items}
+							open={openNavMenu}
+							onToggle={setNavMenu}
+						/>
+					{/each}
+				</nav>
+
+				<div class="band-account">
+					{#if data.user && data.authenticatedManager}
+						<button
+							bind:this={userButton}
+							type="button"
+							class="pill"
+							class:open={showUserMenu}
+							class:commissioner={commissionerPill}
+							onclick={toggleUserMenu}
+							aria-expanded={showUserMenu}
+							aria-haspopup="menu"
 						>
-							<div class="signed-in" role="none">
-								<div class="signed-in-label">Signed in as</div>
-								<div class="signed-in-name">{data.authenticatedManager.displayName}</div>
-							</div>
-							<a
-								href={profileHref}
-								class="account-item"
-								class:current={profileCurrent}
-								role="menuitem"
-								aria-current={profileCurrent ? 'page' : undefined}
-								onclick={closeUserMenu}>Your profile</a
-							>
-							<a
-								href="/settings"
-								class="account-item"
-								class:current={settingsCurrent}
-								role="menuitem"
-								aria-current={settingsCurrent ? 'page' : undefined}
-								onclick={closeUserMenu}>Settings</a
-							>
-							{#if isCommissioner}
-								<a
-									href="/admin/members"
-									class="account-item"
-									class:current={adminCurrent}
-									role="menuitem"
-									aria-current={adminCurrent ? 'page' : undefined}
-									onclick={closeUserMenu}>Commissioner</a
+							{#if commissionerPill}
+								<span
+									>Commissioner<span aria-hidden="true">&nbsp;{showUserMenu ? '▴' : '▾'}</span
+									></span
+								>
+							{:else}
+								<Avatar name={data.authenticatedManager.managerName} size={30} />
+								<span
+									>{data.authenticatedManager.displayName}<span aria-hidden="true"
+										>&nbsp;{showUserMenu ? '▴' : '▾'}</span
+									></span
 								>
 							{/if}
-							<form method="post" action="/logout" use:enhance={handleLogout} role="none">
-								<button type="submit" class="account-item sign-out" role="menuitem">Sign out</button
-								>
-							</form>
-						</div>
-					{/if}
-				{:else}
-					<a href="/login" class="sign-in">Sign in</a>
-				{/if}
-			</div>
+						</button>
 
-			<button
-				bind:this={menuButton}
-				type="button"
-				class="menu-button"
-				aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-				aria-expanded={showMobileMenu}
-				aria-controls="site-menu"
-				onclick={() => (showMobileMenu ? dismissMobileMenu() : openMobileMenu())}
-			>
-				{#if showMobileMenu}
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg
-					>
-				{:else}
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg
-					>
-				{/if}
-			</button>
+						{#if showUserMenu}
+							<div
+								bind:this={userMenu}
+								class="account-menu"
+								role="menu"
+								aria-label="Account"
+								tabindex="-1"
+								use:clickOutside={{ onOutside: closeUserMenu, ignore: [userButton] }}
+								onkeydown={onUserMenuKeydown}
+								onfocusout={onUserMenuFocusout}
+							>
+								<div class="signed-in" role="none">
+									<div class="signed-in-label">Signed in as</div>
+									<div class="signed-in-name">{data.authenticatedManager.displayName}</div>
+								</div>
+								<a
+									href={profileHref}
+									class="account-item"
+									class:current={profileCurrent}
+									role="menuitem"
+									aria-current={profileCurrent ? 'page' : undefined}
+									onclick={closeUserMenu}>Your profile</a
+								>
+								<a
+									href="/settings"
+									class="account-item"
+									class:current={settingsCurrent}
+									role="menuitem"
+									aria-current={settingsCurrent ? 'page' : undefined}
+									onclick={closeUserMenu}>Settings</a
+								>
+								{#if isCommissioner}
+									<a
+										href="/admin/members"
+										class="account-item"
+										class:current={adminCurrent}
+										role="menuitem"
+										aria-current={adminCurrent ? 'page' : undefined}
+										onclick={closeUserMenu}>Commissioner</a
+									>
+								{/if}
+								<form method="post" action="/logout" use:enhance={handleLogout} role="none">
+									<button type="submit" class="account-item sign-out" role="menuitem"
+										>Sign out</button
+									>
+								</form>
+							</div>
+						{/if}
+					{:else}
+						<a href="/login" class="sign-in">Sign in</a>
+					{/if}
+				</div>
+
+				<button
+					bind:this={menuButton}
+					type="button"
+					class="menu-button"
+					aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+					aria-expanded={showMobileMenu}
+					aria-controls="site-menu"
+					onclick={() => (showMobileMenu ? dismissMobileMenu() : openMobileMenu())}
+				>
+					{#if showMobileMenu}
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg
+						>
+					{:else}
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg
+						>
+					{/if}
+				</button>
+			{/if}
 		</div>
 	</header>
 
 	<!-- The phone menu: a full-screen panel over the page, so no backdrop. The
 	     band's row stays above it as its top row (see .menu-open). -->
-	<div id="site-menu" class="phone-panel" hidden={!showMobileMenu}>
-		<nav aria-label="Main" class="phone-nav">
-			<!-- The panel has the vertical room the bar doesn't, so the groups
+	{#if !bare}
+		<div id="site-menu" class="phone-panel" hidden={!showMobileMenu}>
+			<nav aria-label="Main" class="phone-nav">
+				<!-- The panel has the vertical room the bar doesn't, so the groups
 			     open flat under their headings rather than as nested menus. -->
-			{#each directLinks as item (item.href)}
-				{@const active = isActivePath(pathname, item.href)}
-				<a
-					href={item.href}
-					class="phone-link"
-					class:on={active}
-					aria-current={active ? 'page' : undefined}
-					onclick={closeMobileMenu}>{item.name}</a
-				>
-			{/each}
-
-			{#each navGroups as group (group.label)}
-				<div class="phone-group">{group.label}</div>
-				{#each group.items as item (item.href)}
+				{#each directLinks as item (item.href)}
 					{@const active = isActivePath(pathname, item.href)}
 					<a
 						href={item.href}
-						class="phone-item"
+						class="phone-link"
 						class:on={active}
 						aria-current={active ? 'page' : undefined}
 						onclick={closeMobileMenu}>{item.name}</a
 					>
 				{/each}
-			{/each}
 
-			<div class="phone-account">
-				{#if data.user && data.authenticatedManager}
-					<Avatar name={data.authenticatedManager.managerName} size={28} />
-					<span>
-						<a href={profileHref} class="phone-account-link" onclick={closeMobileMenu}
-							>Your profile</a
+				{#each navGroups as group (group.label)}
+					<div class="phone-group">{group.label}</div>
+					{#each group.items as item (item.href)}
+						{@const active = isActivePath(pathname, item.href)}
+						<a
+							href={item.href}
+							class="phone-item"
+							class:on={active}
+							aria-current={active ? 'page' : undefined}
+							onclick={closeMobileMenu}>{item.name}</a
 						>
-						·
-						<a href="/settings" class="phone-account-link" onclick={closeMobileMenu}>Settings</a>
-						·
-						{#if isCommissioner}
-							<a href="/admin/members" class="phone-account-link" onclick={closeMobileMenu}
-								>Commissioner</a
+					{/each}
+				{/each}
+
+				<div class="phone-account">
+					{#if data.user && data.authenticatedManager}
+						<Avatar name={data.authenticatedManager.managerName} size={28} />
+						<span>
+							<a href={profileHref} class="phone-account-link" onclick={closeMobileMenu}
+								>Your profile</a
 							>
 							·
-						{/if}
-						<form
-							method="post"
-							action="/logout"
-							use:enhance={handleLogout}
-							class="phone-account-form"
-						>
-							<button type="submit" class="phone-account-link">Sign out</button>
-						</form>
-					</span>
-				{:else}
-					<a href="/login" class="phone-account-link" onclick={closeMobileMenu}>Sign in</a>
-				{/if}
-			</div>
-		</nav>
-	</div>
-
+							<a href="/settings" class="phone-account-link" onclick={closeMobileMenu}>Settings</a>
+							·
+							{#if isCommissioner}
+								<a href="/admin/members" class="phone-account-link" onclick={closeMobileMenu}
+									>Commissioner</a
+								>
+								·
+							{/if}
+							<form
+								method="post"
+								action="/logout"
+								use:enhance={handleLogout}
+								class="phone-account-form"
+							>
+								<button type="submit" class="phone-account-link">Sign out</button>
+							</form>
+						</span>
+					{:else}
+						<a href="/login" class="phone-account-link" onclick={closeMobileMenu}>Sign in</a>
+					{/if}
+				</div>
+			</nav>
+		</div>
+	{/if}
 	<main
 		class="content"
 		class:full-bleed={fullBleed}
 		class:compact-top={compactTop}
+		class:screen
+		class:bare
 		inert={showMobileMenu}
 	>
 		{@render children()}
 	</main>
 
-	<footer class="foot" inert={showMobileMenu}>
-		<div class="foot-row">
-			<span class="foot-name">The League</span>
-			<span>Est. 2005 · Data from Yahoo Fantasy</span>
-		</div>
-	</footer>
+	{#if !bare}
+		<footer class="foot" inert={showMobileMenu}>
+			<div class="foot-row">
+				<span class="foot-name">The League</span>
+				<span>Est. 2005 · Data from Yahoo Fantasy</span>
+			</div>
+		</footer>
+	{/if}
 </div>
 
 <style>
@@ -434,6 +469,11 @@
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
 		color: var(--color-on-clubhouse-2);
+	}
+
+	/* The bare band has nothing else in it, so "Est. 2005" stays at every width. */
+	.shell.bare .brand-est {
+		display: inline;
 	}
 
 	.band-nav {
@@ -512,6 +552,19 @@
 
 	.pill.open {
 		box-shadow: inset 0 0 0 2px var(--color-pennant-light);
+	}
+
+	.pill.commissioner {
+		gap: 8px;
+		padding: 8px 14px;
+		background: var(--color-pennant-light);
+		color: var(--color-clubhouse);
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.pill.commissioner.open {
+		box-shadow: inset 0 0 0 2px var(--color-white);
 	}
 
 	.pill:focus-visible,
@@ -635,6 +688,15 @@
 
 		.brand-name {
 			font-size: 22px;
+		}
+
+		/* No menu button to make room for, so the bare band keeps "Est. 2005". */
+		.bare .brand {
+			align-items: baseline;
+		}
+
+		.bare .brand-name {
+			line-height: 44px;
 		}
 
 		.brand-est,
@@ -778,6 +840,20 @@
 		padding-top: 28px;
 	}
 
+	.content.screen {
+		padding: 28px 24px 40px;
+	}
+
+	/* The sign-in pages: the whole shell on the clubhouse ground, the band
+	   with only the wordmark, and main at 40px 24px 72px. */
+	.shell.bare {
+		background: var(--color-clubhouse);
+	}
+
+	.content.bare {
+		padding: 40px 24px 72px;
+	}
+
 	.foot {
 		border-top: 1px solid var(--color-line);
 		background: var(--color-card);
@@ -814,6 +890,14 @@
 
 		.content.full-bleed {
 			padding: 0;
+		}
+
+		.content.screen {
+			padding: 16px;
+		}
+
+		.content.bare {
+			padding: 20px 16px 48px;
 		}
 
 		.foot-row {

@@ -86,7 +86,11 @@
 		 * a 1px line-soft rule on its right edge (the profile's phone Head to
 		 * head table).
 		 */
-		stickyFirst?: boolean;
+		stickyFirst?: boolean | 'phone';
+		/** Px of padding on the sticky column's right, inside its rule (the Commissioner page's phone table: 10). */
+		stickyPad?: number;
+		/** A row across every column when there are no rows. */
+		empty?: Snippet;
 		/** Draw the 1px rule on the sticky column's edge (Draft Central's phone table draws none). */
 		stickyRule?: boolean;
 		/**
@@ -122,6 +126,8 @@
 		cell,
 		header,
 		stickyFirst = false,
+		stickyPad,
+		empty,
 		stickyRule = true,
 		edgeInset,
 		headerAlign,
@@ -131,7 +137,9 @@
 
 <div class="scroll" class:capped={maxHeight != null} style:max-height={maxHeight}>
 	<table
-		class:sticky-first={stickyFirst}
+		class:sticky-first={stickyFirst === true}
+		class:sticky-first-phone={stickyFirst === 'phone'}
+		style:--sticky-pad={stickyPad != null ? `${stickyPad}px` : undefined}
 		class:no-sticky-rule={!stickyRule}
 		class:inset={edgeInset != null}
 		style:--edge-inset={edgeInset != null ? `${edgeInset}px` : undefined}
@@ -166,6 +174,11 @@
 			</tr>
 		</thead>
 		<tbody>
+			{#if rows.length === 0 && empty}
+				<tr class="empty-row">
+					<td colspan={columns.length}>{@render empty()}</td>
+				</tr>
+			{/if}
 			{#each rows as row, index (rowKey(row, index))}
 				{@const rule = divider?.(row, index)}
 				{#if rule && dividerCell}
@@ -285,6 +298,29 @@
 		box-shadow: inset -1px 0 0 var(--color-line-soft);
 	}
 
+	.sticky-first th:first-child,
+	.sticky-first td:first-child {
+		padding-right: var(--sticky-pad, 0);
+	}
+
+	@media (max-width: 639.98px) {
+		.sticky-first-phone th:first-child,
+		.sticky-first-phone td:first-child {
+			position: sticky;
+			left: 0;
+			z-index: 1;
+			padding-right: var(--sticky-pad, 0);
+			background: var(--color-card);
+			box-shadow: inset -1px 0 0 var(--color-line-soft);
+		}
+	}
+
+	tr.empty-row td {
+		padding: 24px 0;
+		text-align: center;
+		color: var(--color-muted);
+	}
+
 	.no-sticky-rule th:first-child,
 	.no-sticky-rule td:first-child {
 		box-shadow: none;
@@ -315,6 +351,16 @@
 
 	.sticky-first tr.selected td:first-child {
 		background: var(--color-field-tint);
+	}
+
+	@media (max-width: 639.98px) {
+		.sticky-first-phone tr.highlighted td:first-child {
+			background: var(--color-pennant-wash);
+		}
+
+		.sticky-first-phone tr.selected td:first-child {
+			background: var(--color-field-tint);
+		}
 	}
 
 	tr.divider td {
