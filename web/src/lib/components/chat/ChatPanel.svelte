@@ -241,6 +241,8 @@
 	}
 
 	.trouble :global(.btn) {
+		display: inline-flex;
+		align-items: center;
 		gap: 6px;
 		font-size: 14px;
 	}
