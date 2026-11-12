@@ -79,3 +79,12 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Smaller on phones (League History face-off)">
+	{#snippet template()}
+		<div style="display: flex; gap: 16px; align-items: center; padding: 24px; background: var(--color-clubhouse)">
+			<Avatar name="Luke S" size={88} phoneSize={64} ring={4} ringColor="var(--color-pennant-light)" />
+			<Avatar name="Bobby" size={44} phoneSize={40} initialTone="field" initialSize={16} />
+		</div>
+	{/snippet}
+</Story>

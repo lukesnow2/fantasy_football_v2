@@ -25,8 +25,15 @@ export interface ChartImageOptions {
 	download?: boolean;
 }
 
-const TEXT = '#f1f5f9';
-const MUTED = '#94a3b8';
+/**
+ * A color token's value from the page (WP10 S10.4), so the saved image looks
+ * like the white chart card it came from. Read when the image is drawn, since
+ * the tokens live in the page's CSS.
+ */
+function token(name: string, fallback: string): string {
+	if (typeof document === 'undefined') return fallback;
+	return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim() || fallback;
+}
 
 async function toDataUrl(href: string): Promise<string | null> {
 	try {
@@ -128,7 +135,10 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 		canvas.height = Math.round((pad + headerH + h + footerH + pad) * scale);
 		ctx.scale(scale, scale);
 
-		ctx.fillStyle = opts.background ?? '#162036';
+		const TEXT = token('ink', 'black');
+		const TEXT_2 = token('ink-2', 'black');
+		const MUTED = token('muted', 'gray');
+		ctx.fillStyle = opts.background ?? token('card', 'white');
 		ctx.fillRect(0, 0, w + pad * 2, pad + headerH + h + footerH + pad);
 
 		let y = pad + 16;
@@ -161,7 +171,7 @@ export async function saveChartImage(svg: SVGSVGElement, opts: ChartImageOptions
 					}
 				}
 				ctx.globalAlpha = 1;
-				ctx.fillStyle = '#cbd5e1';
+				ctx.fillStyle = TEXT_2;
 				ctx.fillText(item.label, x + 20, y);
 			}
 		}

@@ -4491,8 +4491,80 @@ class EdwEtlProcessor:
             
             'vw_league_record_book': """
                 CREATE VIEW edw.vw_league_record_book AS
-                
-                WITH all_records AS (
+
+                -- Season records and outcomes (titles, title games, playoff
+                -- appearances) count finished seasons only: a season is
+                -- finished once its championship game has a winner (the draft
+                -- API's completed-season test). Three weeks of the season in
+                -- progress can't hold "fewest points in a season". Career
+                -- totals that add up games (points, points allowed,
+                -- transactions, win percentage) count it week by week, as on
+                -- the profiles and the Hall of Fame (Luke, 11-10). Single-game
+                -- records keep it too: the extractor loads completed weeks
+                -- only, so a game counts once its week is final.
+                WITH finished_seasons AS (
+                    SELECT DISTINCT season_year
+                    FROM edw.fact_matchup
+                    WHERE is_championship AND winner_team_key IS NOT NULL
+                ),
+                -- The career outcomes, from the facts with the finished filter,
+                -- the same rules mart_manager_performance uses (which other
+                -- pages read with the season in progress, so it stays as is).
+                -- One row per team-season: a manager can run two teams in one
+                -- season. total_seasons is finished seasons, for the win
+                -- percentage's 3+ seasons minimum.
+                career_team_seasons AS (
+                    SELECT
+                        dt.manager_name,
+                        dl.season_year,
+                        dt.team_key,
+                        SUM(CASE WHEN fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as wins,
+                        SUM(CASE WHEN fm.winner_team_key != dt.team_key AND fm.is_tie = FALSE THEN 1 ELSE 0 END) as losses,
+                        SUM(CASE WHEN fm.is_tie = TRUE THEN 1 ELSE 0 END) as ties,
+                        SUM(CASE WHEN fm.team1_key = dt.team_key THEN fm.team1_points
+                                 WHEN fm.team2_key = dt.team_key THEN fm.team2_points
+                                 ELSE 0 END) as points,
+                        COUNT(DISTINCT fm.matchup_key) as games,
+                        SUM(CASE WHEN fm.matchup_type = 'championship' AND fm.winner_team_key = dt.team_key THEN 1 ELSE 0 END) as championships,
+                        SUM(CASE WHEN fm.matchup_type = 'championship' THEN 1 ELSE 0 END) as championship_games
+                    FROM edw.dim_team dt
+                    JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                    JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                    LEFT JOIN edw.fact_matchup fm ON (fm.team1_key = dt.team_key OR fm.team2_key = dt.team_key)
+                        AND fm.season_year = dl.season_year
+                    WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
+                        AND dl.season_year IN (SELECT season_year FROM finished_seasons)
+                    GROUP BY dt.manager_name, dl.season_year, dt.team_key
+                ),
+                career AS (
+                    SELECT
+                        manager_name,
+                        COUNT(DISTINCT season_year) as total_seasons,
+                        SUM(championships) as championships_won,
+                        SUM(championship_games) as championship_appearances,
+                        CASE
+                            WHEN SUM(wins + losses + ties) > 0
+                            THEN ROUND(SUM(wins)::decimal / SUM(wins + losses + ties), 4)
+                            ELSE 0
+                        END as career_win_percentage
+                    FROM career_team_seasons
+                    WHERE games > 0
+                    GROUP BY manager_name
+                ),
+                career_playoffs AS (
+                    SELECT
+                        dt.manager_name,
+                        COUNT(DISTINCT CASE WHEN ftp.is_playoff_team = TRUE THEN dt.league_key END) as playoff_appearances
+                    FROM edw.dim_team dt
+                    JOIN edw.dim_league dl ON dt.league_key = dl.league_key
+                    JOIN edw.dim_manager dm ON dt.manager_name = dm.manager_name
+                    JOIN edw.fact_team_performance ftp ON dt.team_key = ftp.team_key
+                        AND dl.season_year = ftp.season_year
+                    WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
+                        AND dl.season_year IN (SELECT season_year FROM finished_seasons)
+                    GROUP BY dt.manager_name
+                ),
+                all_records AS (
                     -- Most points scored in a season
                     SELECT 
                         'Most Points Scored in a Season' as record_name,
@@ -4504,6 +4576,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4519,6 +4592,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4534,6 +4608,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4549,6 +4624,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4581,6 +4657,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4613,6 +4690,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4628,6 +4706,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4643,6 +4722,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
+                    WHERE dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4658,6 +4738,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_transaction ft
                     JOIN edw.dim_manager dm ON (ft.from_manager_key = dm.manager_key OR ft.to_manager_key = dm.manager_key)
                     WHERE ft.transaction_type = 'trade'
+                        AND ft.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY dm.manager_name, ft.season_year
                     
                     UNION ALL
@@ -4673,6 +4754,7 @@ class EdwEtlProcessor:
                     FROM edw.fact_transaction ft
                     JOIN edw.dim_manager dm ON ft.to_manager_key = dm.manager_key
                     WHERE ft.transaction_type IN ('waiver', 'free_agent')
+                        AND ft.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY dm.manager_name, ft.season_year
                     
                     UNION ALL
@@ -4690,6 +4772,7 @@ class EdwEtlProcessor:
                     WHERE ft.transaction_type IN ('waiver', 'free_agent') 
                         AND ft.faab_bid IS NOT NULL 
                         AND ft.faab_bid > 0
+                        AND ft.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY dm.manager_name, ft.season_year
                     
                     UNION ALL
@@ -4706,6 +4789,7 @@ class EdwEtlProcessor:
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
                     JOIN edw.dim_league dl ON ftp.league_key = dl.league_key
                     WHERE ftp.weekly_rank = 1
+                        AND dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY ftp.team_key, dt.team_name, dt.manager_name, dl.season_year
                     
                     UNION ALL
@@ -4810,7 +4894,7 @@ class EdwEtlProcessor:
                         manager_name,
                         NULL as season_year,
                         ROW_NUMBER() OVER (ORDER BY championships_won DESC, career_win_percentage DESC) as rn
-                    FROM edw.mart_manager_performance
+                    FROM career
                     
                     UNION ALL
                     
@@ -4822,32 +4906,34 @@ class EdwEtlProcessor:
                         manager_name,
                         NULL as season_year,
                         ROW_NUMBER() OVER (ORDER BY championship_appearances DESC, championships_won DESC) as rn
-                    FROM edw.mart_manager_performance
+                    FROM career
                     
                     UNION ALL
                     
                     -- Most playoff appearances (career)
                     SELECT 
                         'Most Playoff Appearances (Career)' as record_name,
-                        CONCAT(playoff_appearances, ' appearances') as record_value,
+                        CONCAT(COALESCE(cp.playoff_appearances, 0), ' appearances') as record_value,
                         NULL as team_name,
-                        manager_name,
+                        c.manager_name,
                         NULL as season_year,
-                        ROW_NUMBER() OVER (ORDER BY playoff_appearances DESC, championships_won DESC) as rn
-                    FROM edw.mart_manager_performance
+                        ROW_NUMBER() OVER (ORDER BY COALESCE(cp.playoff_appearances, 0) DESC, c.championships_won DESC) as rn
+                    FROM career c
+                    LEFT JOIN career_playoffs cp ON cp.manager_name = c.manager_name
                     
                     UNION ALL
                     
                     -- Best career win percentage (min 3 seasons)
                     SELECT 
                         'Best Career Win Percentage (Min 3 Seasons)' as record_name,
-                        CONCAT(ROUND(career_win_percentage * 100, 1), '%') as record_value,
+                        CONCAT(ROUND(mmp.career_win_percentage * 100, 1), '%') as record_value,
                         NULL as team_name,
-                        manager_name,
+                        mmp.manager_name,
                         NULL as season_year,
-                        ROW_NUMBER() OVER (ORDER BY career_win_percentage DESC, total_wins DESC) as rn
-                    FROM edw.mart_manager_performance
-                    WHERE total_seasons >= 3
+                        ROW_NUMBER() OVER (ORDER BY mmp.career_win_percentage DESC, mmp.total_wins DESC) as rn
+                    FROM edw.mart_manager_performance mmp
+                    JOIN career c ON c.manager_name = mmp.manager_name
+                    WHERE c.total_seasons >= 3
                     
                     UNION ALL
                     

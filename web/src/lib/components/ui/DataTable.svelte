@@ -34,7 +34,8 @@
 	 * the playoff line after 6th on the standings. `dividerCell` draws that row's
 	 * content instead of the rule and label, for a divider with more in it (the
 	 * Hall of Fame's tier rows: a name, a count and the tier's numbers on the
-	 * right); the snippet brings its own padding.
+	 * right); the snippet brings its own padding. `maxHeight` scrolls the rows
+	 * under a header that stays put (League History's chart table).
 	 *
 	 *   <DataTable {columns} {rows} divider={(_, i) => (i === 6 ? 'Playoff line' : null)}>
 	 *     {#snippet cell(row, column)}...{/snippet}
@@ -96,6 +97,11 @@
 		edgeInset?: number;
 		/** Where header text sits when the header row is two lines tall. */
 		headerAlign?: 'top' | 'middle' | 'bottom';
+		/**
+		 * Scroll the rows inside this height with the header held at the top
+		 * (League History's chart table: 320px).
+		 */
+		maxHeight?: string;
 	}
 
 	let {
@@ -118,11 +124,12 @@
 		stickyFirst = false,
 		stickyRule = true,
 		edgeInset,
-		headerAlign
+		headerAlign,
+		maxHeight
 	}: Props = $props();
 </script>
 
-<div class="scroll">
+<div class="scroll" class:capped={maxHeight != null} style:max-height={maxHeight}>
 	<table
 		class:sticky-first={stickyFirst}
 		class:no-sticky-rule={!stickyRule}
@@ -204,6 +211,21 @@
 	table {
 		width: 100%;
 		border-collapse: collapse;
+	}
+
+	/* The header stays put while the rows scroll under it; its 2px rule is a
+	   shadow, since a collapsed border doesn't stick with its cell. */
+	.scroll.capped {
+		overflow-y: auto;
+	}
+
+	.capped th {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		background: var(--color-card);
+		border-bottom: 0;
+		box-shadow: inset 0 -2px 0 var(--color-ink);
 	}
 
 	th {

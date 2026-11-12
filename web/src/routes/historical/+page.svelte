@@ -1,899 +1,1366 @@
 <script lang="ts">
-	import { BarChart3, TrendingUp, Trophy, Users, Target, Calendar, Zap, History } from 'lucide-svelte';
+	import { tick } from 'svelte';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { page } from '$app/state';
+	import { afterNavigate, replaceState } from '$app/navigation';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { onMount } from 'svelte';
 	import ClientOnlyD3Overview from '$lib/components/ClientOnlyD3Overview.svelte';
-	import MetricHelp from '$lib/components/MetricHelp.svelte';
-	import MetricTooltip from '$lib/components/MetricTooltip.svelte';
-	import { splitEras } from '$lib/league-trends';
-	
-	let h2hData: any = null;
-	let overviewData: any = null;
-	let recordBookData: any = null;
-	let loading = true;
-	let loadingH2H = false;
-	let loadingOverview = false;
-	let loadingRecords = false;
-	let selectedSeason = 'all';
+	import ManagerPicker from '$lib/components/history/ManagerPicker.svelte';
+	import {
+		Avatar,
+		Button,
+		Card,
+		DataTable,
+		EmptyValue,
+		Pennant,
+		StatStrip,
+		StatTile,
+		StatTip,
+		TabNav,
+		Tag,
+		type Column
+	} from '$lib/components/ui';
+	import { profileHref } from '$lib/home';
+	import { rivalryHref } from '$lib/utils/managers';
+	import {
+		HISTORY_TABS,
+		TABLE_ROWS,
+		computeEras,
+		defaultPair,
+		faceRecord,
+		filterRivalries,
+		findRivalry,
+		historyIntro,
+		historyKicker,
+		historyTab,
+		luckier,
+		oneDecimal,
+		plural,
+		recordBook,
+		recordChips,
+		recordFootnote,
+		resolveManager,
+		rivalryFromRow,
+		rivalryManagers,
+		seriesLeader,
+		seriesShare,
+		spanYears,
+		tableLeader,
+		winShare,
+		type H2HRow,
+		type HistoryTab,
+		type Rivalry
+	} from '$lib/history-display';
 
-	// Head-to-Head filtering state
-	let h2hManagerA = '';
-	let h2hManagerB = '';
-	let availableManagers: string[] = [];
-	let showAllH2H = false; // Track whether to show all results or just top 20
+	const phone = new MediaQuery('(max-width: 639.98px)');
 
-	// Computed filtered head-to-head data
-	$: filteredH2HData = filterH2HData(h2hData?.headToHead || [], h2hManagerA, h2hManagerB);
+	/* ---------- Data, fetched per tab and kept (G4) ---------- */
 
-	// Computed display data based on filters and show more state
-	$: displayH2HData = getDisplayH2HData(filteredH2HData, h2hManagerA, h2hManagerB, showAllH2H);
+	let overviewData: any = $state(null);
+	let h2hData: any = $state(null);
+	let recordBookData: any = $state(null);
+	let loadingOverview = $state(false);
+	let loadingH2H = $state(false);
+	let loadingRecords = $state(false);
+	let overviewFailed = $state(false);
+	let h2hFailed = $state(false);
+	let recordsFailed = $state(false);
 
-	// Function to get display data
-	function getDisplayH2HData(data: any[], managerA: string, managerB: string, showAll: boolean) {
-		if (!data || data.length === 0) return [];
-		
-		// If filters are applied, show all filtered results
-		if (managerA || managerB) {
-			return data;
-		}
-		
-		// If no filters and showAll is false, limit to 20
-		if (!showAll) {
-			return data.slice(0, 20);
-		}
-		
-		// Otherwise show all
-		return data;
-	}
-
-	// Function to filter head-to-head data
-	function filterH2HData(data: any[], managerA: string, managerB: string) {
-		if (!data || data.length === 0) return [];
-		
-		let filtered = data;
-		
-		// Apply specific manager filters
-		if (managerA || managerB) {
-			filtered = filtered.filter(matchup => {
-				const managerAName = matchup.managerAName || matchup.manager_a_name;
-				const managerBName = matchup.managerBName || matchup.manager_b_name;
-				const matchupManagers = [managerAName, managerBName];
-				
-				let matchesA = !managerA || matchupManagers.includes(managerA);
-				let matchesB = !managerB || matchupManagers.includes(managerB);
-				
-				// If both managers are selected, ensure both are in the matchup
-				if (managerA && managerB) {
-					return matchupManagers.includes(managerA) && matchupManagers.includes(managerB);
-				}
-				
-				return matchesA && matchesB;
-			});
-		}
-		
-		return filtered;
-	}
-
-	// Function to extract unique managers from h2h data
-	function extractUniqueManagers(h2hData: any[]): string[] {
-		if (!h2hData || h2hData.length === 0) return [];
-		
-		const managers = new Set<string>();
-		h2hData.forEach(matchup => {
-			if (matchup.managerAName || matchup.manager_a_name) managers.add(matchup.managerAName || matchup.manager_a_name);
-			if (matchup.managerBName || matchup.manager_b_name) managers.add(matchup.managerBName || matchup.manager_b_name);
-		});
-		
-		return Array.from(managers).sort();
-	}
-
-	// Clear all filters
-	function clearH2HFilters() {
-		h2hManagerA = '';
-		h2hManagerB = '';
-		showAllH2H = false; // Reset show all when clearing filters
-	}
-
-	let selectedTab = 'overview';
-	const tabs = [
-		{ id: 'overview', name: 'Overview', icon: BarChart3 },
-		{ id: 'head-to-head', name: 'Head to Head', icon: Users },
-		{ id: 'records', name: 'Record Book', icon: Trophy },
-	];
-
-	// D3 Chart placeholder - will implement actual charts
-	let chartContainer: HTMLDivElement;
-	
-	onMount(async () => {
-		// Skip the failing managers/historical endpoint for now
-		loading = false;
-		
-		// Load overview data since it's the default tab - use setTimeout to ensure it runs after mount
-		setTimeout(() => {
-			loadOverviewData();
-		}, 100);
-		
-		console.log('Historical page mounted, ready for D3 charts');
-	});
-
-
-
-	// Load head-to-head data
-	async function loadH2HData() {
-		if (h2hData) return; // Already loaded
-		
-		loadingH2H = true;
-		try {
-			const response = await fetch('/api/head-to-head?analysis=all');
-			if (response.ok) {
-				h2hData = await response.json();
-				// Extract available managers for filtering
-				availableManagers = extractUniqueManagers(h2hData.headToHead || []);
-				console.log('H2H data loaded:', h2hData);
-			} else {
-				console.error('Failed to fetch H2H data:', response.status, response.statusText);
-			}
-		} catch (err) {
-			console.error('Error fetching H2H data:', err);
-		} finally {
-			loadingH2H = false;
-		}
-	}
-
-	// Load overview data for D3 visualizations
 	async function loadOverviewData() {
-		if (overviewData) return; // Already loaded
-
+		if (overviewData || loadingOverview) return;
 		loadingOverview = true;
+		overviewFailed = false;
 		try {
 			const response = await fetch('/api/overview?metric=all');
-			if (response.ok) {
-				overviewData = await response.json();
-			} else {
-				console.error('Failed to fetch overview data:', response.status, response.statusText);
-			}
-		} catch (err) {
-			console.error('Error fetching overview data:', err);
+			if (response.ok) overviewData = await response.json();
+			else overviewFailed = true;
+		} catch {
+			overviewFailed = true;
 		} finally {
 			loadingOverview = false;
 		}
 	}
 
-	// Load record book data
+	async function loadH2HData() {
+		if (h2hData || loadingH2H) return;
+		loadingH2H = true;
+		h2hFailed = false;
+		try {
+			const response = await fetch('/api/head-to-head?analysis=all');
+			if (response.ok) {
+				h2hData = await response.json();
+				setPairFromUrl();
+			} else h2hFailed = true;
+		} catch {
+			h2hFailed = true;
+		} finally {
+			loadingH2H = false;
+		}
+	}
+
 	async function loadRecordBookData() {
-		if (recordBookData) return; // Already loaded
-		
+		if (recordBookData || loadingRecords) return;
 		loadingRecords = true;
+		recordsFailed = false;
 		try {
 			const response = await fetch('/api/record-book');
-			if (response.ok) {
-				recordBookData = await response.json();
-				console.log('Record book data loaded:', recordBookData);
-			} else {
-				console.error('Failed to fetch record book data:', response.status, response.statusText);
-			}
-		} catch (err) {
-			console.error('Error fetching record book data:', err);
+			if (response.ok) recordBookData = await response.json();
+			else recordsFailed = true;
+		} catch {
+			recordsFailed = true;
 		} finally {
 			loadingRecords = false;
 		}
 	}
 
+	/* ---------- S10.1 Header and tabs in the URL ---------- */
 
+	// The face-off's pair, which the head to head tab's link carries.
+	let pairA = $state<string | null>(null);
+	let pairB = $state<string | null>(null);
+	/** A reader changed a name, so the table filters to the pair (D10). */
+	let picked = $state(false);
+	/** The URL named both managers, so the tab's link keeps them. */
+	let fromUrl = $state(false);
 
-	// Helper function to get rivalry tier color
-	function getRivalryTierColor(tier: string): string {
-		switch (tier) {
-			case 'Epic Rivalry': return 'text-red-400';
-			case 'Major Rivalry': return 'text-orange-400';
-			case 'Strong Rivalry': return 'text-amber-400';
-			case 'Developing Rivalry': return 'text-blue-400';
-			default: return 'text-slate-400';
-		}
+	let tab = $state<HistoryTab>(historyTab(page.url.searchParams));
+
+	// The header reads the overview on every tab, so it loads first.
+	function openTab(id: HistoryTab) {
+		loadOverviewData();
+		if (id === 'head-to-head') loadH2HData();
+		else if (id === 'records') loadRecordBookData();
 	}
 
-	// Helper function to get win percentage color
-	function getWinPercentageColor(winPct: number): string {
-		if (winPct >= 70) return 'text-green-400';
-		if (winPct >= 55) return 'text-blue-400';
-		if (winPct >= 45) return 'text-amber-400';
-		return 'text-red-400';
+	// The first load and any real navigation (a profile's rivalry link) land
+	// on what the URL names; SvelteKit runs this after the first mount too.
+	afterNavigate(() => {
+		tab = historyTab(page.url.searchParams);
+		openTab(tab);
+		// The URL's pair replaces any earlier pick, so the table stops filtering (D10).
+		picked = false;
+		if (h2hData) setPairFromUrl();
+	});
+
+	function hrefFor(id: HistoryTab): string {
+		if (id === 'head-to-head' && (picked || fromUrl) && pairA && pairB) return rivalryHref(pairA, pairB);
+		return HISTORY_TABS.find((t) => t.id === id)!.href;
 	}
 
+	const tabItems = $derived(HISTORY_TABS.map((t) => ({ id: t.id, label: t.label, href: hrefFor(t.id) })));
 
-
-	// Derived overview values. The /api/overview response nests the real data under
-	// `.data` (camelCase) and coverage under `.meta` — bind to those, not the old
-	// top-level snake_case paths (which silently fell back to mock numbers).
-	$: ov = overviewData?.data ?? {};
-	$: ovMeta = overviewData?.meta ?? {};
-	$: ovSeasons = ovMeta.totalSeasons ?? null;
-	$: ovRange = ovMeta.seasonsCovered ?? '';
-	$: ovAvgScore = ov.scoringPatterns?.length
-		? (
-				ov.scoringPatterns.reduce((s: number, x: any) => s + (parseFloat(x.avgWeeklyScore) || 0), 0) /
-				ov.scoringPatterns.length
-		  ).toFixed(1)
-		: null;
-	$: ovTotalTrades = ov.tradeActivity?.length
-		? ov.tradeActivity.reduce((s: number, x: any) => s + (parseInt(x.totalTrades) || 0), 0)
-		: null;
-	$: ovPeak = ov.leagueEvolution?.length
-		? ov.leagueEvolution.reduce(
-				(best: any, x: any) =>
-					(x.totalTransactions ?? 0) > (best?.totalTransactions ?? -1) ? x : best,
-				null
-		  )
-		: null;
-
-	// Era Analysis — split the league's seasons into three contiguous eras and compute
-	// real aggregates for each from the per-season data (no fabricated narrative).
-	$: eras = computeEras(ov);
-	function computeEras(o: any) {
-		const le = o?.leagueEvolution ?? [];
-		if (le.length < 3) return [];
-
-		const tradesByYear = new Map<number, number>();
-		(o.tradeActivity ?? []).forEach((t: any) =>
-			tradesByYear.set(Number(t.seasonYear), parseInt(t.totalTrades) || 0)
-		);
-		const scoreByYear = new Map<number, number>();
-		(o.scoringPatterns ?? []).forEach((s: any) =>
-			scoreByYear.set(Number(s.seasonYear), parseFloat(s.avgWeeklyScore) || 0)
-		);
-
-		const seasons = le
-			.map((x: any) => {
-				const year = Number(x.seasonYear);
-				return {
-					year,
-					champion: x.championManager || null,
-					score: scoreByYear.get(year) ?? (parseFloat(x.averageWeeklyScore) || 0),
-					trades: tradesByYear.get(year) ?? 0,
-					transactions: parseInt(x.totalTransactions) || 0
-				};
-			})
-			.sort((a: any, b: any) => a.year - b.year);
-
-		// Three contiguous eras, the same split the trends chart's era buttons use.
-		const out: any[] = [];
-		for (const era of splitEras(seasons.map((s: any) => s.year))) {
-			const slice = seasons.filter((s: any) => s.year >= era.start && s.year <= era.end);
-			if (!slice.length) continue;
-
-			const titles = new Map<string, number>();
-			slice.forEach((s: any) => {
-				if (s.champion) titles.set(s.champion, (titles.get(s.champion) || 0) + 1);
-			});
-			const ranked = [...titles.entries()].sort((a, b) => b[1] - a[1]);
-			const top = ranked[0];
-
-			out.push({
-				name: era.name,
-				range: `${slice[0].year}–${slice[slice.length - 1].year}`,
-				seasonCount: slice.length,
-				avgScore: (slice.reduce((s: number, x: any) => s + x.score, 0) / slice.length).toFixed(1),
-				totalTrades: slice.reduce((s: number, x: any) => s + x.trades, 0),
-				totalTransactions: slice.reduce((s: number, x: any) => s + x.transactions, 0),
-				topChampion: top ? top[0] : null,
-				topChampionTitles: top ? top[1] : 0,
-				distinctChampions: titles.size
-			});
-		}
-		return out;
+	function selectTab(id: string) {
+		tab = id as HistoryTab;
+		openTab(tab);
+		// Shallow: no reload and no history entry, as the profile's tabs do.
+		replaceState(hrefFor(tab), {});
 	}
 
-	// Handle tab selection
-	function handleTabSelect(tabId: string) {
-		selectedTab = tabId;
-		if (tabId === 'head-to-head') {
-			loadH2HData();
-		} else if (tabId === 'overview') {
-			loadOverviewData();
-		} else if (tabId === 'records') {
-			loadRecordBookData();
-		}
+	const meta = $derived(overviewData?.meta ?? null);
+	const liveSeason = $derived<number | null>(overviewData?.data?.seasonInProgress?.seasonYear ?? null);
+
+	/* ---------- S10.2 Overview: three eras ---------- */
+
+	let selectedEra = $state('all');
+	const eras = $derived(computeEras(overviewData?.data));
+
+	/* ---------- S10.5 to S10.7 Head to head ---------- */
+
+	const rows = $derived<H2HRow[]>(h2hData?.headToHead ?? []);
+	const managers = $derived(rivalryManagers(rows));
+	const overview = $derived(h2hData?.analytics?.overview ?? null);
+	const records = $derived(h2hData?.analytics?.records ?? null);
+
+	let openPicker = $state<'a' | 'b' | null>(null);
+	let showAll = $state(false);
+	let faceoff: HTMLElement | null = $state(null);
+
+	function setPairFromUrl() {
+		const params = page.url.searchParams;
+		const names = rivalryManagers(h2hData?.headToHead ?? []);
+		const a = resolveManager(params.get('a'), names);
+		const b = resolveManager(params.get('b'), names);
+		const pair = defaultPair(h2hData?.headToHead ?? [], a, b);
+		if (pair) [pairA, pairB] = pair;
+		fromUrl = !!(a && b && a !== b);
 	}
+
+	function setPair(a: string, b: string) {
+		pairA = a;
+		pairB = b;
+		picked = true;
+		showAll = false;
+		replaceState(rivalryHref(a, b), {});
+	}
+
+	function pick(side: 'a' | 'b', name: string) {
+		if (side === 'a') setPair(name, pairB ?? '');
+		else setPair(pairA ?? '', name);
+	}
+
+	async function openRivalry(event: MouseEvent, r: Rivalry) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		event.preventDefault();
+		setPair(r.a, r.b);
+		await tick();
+		const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		faceoff?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+	}
+
+	const rivalry = $derived(pairA && pairB ? findRivalry(rows, pairA, pairB) : null);
+	const leader = $derived(rivalry ? seriesLeader(rivalry) : null);
+	const share = $derived(rivalry ? seriesShare(rivalry.aWins, rivalry.bWins, rivalry.games) : null);
+	const optionsA = $derived(managers.filter((m) => m !== pairB));
+	const optionsB = $derived(managers.filter((m) => m !== pairA));
+
+	function sideLine(side: 'a' | 'b'): { text: string; lead: boolean } | null {
+		if (!rivalry) return null;
+		const me = side === 'a' ? pairA : pairB;
+		if (!leader) return side === 'a' ? { text: 'Series tied', lead: false } : { text: rivalry.span, lead: false };
+		return leader === me ? { text: 'Leads the series', lead: true } : { text: rivalry.span, lead: false };
+	}
+
+	const longest = $derived(rows.slice(0, 6).map((r) => rivalryFromRow(r)));
+	const filtered = $derived(filterRivalries(rows, picked, pairA, pairB));
+	const tableRows = $derived(showAll ? filtered : filtered.slice(0, TABLE_ROWS));
+	const titleGames = $derived(
+		(h2hData?.analytics?.playoffImpact ?? []).filter((b: any) => Number(b.championshipMatchups) > 0).slice(0, 8)
+	);
+
+	const columns = $derived<Column[]>([
+		{ key: 'match', label: 'Matchup', width: phone.current ? '168px' : undefined },
+		{ key: 'games', label: 'Games', numeric: true, width: phone.current ? '44px' : '50px', fixedHeader: true },
+		{ key: 'record', label: 'Record', numeric: true, width: phone.current ? '64px' : '70px' },
+		{ key: 'leader', label: 'Leader', width: '130px' },
+		{ key: 'avg', label: 'Avg total', numeric: true, width: '64px', wrapHeader: true },
+		{ key: 'best', label: 'Best win', numeric: true, width: '64px', wrapHeader: true },
+		{ key: 'expected', label: 'Expected', numeric: true, width: '84px', wrapHeader: true },
+		{ key: 'luckier', label: 'Luckier', numeric: true, width: '130px' }
+	]);
+
+	/* ---------- S10.8 Record book ---------- */
+
+	let chip = $state('all');
+	const bookRecords = $derived(recordBookData?.records ?? []);
+	const chips = $derived(recordChips(bookRecords));
+	const book = $derived(recordBook(bookRecords, chip, liveSeason));
 </script>
 
-<div class="space-y-8">
-	<PageHeader icon={History} title="Historical Deep Dive" accent="amber">
-		Explore {ovSeasons ?? 20}+ years of fantasy football history. Trades, head-to-head matchups,
-		league evolution, and championship moments analyzed and visualized.
-	</PageHeader>
+<svelte:head>
+	<title>League History · The League</title>
+</svelte:head>
 
-	<!-- Tab Navigation -->
-	<div class="flex flex-wrap justify-center gap-2 bg-slate-800/30 p-2 rounded-xl">
-		{#each tabs as tab}
-			<button
-				class="flex items-center px-6 py-3 rounded-lg font-medium transition-all
-					{selectedTab === tab.id 
-						? 'bg-amber-500 text-black' 
-						: 'text-slate-300 hover:text-white hover:bg-slate-700/50'}"
-				on:click={() => handleTabSelect(tab.id)}
-			>
-				<svelte:component this={tab.icon} class="w-4 h-4 mr-2" />
-				{tab.name}
-			</button>
-		{/each}
+{#snippet name(n: string)}<a class="name-link" href={profileHref(n)}>{n}</a>{/snippet}
+
+{#snippet names(list: string[])}{#each list as n, i (n)}{#if i > 0}{i === list.length - 1 ? ' and ' : ', '}{/if}{@render name(
+			n
+		)}{/each}{/snippet}
+
+{#snippet failure(title: string, retry: () => void)}
+	<div class="first">
+		<Card {title}>
+			<p class="muted-line">Try again in a minute.</p>
+			<Button variant="secondary" onclick={retry}>Try again</Button>
+		</Card>
 	</div>
+{/snippet}
 
-	<!-- Tab Content -->
-	{#if selectedTab === 'overview'}
-		{#if loadingOverview}
-			<div class="flex items-center justify-center h-64">
-				<div class="text-slate-400">Loading comprehensive league analytics...</div>
-			</div>
-		{:else if overviewData}
-			<div class="space-y-8">
-				<!-- Key Statistics -->
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-						{ovSeasons ? `${ovSeasons}-Year League Summary` : 'League Summary'}
-					</h2>
+{#snippet loadingCard()}
+	<div class="first">
+		<Card title="Loading league history" headGap={0} />
+	</div>
+{/snippet}
 
-					<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-						<div class="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-lg p-4">
-							<h3 class="font-bold text-white mb-2">Total Seasons</h3>
-							<div class="text-3xl font-bold text-blue-400">{ovSeasons ?? '—'}</div>
-							<div class="text-slate-300 text-sm">{ovRange || '—'}</div>
-						</div>
+<PageHeader
+	kicker={historyKicker(meta?.firstSeason, meta?.lastSeason)}
+	title="League History"
+	introWidth={640}
+	pending={!meta && !overviewFailed}
+>
+	{historyIntro(meta?.totalSeasons)}
+</PageHeader>
 
-						<div class="bg-gradient-to-r from-green-500/10 to-green-600/5 border border-green-500/20 rounded-lg p-4">
-							<h3 class="font-bold text-white mb-2">Average Score</h3>
-							<div class="text-3xl font-bold text-green-400">{ovAvgScore ?? '—'}</div>
-							<div class="text-slate-300 text-sm">Points per week</div>
-						</div>
+<div class="tabs">
+	<TabNav label="History sections" tabs={tabItems} current={tab} onselect={selectTab} />
+</div>
 
-						<div class="bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/20 rounded-lg p-4">
-							<h3 class="font-bold text-white mb-2">Total Trades</h3>
-							<div class="text-3xl font-bold text-amber-400">{ovTotalTrades ?? '—'}</div>
-							<div class="text-slate-300 text-sm">All-time</div>
-						</div>
+{#if tab === 'overview'}
+	{#if overviewFailed}
+		{@render failure("League history didn't load", () => loadOverviewData())}
+	{:else if !overviewData}
+		{@render loadingCard()}
+	{:else}
+		<ClientOnlyD3Overview data={overviewData} bind:selectedEra />
 
-						<div class="bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-lg p-4">
-							<h3 class="font-bold text-white mb-2">Peak Activity</h3>
-							<div class="text-3xl font-bold text-purple-400">{ovPeak ? ovPeak.totalTransactions : '—'}</div>
-							<div class="text-slate-300 text-sm">Transactions {ovPeak ? `(${ovPeak.seasonYear})` : ''}</div>
-						</div>
-					</div>
-				</section>
-
-				<!-- D3 Visualization Section -->
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<BarChart3 class="w-6 h-6 text-blue-400 mr-3" />
-						League Evolution {ovRange ? `(${ovRange})` : ''}
-					</h2>
-
-					<ClientOnlyD3Overview data={overviewData} />
-				</section>
-
-				<!-- Era Analysis -->
-				{#if eras.length}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-2 flex items-center">
-							<Calendar class="w-6 h-6 text-amber-400 mr-3" />
-							Era Analysis
-						</h2>
-						<p class="text-slate-400 text-sm mb-6">
-							The league's history split into three equal eras, with real per-era aggregates.
-						</p>
-
-						<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-							{#each eras as era}
-								<div class="bg-slate-900/40 border border-slate-700/50 rounded-lg p-5">
-									<div class="flex items-baseline justify-between mb-4">
-										<h3 class="text-lg font-bold text-white">{era.name}</h3>
-										<span class="text-sm text-slate-400">{era.range}</span>
-									</div>
-									<dl class="space-y-3 text-sm">
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Seasons</dt>
-											<dd class="font-bold text-white">{era.seasonCount}</dd>
-										</div>
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Avg weekly score</dt>
-											<dd class="font-bold text-green-400">{era.avgScore} pts</dd>
-										</div>
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Total trades</dt>
-											<dd class="font-bold text-amber-400">{era.totalTrades}</dd>
-										</div>
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Transactions</dt>
-											<dd class="font-bold text-purple-400">{era.totalTransactions}</dd>
-										</div>
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Most titles</dt>
-											<dd class="font-bold text-white text-right">
-												{#if era.topChampion}
-													{era.topChampion}
-													<span class="text-slate-400 font-normal">({era.topChampionTitles})</span>
-												{:else}
-													—
-												{/if}
-											</dd>
-										</div>
-										<div class="flex justify-between">
-											<dt class="text-slate-400">Distinct champions</dt>
-											<dd class="font-bold text-blue-400">{era.distinctChampions}</dd>
-										</div>
-									</dl>
+		{#if eras.length}
+			<section class="section" aria-labelledby="eras-title">
+				<h2 id="eras-title" class="section-title">Three eras</h2>
+				<div class="eras">
+					{#each eras as e (e.name)}
+						<Card>
+							<div class="era-head">
+								<h3>{e.name}</h3>
+								<span class="era-span">{e.span}</span>
+							</div>
+							{#if e.titles}
+								<div class="era-titles">
+									<Pennant width={14} height={20} />
+									<span><b>{@render names(e.leaders)} ({e.leaderTitles})</b> won the most titles</span>
 								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-			</div>
-		{:else}
-			<div class="text-center py-8">
-				<div class="text-slate-400">Click Overview to load comprehensive league analytics</div>
-				<button 
-					class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-					on:click={loadOverviewData}
-				>
-					Load Overview Data Manually
-				</button>
-			</div>
-		{/if}
-
-	{:else if selectedTab === 'head-to-head'}
-		{#if loadingH2H}
-			<div class="flex items-center justify-center h-64">
-				<div class="text-slate-400">Loading comprehensive head-to-head analysis...</div>
-			</div>
-		{:else if h2hData}
-			<div class="space-y-8">
-				<!-- H2H Overview Analytics -->
-				{#if h2hData.analytics?.overview}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<BarChart3 class="w-6 h-6 text-blue-400 mr-3" />
-							Head-to-Head Overview
-						</h2>
-						
-						<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-							<div class="text-center">
-								<div class="text-3xl font-bold text-blue-400">{h2hData.analytics.overview.totalRivalries || h2hData.analytics.overview.total_rivalries || 0}</div>
-								<div class="text-slate-400">Total Rivalries</div>
-							</div>
-							<div class="text-center">
-								<div class="text-3xl font-bold text-green-400">{parseFloat(h2hData.analytics.overview.avgMatchupsPerRivalry || h2hData.analytics.overview.avg_matchups_per_rivalry || 0).toFixed(1)}</div>
-								<div class="text-slate-400">Avg Games</div>
-							</div>
-							<div class="text-center">
-								<div class="text-3xl font-bold text-amber-400">{h2hData.analytics.overview.longestRivalrySeasons || h2hData.analytics.overview.longest_rivalry_seasons || 0}</div>
-								<div class="text-slate-400">Longest Rivalry</div>
-							</div>
-							<div class="text-center">
-								<div class="text-3xl font-bold text-purple-400">{h2hData.analytics.overview.championshipRivalries || h2hData.analytics.overview.championship_rivalries || 0}</div>
-								<div class="text-slate-400">Championship Battles</div>
-							</div>
-						</div>
-					</section>
-				{/if}
-
-				<!-- Top Rivalries -->
-				{#if h2hData.analytics?.topRivalries}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-							Epic Rivalries
-						</h2>
-						
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-							{#each h2hData.analytics.topRivalries.slice(0, 6) as rivalry}
-								<div class="bg-slate-700/30 rounded-lg p-4 border-l-4 border-amber-400">
-									<div class="flex items-center justify-between mb-3">
-										<div class="font-bold text-white text-lg">
-											{rivalry.managerAName || rivalry.manager_a_name} vs {rivalry.managerBName || rivalry.manager_b_name}
-										</div>
-										<span class="text-xs px-2 py-1 rounded {getRivalryTierColor(rivalry.rivalryTier || rivalry.rivalry_tier)} bg-slate-600/50">
-											{rivalry.rivalryTier || rivalry.rivalry_tier}
-										</span>
-									</div>
-									
-									<div class="grid grid-cols-2 gap-4 text-sm">
-										<div>
-											<div class="text-slate-400">Total Games</div>
-											<div class="font-bold text-white">{rivalry.totalMatchups || rivalry.total_matchups}</div>
-										</div>
-										<div>
-											<div class="text-slate-400">Seasons Together</div>
-											<div class="font-bold text-white">{rivalry.seasonsPlayedTogether || rivalry.seasons_played_together}</div>
-										</div>
-										<div>
-											<div class="text-slate-400">Series Leader</div>
-											<div class="font-bold text-green-400">{rivalry.seriesLeader || rivalry.series_leader}</div>
-										</div>
-										<div>
-											<div class="text-slate-400">Record</div>
-											<div class="font-mono font-bold text-white">{rivalry.seriesRecord || rivalry.series_record}</div>
-										</div>
-									</div>
-									
-									{#if (rivalry.playoffMatchups || rivalry.playoff_matchups) > 0 || (rivalry.championshipMatchups || rivalry.championship_matchups) > 0}
-										<div class="mt-3 pt-3 border-t border-slate-600">
-											<div class="flex items-center space-x-4 text-xs">
-												{#if (rivalry.championshipMatchups || rivalry.championship_matchups) > 0}
-													<span class="text-amber-400">🏆 {rivalry.championshipMatchups || rivalry.championship_matchups} Title Games</span>
-												{/if}
-												{#if (rivalry.playoffMatchups || rivalry.playoff_matchups) > 0}
-													<span class="text-blue-400">🏆 {rivalry.playoffMatchups || rivalry.playoff_matchups} Playoff Games</span>
-												{/if}
-											</div>
-										</div>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				<!-- Complete Head-to-Head Matrix -->
-				<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-					<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-						<Users class="w-6 h-6 text-green-400 mr-3" />
-						Complete Head-to-Head Records
-					</h2>
-					
-					<!-- Filter Controls -->
-					<div class="mb-6 space-y-4">
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<!-- Manager A Selector -->
-							<div>
-								<label for="h2h-manager-a" class="block text-sm font-medium text-slate-300 mb-2">
-									Manager A
-								</label>
-								<select
-									id="h2h-manager-a"
-									bind:value={h2hManagerA}
-									class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-								>
-									<option value="">Any Manager</option>
-									{#each availableManagers as manager}
-										<option value={manager}>{manager}</option>
-									{/each}
-								</select>
-							</div>
-							
-							<!-- Manager B Selector -->
-							<div>
-								<label for="h2h-manager-b" class="block text-sm font-medium text-slate-300 mb-2">
-									Manager B
-								</label>
-								<select
-									id="h2h-manager-b"
-									bind:value={h2hManagerB}
-									class="w-full bg-slate-700/50 border border-slate-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-green-400"
-								>
-									<option value="">Any Manager</option>
-									{#each availableManagers as manager}
-										<option value={manager}>{manager}</option>
-									{/each}
-								</select>
-							</div>
-						</div>
-						
-						<!-- Filter Actions -->
-						<div class="flex items-center justify-between">
-							<div class="text-sm text-slate-400">
-								{#if h2hManagerA || h2hManagerB}
-									Showing {displayH2HData.length} of {h2hData?.headToHead?.length || 0} matchups
-								{:else}
-									Showing {displayH2HData.length} of {filteredH2HData.length} rivalries
-								{/if}
-							</div>
-							{#if h2hManagerA || h2hManagerB}
-								<button
-									on:click={clearH2HFilters}
-									class="text-sm text-amber-400 hover:text-amber-300 font-medium"
-								>
-									Clear Filters
-								</button>
 							{/if}
-						</div>
-					</div>
-					
-					<div class="overflow-x-auto">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="border-b border-slate-700">
-									<th class="text-left py-3 px-4 text-slate-300">Matchup</th>
-									<th class="text-center py-3 px-4 text-slate-300">Games</th>
-									<th class="text-center py-3 px-4 text-slate-300">Record</th>
-									<th class="text-center py-3 px-4 text-slate-300">Avg Score</th>
-									<th class="text-center py-3 px-4 text-slate-300">Biggest Win</th>
-									<th class="text-center py-3 px-4 text-slate-300">
-										<MetricTooltip metricId="pythagorean_wins" position="bottom" maxWidth="300px">
-											<span class="cursor-help">Pythagorean Wins</span>
-										</MetricTooltip>
-									</th>
-									<th class="text-center py-3 px-4 text-slate-300">
-										<MetricTooltip metricId="luck_factor" position="bottom" maxWidth="300px">
-											<span class="cursor-help">Luck Factor</span>
-										</MetricTooltip>
-									</th>
-									<th class="text-center py-3 px-4 text-slate-300">Playoffs</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each displayH2HData as matchup}
-									<tr class="border-b border-slate-700/50">
-										<td class="py-3 px-4">
-											<div class="font-bold text-white">{matchup.managerAName || matchup.manager_a_name} vs {matchup.managerBName || matchup.manager_b_name}</div>
-											<div class="text-xs text-slate-400">{matchup.seasonsPlayedTogether || matchup.seasons_played_together} seasons • {matchup.firstMatchupDate || matchup.first_matchup_date} - {matchup.lastMatchupDate || matchup.last_matchup_date}</div>
-										</td>
-										<td class="text-center py-3 px-4 font-bold text-blue-400">{matchup.totalMatchups || matchup.total_matchups}</td>
-										<td class="text-center py-3 px-4">
-											<div class="font-mono font-bold text-white">{matchup.seriesRecord || matchup.series_record}</div>
-											<div class="text-xs text-slate-400">{matchup.seriesLeader || matchup.series_leader}</div>
-										</td>
-										<td class="text-center py-3 px-4">
-											<div class="font-bold text-white">{parseFloat(matchup.avgTotalPointsPerGame || matchup.avg_total_points_per_game || 0).toFixed(1)}</div>
-											<div class="text-xs text-slate-400">pts/game</div>
-										</td>
-										<td class="text-center py-3 px-4">
-											<div class="font-bold text-amber-400">{parseFloat(matchup.mostLopsidedGame || matchup.most_lopsided_game || 0).toFixed(1)}</div>
-											<div class="text-xs text-slate-400">margin</div>
-										</td>
-										<td class="text-center py-3 px-4">
-											<div class="font-bold text-purple-400">
-												{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0).toFixed(1)} - {parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0).toFixed(1)}
-											</div>
-											<div class="text-xs text-slate-400">
-												{parseFloat(matchup.managerAPythagoreanWins || matchup.manager_a_pythagorean_wins || 0) > parseFloat(matchup.managerBPythagoreanWins || matchup.manager_b_pythagorean_wins || 0) ? (matchup.managerAName || matchup.manager_a_name) : (matchup.managerBName || matchup.manager_b_name)}
-											</div>
-										</td>
-										<td class="text-center py-3 px-4">
-											<div class="font-bold">
-												<span class="{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0) >= 0 ? 'text-green-400' : 'text-red-400'}">
-													{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0).toFixed(2)}
-												</span>
-												<span class="text-slate-400"> / </span>
-												<span class="{parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0) >= 0 ? 'text-green-400' : 'text-red-400'}">
-													{parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0).toFixed(2)}
-												</span>
-											</div>
-											<div class="text-xs text-slate-400">
-												{parseFloat(matchup.managerALuckFactor || matchup.manager_a_luck_factor || 0) > parseFloat(matchup.managerBLuckFactor || matchup.manager_b_luck_factor || 0) ? (matchup.managerAName || matchup.manager_a_name) : (matchup.managerBName || matchup.manager_b_name)}
-											</div>
-										</td>
-										<td class="text-center py-3 px-4">
-											{#if (matchup.championshipMatchups || matchup.championship_matchups) > 0}
-												<span class="text-amber-400 font-bold">🏆 {matchup.championshipMatchups || matchup.championship_matchups}</span>
-											{:else if (matchup.playoffMatchups || matchup.playoff_matchups) > 0}
-												<span class="text-blue-400 font-bold">⚔️ {matchup.playoffMatchups || matchup.playoff_matchups}</span>
-											{:else}
-												<span class="text-slate-500">-</span>
-											{/if}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-					
-					<!-- Show More/Less Controls -->
-					{#if !h2hManagerA && !h2hManagerB}
-						<div class="mt-6 text-center">
-							{#if !showAllH2H && filteredH2HData.length > 20}
-								<button
-									on:click={() => showAllH2H = true}
-									class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-								>
-									Show all {filteredH2HData.length} rivalries
-								</button>
-							{:else if showAllH2H}
-								<button
-									on:click={() => showAllH2H = false}
-									class="inline-flex items-center px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded-lg transition-colors"
-								>
-									Show top 20
-								</button>
-							{/if}
-						</div>
-					{/if}
-				</section>
-
-				<!-- League Records -->
-				{#if h2hData.analytics?.records}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<Trophy class="w-6 h-6 text-amber-400 mr-3" />
-							Head-to-Head Records
-						</h2>
-						
-						<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-							<div class="bg-gradient-to-r from-green-500/10 to-green-600/5 border border-green-500/20 rounded-lg p-4">
-								<h3 class="font-bold text-white mb-2">Highest Score</h3>
-								<div class="text-2xl font-bold text-green-400">{parseFloat(h2hData.analytics.records.highestScoreValue || h2hData.analytics.records.highest_score_value || 0).toFixed(1)}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.highestScoreManager || h2hData.analytics.records.highest_score_manager}</div>
-							</div>
-							
-							<div class="bg-gradient-to-r from-red-500/10 to-red-600/5 border border-red-500/20 rounded-lg p-4">
-								<h3 class="font-bold text-white mb-2">Biggest Blowout</h3>
-								<div class="text-2xl font-bold text-red-400">{parseFloat(h2hData.analytics.records.biggestWinValue || h2hData.analytics.records.biggest_win_value || 0).toFixed(1)}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.biggestWinManager || h2hData.analytics.records.biggest_win_manager}</div>
-							</div>
-							
-							<div class="bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-lg p-4">
-								<h3 class="font-bold text-white mb-2">Hot Streak</h3>
-								<div class="text-2xl font-bold text-blue-400">{h2hData.analytics.records.longestStreakValue || h2hData.analytics.records.longest_streak_value || 0}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.longestStreakManager || h2hData.analytics.records.longest_streak_manager}</div>
-							</div>
-							
-							<div class="bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-lg p-4">
-								<h3 class="font-bold text-white mb-2">Cold Streak</h3>
-								<div class="text-2xl font-bold text-purple-400">{h2hData.analytics.records.worstStreakValue || h2hData.analytics.records.worst_streak_value || 0}</div>
-								<div class="text-slate-300 font-medium">{h2hData.analytics.records.worstStreakManager || h2hData.analytics.records.worst_streak_manager}</div>
-							</div>
-						</div>
-					</section>
-				{/if}
-
-				<!-- Playoff Impact -->
-				{#if h2hData.analytics?.playoffImpact && h2hData.analytics.playoffImpact.length > 0}
-					<section class="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-						<h2 class="text-2xl font-bold text-white mb-6 flex items-center">
-							<Target class="w-6 h-6 text-red-400 mr-3" />
-							Championship & Playoff Battles
-						</h2>
-						
-						<div class="space-y-4">
-							{#each h2hData.analytics.playoffImpact.slice(0, 8) as battle}
-								<div class="bg-slate-700/30 rounded-lg p-4">
-									<div class="flex items-center justify-between mb-2">
-										<div class="font-bold text-white">{battle.managerAName || battle.manager_a_name} vs {battle.managerBName || battle.manager_b_name}</div>
-										<div class="flex items-center space-x-2">
-											{#if (battle.championshipMatchups || battle.championship_matchups) > 0}
-												<span class="bg-amber-500 text-black px-2 py-1 rounded text-xs font-bold">
-													{battle.championshipMatchups || battle.championship_matchups} Title Games
-												</span>
-											{/if}
-											{#if (battle.playoffMatchups || battle.playoff_matchups) > 0}
-												<span class="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold">
-													{battle.playoffMatchups || battle.playoff_matchups} Playoff Games
-												</span>
-											{/if}
-										</div>
-									</div>
-									
-									<div class="grid grid-cols-2 gap-4 text-sm">
-										<div>
-											<span class="text-blue-400 font-medium">{battle.managerAName || battle.manager_a_name}:</span>
-											<span class="text-slate-300">
-												{battle.managerAChampionshipWins || battle.manager_a_championship_wins || 0} titles, {battle.managerAPlayoffWins || battle.manager_a_playoff_wins || 0} playoff wins
-											</span>
-										</div>
-										<div>
-											<span class="text-purple-400 font-medium">{battle.managerBName || battle.manager_b_name}:</span>
-											<span class="text-slate-300">
-												{battle.managerBChampionshipWins || battle.manager_b_championship_wins || 0} titles, {battle.managerBPlayoffWins || battle.manager_b_playoff_wins || 0} playoff wins
-											</span>
-										</div>
-									</div>
-									
-									{#if battle.mostImportantGameWinner || battle.most_important_game_winner}
-										<div class="mt-2 pt-2 border-t border-slate-600 text-xs text-slate-400">
-											Most Important: {battle.mostImportantGameWinner || battle.most_important_game_winner} ({battle.mostImportantGameType || battle.most_important_game_type}, {battle.mostImportantGameSeason || battle.most_important_game_season})
-										</div>
-									{/if}
-								</div>
+							{#each e.rows as r (r.label)}
+								<div class="era-stat"><span>{r.label}</span><span class="era-value">{r.value}</span></div>
 							{/each}
-						</div>
-					</section>
-				{/if}
-			</div>
-		{:else}
-			<div class="text-center py-8">
-				<div class="text-slate-400">No head-to-head data available</div>
-			</div>
-		{/if}
-
-
-	{:else if selectedTab === 'records'}
-		{#if loadingRecords}
-			<div class="flex items-center justify-center h-64">
-				<div class="text-slate-400">Loading league record book...</div>
-			</div>
-		{:else if recordBookData?.recordsByCategory}
-			<div class="space-y-8">
-				<!-- Header -->
-				<section class="text-center">
-					<h2 class="text-3xl font-bold text-white mb-4 flex items-center justify-center">
-						<Trophy class="w-8 h-8 text-amber-400 mr-3" />
-						League Record Book
-					</h2>
-					<p class="text-slate-300 max-w-2xl mx-auto">
-						The greatest achievements in league history, organized by category for easy browsing.
-					</p>
-					<div class="mt-4 text-sm text-slate-400">
-						{recordBookData.totalRecords} total records across {recordBookData.categories?.length || 0} categories
-					</div>
-				</section>
-
-				<!-- Categories -->
-				{#each recordBookData.categories || [] as category}
-					{@const categoryRecords = recordBookData.recordsByCategory[category] || []}
-					{@const categoryIcons: Record<string, string> = {
-						'Scoring Records': '🎯',
-						'Championship Records': '🏆', 
-						'Win/Loss Records': '⚔️',
-						'Transaction Records': '💼',
-						'Draft Records': '📋',
-						'Season Records': '📅',
-						'Other Records': '📊'
-					}}
-					
-					<section class="bg-slate-800/30 rounded-xl border border-slate-700/30 overflow-hidden">
-						<div class="bg-slate-800/50 px-6 py-4 border-b border-slate-700/50">
-							<h3 class="text-xl font-bold text-white flex items-center">
-								<span class="text-2xl mr-3">{categoryIcons[category] || '📊'}</span>
-								{category}
-								<span class="ml-auto text-sm font-normal text-slate-400">
-									{categoryRecords.length} records
-								</span>
-							</h3>
-						</div>
-						
-						<div class="p-6">
-							<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-								{#each categoryRecords as record}
-									<div class="bg-slate-700/20 hover:bg-slate-700/30 rounded-lg p-4 border border-slate-600/30 transition-colors">
-										<div class="flex items-start justify-between">
-											<div class="flex-1 min-w-0">
-												<h4 class="font-semibold text-white mb-1 text-sm leading-tight">
-													{record.record}
-												</h4>
-												<div class="flex items-baseline space-x-2">
-													<span class="text-xl font-bold text-amber-400">
-														{record.value}
-													</span>
-													{#if record.year}
-														<span class="text-xs text-slate-400">
-															({record.year})
-														</span>
-													{/if}
-												</div>
-												<div class="text-sm text-slate-300 font-medium mt-1 truncate">
-													{record.holder}
-												</div>
-											</div>
-											<div class="flex-shrink-0 ml-3">
-												<Trophy class="w-5 h-5 text-amber-400/60" />
-											</div>
-										</div>
-									</div>
-								{/each}
-							</div>
-						</div>
-					</section>
-				{/each}
-
-				<!-- Footer -->
-				{#if recordBookData.lastUpdated}
-					<div class="text-center text-slate-500 text-sm bg-slate-800/20 rounded-lg p-4">
-						<div class="flex items-center justify-center space-x-2">
-							<span>📊</span>
-							<span>Last updated: {new Date(recordBookData.lastUpdated).toLocaleString()}</span>
-						</div>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div class="text-center py-8">
-				<div class="text-slate-400">No record book data available</div>
-				<button 
-					class="mt-4 px-4 py-2 bg-amber-500 text-black rounded hover:bg-amber-600"
-					on:click={loadRecordBookData}
-				>
-					Load Record Book
-				</button>
-			</div>
+						</Card>
+					{/each}
+				</div>
+			</section>
 		{/if}
 	{/if}
-</div> 
+{:else if tab === 'head-to-head'}
+	{#if h2hFailed}
+		{@render failure("League history didn't load", () => loadH2HData())}
+	{:else if !h2hData}
+		{@render loadingCard()}
+	{:else}
+		{#if overview}
+			<div class="first">
+				<StatStrip label="Rivalries in numbers" twoUpOnPhones>
+					<StatTile dense value={String(overview.totalRivalries)} label="rivalries" />
+					<StatTile dense value={oneDecimal(overview.avgMatchupsPerRivalry)} label="games per rivalry, on average" />
+					<StatTile dense value={String(overview.longestRivalrySeasons)} label="seasons, the longest rivalry" />
+					<StatTile dense value={String(overview.championshipRivalries)} label="pairs who met in a title game" />
+				</StatStrip>
+			</div>
+		{/if}
+
+		{#if pairA && pairB}
+			{@const lineA = sideLine('a')}
+			{@const lineB = sideLine('b')}
+			<div class="block">
+				<Card tone="clubhouse" padding="24px 28px" phonePadding="18px" label="Face-off" bind:element={faceoff}>
+					<div class="faceoff">
+						<div class="side side-a">
+							<Avatar
+								name={pairA}
+								size={88}
+								phoneSize={64}
+								ring={4}
+								ringColor={rivalry && leader === pairA ? 'var(--color-pennant-light)' : 'var(--color-field-2)'}
+								alt=""
+							/>
+							<div class="side-text">
+								<ManagerPicker
+									name={pairA}
+									options={optionsA}
+									open={openPicker === 'a'}
+									ontoggle={(o) => (openPicker = o ? 'a' : null)}
+									onpick={(n) => pick('a', n)}
+								/>
+								{#if lineA}<div class="side-line" class:lead={lineA.lead}>{lineA.text}</div>{/if}
+							</div>
+						</div>
+						<div class="center">
+							{#if rivalry}
+								<div class="record">{faceRecord(rivalry)}</div>
+								<div class="record-sub">{rivalry.games} games over {rivalry.seasons} seasons</div>
+							{:else}
+								<p class="few">{pairA} and {pairB} have played fewer than five games.</p>
+							{/if}
+						</div>
+						<div class="side side-b">
+							<Avatar
+								name={pairB}
+								size={88}
+								phoneSize={64}
+								ring={4}
+								ringColor={rivalry && leader === pairB ? 'var(--color-pennant-light)' : 'var(--color-field-2)'}
+								alt=""
+							/>
+							<div class="side-text">
+								<ManagerPicker
+									name={pairB}
+									options={optionsB}
+									open={openPicker === 'b'}
+									align="end"
+									ontoggle={(o) => (openPicker = o ? 'b' : null)}
+									onpick={(n) => pick('b', n)}
+								/>
+								{#if lineB}<div class="side-line" class:lead={lineB.lead}>{lineB.text}</div>{/if}
+							</div>
+						</div>
+					</div>
+					<p class="hint">Tap either name to swap in someone else.</p>
+					{#if rivalry && share}
+						<div class="share" role="img" aria-label="{pairA} won {rivalry.aWins} of {rivalry.games}, {pairB} won {rivalry.bWins}">
+							<span class="share-a" style:width="{share.a}%"></span><span class="share-b" style:width="{share.b}%"></span>
+						</div>
+						<div class="face-tiles">
+							<Card tone="raised" padding="12px 14px" phonePadding="12px">
+								<div class="tile-value">{oneDecimal(rivalry.avgTotal)}</div>
+								<div class="tile-label">combined points per game</div>
+							</Card>
+							<Card tone="raised" padding="12px 14px" phonePadding="12px">
+								<div class="tile-value">{oneDecimal(rivalry.bestWin)}</div>
+								<div class="tile-label">biggest winning margin</div>
+							</Card>
+							<Card tone="raised" padding="12px 14px" phonePadding="12px">
+								<div class="tile-value">{rivalry.titleGames}</div>
+								<div class="tile-label">title games</div>
+							</Card>
+							<Card tone="raised" padding="12px 14px" phonePadding="12px">
+								<div class="tile-value">{rivalry.playoffGames}</div>
+								<div class="tile-label">playoff games</div>
+							</Card>
+							<div class="wide-tile">
+								<Card tone="raised" padding="12px 14px" phonePadding="12px">
+									<div class="tile-value">
+										{#if rivalry.keyWinner && rivalry.keySeason}{@render name(rivalry.keyWinner)}, {rivalry.keySeason}{:else}<EmptyValue
+											/>{/if}
+									</div>
+									<div class="tile-label">the one that mattered most</div>
+								</Card>
+							</div>
+						</div>
+					{/if}
+				</Card>
+			</div>
+		{/if}
+
+		{#if longest.length}
+			<section class="block section-gap" aria-labelledby="longest-title">
+				<h2 id="longest-title" class="section-title">Longest rivalries</h2>
+				<div class="rivals">
+					{#each longest as r (r.a + r.b)}
+						{@const w = winShare(r.aWins, r.bWins)}
+						<a class="rival" href={rivalryHref(r.a, r.b)} onclick={(e) => openRivalry(e, r)}>
+							<Card padding="18px 20px" phonePadding="14px 16px">
+								<div class="rival-top">
+									<Avatar name={r.a} size={40} phoneSize={32} alt="" />
+									<span class="rival-name">{r.a}</span>
+									<span class="rival-record">{r.aWins}-{r.bWins}</span>
+									<span class="rival-name end">{r.b}</span>
+									<Avatar name={r.b} size={40} phoneSize={32} alt="" />
+								</div>
+								<div class="rival-bar" aria-hidden="true">
+									<span class="bar-a" style:width="{w.a}%"></span><span class="bar-b" style:width="{w.b}%"></span>
+								</div>
+								<div class="rival-meta">
+									<span>{r.games} games · {r.seasons} seasons</span>
+									{#if r.titleGames > 0}
+										<span class="titles"><Pennant width={9} height={13} stroke={1.8} />{plural(r.titleGames, 'title game')}</span>
+									{/if}
+									<span>{plural(r.playoffGames, 'playoff game')}</span>
+								</div>
+							</Card>
+						</a>
+					{/each}
+				</div>
+			</section>
+		{/if}
+
+		{#if records}
+			<div class="block">
+				<StatStrip label="Head to head records" twoUpOnPhones>
+					<StatTile
+						layout="record"
+						avatar={records.highestScoreManager}
+						label="Highest score"
+						value={oneDecimal(records.highestScoreValue)}
+						holder={records.highestScoreManager ?? undefined}
+						holderHref={records.highestScoreManager ? profileHref(records.highestScoreManager) : undefined}
+					/>
+					<StatTile
+						layout="record"
+						avatar={records.biggestWinManager}
+						label="Biggest blowout"
+						value={oneDecimal(records.biggestWinValue)}
+						holder={records.biggestWinManager ?? undefined}
+						holderHref={records.biggestWinManager ? profileHref(records.biggestWinManager) : undefined}
+					/>
+					<StatTile
+						layout="record"
+						avatar={records.longestStreakManager}
+						label="Hot streak"
+						value={String(records.longestStreakValue)}
+						holder={records.longestStreakManager ?? undefined}
+						holderHref={records.longestStreakManager ? profileHref(records.longestStreakManager) : undefined}
+					/>
+					<StatTile
+						layout="record"
+						avatar={records.worstStreakManager}
+						label="Cold streak"
+						value={String(Math.abs(Number(records.worstStreakValue)))}
+						holder={records.worstStreakManager ?? undefined}
+						holderHref={records.worstStreakManager ? profileHref(records.worstStreakManager) : undefined}
+					/>
+				</StatStrip>
+			</div>
+		{/if}
+
+		<div class="block tables">
+			<div class="every">
+				<Card
+					title="Every rivalry"
+					padding="22px 24px 12px"
+					phonePadding="16px 16px 8px"
+					headGap={10}
+					phoneHeadStack
+				>
+					{#snippet action()}<span class="note">Sorted by games played. The names you pick above filter this table too.</span>{/snippet}
+					<DataTable
+						{columns}
+						rows={tableRows}
+						label="Every rivalry"
+						rowPadding={10}
+						columnGap={12}
+						minWidth={phone.current ? '832px' : '866px'}
+						fontSize={phone.current ? 14 : 15}
+						stickyFirst={phone.current}
+						headerAlign="top"
+						rowKey={(r) => `${r.managerAName}|${r.managerBName}`}
+					>
+						{#snippet header(column)}
+							{#if column.key === 'expected'}
+								<StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline-small" />
+							{:else if column.key === 'luckier'}
+								<StatTip metricId="luck_factor" label="Luckier" phoneTap="inline-small" />
+							{:else}{column.label}{/if}
+						{/snippet}
+						{#snippet cell(row, column)}
+							{#if column.key === 'match'}
+								<span class="match"
+									>{@render name(row.managerAName)} vs {@render name(row.managerBName)}</span
+								>
+								<span class="match-sub"
+									>{row.seasonsPlayedTogether} seasons · {spanYears(row.firstMatchupDate, row.lastMatchupDate)}</span
+								>
+							{:else if column.key === 'games'}
+								{row.totalMatchups}
+							{:else if column.key === 'record'}
+								<span class="strong">{row.seriesRecord}</span>
+							{:else if column.key === 'leader'}
+								{@const lead = tableLeader(row)}
+								{#if lead}
+									<a class="leader" href={profileHref(lead)}><Avatar name={lead} size={22} alt="" />{lead}</a>
+								{:else}
+									<span class="tied">Tied</span>
+								{/if}
+							{:else if column.key === 'avg'}
+								<span class="soft">{oneDecimal(row.avgTotalPointsPerGame)}</span>
+							{:else if column.key === 'best'}
+								<span class="soft">{oneDecimal(row.mostLopsidedGame)}</span>
+							{:else if column.key === 'expected'}
+								<span class="soft"
+									>{oneDecimal(row.managerAPythagoreanWins)}-{oneDecimal(row.managerBPythagoreanWins)}</span
+								>
+							{:else if column.key === 'luckier'}
+								{@const l = luckier(row)}
+								<span class="luckier"
+									>{#if l}<span class="strong-600">{@render name(l.name)}</span>
+										<span class="luck">{l.luck}</span>{:else}<EmptyValue text="Even" />{/if}</span
+								>
+							{/if}
+						{/snippet}
+					</DataTable>
+					{#if filtered.length > TABLE_ROWS}
+						<Button variant="link" size="tap" onclick={() => (showAll = !showAll)}>
+							{showAll ? `Show the top ${TABLE_ROWS}` : `Show all ${filtered.length} →`}
+						</Button>
+					{/if}
+				</Card>
+			</div>
+
+			{#if titleGames.length}
+				<div class="title-games">
+					<Card title="Title-game rivalries" tone="pennant" titleSize={26} headGap={0}>
+						<p class="title-games-sub">Pairs who've met with a championship on the line.</p>
+						{#each titleGames as b (b.managerAName + b.managerBName)}
+							<div class="tg-row">
+								<div class="tg-top">
+									<b>{@render name(b.managerAName)} vs {@render name(b.managerBName)}</b>
+									<span class="tg-count">{plural(Number(b.championshipMatchups), 'title game')}</span>
+								</div>
+								{#if b.mostImportantGameWinner}
+									<div class="tg-key">
+										Biggest one: {b.mostImportantGameWinner}, {b.mostImportantGameSeason} championship
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</Card>
+				</div>
+			{/if}
+		</div>
+	{/if}
+{:else if tab === 'records'}
+	{#if recordsFailed}
+		{@render failure("League history didn't load", () => loadRecordBookData())}
+	{:else if !recordBookData}
+		{@render loadingCard()}
+	{:else}
+		<div class="first chips">
+			<span class="count">{plural(bookRecords.length, 'record')}</span>
+			{#each chips as c (c.id)}
+				<Button variant="filter" aria-pressed={chip === c.id} onclick={() => (chip = c.id)}
+					>{c.label} <span class="chip-count">{c.count}</span></Button
+				>
+			{/each}
+		</div>
+
+		{#if book.champion.length}
+			<div class="block">
+				<Card
+					title="Championship records"
+					tone="clubhouse"
+					titleSize={26}
+					padding="24px 28px"
+					phonePadding="18px"
+					headGap={16}
+					phoneHeadGap={14}
+				>
+					{#snippet icon()}<Pennant
+							staff="var(--color-white)"
+							fill="var(--color-pennant-light)"
+							width={14}
+							height={20}
+						/>{/snippet}
+					<div class="champ-grid">
+						{#each book.champion as r (r.key)}
+							<Card tone="raised" padding="18px 20px" phonePadding="14px 16px">
+								<div class="champ">
+									{#if r.face}
+										<Avatar name={r.face} size={52} phoneSize={44} ring={3} ringColor="var(--color-pennant-light)" alt="" />
+									{/if}
+									<div class="champ-text">
+										<div class="champ-label">{r.label}</div>
+										<div class="champ-value"><span class="champ-number">{r.value}</span><span class="champ-unit">{r.unit}</span></div>
+										<div class="champ-holder">{#each r.names as n (n)}{@render name(n)}{/each}</div>
+									</div>
+								</div>
+							</Card>
+						{/each}
+					</div>
+				</Card>
+			</div>
+		{/if}
+
+		{#each book.groups as g (g.id)}
+			<div class="block">
+				<Card title={g.name} titleSize={26} headRule>
+					{#snippet action()}<span class="group-count">{g.count}</span>{/snippet}
+					<div class="book-grid">
+						{#each g.rows as r (r.key)}
+							<div class="book-row">
+								<Avatar name={r.face ?? 'Hidden'} size={44} phoneSize={40} initialTone="field" initialSize={16} alt="" />
+								<div class="book-text">
+									<div class="book-label">{r.label}</div>
+									<div class="book-value">
+										<span class="book-number" style:color="var(--color-{r.tone})">{r.value}</span>
+										{#if r.unit}<span class="book-unit">{r.unit}</span>{/if}
+									</div>
+									<div class="book-who">
+										<b
+											>{#each r.who.split(' vs. ') as part, i (i)}{#if i > 0}{' vs. '}{/if}{#if r.names.includes(part)}{@render name(
+														part
+													)}{:else}{part}{/if}{/each}</b
+										><span class="book-when">{r.when}</span>
+									</div>
+								</div>
+								{#if r.live}<Tag variant="live" size="note">{r.live}</Tag>{/if}
+							</div>
+						{/each}
+					</div>
+				</Card>
+			</div>
+		{/each}
+
+		<p class="footnote">{recordFootnote(liveSeason, recordBookData.lastUpdated)}</p>
+	{/if}
+{/if}
+
+<style>
+	.tabs {
+		margin-top: 24px;
+	}
+
+	.first {
+		margin-top: 20px;
+	}
+
+	.block {
+		margin-top: 20px;
+	}
+
+	.muted-line {
+		margin: 0 0 14px;
+		font-size: 15px;
+		color: var(--color-muted);
+	}
+
+	.name-link {
+		color: inherit;
+	}
+
+	.name-link:hover {
+		color: var(--color-field);
+	}
+
+	/* Section titles outside a card ("Three eras", "Longest rivalries"). */
+	.section {
+		margin-top: 20px;
+	}
+
+	.section-title {
+		margin: 0 0 12px;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 28px;
+	}
+
+	/* ---------- Three eras ---------- */
+
+	.eras {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		gap: 16px;
+	}
+
+	.era-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
+	}
+
+	.era-head h3 {
+		margin: 0;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 24px;
+	}
+
+	.era-span {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--color-field);
+	}
+
+	.era-titles {
+		margin-top: 14px;
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 12px 14px;
+		border-radius: 10px;
+		background: var(--color-pennant-tint);
+		font-size: 15px;
+	}
+
+	.era-stat {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 9px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+		font-size: 15px;
+		color: var(--color-ink-2);
+	}
+
+	.era-value {
+		font-weight: 600;
+		color: var(--color-ink);
+	}
+
+	/* ---------- The face-off ---------- */
+
+	.faceoff {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+		gap: 20px;
+		align-items: center;
+	}
+
+	.side {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.side-b {
+		flex-direction: row-reverse;
+		text-align: right;
+	}
+
+	.side-line {
+		margin-top: 4px;
+		font-size: 14px;
+		color: var(--color-on-clubhouse-2);
+	}
+
+	.side-line.lead {
+		font-weight: 700;
+		color: var(--color-pennant-light);
+	}
+
+	.center {
+		text-align: center;
+	}
+
+	.record {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 64px;
+		line-height: 1;
+	}
+
+	.record-sub {
+		margin-top: 6px;
+		font-size: 14px;
+		color: var(--color-on-clubhouse);
+	}
+
+	.few {
+		margin: 0;
+		max-width: 320px;
+		font-size: 16px;
+		color: var(--color-on-clubhouse);
+	}
+
+	.hint {
+		margin: 10px 0 0;
+		text-align: center;
+		font-size: 13px;
+		color: var(--color-on-clubhouse-2);
+	}
+
+	.share {
+		margin-top: 18px;
+		height: 12px;
+		border-radius: 6px;
+		display: flex;
+		overflow: hidden;
+		background: var(--color-field-2);
+	}
+
+	.share-a {
+		background: var(--color-pennant-light);
+	}
+
+	.share-b {
+		background: var(--color-on-clubhouse-2);
+	}
+
+	.face-tiles {
+		margin-top: 20px;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+		gap: 12px;
+	}
+
+	.wide-tile {
+		display: contents;
+	}
+
+	.tile-value {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 24px;
+	}
+
+	.tile-value :global(.empty) {
+		color: var(--color-on-clubhouse-2);
+	}
+
+	.tile-label {
+		margin-top: 2px;
+		font-size: 13px;
+		color: var(--color-on-clubhouse-2);
+	}
+
+	/* ---------- Longest rivalries ---------- */
+
+	.rivals {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+		gap: 16px;
+	}
+
+	.rival {
+		display: block;
+		color: var(--color-ink);
+	}
+
+	.rival:hover {
+		color: var(--color-ink);
+	}
+
+	.rival:hover :global(.card) {
+		border-color: var(--color-field-line);
+	}
+
+	.rival:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+		border-radius: var(--radius-card);
+	}
+
+	.rival-top {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.rival-name {
+		flex: 1;
+		min-width: 0;
+		font-weight: 700;
+		font-size: 16px;
+	}
+
+	.rival-name.end {
+		text-align: right;
+	}
+
+	.rival-record {
+		flex: none;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 24px;
+	}
+
+	.rival-bar {
+		margin-top: 12px;
+		height: 8px;
+		border-radius: 4px;
+		display: flex;
+		overflow: hidden;
+	}
+
+	.bar-a {
+		background: var(--color-field);
+	}
+
+	.bar-b {
+		background: var(--color-line-strong);
+	}
+
+	.rival-meta {
+		margin-top: 10px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 14px;
+		font-size: 13px;
+		color: var(--color-ink-2);
+	}
+
+	.titles {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-weight: 700;
+		color: var(--color-pennant-dark);
+	}
+
+	/* ---------- Every rivalry and title games ---------- */
+
+	.tables {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 20px;
+		align-items: flex-start;
+	}
+
+	/* The board's bases are content-box: 640px and 320px inside each card's
+	   24px sides and 1px border. */
+	.every {
+		flex: 999 1 690px;
+		min-width: 0;
+	}
+
+	.title-games {
+		flex: 1 1 370px;
+		min-width: 0;
+	}
+
+	.note {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	/* The board's minmax(190px, 1fr): at least 190px, and the rest of the row.
+	   Its columns and gaps come to 866px, past the 860px minimum it sets, so
+	   the table's minimum is 866px. */
+	.match {
+		display: block;
+		min-width: 190px;
+		font-weight: 600;
+	}
+
+	.match-sub {
+		display: block;
+		font-size: 12px;
+		color: var(--color-muted);
+	}
+
+	.strong {
+		font-weight: 700;
+	}
+
+	.strong-600 {
+		font-weight: 600;
+	}
+
+	.leader {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 600;
+	}
+
+	.tied {
+		font-weight: 600;
+		color: var(--color-muted);
+	}
+
+	.soft {
+		color: var(--color-ink-2);
+	}
+
+	.luckier {
+		font-size: 14px;
+	}
+
+	.luck {
+		font-weight: 700;
+		color: var(--color-field);
+	}
+
+	.title-games-sub {
+		margin: 4px 0 6px;
+		font-size: 14px;
+		color: var(--color-ink-brown);
+	}
+
+	.tg-row {
+		padding: 11px 0;
+		border-bottom: 1px solid var(--color-pennant-line);
+	}
+
+	.tg-top {
+		display: flex;
+		justify-content: space-between;
+		gap: 10px;
+		font-size: 15px;
+	}
+
+	.tg-count {
+		flex: none;
+		font-weight: 600;
+		color: var(--color-pennant-dark);
+	}
+
+	.tg-key {
+		margin-top: 3px;
+		font-size: 13px;
+		color: var(--color-ink-2);
+	}
+
+	/* ---------- Record book ---------- */
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		align-items: center;
+	}
+
+	.count {
+		margin-right: 6px;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	.chip-count {
+		opacity: 0.7;
+	}
+
+	.champ-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+		gap: 14px;
+	}
+
+	.champ {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+	}
+
+	.champ-text {
+		min-width: 0;
+	}
+
+	.champ-label {
+		font-size: 13px;
+		color: var(--color-on-clubhouse-2);
+	}
+
+	.champ-value {
+		margin-top: 2px;
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+	}
+
+	.champ-number {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 34px;
+		line-height: 1;
+	}
+
+	.champ-unit {
+		font-size: 14px;
+		color: var(--color-on-clubhouse);
+	}
+
+	.champ-holder {
+		margin-top: 2px;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--color-pennant-light);
+	}
+
+	.champ-holder .name-link:hover {
+		color: var(--color-white);
+	}
+
+	.group-count {
+		flex: none;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	.book-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+		gap: 0 28px;
+	}
+
+	.book-row {
+		display: flex;
+		gap: 14px;
+		align-items: center;
+		padding: 14px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+	}
+
+	.book-text {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.book-label {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--color-muted);
+	}
+
+	.book-value {
+		margin-top: 2px;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 8px;
+	}
+
+	.book-number {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 26px;
+		line-height: 1.1;
+	}
+
+	.book-unit {
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	.book-who {
+		margin-top: 2px;
+		font-size: 14px;
+	}
+
+	.book-when {
+		color: var(--color-muted);
+	}
+
+	.footnote {
+		margin: 16px 0 0;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	/* ---------- Phones (S10.10) ---------- */
+
+	@media (max-width: 639.98px) {
+		.tabs {
+			margin-top: 20px;
+		}
+
+		.first {
+			margin-top: 16px;
+		}
+
+		.block {
+			margin-top: 16px;
+		}
+
+		.section,
+		.section-gap {
+			margin-top: 24px;
+		}
+
+		.section-title {
+			margin-bottom: 10px;
+			font-size: 22px;
+		}
+
+		.eras {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 12px;
+		}
+
+		.era-head h3 {
+			font-size: 18px;
+		}
+
+		.era-titles {
+			margin-top: 12px;
+		}
+
+		.era-stat {
+			font-size: 14px;
+		}
+
+		.faceoff {
+			display: flex;
+			flex-direction: column;
+			align-items: stretch;
+			gap: 16px;
+			text-align: center;
+		}
+
+		.side,
+		.side-b {
+			flex-direction: column;
+			gap: 0;
+			text-align: center;
+		}
+
+		.side-text {
+			width: 100%;
+			margin-top: 8px;
+		}
+
+		.record {
+			font-size: 56px;
+		}
+
+		.few {
+			max-width: none;
+		}
+
+		.hint {
+			margin-top: 12px;
+		}
+
+		.share {
+			margin-top: 16px;
+		}
+
+		.face-tiles {
+			margin-top: 16px;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 10px;
+			text-align: center;
+		}
+
+		.wide-tile {
+			display: block;
+			grid-column: 1 / -1;
+		}
+
+		.tile-value {
+			font-size: 22px;
+		}
+
+		.rivals {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 12px;
+		}
+
+		.rival-top {
+			gap: 8px;
+		}
+
+		.rival-name {
+			font-size: 15px;
+			line-height: 1.25;
+		}
+
+		.rival-record {
+			font-size: 22px;
+		}
+
+		.tables {
+			display: block;
+		}
+
+		.title-games {
+			margin-top: 16px;
+		}
+
+		.note {
+			line-height: 1.45;
+		}
+
+		/* The sticky matchup keeps 10px clear of its rule, as drawn. */
+		.match,
+		.match-sub {
+			min-width: 0;
+			padding-right: 10px;
+		}
+
+		.match-sub {
+			white-space: nowrap;
+		}
+
+		.champ-grid {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 12px;
+		}
+
+		.champ-number {
+			font-size: 28px;
+		}
+
+		.book-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.book-row {
+			gap: 12px;
+			padding: 12px 0;
+		}
+
+		.book-number {
+			font-size: 22px;
+		}
+
+		.footnote {
+			line-height: 1.5;
+		}
+	}
+</style>

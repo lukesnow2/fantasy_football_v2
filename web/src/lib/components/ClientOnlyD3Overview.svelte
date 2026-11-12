@@ -1,29 +1,52 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import { onMount } from 'svelte';
-	
+
 	export let data: any = null;
-	
+	/** The era picked above the chart, bound through to D3Overview. */
+	export let selectedEra = 'all';
+
 	// Extract the actual data from API response
 	$: actualData = data?.data ? data.data : data;
-	
+
 	let mounted = false;
-	
+
 	onMount(() => {
 		mounted = true;
 	});
 </script>
 
+{#snippet placeholder()}
+	<div class="placeholder" aria-busy="true">
+		<div class="block"></div>
+		<p>Loading the chart</p>
+	</div>
+{/snippet}
+
 {#if browser && mounted}
-	{#await import('$lib/components/D3Overview.svelte') then { default: D3Overview }}
-		<D3Overview data={actualData} />
+	{#await import('$lib/components/D3Overview.svelte')}
+		{@render placeholder()}
+	{:then { default: D3Overview }}
+		<D3Overview data={actualData} bind:selectedEra />
 	{/await}
 {:else}
-	<div class="text-center text-slate-300 py-8">
-		<div class="animate-pulse">
-			<div class="h-4 bg-slate-700 rounded w-48 mx-auto mb-4"></div>
-			<div class="h-96 bg-slate-700/50 rounded"></div>
-		</div>
-		<p class="mt-4">Loading interactive visualization...</p>
-	</div>
-{/if} 
+	{@render placeholder()}
+{/if}
+
+<style>
+	.placeholder {
+		margin-top: 20px;
+	}
+
+	.block {
+		height: 384px;
+		border-radius: var(--radius-card);
+		background: var(--color-wash);
+	}
+
+	p {
+		margin: 8px 0 0;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+</style>

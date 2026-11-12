@@ -3,6 +3,7 @@
 	import Card from '$lib/components/ui/Card.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import DataTable from '$lib/components/ui/DataTable.svelte';
+	import Pennant from '$lib/components/ui/Pennant.svelte';
 	import { STANDINGS } from './fixtures';
 
 	const { Story } = defineMeta({ title: 'UI/Card', component: Card, tags: ['autodocs'] });
@@ -169,6 +170,21 @@
 		<div style="max-width: 560px">
 			<Card title="The ledger" tone="pennant">
 				<Card tone="tile" padding="10px 12px">Craig · 0-0</Card>
+			</Card>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Head rule and icon (League History record book)">
+	{#snippet template()}
+		<div style="display: grid; gap: 20px; max-width: 760px">
+			<Card title="Scoring records" titleSize={26} headRule>
+				{#snippet action()}<span style="font-size: 14px; color: var(--color-muted)">13 records</span>{/snippet}
+				<p style="margin: 14px 0 0; color: var(--color-ink-2)">Record rows.</p>
+			</Card>
+			<Card title="Championship records" titleSize={26} tone="clubhouse" padding="24px 28px" headGap={16}>
+				{#snippet icon()}<Pennant staff="var(--color-white)" fill="var(--color-pennant-light)" width={14} height={20} />{/snippet}
+				<p style="margin: 0">Tiles.</p>
 			</Card>
 		</div>
 	{/snippet}

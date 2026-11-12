@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { lastPipelineLoad } from '$lib/server/pipeline-load';
 import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 
@@ -16,7 +17,11 @@ export const GET: RequestHandler = async () => {
 			ORDER BY record_name, season_year DESC
 		`;
 
-		const recordBookResult = await db.execute(sql.raw(recordBookQuery));
+		// The ledger read never throws, so it runs alongside the records.
+		const [recordBookResult, lastUpdated] = await Promise.all([
+			db.execute(sql.raw(recordBookQuery)),
+			lastPipelineLoad()
+		]);
 		const records = Array.from(recordBookResult);
 
 		// Categorize records for better organization
@@ -68,7 +73,8 @@ export const GET: RequestHandler = async () => {
 			recordsByCategory: recordsByCategory,
 			categories: Object.keys(recordsByCategory),
 			totalRecords: formattedRecords.length,
-			lastUpdated: new Date().toISOString()
+			// The pipeline's last load, not this request: null when there's none.
+			lastUpdated
 		});
 
 	} catch (error) {

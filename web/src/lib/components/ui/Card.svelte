@@ -41,6 +41,15 @@
 	 *   board draws a control beside the title (This Season's Final standings:
 	 *   center, "10px 16px")
 	 *
+	 * League History (WP10) adds:
+	 * - `headRule`: a 2px ink rule under the header row, 10px below it, with
+	 *   the body right under the rule (the record book's group cards)
+	 * - `icon`: a snippet 10px left of the title, centered on it (the
+	 *   Championship records band's pennant)
+	 * - `tone="raised"`: a tile on a clubhouse card, clubhouse-2 fill, white
+	 *   text, no border, 10px corners (the face-off's numbers, the
+	 *   Championship records tiles)
+	 *
 	 * Below 640px every card follows the build spec's Phones rules: 16px of
 	 * padding and a 22px title. A phone board that draws something else sets:
 	 * - `phonePadding`: the padding as CSS ("16px 16px 6px" when rows run to the
@@ -73,7 +82,8 @@
 			| 'inset'
 			| 'inset-pennant'
 			| 'dashed'
-			| 'tile';
+			| 'tile'
+			| 'raised';
 		/** A dot of this color token beside the title. */
 		dot?: 'sage' | 'field' | 'pennant' | 'ink' | 'muted';
 		/** Px between the header and each child, as a flex column. */
@@ -90,6 +100,10 @@
 		phoneHeadStack?: boolean;
 		phoneHeadStackGap?: number;
 		phoneHeadAlign?: 'baseline' | 'center';
+		/** A 2px ink rule under the header row. */
+		headRule?: boolean;
+		/** Drawn 10px left of the title. */
+		icon?: Snippet;
 		/** Classes for spacing between cards, passed by the page. */
 		class?: string;
 		action?: Snippet;
@@ -116,6 +130,8 @@
 		phoneHeadStack = false,
 		phoneHeadStackGap = 4,
 		phoneHeadAlign = 'baseline',
+		headRule = false,
+		icon,
 		class: className = '',
 		action,
 		children
@@ -147,8 +163,16 @@
 			class="head"
 			class:stack-phone={phoneHeadStack}
 			class:center-phone={phoneHeadAlign === 'center'}
+			class:rule={headRule}
 		>
-			{#if title && dot}
+			{#if title && icon}
+				<div class="title-row">
+					{@render icon()}
+					<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
+						{title}
+					</svelte:element>
+				</div>
+			{:else if title && dot}
 				<div class="title-row">
 					<span class="dot" aria-hidden="true" style:background="var(--color-{dot})"></span>
 					<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
@@ -236,6 +260,13 @@
 		min-width: 0;
 	}
 
+	.card.raised {
+		border: 0;
+		border-radius: 10px;
+		background: var(--color-clubhouse-2);
+		color: var(--color-white);
+	}
+
 	.card.stack {
 		display: flex;
 		flex-direction: column;
@@ -279,6 +310,12 @@
 		padding: 22px 24px 0;
 	}
 
+	.head.rule {
+		margin-bottom: 0;
+		padding-bottom: 10px;
+		border-bottom: 2px solid var(--color-ink);
+	}
+
 	/* A flex box, so whatever sits in the action slot is as tall as its own
 	   line and no taller. As a plain block, it put a line of the card's own
 	   size around a 13px caption, so a stacked phone header came out 4px
@@ -315,10 +352,22 @@
 			margin-bottom: var(--card-head-gap-phone);
 		}
 
+		.head.rule {
+			margin-bottom: 0;
+		}
+
 		.head.stack-phone {
 			flex-direction: column;
+			flex-wrap: nowrap;
 			align-items: flex-start;
 			gap: var(--card-head-stack-gap);
+		}
+
+		/* The full width, so a row inside it that scrolls (League History's
+		   Measure control) stops at the card's edge. Its items still sit at
+		   the start. */
+		.head.stack-phone > .action {
+			align-self: stretch;
 		}
 
 		.head.center-phone {
