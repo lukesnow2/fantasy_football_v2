@@ -1,1 +1,0 @@
-web: gunicorn database_explorer:app 

@@ -1,1 +1,0 @@
-ALTER TABLE "app"."constitution_clause" ADD CONSTRAINT "constitution_clause_parent_key_constitution_clause_clause_key_fk" FOREIGN KEY ("parent_key") REFERENCES "app"."constitution_clause"("clause_key") ON DELETE cascade ON UPDATE no action;
