@@ -14,6 +14,14 @@ describe('formatMemberDate', () => {
 		expect(formatMemberDate('2026-11-10T07:30:00Z')).toBe('Nov 10, 2026');
 	});
 
+	it("writes the reader's day when given their zone", () => {
+		// 9pm Pacific on Nov 9 is 10pm Mountain the same day, and Nov 10 in UTC.
+		expect(formatMemberDate('2026-11-10T05:00:00Z', 'America/Los_Angeles')).toBe('Nov 9, 2026');
+		// 11:30pm Pacific is already Nov 10 in Mountain time.
+		expect(formatMemberDate('2026-11-10T07:30:00Z', 'America/Los_Angeles')).toBe('Nov 9, 2026');
+		expect(formatMemberDate('2026-11-10T07:30:00Z', 'America/Denver')).toBe('Nov 10, 2026');
+	});
+
 	it('has nothing to show for no date', () => {
 		expect(formatMemberDate(null)).toBeNull();
 		expect(formatMemberDate(undefined)).toBeNull();

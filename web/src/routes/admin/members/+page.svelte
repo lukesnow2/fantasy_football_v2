@@ -11,12 +11,28 @@
 		Tag,
 		type Column
 	} from '$lib/components/ui';
+	import { onMount } from 'svelte';
+	import { TIME_ZONE_COOKIE, browserTimeZone } from '$lib/utils/time-zone';
 	import { formatMemberDate } from './member-dates';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	type Member = PageData['members'][number];
+
+	// The server's pick (saved cookie, then Vercel's guess, then Mountain time),
+	// corrected to the browser's own zone once the page loads. The browser's
+	// zone is saved for next time, so the server gets it right from then on.
+	let timeZone = $state(data.timeZone);
+
+	onMount(() => {
+		const zone = browserTimeZone();
+		if (!zone) return;
+		timeZone = zone;
+		if (zone !== data.timeZone) {
+			document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(zone)}; path=/; max-age=31536000; samesite=lax`;
+		}
+	});
 
 	// Widths come from page CSS so the phone table can draw its own (S12.10).
 	const columns: Column[] = [
@@ -247,7 +263,8 @@
 					</form>
 				{:else if column.key === 'invited' || column.key === 'firstLogin'}
 					{@const when = formatMemberDate(
-						column.key === 'invited' ? member.invitedAt : member.firstLoginAt
+						column.key === 'invited' ? member.invitedAt : member.firstLoginAt,
+						timeZone
 					)}
 					<span class="date"
 						>{#if when}{when}{:else}<EmptyValue text="Not yet" />{/if}</span
