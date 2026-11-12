@@ -635,7 +635,7 @@ export function shortDate(iso: string | null | undefined): string {
 export function recordFootnote(liveSeason: number | null | undefined, lastUpdated: string | null | undefined): string {
 	const when = shortDate(lastUpdated);
 	const season = liveSeason
-		? `Season and career records only count finished seasons, so ${liveSeason} joins them after the championship.`
-		: 'Season and career records only count finished seasons.';
-	return `Single-game records count as soon as the week is final. ${season}${when ? ` Last updated ${when}.` : ''}`;
+		? `Season records, titles and playoff appearances only count finished seasons, so ${liveSeason} joins them after the championship.`
+		: 'Season records, titles and playoff appearances only count finished seasons.';
+	return `Single-game records and career totals count each week once it's final. ${season}${when ? ` Last updated ${when}.` : ''}`;
 }

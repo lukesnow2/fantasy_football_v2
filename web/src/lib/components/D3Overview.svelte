@@ -72,11 +72,16 @@
 	// mount into these. Until then they're the var() strings, which the
 	// legend's HTML swatches can use. The names are the old slots': series
 	// one is field, two pennant, three sage, and the last three are grays.
+	// The position stack keeps field and pennant apart (sage between them),
+	// since side by side they fall under the colorblind floor (S10.4).
 	const token = (name: string) => `var(--color-${name})`;
 	let BLUE = token('field');
 	let ORANGE = token('pennant');
 	let AQUA = token('sage');
 	let YELLOW = token('ink-2');
+	// Titles are pennant wherever they're drawn (a won title, a lost final's
+	// outline, the title race), in a slot of their own so TE stays ink-2.
+	let TITLE = token('pennant');
 	let MAGENTA = token('line-strong');
 	let GREEN = token('faint');
 	let TEXT_PRIMARY = token('ink');
@@ -97,6 +102,7 @@
 		ORANGE = read('pennant', ORANGE);
 		AQUA = read('sage', AQUA);
 		YELLOW = read('ink-2', YELLOW);
+		TITLE = read('pennant', TITLE);
 		MAGENTA = read('line-strong', MAGENTA);
 		GREEN = read('faint', GREEN);
 		TEXT_PRIMARY = read('ink', TEXT_PRIMARY);
@@ -114,8 +120,8 @@
 
 	const buildPositions = (): [string, string, string][] => [
 		['QB', 'Quarterbacks', BLUE],
-		['RB', 'Running backs', ORANGE],
-		['WR', 'Wide receivers', AQUA],
+		['RB', 'Running backs', AQUA],
+		['WR', 'Wide receivers', ORANGE],
 		['TE', 'Tight ends', YELLOW],
 		['K', 'Kickers', MAGENTA],
 		['DEF', 'Defenses', GREEN]
@@ -1177,7 +1183,7 @@
 		if (!c) return [];
 		const t = (trends?.titles ?? []).find((m: any) => m.manager === c.manager);
 		const nth = t ? t.years.indexOf(season.seasonYear) + 1 : null;
-		const lines: TipLine[] = [{ color: YELLOW, value: c.manager, label: nth ? `won · title #${nth}` : 'won' }];
+		const lines: TipLine[] = [{ color: TITLE, value: c.manager, label: nth ? `won · title #${nth}` : 'won' }];
 		if (c.runnerUp) lines.push({ value: c.runnerUp, label: 'lost the final' });
 		if (c.score) lines.push({ value: `${c.score[0].toFixed(1)}-${c.score[1].toFixed(1)}`, label: 'final score' });
 		if (c.pointsRank) lines.push({ value: `#${c.pointsRank}`, label: 'scorer in the regular season' });
@@ -1208,8 +1214,8 @@
 		// Legend, above the grid; wraps when it runs out of room.
 		const legend = frame.append('g').attr('transform', `translate(${vertical ? -margin.left + 4 : 0},${-margin.top + 8})`);
 		const items: [string, (g: any) => void][] = [
-			['Won the title', (g) => g.append('rect').attr('width', 12).attr('height', 12).attr('rx', 3).attr('fill', YELLOW)],
-			['Lost the final', (g) => g.append('rect').attr('x', 0.75).attr('y', 0.75).attr('width', 10.5).attr('height', 10.5).attr('rx', 3).attr('fill', 'none').attr('stroke', YELLOW).attr('stroke-width', 1.5)],
+			['Won the title', (g) => g.append('rect').attr('width', 12).attr('height', 12).attr('rx', 3).attr('fill', TITLE)],
+			['Lost the final', (g) => g.append('rect').attr('x', 0.75).attr('y', 0.75).attr('width', 10.5).attr('height', 10.5).attr('rx', 3).attr('fill', 'none').attr('stroke', TITLE).attr('stroke-width', 1.5)],
 			['In the league', (g) => g.append('rect').attr('width', 12).attr('height', 12).attr('rx', 3).attr('fill', TEXT_PRIMARY).attr('fill-opacity', 0.07)]
 		];
 		let lx = 0;
@@ -1268,7 +1274,7 @@
 				const tile = () => inner.append('rect').attr('x', -cw / 2).attr('y', -ch / 2).attr('width', cw).attr('height', ch).attr('rx', rx);
 				tile().attr('fill', TEXT_PRIMARY).attr('fill-opacity', 0.07);
 				if (won.has(year)) {
-					tile().attr('fill', YELLOW);
+					tile().attr('fill', TITLE);
 					if (cw >= 16 && ch >= 14) {
 						inner.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', SURFACE)
 							.style('font-size', '11px').style('font-weight', '700').style('font-variant-numeric', 'tabular-nums')
@@ -1276,7 +1282,7 @@
 					}
 				} else if (lost.has(year)) {
 					inner.append('rect').attr('x', -cw / 2 + 1).attr('y', -ch / 2 + 1).attr('width', cw - 2).attr('height', ch - 2).attr('rx', rx)
-						.attr('fill', 'none').attr('stroke', YELLOW).attr('stroke-width', 1.5);
+						.attr('fill', 'none').attr('stroke', TITLE).attr('stroke-width', 1.5);
 				}
 				if (animate && !reduceMotion) {
 					inner.transition().delay(80 + col * 45).duration(320).ease(d3.easeBackOut.overshoot(won.has(year) ? 2.2 : 1)).attr('transform', 'scale(1)');
@@ -1302,7 +1308,7 @@
 			const bx = d3.scaleLinear().domain([0, maxTitles]).range([0, bar]);
 			const tg = g.append('g').attr('transform', `translate(${plotW + 12},${ch / 2})`);
 			if (bar) {
-				tg.append('rect').attr('y', -4).attr('height', 8).attr('rx', 2).attr('fill', YELLOW).attr('width', 0)
+				tg.append('rect').attr('y', -4).attr('height', 8).attr('rx', 2).attr('fill', TITLE).attr('width', 0)
 					.transition().delay(totalsDelay).duration(dur(animate ? 500 : 0)).ease(d3.easeCubicOut)
 					.attr('width', Math.max(wonIn(m) ? 2 : 0, bx(wonIn(m))));
 			}
@@ -1361,7 +1367,7 @@
 			seasonHi.style('display', 'none');
 			focusLane(m.manager);
 			showTooltip(m.manager, [
-				{ color: YELLOW, value: String(m.years.length), label: m.years.length === 1 ? 'title' : 'titles' },
+				{ color: TITLE, value: String(m.years.length), label: m.years.length === 1 ? 'title' : 'titles' },
 				...(m.years.length ? [{ value: m.years.join(', '), label: '' }] : []),
 				{ value: String(m.finals.length), label: m.finals.length === 1 ? 'final lost' : 'finals lost' },
 				{ value: String(m.seasons.length), label: 'seasons played' }
@@ -1432,7 +1438,7 @@
 				.attr('stroke-opacity', 0.55).attr('stroke-linejoin', 'round');
 			// A dot on each title, where the line steps up.
 			for (const yr of m.years) {
-				g.append('circle').attr('cx', x(yr)).attr('cy', y(countAt(m, yr)) + nudge(i)).attr('r', 3.5).attr('fill', YELLOW)
+				g.append('circle').attr('cx', x(yr)).attr('cy', y(countAt(m, yr)) + nudge(i)).attr('r', 3.5).attr('fill', TITLE)
 					.attr('stroke', SURFACE).attr('stroke-width', 1.5);
 			}
 			return { m, g, end };
@@ -1534,7 +1540,7 @@
 			cross.style('display', 'none');
 			focus(m.manager);
 			showTooltip(m.manager, [
-				{ color: YELLOW, value: String(m.years.length), label: `titles of ${m.years.length + m.finals.length} finals` },
+				{ color: TITLE, value: String(m.years.length), label: `titles of ${m.years.length + m.finals.length} finals` },
 				{ value: m.years.join(', '), label: '' }
 			]);
 			positionTooltip(plotW + margin.left - 4, plotW + margin.left + margin.right);
@@ -1928,7 +1934,7 @@
 		} else if (m.kind === 'champion') {
 			out.push({ kind: 'dot', color: BLUE, label: 'Scoring rank' }, { kind: 'ring', color: ORANGE, label: 'Record rank' }, { kind: 'rect', color: BLUE, opacity: 0.3, label: 'Top 3 scorers' });
 		} else if (m.kind === 'titles') {
-			if (v === 'race') out.push({ kind: 'dot', color: YELLOW, label: 'A title' });
+			if (v === 'race') out.push({ kind: 'dot', color: TITLE, label: 'A title' });
 		} else if (v === 'ridgeline') {
 			out.push({ kind: 'rect', color: BLUE, opacity: 0.45, label: 'How often each score came up' }, { kind: 'line', color: TEXT_PRIMARY, label: 'Median' });
 			if (live) out.push({ kind: 'line', color: BLUE, opacity: 0.6, label: `${live.seasonYear}*: through week ${live.throughWeek}` });
@@ -2368,7 +2374,7 @@
 		color: var(--color-field);
 	}
 
-	/* The board draws this text in a color with no token: ink-2 until one is settled (G1). */
+	/* ink-2, settled 11-11 (S10.3): the phone and desktop boards both draw it. */
 	.insights ul {
 		margin: 6px 0 0;
 		padding-left: 18px;

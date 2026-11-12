@@ -1,10 +1,11 @@
-"""The record book counts finished seasons only (WP10 S10.9).
+"""The record book's season records count finished seasons only (WP10 S10.9).
 
 edw.vw_league_record_book listed three weeks of 2026 as "Fewest Points Scored
-in a Season", and its career records added the season in progress through
-mart_manager_performance. Season and career records now read a
-finished_seasons CTE (a championship game with a winner); single-game records
-keep the season in progress, since the extractor only loads completed weeks.
+in a Season". Season records and outcomes (titles, title games, playoff
+appearances) now read a finished_seasons CTE (a championship game with a
+winner). Career totals count the season in progress, as on the profiles and
+the Hall of Fame (Luke, 11-10), and so do single-game records, since the
+extractor only loads completed weeks.
 
 These tests read the view's SQL: the suite has no database to build it in.
 """
@@ -29,10 +30,13 @@ SEASON_RECORDS = [
     'Most FAAB Spent in a Season',
 ]
 
-CAREER_RECORDS = [
+CAREER_OUTCOMES = [
     'Most Championships (Career)',
     'Most Championship Appearances (Career)',
     'Most Playoff Appearances (Career)',
+]
+
+CAREER_TOTALS = [
     'Best Career Win Percentage (Min 3 Seasons)',
     'Most Career Points',
     'Most Career Points Allowed (Unluckiest Manager)',
@@ -75,7 +79,7 @@ def test_finished_seasons_need_a_decided_championship():
 
 def test_every_record_the_view_lists_is_covered_here():
     _, selects = _parts()
-    assert set(selects) == set(SEASON_RECORDS + CAREER_RECORDS + SINGLE_GAME_RECORDS)
+    assert set(selects) == set(SEASON_RECORDS + CAREER_OUTCOMES + CAREER_TOTALS + SINGLE_GAME_RECORDS)
 
 
 def test_season_records_count_finished_seasons_only():
@@ -84,16 +88,29 @@ def test_season_records_count_finished_seasons_only():
         assert FINISHED in selects[name], name
 
 
-def test_career_records_count_finished_seasons_only():
+def test_career_outcomes_count_finished_seasons_only():
     head, selects = _parts()
-    for name in CAREER_RECORDS:
+    for name in CAREER_OUTCOMES:
         chunk = selects[name]
         assert 'mart_manager_performance' not in chunk, name
-        # Read from a finished-only CTE, or filtered in place.
-        assert FINISHED in chunk or re.search(r'FROM career(_transactions)?\b', chunk), name
-    for cte in ('career_team_seasons', 'career_playoffs', 'career_transactions'):
+        assert re.search(r'FROM career\b', chunk), name
+    for cte in ('career_team_seasons', 'career_playoffs'):
         body = head.split(f'{cte} AS (', 1)[1].split('\n                ),', 1)[0]
         assert FINISHED in body, cte
+
+
+def test_career_totals_count_the_season_in_progress():
+    _, selects = _parts()
+    for name in CAREER_TOTALS:
+        assert FINISHED not in selects[name], name
+    for name in ('Most Career Points', 'Most Career Transactions', 'Best Career Win Percentage (Min 3 Seasons)'):
+        assert 'FROM edw.mart_manager_performance' in selects[name], name
+
+
+def test_win_percentage_minimum_counts_finished_seasons():
+    _, selects = _parts()
+    chunk = selects['Best Career Win Percentage (Min 3 Seasons)']
+    assert 'JOIN career c' in chunk and 'c.total_seasons >= 3' in chunk
 
 
 def test_single_game_records_keep_the_season_in_progress():

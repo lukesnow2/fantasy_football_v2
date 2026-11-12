@@ -307,10 +307,10 @@ describe('record book (S10.8)', () => {
 
 	it('writes the footnote, dropping the season clause with no season in progress', () => {
 		expect(recordFootnote(2026, '2026-11-07T18:00:00Z')).toBe(
-			'Single-game records count as soon as the week is final. Season and career records only count finished seasons, so 2026 joins them after the championship. Last updated Nov 7, 2026.'
+			"Single-game records and career totals count each week once it's final. Season records, titles and playoff appearances only count finished seasons, so 2026 joins them after the championship. Last updated Nov 7, 2026."
 		);
 		expect(recordFootnote(null, '2026-11-07T18:00:00Z')).toBe(
-			'Single-game records count as soon as the week is final. Season and career records only count finished seasons. Last updated Nov 7, 2026.'
+			"Single-game records and career totals count each week once it's final. Season records, titles and playoff appearances only count finished seasons. Last updated Nov 7, 2026."
 		);
 	});
 });

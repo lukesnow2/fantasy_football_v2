@@ -4492,22 +4492,27 @@ class EdwEtlProcessor:
             'vw_league_record_book': """
                 CREATE VIEW edw.vw_league_record_book AS
 
-                -- Season and career records count finished seasons only: a
-                -- season is finished once its championship game has a winner
-                -- (the draft API's completed-season test). Three weeks of the
-                -- season in progress can't hold "fewest points in a season".
-                -- Single-game records keep it: the extractor loads completed
-                -- weeks only, so a game counts once its week is final.
+                -- Season records and outcomes (titles, title games, playoff
+                -- appearances) count finished seasons only: a season is
+                -- finished once its championship game has a winner (the draft
+                -- API's completed-season test). Three weeks of the season in
+                -- progress can't hold "fewest points in a season". Career
+                -- totals that add up games (points, points allowed,
+                -- transactions, win percentage) count it week by week, as on
+                -- the profiles and the Hall of Fame (Luke, 11-10). Single-game
+                -- records keep it too: the extractor loads completed weeks
+                -- only, so a game counts once its week is final.
                 WITH finished_seasons AS (
                     SELECT DISTINCT season_year
                     FROM edw.fact_matchup
                     WHERE is_championship AND winner_team_key IS NOT NULL
                 ),
-                -- The career records, from the facts with the finished filter,
+                -- The career outcomes, from the facts with the finished filter,
                 -- the same rules mart_manager_performance uses (which other
                 -- pages read with the season in progress, so it stays as is).
                 -- One row per team-season: a manager can run two teams in one
-                -- season.
+                -- season. total_seasons is finished seasons, for the win
+                -- percentage's 3+ seasons minimum.
                 career_team_seasons AS (
                     SELECT
                         dt.manager_name,
@@ -4535,8 +4540,6 @@ class EdwEtlProcessor:
                     SELECT
                         manager_name,
                         COUNT(DISTINCT season_year) as total_seasons,
-                        SUM(wins) as total_wins,
-                        SUM(points) as total_points_scored,
                         SUM(championships) as championships_won,
                         SUM(championship_games) as championship_appearances,
                         CASE
@@ -4560,16 +4563,6 @@ class EdwEtlProcessor:
                     WHERE dt.is_active = TRUE AND dm.include_in_analysis = TRUE
                         AND dl.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY dt.manager_name
-                ),
-                career_transactions AS (
-                    SELECT
-                        dm.manager_name,
-                        COUNT(ft.transaction_key) as total_transactions
-                    FROM edw.dim_manager dm
-                    JOIN edw.fact_transaction ft ON dm.manager_key = ft.to_manager_key
-                    WHERE dm.is_active = TRUE AND dm.include_in_analysis = TRUE
-                        AND ft.season_year IN (SELECT season_year FROM finished_seasons)
-                    GROUP BY dm.manager_name
                 ),
                 all_records AS (
                     -- Most points scored in a season
@@ -4933,13 +4926,14 @@ class EdwEtlProcessor:
                     -- Best career win percentage (min 3 seasons)
                     SELECT 
                         'Best Career Win Percentage (Min 3 Seasons)' as record_name,
-                        CONCAT(ROUND(career_win_percentage * 100, 1), '%') as record_value,
+                        CONCAT(ROUND(mmp.career_win_percentage * 100, 1), '%') as record_value,
                         NULL as team_name,
-                        manager_name,
+                        mmp.manager_name,
                         NULL as season_year,
-                        ROW_NUMBER() OVER (ORDER BY career_win_percentage DESC, total_wins DESC) as rn
-                    FROM career
-                    WHERE total_seasons >= 3
+                        ROW_NUMBER() OVER (ORDER BY mmp.career_win_percentage DESC, mmp.total_wins DESC) as rn
+                    FROM edw.mart_manager_performance mmp
+                    JOIN career c ON c.manager_name = mmp.manager_name
+                    WHERE c.total_seasons >= 3
                     
                     UNION ALL
                     
@@ -4951,7 +4945,7 @@ class EdwEtlProcessor:
                         manager_name,
                         NULL as season_year,
                         ROW_NUMBER() OVER (ORDER BY total_points_scored DESC) as rn
-                    FROM career
+                    FROM edw.mart_manager_performance
                     
                     UNION ALL
                     
@@ -4965,7 +4959,6 @@ class EdwEtlProcessor:
                         ROW_NUMBER() OVER (ORDER BY SUM(ftp.points_against) DESC) as rn
                     FROM edw.fact_team_performance ftp
                     JOIN edw.dim_team dt ON ftp.team_key = dt.team_key
-                    WHERE ftp.season_year IN (SELECT season_year FROM finished_seasons)
                     GROUP BY dt.manager_name
                     
                     UNION ALL
@@ -4978,7 +4971,7 @@ class EdwEtlProcessor:
                         manager_name,
                         NULL as season_year,
                         ROW_NUMBER() OVER (ORDER BY total_transactions DESC) as rn
-                    FROM career_transactions
+                    FROM edw.mart_manager_performance
                 )
                 SELECT 
                     record_name,
