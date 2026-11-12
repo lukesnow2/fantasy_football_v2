@@ -16,7 +16,9 @@
 
 	const managers = $derived(store.roster.length);
 	const kicker = $derived(
-		managers > 0 ? `Members only · ${managers} ${managers === 1 ? 'manager' : 'managers'}` : 'Members only'
+		managers > 0
+			? `Members only · ${managers} ${managers === 1 ? 'manager' : 'managers'}`
+			: 'Members only'
 	);
 	const pill = $derived(meManagerKey === null ? null : connectionPill(store.connectionState));
 </script>
@@ -31,8 +33,8 @@
      preview embedded on the public /this-season page. -->
 <div class="chat-page">
 	<PageHeader {kicker} title="Chat" titleSuffix="#general" size={48} tight phoneActionBesideTitle>
-		Trash talk, trade offers and grievances. Reply in a thread to keep side arguments out of the main
-		feed.
+		Trash talk, trade offers and grievances. Reply in a thread to keep side arguments out of the
+		main feed.
 		{#snippet action()}
 			{#if pill}
 				<span class="status {pill.tone}" role="status">
@@ -42,18 +44,39 @@
 		{/snippet}
 	</PageHeader>
 
-	<!-- dvh, not vh: on mobile Safari the toolbar makes vh taller than the
-	     visible viewport, which pushes the composer off the bottom of the
-	     screen. 252px is everything above and below the row at 1280: the 68px
-	     band, <main>'s 28px and 40px, the 96px header and the 20px under it. -->
+	<!-- The page is one screen under the band: the header at its own height
+	     and the feed taking the rest, so the composer stays in view however
+	     the header wraps. dvh, not vh: on mobile Safari the toolbar makes vh
+	     taller than the visible viewport. -->
 	<div class="feed">
-		<ChatPanel {store} height="calc(100dvh - 252px)" />
+		<ChatPanel {store} height="auto" />
 	</div>
 </div>
 
 <style>
+	/* 100dvh less the 68px band and <main>'s 28px and 40px; the floor keeps a
+	   24rem card under a wrapped header on a short window. */
+	.chat-page {
+		box-sizing: border-box;
+		height: calc(100dvh - 68px - 68px);
+		min-height: calc(24rem + 160px);
+		display: flex;
+		flex-direction: column;
+	}
+
 	.feed {
+		flex: 1 1 auto;
+		min-height: 0;
 		margin-top: 20px;
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* Below 1024px the band is the 72px phone band. */
+	@media (max-width: 1023.98px) {
+		.chat-page {
+			height: calc(100dvh - 72px - 68px);
+		}
 	}
 
 	.status {
@@ -104,19 +127,11 @@
 	   the card filling the rest, so the composer is always at your thumb. */
 	@media (max-width: 639.98px) {
 		.chat-page {
-			box-sizing: border-box;
 			height: calc(100dvh - 72px - 32px);
-			min-height: calc(24rem + 160px);
-			display: flex;
-			flex-direction: column;
 		}
 
 		.feed {
-			flex: 1 1 auto;
-			min-height: 0;
 			margin-top: 14px;
-			display: flex;
-			flex-direction: column;
 		}
 	}
 </style>

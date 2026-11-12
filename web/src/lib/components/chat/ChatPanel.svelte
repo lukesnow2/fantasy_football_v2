@@ -26,11 +26,7 @@
 		store?: ChatStore;
 	}
 
-	let {
-		channelId = DEFAULT_CHANNEL,
-		height = '38rem',
-		store: providedStore
-	}: Props = $props();
+	let { channelId = DEFAULT_CHANNEL, height = '38rem', store: providedStore }: Props = $props();
 
 	const meManagerKey = $derived(page.data.authenticatedManager?.managerKey ?? null);
 	const canWrite = $derived(meManagerKey !== null);
@@ -86,7 +82,6 @@
 	const threadRoot = $derived(
 		expandedThreadId ? (store.messages.find((m) => m.messageId === expandedThreadId) ?? null) : null
 	);
-
 </script>
 
 <div class="chat-row" style:--chat-height={height}>
@@ -136,26 +131,26 @@
 		{/if}
 	</Card>
 
-{#if threadRoot && canWrite && store.connectionState !== 'unauthorized'}
-	{@const root = threadRoot}
-	<ThreadReplies
-		replies={store.repliesFor(root.messageId)}
-		loading={store.isThreadLoading(root.messageId)}
-		roster={store.roster}
-		meManagerKey={store.meManagerKey}
-		{canWrite}
-		reactionsFor={(id) => store.reactionsFor(id)}
-		onSendReply={(content) =>
-			void store.send(content, { parentMessageKey: root.messageKey ?? undefined })}
-		onToggleReaction={(id, emoji, emojiType) => void store.toggleReaction(id, emoji, emojiType)}
-		onOpenPicker={openPicker}
-		onEdit={(id, content) => void store.edit(id, content)}
-		onDelete={(id) => void store.remove(id)}
-		onRetry={(id) => void store.retry(id)}
-		onDiscard={(id) => store.discard(id)}
-		onCollapse={closeThread}
-	/>
-{/if}
+	{#if threadRoot && canWrite && store.connectionState !== 'unauthorized'}
+		{@const root = threadRoot}
+		<ThreadReplies
+			replies={store.repliesFor(root.messageId)}
+			loading={store.isThreadLoading(root.messageId)}
+			roster={store.roster}
+			meManagerKey={store.meManagerKey}
+			{canWrite}
+			reactionsFor={(id) => store.reactionsFor(id)}
+			onSendReply={(content) =>
+				void store.send(content, { parentMessageKey: root.messageKey ?? undefined })}
+			onToggleReaction={(id, emoji, emojiType) => void store.toggleReaction(id, emoji, emojiType)}
+			onOpenPicker={openPicker}
+			onEdit={(id, content) => void store.edit(id, content)}
+			onDelete={(id) => void store.remove(id)}
+			onRetry={(id) => void store.retry(id)}
+			onDiscard={(id) => store.discard(id)}
+			onCollapse={closeThread}
+		/>
+	{/if}
 </div>
 
 {#if pickerFor}
@@ -173,7 +168,10 @@
 <style>
 	/* The Chat board's row: the messages card and, while a thread is open, the
 	   Thread card beside it (WP12 S12.1). */
+	/* In a flex column (the Chat page) the row takes the space left; on its
+	   own it's --chat-height tall. */
 	.chat-row {
+		flex: 1 1 auto;
 		display: flex;
 		flex-wrap: wrap;
 		gap: 16px;

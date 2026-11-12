@@ -18,14 +18,23 @@
 <div class="column">
 	<Card tone="sheet" padding="36px" phonePadding="24px" label="Check your email">
 		<StatusTile>
-			<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-				><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3.5 6.5l8.5 6.5 8.5-6.5"></path></svg
+			<svg
+				width="28"
+				height="28"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.8"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3.5 6.5l8.5 6.5 8.5-6.5"
+				></path></svg
 			>
 		</StatusTile>
 		<h1>Check your email</h1>
 		<p class="detail">
-			If that address is on the league roster, a sign-in link is on its way. It expires in 15 minutes
-			and can only be used once.
+			If that address is on the league roster, a sign-in link is on its way. It expires in 15
+			minutes and can only be used once.
 		</p>
 		<p class="retry">
 			Didn't get it? Check your spam folder, then <a href="/login" class="field-link">try again</a>.

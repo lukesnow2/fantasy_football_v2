@@ -189,138 +189,140 @@
 			</a>
 
 			{#if !bare}
-		<nav aria-label="Main" class="band-nav">
-				{#each directLinks as item (item.href)}
-					{@const active = isActivePath(pathname, item.href)}
-					<a
-						href={item.href}
-						class="band-link"
-						class:on={active}
-						aria-current={active ? 'page' : undefined}>{item.name}</a
-					>
-				{/each}
-
-				{#each navGroups as group (group.label)}
-					<NavDropdown
-						label={group.label}
-						items={group.items}
-						open={openNavMenu}
-						onToggle={setNavMenu}
-					/>
-				{/each}
-			</nav>
-
-			<div class="band-account">
-				{#if data.user && data.authenticatedManager}
-					<button
-						bind:this={userButton}
-						type="button"
-						class="pill"
-						class:open={showUserMenu}
-						class:commissioner={commissionerPill}
-						onclick={toggleUserMenu}
-						aria-expanded={showUserMenu}
-						aria-haspopup="menu"
-					>
-						{#if commissionerPill}
-							<span
-								>Commissioner<span aria-hidden="true">&nbsp;{showUserMenu ? '▴' : '▾'}</span></span
-							>
-						{:else}
-							<Avatar name={data.authenticatedManager.managerName} size={30} />
-							<span
-								>{data.authenticatedManager.displayName}<span aria-hidden="true"
-									>&nbsp;{showUserMenu ? '▴' : '▾'}</span
-								></span
-							>
-						{/if}
-					</button>
-
-					{#if showUserMenu}
-						<div
-							bind:this={userMenu}
-							class="account-menu"
-							role="menu"
-							aria-label="Account"
-							tabindex="-1"
-							use:clickOutside={{ onOutside: closeUserMenu, ignore: [userButton] }}
-							onkeydown={onUserMenuKeydown}
-							onfocusout={onUserMenuFocusout}
+				<nav aria-label="Main" class="band-nav">
+					{#each directLinks as item (item.href)}
+						{@const active = isActivePath(pathname, item.href)}
+						<a
+							href={item.href}
+							class="band-link"
+							class:on={active}
+							aria-current={active ? 'page' : undefined}>{item.name}</a
 						>
-							<div class="signed-in" role="none">
-								<div class="signed-in-label">Signed in as</div>
-								<div class="signed-in-name">{data.authenticatedManager.displayName}</div>
-							</div>
-							<a
-								href={profileHref}
-								class="account-item"
-								class:current={profileCurrent}
-								role="menuitem"
-								aria-current={profileCurrent ? 'page' : undefined}
-								onclick={closeUserMenu}>Your profile</a
-							>
-							<a
-								href="/settings"
-								class="account-item"
-								class:current={settingsCurrent}
-								role="menuitem"
-								aria-current={settingsCurrent ? 'page' : undefined}
-								onclick={closeUserMenu}>Settings</a
-							>
-							{#if isCommissioner}
-								<a
-									href="/admin/members"
-									class="account-item"
-									class:current={adminCurrent}
-									role="menuitem"
-									aria-current={adminCurrent ? 'page' : undefined}
-									onclick={closeUserMenu}>Commissioner</a
+					{/each}
+
+					{#each navGroups as group (group.label)}
+						<NavDropdown
+							label={group.label}
+							items={group.items}
+							open={openNavMenu}
+							onToggle={setNavMenu}
+						/>
+					{/each}
+				</nav>
+
+				<div class="band-account">
+					{#if data.user && data.authenticatedManager}
+						<button
+							bind:this={userButton}
+							type="button"
+							class="pill"
+							class:open={showUserMenu}
+							class:commissioner={commissionerPill}
+							onclick={toggleUserMenu}
+							aria-expanded={showUserMenu}
+							aria-haspopup="menu"
+						>
+							{#if commissionerPill}
+								<span
+									>Commissioner<span aria-hidden="true">&nbsp;{showUserMenu ? '▴' : '▾'}</span
+									></span
+								>
+							{:else}
+								<Avatar name={data.authenticatedManager.managerName} size={30} />
+								<span
+									>{data.authenticatedManager.displayName}<span aria-hidden="true"
+										>&nbsp;{showUserMenu ? '▴' : '▾'}</span
+									></span
 								>
 							{/if}
-							<form method="post" action="/logout" use:enhance={handleLogout} role="none">
-								<button type="submit" class="account-item sign-out" role="menuitem">Sign out</button
-								>
-							</form>
-						</div>
-					{/if}
-				{:else}
-					<a href="/login" class="sign-in">Sign in</a>
-				{/if}
-			</div>
+						</button>
 
-			<button
-				bind:this={menuButton}
-				type="button"
-				class="menu-button"
-				aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-				aria-expanded={showMobileMenu}
-				aria-controls="site-menu"
-				onclick={() => (showMobileMenu ? dismissMobileMenu() : openMobileMenu())}
-			>
-				{#if showMobileMenu}
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg
-					>
-				{:else}
-					<svg
-						width="20"
-						height="20"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg
-					>
-				{/if}
-			</button>
+						{#if showUserMenu}
+							<div
+								bind:this={userMenu}
+								class="account-menu"
+								role="menu"
+								aria-label="Account"
+								tabindex="-1"
+								use:clickOutside={{ onOutside: closeUserMenu, ignore: [userButton] }}
+								onkeydown={onUserMenuKeydown}
+								onfocusout={onUserMenuFocusout}
+							>
+								<div class="signed-in" role="none">
+									<div class="signed-in-label">Signed in as</div>
+									<div class="signed-in-name">{data.authenticatedManager.displayName}</div>
+								</div>
+								<a
+									href={profileHref}
+									class="account-item"
+									class:current={profileCurrent}
+									role="menuitem"
+									aria-current={profileCurrent ? 'page' : undefined}
+									onclick={closeUserMenu}>Your profile</a
+								>
+								<a
+									href="/settings"
+									class="account-item"
+									class:current={settingsCurrent}
+									role="menuitem"
+									aria-current={settingsCurrent ? 'page' : undefined}
+									onclick={closeUserMenu}>Settings</a
+								>
+								{#if isCommissioner}
+									<a
+										href="/admin/members"
+										class="account-item"
+										class:current={adminCurrent}
+										role="menuitem"
+										aria-current={adminCurrent ? 'page' : undefined}
+										onclick={closeUserMenu}>Commissioner</a
+									>
+								{/if}
+								<form method="post" action="/logout" use:enhance={handleLogout} role="none">
+									<button type="submit" class="account-item sign-out" role="menuitem"
+										>Sign out</button
+									>
+								</form>
+							</div>
+						{/if}
+					{:else}
+						<a href="/login" class="sign-in">Sign in</a>
+					{/if}
+				</div>
+
+				<button
+					bind:this={menuButton}
+					type="button"
+					class="menu-button"
+					aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+					aria-expanded={showMobileMenu}
+					aria-controls="site-menu"
+					onclick={() => (showMobileMenu ? dismissMobileMenu() : openMobileMenu())}
+				>
+					{#if showMobileMenu}
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg
+						>
+					{:else}
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg
+						>
+					{/if}
+				</button>
 			{/if}
 		</div>
 	</header>
@@ -328,67 +330,66 @@
 	<!-- The phone menu: a full-screen panel over the page, so no backdrop. The
 	     band's row stays above it as its top row (see .menu-open). -->
 	{#if !bare}
-	<div id="site-menu" class="phone-panel" hidden={!showMobileMenu}>
-		<nav aria-label="Main" class="phone-nav">
-			<!-- The panel has the vertical room the bar doesn't, so the groups
+		<div id="site-menu" class="phone-panel" hidden={!showMobileMenu}>
+			<nav aria-label="Main" class="phone-nav">
+				<!-- The panel has the vertical room the bar doesn't, so the groups
 			     open flat under their headings rather than as nested menus. -->
-			{#each directLinks as item (item.href)}
-				{@const active = isActivePath(pathname, item.href)}
-				<a
-					href={item.href}
-					class="phone-link"
-					class:on={active}
-					aria-current={active ? 'page' : undefined}
-					onclick={closeMobileMenu}>{item.name}</a
-				>
-			{/each}
-
-			{#each navGroups as group (group.label)}
-				<div class="phone-group">{group.label}</div>
-				{#each group.items as item (item.href)}
+				{#each directLinks as item (item.href)}
 					{@const active = isActivePath(pathname, item.href)}
 					<a
 						href={item.href}
-						class="phone-item"
+						class="phone-link"
 						class:on={active}
 						aria-current={active ? 'page' : undefined}
 						onclick={closeMobileMenu}>{item.name}</a
 					>
 				{/each}
-			{/each}
 
-			<div class="phone-account">
-				{#if data.user && data.authenticatedManager}
-					<Avatar name={data.authenticatedManager.managerName} size={28} />
-					<span>
-						<a href={profileHref} class="phone-account-link" onclick={closeMobileMenu}
-							>Your profile</a
+				{#each navGroups as group (group.label)}
+					<div class="phone-group">{group.label}</div>
+					{#each group.items as item (item.href)}
+						{@const active = isActivePath(pathname, item.href)}
+						<a
+							href={item.href}
+							class="phone-item"
+							class:on={active}
+							aria-current={active ? 'page' : undefined}
+							onclick={closeMobileMenu}>{item.name}</a
 						>
-						·
-						<a href="/settings" class="phone-account-link" onclick={closeMobileMenu}>Settings</a>
-						·
-						{#if isCommissioner}
-							<a href="/admin/members" class="phone-account-link" onclick={closeMobileMenu}
-								>Commissioner</a
+					{/each}
+				{/each}
+
+				<div class="phone-account">
+					{#if data.user && data.authenticatedManager}
+						<Avatar name={data.authenticatedManager.managerName} size={28} />
+						<span>
+							<a href={profileHref} class="phone-account-link" onclick={closeMobileMenu}
+								>Your profile</a
 							>
 							·
-						{/if}
-						<form
-							method="post"
-							action="/logout"
-							use:enhance={handleLogout}
-							class="phone-account-form"
-						>
-							<button type="submit" class="phone-account-link">Sign out</button>
-						</form>
-					</span>
-				{:else}
-					<a href="/login" class="phone-account-link" onclick={closeMobileMenu}>Sign in</a>
-				{/if}
-			</div>
-		</nav>
-	</div>
-
+							<a href="/settings" class="phone-account-link" onclick={closeMobileMenu}>Settings</a>
+							·
+							{#if isCommissioner}
+								<a href="/admin/members" class="phone-account-link" onclick={closeMobileMenu}
+									>Commissioner</a
+								>
+								·
+							{/if}
+							<form
+								method="post"
+								action="/logout"
+								use:enhance={handleLogout}
+								class="phone-account-form"
+							>
+								<button type="submit" class="phone-account-link">Sign out</button>
+							</form>
+						</span>
+					{:else}
+						<a href="/login" class="phone-account-link" onclick={closeMobileMenu}>Sign in</a>
+					{/if}
+				</div>
+			</nav>
+		</div>
 	{/if}
 	<main
 		class="content"
@@ -402,12 +403,12 @@
 	</main>
 
 	{#if !bare}
-	<footer class="foot" inert={showMobileMenu}>
-		<div class="foot-row">
-			<span class="foot-name">The League</span>
-			<span>Est. 2005 · Data from Yahoo Fantasy</span>
-		</div>
-	</footer>
+		<footer class="foot" inert={showMobileMenu}>
+			<div class="foot-row">
+				<span class="foot-name">The League</span>
+				<span>Est. 2005 · Data from Yahoo Fantasy</span>
+			</div>
+		</footer>
 	{/if}
 </div>
 
@@ -697,7 +698,6 @@
 		.bare .brand-name {
 			line-height: 44px;
 		}
-
 
 		.brand-est,
 		.band-nav,

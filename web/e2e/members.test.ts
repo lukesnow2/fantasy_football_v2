@@ -20,7 +20,9 @@ test.describe('signed out', () => {
 
 	test('/login shows the sign-in card with no nav links', async ({ page }) => {
 		await page.goto('/login');
-		await expect(page.getByRole('heading', { level: 1, name: 'Sign in to The League' })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { level: 1, name: 'Sign in to The League' })
+		).toBeVisible();
 		await expect(page.getByRole('navigation')).toHaveCount(0);
 		await expect(page.getByRole('contentinfo')).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Email me a sign-in link' })).toBeVisible();
@@ -28,7 +30,9 @@ test.describe('signed out', () => {
 
 	test('/login/verify with no token says so and sends you back to /login', async ({ page }) => {
 		await page.goto('/login/verify');
-		await expect(page.getByRole('heading', { level: 1, name: 'No sign-in link found' })).toBeVisible();
+		await expect(
+			page.getByRole('heading', { level: 1, name: 'No sign-in link found' })
+		).toBeVisible();
 		await page.getByRole('link', { name: 'Send me a new link' }).click();
 		await expect(page).toHaveURL((url) => url.pathname === '/login');
 	});

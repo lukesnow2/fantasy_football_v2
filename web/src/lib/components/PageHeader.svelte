@@ -119,7 +119,7 @@
 			</div>
 		{/if}
 		<h1 class:first={!kicker && !pending} style:--title-size="{size}px"
-			>{title}{#if titleSuffix}{' '}<span class="suffix">{titleSuffix}</span>{/if}</h1
+			>{title}{#if titleSuffix} <span class="suffix">{titleSuffix}</span>{/if}</h1
 		>
 		{#if pending}
 			<p><span class="bar intro-bar"></span></p>

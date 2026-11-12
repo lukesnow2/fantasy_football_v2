@@ -27,8 +27,10 @@
 		{:else}
 			<p class="panel-title">League chat is for managers.</p>
 			<p class="panel-line">Sign in with your league email and you'll land right back here.</p>
-			<Button variant="primary" class="sign-in" href="/login?redirect={encodeURIComponent(redirectTo)}"
-				>Sign in</Button
+			<Button
+				variant="primary"
+				class="sign-in"
+				href="/login?redirect={encodeURIComponent(redirectTo)}">Sign in</Button
 			>
 		{/if}
 	</div>

@@ -25,10 +25,10 @@
 	 * the ruling") and text into pennant-dark.
 	 *
 	 * - pill (WP12): card fill, a 1px line border, a 999px radius, 13px weight
- *   600 ink-2, 36px tall with 0 14px of padding (44px below 640px): Chat's
- *   "Load earlier messages"
- *
- * Sizes beyond the default (WP9 adds the last two):
+	 *   600 ink-2, 36px tall with 0 14px of padding (44px below 640px): Chat's
+	 *   "Load earlier messages"
+	 *
+	 * Sizes beyond the default (WP9 adds the last two):
 	 * - `large`: 48px with 0 22px of padding at 16px, content-box (Home's band)
 	 * - `lg`: 48px with 0 22px of padding at 16px weight 700 ("Post a bet");
 	 *   `padX` sets another side padding in px ("Post it", 26)
@@ -36,14 +36,14 @@
 	 *   outline are 0 16px at weight 700, secondary 0 14px at 600, text 0 12px at
 	 *   600, and the pennant text button is 13px ("Take it", "Pass", "Pull it")
 	 * - `xl` (WP12): 50px with 0 22px of padding, a 10px radius, 16px weight
- *   700: the sign-in cards' "Email me a sign-in link" and "Send me a new
- *   link"; `padX` sets another side padding
- * - `row` (WP12): a control inside a table row (the Commissioner page).
- *   Secondary is 34px with 0 10px of padding at 13px weight 600 ink-2, and
- *   with `tone="field"` a field border and field text at 700 ("Resend
- *   link"); icon is a 30px square with a 1px line border, a 6px radius and
- *   field text at 700 (the "Save email" ✓). Both are 44px below 640px
- * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
+	 *   700: the sign-in cards' "Email me a sign-in link" and "Send me a new
+	 *   link"; `padX` sets another side padding
+	 * - `row` (WP12): a control inside a table row (the Commissioner page).
+	 *   Secondary is 34px with 0 10px of padding at 13px weight 600 ink-2, and
+	 *   with `tone="field"` a field border and field text at 700 ("Resend
+	 *   link"); icon is a 30px square with a 1px line border, a 6px radius and
+	 *   field text at 700 (the "Save email" ✓). Both are 44px below 640px
+	 * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
 	 *   640px): League History's "Save image" and "Show table"
 	 *
 	 * The Constitution and the Data Dictionary (WP11) add:

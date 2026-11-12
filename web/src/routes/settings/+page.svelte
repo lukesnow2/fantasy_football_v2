@@ -2,6 +2,7 @@
 	import { enhance } from '$app/forms';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import { Avatar, Button, Card, Switch, Tag } from '$lib/components/ui';
+	import { profileHref as managerProfileHref } from '$lib/utils/managers';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -30,7 +31,7 @@
 	});
 
 	const profileHref = $derived(
-		data.manager ? `/managers/${encodeURIComponent(data.manager.managerName ?? data.manager.displayName)}` : null
+		data.manager ? managerProfileHref(data.manager.managerName ?? data.manager.displayName) : null
 	);
 
 	const ROWS = [

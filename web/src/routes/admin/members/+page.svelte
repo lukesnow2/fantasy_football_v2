@@ -2,7 +2,15 @@
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Avatar, Button, Card, DataTable, EmptyValue, Tag, type Column } from '$lib/components/ui';
+	import {
+		Avatar,
+		Button,
+		Card,
+		DataTable,
+		EmptyValue,
+		Tag,
+		type Column
+	} from '$lib/components/ui';
 	import { formatMemberDate } from './member-dates';
 	import type { ActionData, PageData } from './$types';
 
@@ -43,14 +51,29 @@
 	<title>League members | The League</title>
 </svelte:head>
 
-<PageHeader kicker="Commissioner only" kickerTone="pennant" title="League members" size={56} introWidth={640}>
+<PageHeader
+	kicker="Commissioner only"
+	kickerTone="pennant"
+	title="League members"
+	size={56}
+	introWidth={640}
+>
 	The allowlist. Only these addresses can sign in, and there's no registration.
 </PageHeader>
 
 {#if !data.mailConfig.ok}
 	<!-- Not on the board: kept above the cards until Luke places it. -->
 	<div class="strip error mail" role="alert">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2.2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
 			><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4.5M12 16h.01"></path></svg
 		>
 		<div>
@@ -75,13 +98,21 @@
 		dashboard that stores it write-only will not read it back. Showing it here
 		is the only place anyone can see what domain the links actually carry.
 	-->
-	<Card title="Sign-in links point at" titleSize={24} headGap={12} phoneHeadGap={10} class="origin-card">
+	<Card
+		title="Sign-in links point at"
+		titleSize={24}
+		headGap={12}
+		phoneHeadGap={10}
+		class="origin-card"
+	>
 		<div class="well">
 			<span class="dot" class:bad={!data.mailConfig.originOk} aria-hidden="true"></span>
 			<span class="origin">{data.mailConfig.origin}/login/verify</span>
 		</div>
 		<p class="origin-note">
-			{#if !data.mailConfig.originOk}<strong class="expected">Expected {data.mailConfig.canonicalOrigin}.</strong>
+			{#if !data.mailConfig.originOk}<strong class="expected"
+					>Expected {data.mailConfig.canonicalOrigin}.</strong
+				>
 			{/if}If this isn't the site's address, change ORIGIN in the deployment's environment variables
 			and redeploy. Env values are baked in per deployment.
 		</p>
@@ -90,8 +121,8 @@
 	{#if data.unclaimed.length > 0}
 		<Card title="Not on the allowlist yet" titleSize={24} headGap={6} class="add-card">
 			<p class="add-note">
-				They can't sign in until they have an address here. Adding one takes effect immediately, with
-				no seed script and no redeploy.
+				They can't sign in until they have an address here. Adding one takes effect immediately,
+				with no seed script and no redeploy.
 			</p>
 			<form method="POST" action="?/addMember" use:enhance class="add-form">
 				<label class="field manager-field">
@@ -122,14 +153,31 @@
 
 {#if form?.error}
 	<div class="strip error" role="alert">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2.2"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
 			><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4.5M12 16h.01"></path></svg
 		>{form.error}
 	</div>
 {:else if form?.success}
 	<div class="strip success" role="status">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-			><path d="M5 12l5 5 9-10"></path></svg
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2.5"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg
 		>{form.success}
 	</div>
 {/if}
@@ -165,7 +213,14 @@
 						{#if !member.active}<Tag variant="missed" size="flag">Deactivated</Tag>{/if}
 					</span>
 				{:else if column.key === 'email'}
-					<form method="POST" action="?/updateEmail" use:enhance={() => async ({ update }) => update({ reset: false })} class="email-form">
+					<form
+						method="POST"
+						action="?/updateEmail"
+						use:enhance={() =>
+							async ({ update }) =>
+								update({ reset: false })}
+						class="email-form"
+					>
 						<input type="hidden" name="memberId" value={member.id} />
 						<input
 							name="email"
@@ -191,20 +246,30 @@
 						</select>
 					</form>
 				{:else if column.key === 'invited' || column.key === 'firstLogin'}
-					{@const when = formatMemberDate(column.key === 'invited' ? member.invitedAt : member.firstLoginAt)}
-					<span class="date">{#if when}{when}{:else}<EmptyValue text="Not yet" />{/if}</span>
+					{@const when = formatMemberDate(
+						column.key === 'invited' ? member.invitedAt : member.firstLoginAt
+					)}
+					<span class="date"
+						>{#if when}{when}{:else}<EmptyValue text="Not yet" />{/if}</span
+					>
 				{:else if column.key === 'actions'}
 					<span class="actions">
 						<form method="POST" action="?/invite" use:enhance>
 							<input type="hidden" name="memberId" value={member.id} />
-							<Button type="submit" variant="secondary" size="row" tone="field" disabled={!member.active}
-								>{member.firstLoginAt ? 'Resend link' : 'Invite'}</Button
+							<Button
+								type="submit"
+								variant="secondary"
+								size="row"
+								tone="field"
+								disabled={!member.active}>{member.firstLoginAt ? 'Resend link' : 'Invite'}</Button
 							>
 						</form>
 						<form method="POST" action="?/setActive" use:enhance>
 							<input type="hidden" name="memberId" value={member.id} />
 							<input type="hidden" name="active" value={(!member.active).toString()} />
-							<Button type="submit" variant="secondary" size="row">{member.active ? 'Deactivate' : 'Reactivate'}</Button>
+							<Button type="submit" variant="secondary" size="row"
+								>{member.active ? 'Deactivate' : 'Reactivate'}</Button
+							>
 						</form>
 					</span>
 				{/if}
