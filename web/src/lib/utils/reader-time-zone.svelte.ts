@@ -17,11 +17,11 @@ export function readerTimeZone(serverZone: string): { readonly current: string }
 	let zone = $state(serverZone);
 
 	onMount(() => {
-		const browser = browserTimeZone();
-		if (!browser) return;
-		zone = browser;
-		if (browser !== serverZone) {
-			document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(browser)}; path=/; max-age=31536000; samesite=lax`;
+		const own = browserTimeZone();
+		if (!own) return;
+		zone = own;
+		if (own !== serverZone) {
+			document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(own)}; path=/; max-age=31536000; samesite=lax`;
 		}
 	});
 

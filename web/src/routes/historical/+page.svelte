@@ -22,7 +22,8 @@
 	} from '$lib/components/ui';
 	import { profileHref } from '$lib/home';
 	import { rivalryHref } from '$lib/utils/managers';
-	import { LEAGUE_TIME_ZONE, browserTimeZone } from '$lib/utils/time-zone';
+	import { LEAGUE_TIME_ZONE } from '$lib/utils/time-zone';
+	import { readerTimeZone } from '$lib/utils/reader-time-zone.svelte';
 	import {
 		HISTORY_TABS,
 		TABLE_ROWS,
@@ -59,6 +60,9 @@
 
 	let overviewData: any = $state(null);
 	let h2hData: any = $state(null);
+	// The reader's zone for the record book's "Last updated" date: Mountain on
+	// the server, the browser's own once the page loads.
+	const zone = readerTimeZone(LEAGUE_TIME_ZONE);
 	let recordBookData: any = $state(null);
 	let loadingOverview = $state(false);
 	let loadingH2H = $state(false);
@@ -679,7 +683,7 @@
 		<p class="footnote">{recordFootnote(
 				liveSeason,
 				recordBookData.lastUpdated,
-				browserTimeZone() ?? LEAGUE_TIME_ZONE
+				zone.current
 			)}</p>
 	{/if}
 {/if}

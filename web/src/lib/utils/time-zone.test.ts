@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	LEAGUE_TIME_ZONE,
+	TIME_ZONE_COOKIE,
 	formatShortDate,
 	isTimeZone,
 	requestTimeZone,
@@ -42,7 +43,7 @@ describe('resolveTimeZone', () => {
 
 describe('requestTimeZone', () => {
 	const event = (cookie: string | undefined, header: string | null) => ({
-		cookies: { get: (name: string) => (name === 'tz' ? cookie : undefined) },
+		cookies: { get: (name: string) => (name === TIME_ZONE_COOKIE ? cookie : undefined) },
 		request: new Request('http://x', header ? { headers: { 'x-vercel-ip-timezone': header } } : {})
 	});
 
