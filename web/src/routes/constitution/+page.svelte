@@ -79,16 +79,18 @@
 
 	// Contents: the current item is the last article whose top has scrolled
 	// past the top of the viewport, or the first one before any has. A Contents
-	// link lands an article its scroll margin (16px) below the top, so that
-	// counts as past it.
-	const SCROLL_MARGIN = 16;
+	// link lands an article its scroll margin below the top, so that counts as
+	// past it. The margin is read off the element, so the CSS stays the one
+	// place it's set.
 	let current = '';
 
 	function updateCurrent() {
 		let found = data.sections[0]?.sectionId ?? '';
 		for (const s of data.sections) {
 			const el = document.getElementById(s.sectionId);
-			if (el && el.getBoundingClientRect().top <= SCROLL_MARGIN + 1) found = s.sectionId;
+			if (!el) continue;
+			const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+			if (el.getBoundingClientRect().top <= margin + 1) found = s.sectionId;
 		}
 		current = found;
 	}
@@ -118,9 +120,18 @@
 			threshold: [0, 1]
 		});
 		observeAll();
-		const onScroll = () => requestAnimationFrame(updateCurrent);
+		// One measurement per frame, however many scroll events arrive.
+		let frame = 0;
+		const onScroll = () => {
+			if (frame) return;
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				updateCurrent();
+			});
+		};
 		window.addEventListener('scroll', onScroll, { passive: true });
 		return () => {
+			cancelAnimationFrame(frame);
 			observer?.disconnect();
 			observer = null;
 			window.removeEventListener('scroll', onScroll);
@@ -154,7 +165,8 @@
 	</div>
 {/if}
 
-{#if form?.error}
+<!-- While the dialog is open it shows the error itself. -->
+{#if form?.error && !draft}
 	<div class="strip error" role="alert">{form.error}</div>
 {/if}
 

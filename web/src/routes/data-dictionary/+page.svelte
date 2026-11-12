@@ -57,7 +57,12 @@
 
 	/** A hash naming a metric clears the filters, opens it and moves to it. */
 	async function openFromHash() {
-		const id = decodeURIComponent(window.location.hash.slice(1));
+		let id = '';
+		try {
+			id = decodeURIComponent(window.location.hash.slice(1));
+		} catch {
+			return; // A malformed escape names no metric.
+		}
 		if (!id) return;
 		const known = categories.some((c) => (c.metrics ?? []).some((m) => m.metricId === id));
 		if (!known) return;
@@ -175,7 +180,7 @@
 	</div>
 {/if}
 
-<div class="groups">
+<div class="groups" aria-busy={loading || undefined}>
 	{#if loading}
 		{#each [0, 1, 2] as i (i)}
 			<Card label="Loading">

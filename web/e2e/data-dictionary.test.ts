@@ -39,3 +39,12 @@ test('a later hash change clears the filters and opens the entry', async ({ page
 	await expect(page.getByRole('searchbox', { name: 'Search' })).toHaveValue('');
 	await expect(page.locator('[id="luck_factor"]').getByRole('heading', { name: 'Luck Factor' })).toBeFocused();
 });
+
+test('a malformed hash opens nothing and throws nothing', async ({ page }) => {
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+	await page.goto('/data-dictionary#%E0');
+	await expect(page.getByRole('button', { name: 'Show details' }).first()).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Hide details' })).toHaveCount(0);
+	expect(errors).toEqual([]);
+});
