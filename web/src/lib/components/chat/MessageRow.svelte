@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { clickOutside } from '$lib/actions/clickOutside';
 	import Avatar from '../ui/Avatar.svelte';
@@ -128,7 +129,14 @@
 		// A tap on a link, a button or a field does its own thing.
 		if ((event.target as HTMLElement).closest('a, button, textarea, input, [role="menu"]')) return;
 		actionsOpen = !actionsOpen;
+		// The toolbar opens under the text, so on the last row it can land
+		// below the fold of the feed.
+		if (actionsOpen) {
+			void tick().then(() => actionsEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+		}
 	}
+
+	let actionsEl = $state<HTMLDivElement | null>(null);
 </script>
 
 <!-- The click handler is only the touch-screen way to open the toolbar; with a
@@ -241,7 +249,7 @@
 		{/if}
 
 		{#if showActions && !editing}
-			<div class="actions">
+			<div class="actions" bind:this={actionsEl}>
 				<MessageActions
 					{isAuthor}
 					canReply={allowThread && onOpenThread !== undefined}

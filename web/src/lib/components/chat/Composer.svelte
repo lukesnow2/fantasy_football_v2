@@ -458,6 +458,7 @@
 		.small .icon {
 			width: 44px;
 			height: 44px;
+			border-radius: 9px;
 		}
 	}
 </style>

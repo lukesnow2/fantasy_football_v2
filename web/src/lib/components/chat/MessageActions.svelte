@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
+	import { MediaQuery } from 'svelte/reactivity';
 	import { clickOutside } from '$lib/actions/clickOutside';
 	import { MAX_RECENT_EMOJI, QUICK_EMOJI, RECENT_EMOJI_STORAGE_KEY } from '$lib/chat/constants';
 	import type { EmojiType } from '$lib/chat/types';
@@ -20,6 +21,8 @@
 	let confirmingDelete = $state(false);
 	let menuTrigger = $state<HTMLButtonElement | null>(null);
 	let menu = $state<HTMLDivElement | null>(null);
+
+	const touch = new MediaQuery('hover: none');
 
 	// The board's labels for the league's three defaults; any other emoji is
 	// named by itself.
@@ -67,18 +70,21 @@
 
 	// Same clipping problem as the emoji picker: this menu lives inside the
 	// overflow-y-auto message list, so it has to be positioned fixed to escape it.
-	// flip() puts it above the toolbar when the row sits at the bottom of the
-	// feed, as the phone board draws it.
+	// On a touch screen the toolbar sits inside the row, so the menu flips
+	// above it when the row is at the bottom of the feed, as the phone board
+	// draws it: the feed, not the window, is the space it has to fit in. On
+	// desktop it opens below the ⋯ as the Chat board draws it.
 	$effect(() => {
 		if (!menuOpen || !menu || !menuTrigger) return;
 		const menuEl = menu;
 		const triggerEl = menuTrigger;
+		const feed = touch.current ? triggerEl.closest<HTMLElement>('[role="log"]') : null;
 
 		return autoUpdate(triggerEl, menuEl, async () => {
 			const { x, y } = await computePosition(triggerEl, menuEl, {
 				strategy: 'fixed',
 				placement: 'bottom-end',
-				middleware: [offset(4), flip(), shift({ padding: 8 })]
+				middleware: [offset(4), flip(feed ? { boundary: feed } : undefined), shift({ padding: 8 })]
 			});
 			Object.assign(menuEl.style, { left: `${x}px`, top: `${y}px` });
 		});

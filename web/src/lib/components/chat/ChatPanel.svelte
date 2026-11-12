@@ -246,14 +246,18 @@
 	}
 
 	@media (max-width: 639.98px) {
+		/* One line, so the card takes the row's height rather than its
+		   content's; the thread is a sheet at this width. */
 		.chat-row {
 			flex: 1 1 auto;
+			flex-wrap: nowrap;
 			height: auto;
 			min-height: 24rem;
 		}
 
 		.chat-row :global(.messages) {
 			height: auto;
+			min-height: 0;
 		}
 
 		.loading {
