@@ -2,7 +2,6 @@
 	import { tick } from 'svelte';
 	import { ArrowDown, MessageSquare } from 'lucide-svelte';
 	import MessageRow from './MessageRow.svelte';
-	import ThreadReplies from './ThreadReplies.svelte';
 	import { BOTTOM_THRESHOLD_PX } from '$lib/chat/constants';
 	import { dayKey, formatDayDivider, shouldGroupWith } from '$lib/chat/format';
 	import type { ChatStore } from '$lib/stores/chat.svelte';
@@ -71,22 +70,6 @@
 			// After the DOM has the new row, or scrollHeight is still the old value.
 			void tick().then(() => scrollToBottom(isFirstPaint ? 'auto' : 'smooth'));
 		}
-	});
-
-	// Expanding a thread can add a few hundred pixels below the fold. Without
-	// this, the replies you just asked for open off-screen and the panel looks
-	// like it did nothing.
-	let lastExpandedId = $state<string | null>(null);
-	$effect(() => {
-		const id = expandedThreadId;
-		if (id === lastExpandedId) return;
-		lastExpandedId = id;
-		if (!id || !container) return;
-
-		void tick().then(() => {
-			const thread = container?.querySelector('[data-thread-for]');
-			thread?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-		});
 	});
 
 	async function loadOlder() {
@@ -182,25 +165,6 @@
 			onDiscard={(id) => store.discard(id)}
 		/>
 
-		{#if expandedThreadId === message.messageId}
-			<ThreadReplies
-				replies={store.repliesFor(message.messageId)}
-				loading={store.isThreadLoading(message.messageId)}
-				roster={store.roster}
-				meManagerKey={store.meManagerKey}
-				{canWrite}
-				reactionsFor={(id) => store.reactionsFor(id)}
-				onSendReply={(content) =>
-					void store.send(content, { parentMessageKey: message.messageKey ?? undefined })}
-				onToggleReaction={handleToggleReaction}
-				{onOpenPicker}
-				onEdit={(id, content) => void store.edit(id, content)}
-				onDelete={(id) => void store.remove(id)}
-				onRetry={(id) => void store.retry(id)}
-				onDiscard={(id) => store.discard(id)}
-				onCollapse={() => onToggleThread(message.messageId)}
-			/>
-		{/if}
 	{/each}
 </div>
 

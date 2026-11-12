@@ -38,10 +38,15 @@
 	}: Props = $props();
 </script>
 
-<!-- Inline under the root message, not a side panel: one scroll container, one
-     cursor, one poll loop. The rail on the left is what says "these belong to
-     the message above". -->
-<div data-thread-for="expanded" class="ml-6 border-l-2 border-slate-700 pl-3">
+<!-- The Thread card beside the feed (WP12 S12.5), drawn on the Chat board in
+     place of the old inline replies. The data path is the same as inline: the
+     panel's one store loads the thread (store.loadThread) and sends replies
+     with parentMessageKey, so there's still one poll loop. -->
+<aside aria-label="Thread" data-thread-for="expanded">
+	<div class="flex items-center justify-between">
+		<h2>Thread</h2>
+		<button type="button" aria-label="Close thread" onclick={onCollapse}>×</button>
+	</div>
 	{#if loading && replies.length === 0}
 		<p class="py-2 text-xs text-slate-500">Loading replies…</p>
 	{:else}
@@ -67,18 +72,10 @@
 		<div class="mt-1">
 			<Composer
 				{roster}
-				placeholder="Reply…"
+				placeholder="Reply in thread"
 				autofocus
 				onSend={onSendReply}
 			/>
 		</div>
 	{/if}
-
-	<button
-		type="button"
-		onclick={onCollapse}
-		class="mt-1 px-2 py-1 text-xs text-slate-400 hover:text-slate-200"
-	>
-		Hide replies
-	</button>
-</div>
+</aside>

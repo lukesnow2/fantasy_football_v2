@@ -5,20 +5,28 @@
 	import EmojiPickerPopover from './EmojiPickerPopover.svelte';
 	import MessageList from './MessageList.svelte';
 	import SignedOutPanel from './SignedOutPanel.svelte';
+	import ThreadReplies from './ThreadReplies.svelte';
 	import { DEFAULT_CHANNEL } from '$lib/chat/constants';
-	import { createChatStore } from '$lib/stores/chat.svelte';
+	import { createChatStore, type ChatStore } from '$lib/stores/chat.svelte';
 
 	interface Props {
 		channelId?: string;
 		/** Tailwind height for the panel body. The list needs a bounded height to scroll. */
 		heightClass?: string;
 		title?: string;
+		/**
+		 * The page's store, when the page also reads it (Chat's header shows the
+		 * roster count and the connection). Without one the panel makes its own,
+		 * so there's always one store and one poll loop.
+		 */
+		store?: ChatStore;
 	}
 
 	let {
 		channelId = DEFAULT_CHANNEL,
 		heightClass = 'h-[32rem] lg:h-[38rem]',
-		title = 'League Chat'
+		title = 'League Chat',
+		store: providedStore
 	}: Props = $props();
 
 	const meManagerKey = $derived(page.data.authenticatedManager?.managerKey ?? null);
@@ -27,9 +35,13 @@
 	// A fresh store when identity or channel changes, not a patched one: `mine` on
 	// every reaction is computed server-side against the caller's manager key, so
 	// signing in has to refetch rather than reinterpret what's already loaded.
-	const store = $derived.by(() => createChatStore({ channelId, meManagerKey }));
+	const ownStore = $derived.by(() =>
+		providedStore ? null : createChatStore({ channelId, meManagerKey })
+	);
+	const store = $derived(providedStore ?? (ownStore as ChatStore));
 
-	$effect(() => store.start());
+	// The page starts a store it passes in; the panel starts only its own.
+	$effect(() => ownStore?.start());
 
 	// One picker for the whole panel. Rendering one per message would mount a
 	// 288px web component (and its IndexedDB handle) for every row on screen.
@@ -51,12 +63,26 @@
 
 	function toggleThread(messageId: string) {
 		if (expandedThreadId === messageId) {
-			expandedThreadId = null;
+			closeThread();
 			return;
 		}
 		expandedThreadId = messageId;
 		void store.loadThread(messageId);
 	}
+
+	// Closing puts focus back on the chip that opened the thread.
+	function closeThread() {
+		const id = expandedThreadId;
+		expandedThreadId = null;
+		if (!id) return;
+		queueMicrotask(() =>
+			document.querySelector<HTMLElement>(`[data-thread-chip="${CSS.escape(id)}"]`)?.focus()
+		);
+	}
+
+	const threadRoot = $derived(
+		expandedThreadId ? (store.messages.find((m) => m.messageId === expandedThreadId) ?? null) : null
+	);
 
 	const connectionLabel = $derived(
 		store.connectionState === 'live'
@@ -150,6 +176,27 @@
 		/>
 	{/if}
 </section>
+
+{#if threadRoot && canWrite && store.connectionState !== 'unauthorized'}
+	{@const root = threadRoot}
+	<ThreadReplies
+		replies={store.repliesFor(root.messageId)}
+		loading={store.isThreadLoading(root.messageId)}
+		roster={store.roster}
+		meManagerKey={store.meManagerKey}
+		{canWrite}
+		reactionsFor={(id) => store.reactionsFor(id)}
+		onSendReply={(content) =>
+			void store.send(content, { parentMessageKey: root.messageKey ?? undefined })}
+		onToggleReaction={(id, emoji, emojiType) => void store.toggleReaction(id, emoji, emojiType)}
+		onOpenPicker={openPicker}
+		onEdit={(id, content) => void store.edit(id, content)}
+		onDelete={(id) => void store.remove(id)}
+		onRetry={(id) => void store.retry(id)}
+		onDiscard={(id) => store.discard(id)}
+		onCollapse={closeThread}
+	/>
+{/if}
 
 {#if pickerFor}
 	<EmojiPickerPopover

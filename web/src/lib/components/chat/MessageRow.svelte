@@ -196,6 +196,8 @@
 		{#if allowThread && message.replyCount > 0 && onOpenThread}
 			<button
 				type="button"
+				data-thread-chip={message.messageId}
+				aria-expanded={threadExpanded}
 				onclick={() => onOpenThread(message.messageId)}
 				class="mt-1 flex items-center gap-1.5 rounded px-1 py-0.5 text-xs font-medium text-blue-300 hover:bg-slate-700/50 hover:text-blue-200"
 			>
