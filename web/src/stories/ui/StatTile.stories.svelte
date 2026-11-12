@@ -136,3 +136,22 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Dense and record (League History head to head)">
+	{#snippet template()}
+		<div style="display: grid; gap: 20px; max-width: 1152px">
+			<StatStrip twoUpOnPhones>
+				<StatTile dense value="55" label="rivalries" />
+				<StatTile dense value="23.6" label="games per rivalry, on average" />
+				<StatTile dense value="21" label="seasons, the longest rivalry" />
+				<StatTile dense value="15" label="pairs who met in a title game" />
+			</StatStrip>
+			<StatStrip twoUpOnPhones>
+				<StatTile layout="record" avatar="Nick" label="Highest score" value="220.7" holder="Nick" />
+				<StatTile layout="record" avatar="Omar" label="Biggest blowout" value="124.8" holder="Omar" />
+				<StatTile layout="record" avatar="Luke S" label="Hot streak" value="7" holder="Luke S" />
+				<StatTile layout="record" avatar="Trevor" label="Cold streak" value="7" holder="Trevor" />
+			</StatStrip>
+		</div>
+	{/snippet}
+</Story>

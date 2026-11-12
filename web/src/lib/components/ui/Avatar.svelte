@@ -12,6 +12,9 @@
 	 * the selected manager). `alt` is the photo's alt text; pass "" where the
 	 * name is already beside it, which also hides the initial circle from
 	 * screen readers.
+	 *
+	 * `phoneSize` is the size below 640px, when the phone board draws the
+	 * avatar smaller (League History's face-off: 88px, 64px on a phone).
 	 */
 	import ManagerProfilePicture from '../ManagerProfilePicture.svelte';
 	import { getManagerProfilePicture } from '$lib/utils/managerUtils';
@@ -20,6 +23,8 @@
 	interface Props {
 		name: string;
 		size?: number;
+		/** The size in px below 640px, when the phone board draws another. */
+		phoneSize?: number;
 		ring?: number;
 		/** The ring's color: white (card) unless the board draws another. */
 		ringColor?: string;
@@ -33,6 +38,7 @@
 	let {
 		name,
 		size = 28,
+		phoneSize,
 		ring = 0,
 		ringColor,
 		ringStyle = 'border',
@@ -54,8 +60,8 @@
 {#if hasPhoto}
 	<span
 		class="avatar {className}"
-		style:width="{size}px"
-		style:height="{size}px"
+		style:--avatar-size="{size}px"
+		style:--avatar-phone-size={phoneSize == null ? undefined : `${phoneSize}px`}
 		style:border-width={border}
 		style:border-color={border ? ringColor : undefined}
 		style:box-shadow={shadow}
@@ -68,13 +74,12 @@
 		role={alt === '' ? undefined : 'img'}
 		aria-label={alt === '' ? undefined : (alt ?? name)}
 		aria-hidden={alt === '' || undefined}
-		style:width="{size}px"
-		style:height="{size}px"
+		style:--avatar-size="{size}px"
+		style:--avatar-phone-size={phoneSize == null ? undefined : `${phoneSize}px`}
 		style:border-width={border}
 		style:border-color={border ? ringColor : undefined}
 		style:box-shadow={shadow}
-		style:font-size="{initialSize ?? size * 0.4}px"
-		style:line-height="{size}px">{avatarInitial(name)}</span
+		style:font-size="{initialSize ?? size * 0.4}px">{avatarInitial(name)}</span
 	>
 {/if}
 
@@ -83,6 +88,8 @@
 	   does: its baseline is under the ring, not under the photo inside it
 	   (build spec F2). The initial is centered by line height. */
 	.avatar {
+		width: var(--avatar-size);
+		height: var(--avatar-size);
 		display: inline-block;
 		flex: none;
 		vertical-align: baseline;
@@ -99,10 +106,22 @@
 	}
 
 	.initial {
+		line-height: var(--avatar-size);
 		text-align: center;
 		background: var(--color-wash);
 		color: var(--color-ink-2);
 		font-weight: 700;
+	}
+
+	@media (max-width: 639.98px) {
+		.avatar {
+			width: var(--avatar-phone-size, var(--avatar-size));
+			height: var(--avatar-phone-size, var(--avatar-size));
+		}
+
+		.initial {
+			line-height: var(--avatar-phone-size, var(--avatar-size));
+		}
 	}
 
 	.initial.field {

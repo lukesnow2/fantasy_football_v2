@@ -111,3 +111,20 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Filter chips and extra small (League History)">
+	{#snippet template()}
+		<div style="display: grid; gap: 12px; max-width: 560px">
+			<div style="display: flex; flex-wrap: wrap; gap: 8px">
+				<Button variant="filter" aria-pressed="true">All <span style="opacity: 0.7">23</span></Button>
+				<Button variant="filter" aria-pressed="false"
+					>Scoring <span style="opacity: 0.7">13</span></Button
+				>
+			</div>
+			<div style="display: flex; gap: 8px">
+				<Button variant="secondary" size="xs">Save image</Button>
+				<Button variant="secondary" size="xs" aria-pressed="false">Show table</Button>
+			</div>
+		</div>
+	{/snippet}
+</Story>

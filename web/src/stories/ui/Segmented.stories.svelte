@@ -49,3 +49,42 @@
 		/>
 	{/snippet}
 </Story>
+
+<Story name="Compact, with years (League History Seasons)">
+	{#snippet template()}
+		<Segmented
+			label="Seasons"
+			size="compact"
+			wrap
+			phoneColumns={2}
+			options={[
+				{ value: 'all', label: 'All' },
+				{ value: 'early', label: 'Early', sub: '05 to 12' },
+				{ value: 'middle', label: 'Middle', sub: '13 to 19' },
+				{ value: 'modern', label: 'Modern', sub: '20 to 26' }
+			]}
+			value="all"
+		/>
+	{/snippet}
+</Story>
+
+<Story name="Bleed on phones (League History Measure)">
+	{#snippet template()}
+		<div style="max-width: 358px; padding: 16px; border: 1px solid var(--color-line); border-radius: 12px">
+			<Segmented
+				label="Measure"
+				size="compact"
+				padX={12}
+				wrap
+				bleed={16}
+				options={[
+					{ value: 'scoring', label: 'Scoring' },
+					{ value: 'balance', label: 'Skill vs luck' },
+					{ value: 'champion', label: 'Does the best team win?' },
+					{ value: 'titles', label: 'Championships' }
+				]}
+				value="scoring"
+			/>
+		</div>
+	{/snippet}
+</Story>

@@ -26,6 +26,15 @@
 	 * under that; on phones 14px 16px and a 24px value. `tone` colors the value
 	 * (field, pennant, pennant-dark or ink), and a null value is EmptyValue
 	 * "None".
+	 *
+	 * League History (WP10 S10.5, S10.6) adds:
+	 * - `dense`, value first: 18px 22px of padding, a 36px value at line
+	 *   height 1 and the 14px ink-2 label 6px under it; on phones the compact
+	 *   cell (12px 14px, a 24px value, the label in 12px muted)
+	 * - `layout="record"`: a 36px Avatar 12px left of the text, 16px 20px of
+	 *   padding, the 13px muted label, then the 24px value at line height 1.1
+	 *   with `holder` after it in 14px weight 600 sans; on phones 12px 14px, a
+	 *   32px Avatar 10px from the text, a 12px label and a 22px value
 	 */
 	import { getContext } from 'svelte';
 	import Avatar from './Avatar.svelte';
@@ -43,8 +52,12 @@
 		/** With compact: a line-height 1 value and the label 4px under it. */
 		tight?: boolean;
 		small?: boolean;
-		layout?: 'stack' | 'avatar';
+		/** Value first at League History's head to head strip sizes. */
+		dense?: boolean;
+		layout?: 'stack' | 'avatar' | 'record';
 		avatar?: string | null;
+		/** With layout="record": the manager after the value. */
+		holder?: string;
 		tone?: 'ink' | 'field' | 'pennant' | 'pennant-dark';
 	}
 
@@ -57,8 +70,10 @@
 		compact = false,
 		tight = false,
 		small = false,
+		dense = false,
 		layout = 'stack',
 		avatar,
+		holder,
 		tone
 	}: Props = $props();
 
@@ -77,7 +92,17 @@
 	{#if value == null}<EmptyValue />{:else}{value}{/if}
 {/snippet}
 
-{#if layout === 'avatar'}
+{#if layout === 'record'}
+	<div class="tile record-tile" class:in-strip={inStrip}>
+		{#if avatar}<Avatar name={avatar} size={36} phoneSize={32} alt="" />{/if}
+		<div class="text">
+			<div class="record-label">{@render labelText()}</div>
+			<div class="record-value">
+				{@render valueText()}{#if holder}{' '}<span class="holder">{holder}</span>{/if}
+			</div>
+		</div>
+	</div>
+{:else if layout === 'avatar'}
 	<div class="tile avatar-tile" class:in-strip={inStrip}>
 		{#if avatar}<Avatar name={avatar} size={40} alt="" />{/if}
 		<div class="text">
@@ -92,12 +117,13 @@
 	<div
 		class="tile"
 		class:in-strip={inStrip}
-		class:value-first={valueFirst || compact || small}
+		class:value-first={valueFirst || compact || small || dense}
 		class:compact
+		class:dense
 		class:tight={compact && tight}
 		class:small
 	>
-		{#if valueFirst || compact || small}
+		{#if valueFirst || compact || small || dense}
 			<div class="value" style:color={tone ? `var(--color-${tone})` : undefined}>
 				{@render valueText()}
 			</div>
@@ -258,6 +284,91 @@
 
 	.tight .first-label {
 		margin-top: 4px;
+	}
+
+	/* League History's head to head strip. */
+	.tile.dense {
+		padding: 18px 22px;
+	}
+
+	.dense .value {
+		font-size: 36px;
+		line-height: 1;
+	}
+
+	.dense .first-label {
+		margin-top: 6px;
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	@media (max-width: 639.98px) {
+		.tile.dense {
+			padding: 12px 14px;
+		}
+
+		.dense .value {
+			font-size: 24px;
+			line-height: normal;
+		}
+
+		.dense .first-label {
+			margin-top: 0;
+			font-size: 12px;
+			color: var(--color-muted);
+		}
+	}
+
+	/* League History's records strip. */
+	.record-tile {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.tile.record-tile.in-strip {
+		padding: 16px 20px;
+	}
+
+	.record-tile .text {
+		min-width: 0;
+	}
+
+	.record-label {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.record-value {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 24px;
+		line-height: 1.1;
+		color: var(--color-ink);
+	}
+
+	.holder {
+		font-family: var(--font-sans);
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	@media (max-width: 639.98px) {
+		.record-tile {
+			gap: 10px;
+		}
+
+		.tile.record-tile.in-strip {
+			padding: 12px 14px;
+		}
+
+		.record-label {
+			font-size: 12px;
+		}
+
+		.record-value {
+			font-size: 22px;
+		}
 	}
 
 	/* The Hall of Fame strip. */

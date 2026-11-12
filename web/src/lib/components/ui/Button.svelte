@@ -16,6 +16,11 @@
 	 * - text: no box, ink-2 text with the button's height and padding (the Bet
 	 *   Board's "Cancel"); with `tone="pennant"` it's pennant-dark ("Pull it")
 	 *
+	 * - filter: a filter chip (League History's record book), a pill with 7px
+	 *   12px of padding at 14px weight 600 (44px tall with 0 14px below 640px).
+	 *   Pass `aria-pressed`: on is field fill with white text, off is card
+	 *   fill, ink, with a 1px line border
+	 *
 	 * `tone="pennant"` turns primary into a pennant fill with white text ("Record
 	 * the ruling") and text into pennant-dark.
 	 *
@@ -26,6 +31,8 @@
 	 * - `sm`: 40px at 14px (44px below 640px, the phone tap target). Primary and
 	 *   outline are 0 16px at weight 700, secondary 0 14px at 600, text 0 12px at
 	 *   600, and the pennant text button is 13px ("Take it", "Pass", "Pull it")
+	 * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
+	 *   640px): League History's "Save image" and "Show table"
 	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
@@ -46,8 +53,9 @@
 		| 'band-white'
 		| 'chip'
 		| 'outline'
-		| 'text';
-	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm';
+		| 'text'
+		| 'filter';
+	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm' | 'xs';
 	type Tone = 'default' | 'pennant';
 
 	type Props = {
@@ -224,6 +232,35 @@
 		}
 	}
 
+	.filter {
+		gap: 4px;
+		min-height: 0;
+		padding: 7px 12px;
+		border: 1px solid var(--color-line);
+		border-radius: 999px;
+		background: var(--color-card);
+		color: var(--color-ink);
+		font-size: 14px;
+	}
+
+	.filter:hover {
+		color: var(--color-field);
+	}
+
+	.filter[aria-pressed='true'],
+	.filter[aria-pressed='true']:hover {
+		border-color: var(--color-field);
+		background: var(--color-field);
+		color: var(--color-white);
+	}
+
+	@media (max-width: 639.98px) {
+		.filter {
+			min-height: 44px;
+			padding: 0 14px;
+		}
+	}
+
 	.size-large {
 		box-sizing: content-box;
 		min-height: 48px;
@@ -301,8 +338,15 @@
 		font-size: 13px;
 	}
 
+	.size-xs {
+		min-height: 40px;
+		padding: 0 var(--btn-pad-x, 14px);
+		font-size: 13px;
+	}
+
 	@media (max-width: 639.98px) {
-		.size-sm {
+		.size-sm,
+		.size-xs {
 			min-height: 44px;
 		}
 	}
