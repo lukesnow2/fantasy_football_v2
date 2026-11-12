@@ -69,6 +69,9 @@
 	 * League History (WP10) adds `live`, wash with ink-2, at `size="note"`
 	 * (3px 8px, no letter spacing): a record set in the season in progress.
 	 *
+	 * The Commissioner page (WP12) adds `size="flag"`, 1px 6px at 12px with no
+	 * letter spacing, for "Deactivated" (on `missed`).
+	 *
 	 * The Constitution (WP11) adds `passed`, field-tint with field text, and
 	 * two sizes with 3px 9px of padding and no letter spacing: `status` (a
 	 * proposal's status and category) and `pill`, a 999px pill ("1 proposed").
@@ -92,7 +95,8 @@
 			| 'count'
 			| 'note'
 			| 'status'
-			| 'pill';
+			| 'pill'
+			| 'flag';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
 		center?: boolean;
@@ -188,6 +192,13 @@
 	.size-cell {
 		border: 1px solid transparent;
 		border-radius: 4px;
+		letter-spacing: normal;
+	}
+
+	/* A flag after a name (the Commissioner page's "Deactivated", WP12). */
+	.size-flag {
+		padding: 1px 6px;
+		font-size: 12px;
 		letter-spacing: normal;
 	}
 

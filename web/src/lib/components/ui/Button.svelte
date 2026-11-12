@@ -38,6 +38,11 @@
 	 * - `xl` (WP12): 50px with 0 22px of padding, a 10px radius, 16px weight
  *   700: the sign-in cards' "Email me a sign-in link" and "Send me a new
  *   link"; `padX` sets another side padding
+ * - `row` (WP12): a control inside a table row (the Commissioner page).
+ *   Secondary is 34px with 0 10px of padding at 13px weight 600 ink-2, and
+ *   with `tone="field"` a field border and field text at 700 ("Resend
+ *   link"); icon is a 30px square with a 1px line border, a 6px radius and
+ *   field text at 700 (the "Save email" ✓). Both are 44px below 640px
  * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
 	 *   640px): League History's "Save image" and "Show table"
 	 *
@@ -82,8 +87,8 @@
 		| 'filter'
 		| 'dashed'
 		| 'icon';
-	type Size = 'default' | 'large' | 'tap' | 'lg' | 'xl' | 'sm' | 'xs';
-	type Tone = 'default' | 'pennant' | 'muted';
+	type Size = 'default' | 'large' | 'tap' | 'lg' | 'xl' | 'sm' | 'xs' | 'row';
+	type Tone = 'default' | 'pennant' | 'muted' | 'field';
 
 	type Props = {
 		variant?: Variant;
@@ -494,6 +499,41 @@
 		height: 15px;
 	}
 
+	.secondary.size-row {
+		min-height: 34px;
+		padding: 0 10px;
+		font-size: 13px;
+		color: var(--color-ink-2);
+	}
+
+	.secondary.size-row.tone-field {
+		border-color: var(--color-field);
+		color: var(--color-field);
+		font-weight: 700;
+	}
+
+	.icon.size-row {
+		width: 30px;
+		height: 30px;
+		border-color: var(--color-line);
+		border-radius: 6px;
+		color: var(--color-field);
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	@media (max-width: 639.98px) {
+		.secondary.size-row {
+			min-height: 44px;
+		}
+
+		.icon.size-row {
+			width: 44px;
+			height: 44px;
+			font-size: 15px;
+		}
+	}
+
 	@media (hover: none) {
 		.icon {
 			width: 44px;
@@ -534,5 +574,11 @@
 	.btn[aria-disabled='true'] {
 		cursor: not-allowed;
 		opacity: 0.55;
+	}
+
+	/* A row control that can't act right now (an invite to a deactivated
+	   member) fades further, as the Commissioner board draws it. */
+	.size-row:disabled {
+		opacity: 0.4;
 	}
 </style>

@@ -211,7 +211,7 @@ export const actions: Actions = {
 		// a fresh token and both links work.
 		if (!sent) {
 			return fail(502, {
-				error: `The invite to ${member.email} could not be confirmed — the mail provider did not accept it, or did not answer in time. Check that the Resend domain is verified, then try again.`
+				error: `The invite to ${member.email} couldn't be confirmed. The mail provider didn't accept it or didn't answer in time. Check that the Resend domain is verified, then try again.`
 			});
 		}
 
