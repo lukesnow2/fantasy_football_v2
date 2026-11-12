@@ -1,6 +1,12 @@
 <script lang="ts">
+	/**
+	 * The Propose a change dialog (WP11 S11.5): what you're changing, what kind
+	 * of change it is and the vote that sets, the new wording, why, and the
+	 * season it takes effect. It saves a draft only you can see.
+	 */
 	import { enhance } from '$app/forms';
-	import { X } from 'lucide-svelte';
+	import { Button, Dialog, TextField } from '$lib/components/ui';
+	import { articleParts, thresholdHint } from '$lib/constitution/display';
 
 	export let draft: {
 		type: 'edit_clause' | 'add_clause' | 'delete_clause';
@@ -18,178 +24,225 @@
 	let proposedLanguage = draft.type === 'edit_clause' ? draft.currentText : '';
 	let submitting = false;
 
-	const nextSeason = new Date().getFullYear() + 1;
+	const thisYear = new Date().getFullYear();
+	const nextSeason = thisYear + 1;
 
 	const TYPE_TITLE = {
 		edit_clause: 'Propose a change',
 		add_clause: 'Propose a new clause',
 		delete_clause: 'Propose removing a clause'
 	} as const;
+
+	$: parts = articleParts({ title: sectionTitle });
+	$: kicker = parts.numeral ? `${parts.cite} · ${parts.name}` : parts.name;
+
+	// "Other constitutional change" first and chosen, then the rest in their
+	// stored order.
+	$: categoryOptions = [
+		...Object.entries(categoryLabels).filter(([value]) => value === 'general'),
+		...Object.entries(categoryLabels).filter(([value]) => value !== 'general')
+	].map(([value, label]) => ({ value, label }));
+
+	$: memberOptions = [
+		{ value: '', label: 'Choose…' },
+		...members.map((m) => ({ value: String(m.managerKey), label: m.displayName ?? 'Unknown' }))
+	];
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-	<div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-700 bg-slate-800 p-6">
-		<div class="mb-4 flex items-start justify-between">
-			<div>
-				<h3 class="text-lg font-semibold text-white">{TYPE_TITLE[draft.type]}</h3>
-				<p class="text-sm text-slate-400">{sectionTitle}</p>
+<Dialog {kicker} title={TYPE_TITLE[draft.type]} {onClose}>
+	<form
+		method="POST"
+		action="?/propose"
+		use:enhance={() => {
+			submitting = true;
+			return async ({ result, update }) => {
+				await update();
+				submitting = false;
+				// Saved: the draft is on the page behind, so the dialog's done.
+				if (result.type === 'success') onClose();
+			};
+		}}
+	>
+		<input type="hidden" name="proposalType" value={draft.type} />
+		<input type="hidden" name="affectedSection" value={draft.sectionId} />
+		<input type="hidden" name="targetClauseUid" value={draft.clauseUid ?? ''} />
+		<input type="hidden" name="currentLanguage" value={draft.currentText} />
+
+		{#if draft.currentText}
+			<div class="well">
+				<div class="well-label">Current wording</div>
+				<div class="well-text">{draft.currentText}</div>
 			</div>
-			<button type="button" on:click={onClose} class="rounded p-1 text-slate-400 hover:bg-slate-700">
-				<X class="h-5 w-5" />
-			</button>
+		{/if}
+
+		<TextField
+			label="Title"
+			hint="Optional"
+			phoneHintInline
+			name="title"
+			placeholder="Short name for this proposal"
+			focusBorder
+		/>
+
+		<!--
+			The category is chosen, never inferred. Keyword-matching the proposal
+			text meant a rationale that mentioned "scoring" silently dropped a
+			constitutional amendment to a simple majority.
+		-->
+		<TextField
+			kind="select"
+			label="What kind of change is this?"
+			name="category"
+			required
+			options={categoryOptions}
+			bind:value={category}
+			helper="This sets how many votes it needs under Article VIII. {thresholdHint(category)}"
+			helperWeight={400}
+			focusBorder
+		/>
+
+		{#if category === 'manager_removal'}
+			<TextField
+				kind="select"
+				label="Which manager?"
+				name="subjectManagerKey"
+				required
+				options={memberOptions}
+				helper="They're excluded from the vote and from the count (Article VIII, IV)."
+				helperWeight={400}
+				focusBorder
+			/>
+		{/if}
+
+		{#if draft.type !== 'delete_clause'}
+			<TextField
+				kind="textarea"
+				label="Proposed wording"
+				name="proposedLanguage"
+				rows={3}
+				required
+				placeholder="Write the clause exactly as it should read"
+				bind:value={proposedLanguage}
+				focusBorder
+			/>
+		{/if}
+
+		<TextField
+			kind="textarea"
+			label="Why is this needed?"
+			name="rationale"
+			rows={3}
+			required
+			placeholder="This goes in the email to the league and in the amendment record."
+			focusBorder
+		/>
+
+		<TextField
+			label="Takes effect"
+			name="effectiveSeason"
+			type="number"
+			value={nextSeason}
+			min={thisYear}
+			max={nextSeason + 5}
+			required
+			focusBorder
+			class="season"
+		/>
+
+		{#if error}
+			<p class="error" role="alert">{error}</p>
+		{/if}
+
+		<div class="footer">
+			<Button type="submit" height={46} padX={20} bold disabled={submitting}>
+				{submitting ? 'Saving…' : 'Save as draft'}
+			</Button>
+			<Button variant="secondary" height={46} onclick={onClose}>Cancel</Button>
+			<span class="note">Saved as a draft first. Nobody sees it until you open it for voting.</span>
 		</div>
+	</form>
+</Dialog>
 
-		<form
-			method="POST"
-			action="?/propose"
-			use:enhance={() => {
-				submitting = true;
-				return async ({ update }) => {
-					await update();
-					submitting = false;
-				};
-			}}
-			class="space-y-4"
-		>
-			<input type="hidden" name="proposalType" value={draft.type} />
-			<input type="hidden" name="affectedSection" value={draft.sectionId} />
-			<input type="hidden" name="targetClauseUid" value={draft.clauseUid ?? ''} />
-			<input type="hidden" name="currentLanguage" value={draft.currentText} />
+<style>
+	form {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 22px 26px;
+	}
 
-			{#if draft.currentText}
-				<div>
-					<span class="mb-1 block text-sm font-medium text-slate-300">Current wording</span>
-					<p class="rounded bg-slate-900 p-3 text-sm text-slate-400">{draft.currentText}</p>
-				</div>
-			{/if}
+	.well {
+		padding: 12px 14px;
+		border-radius: 10px;
+		background: var(--color-ground);
+	}
 
-			<div>
-				<label for="title" class="mb-1 block text-sm font-medium text-slate-300">Title</label>
-				<input
-					id="title"
-					name="title"
-					placeholder="Short name for this proposal"
-					class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white placeholder-slate-500"
-				/>
-			</div>
+	.well-label {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
 
-			<!--
-				The category is chosen, never inferred. Keyword-matching the proposal
-				text meant a rationale that mentioned "scoring" silently dropped a
-				constitutional amendment to a simple majority.
-			-->
-			<div>
-				<label for="category" class="mb-1 block text-sm font-medium text-slate-300">
-					What kind of change is this?
-				</label>
-				<select
-					id="category"
-					name="category"
-					bind:value={category}
-					required
-					class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-				>
-					{#each Object.entries(categoryLabels) as [value, label]}
-						<option {value}>{label}</option>
-					{/each}
-				</select>
-				<p class="mt-1 text-xs text-slate-500">
-					This sets the vote threshold under Article 8. Pick honestly — it decides how many votes
-					your proposal needs.
-				</p>
-			</div>
+	.well-text {
+		margin-top: 4px;
+		font-size: 15px;
+	}
 
-			{#if category === 'manager_removal'}
-				<div>
-					<label for="subject" class="mb-1 block text-sm font-medium text-slate-300">
-						Which manager?
-					</label>
-					<select
-						id="subject"
-						name="subjectManagerKey"
-						required
-						class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-					>
-						<option value="">Choose…</option>
-						{#each members as member}
-							<option value={member.managerKey}>{member.displayName}</option>
-						{/each}
-					</select>
-					<p class="mt-1 text-xs text-slate-500">
-						They're excluded from the vote and from the count (Article 8, IV).
-					</p>
-				</div>
-			{/if}
+	form :global(.season) {
+		max-width: 200px;
+	}
 
-			{#if draft.type !== 'delete_clause'}
-				<div>
-					<label for="proposedLanguage" class="mb-1 block text-sm font-medium text-slate-300">
-						Proposed wording
-					</label>
-					<textarea
-						id="proposedLanguage"
-						name="proposedLanguage"
-						bind:value={proposedLanguage}
-						rows="4"
-						required
-						class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white placeholder-slate-500"
-						placeholder="Write the clause exactly as it should read"
-					></textarea>
-				</div>
-			{/if}
+	.error {
+		margin: 0;
+		font-size: 14px;
+		color: var(--color-pennant-dark);
+	}
 
-			<div>
-				<label for="rationale" class="mb-1 block text-sm font-medium text-slate-300">
-					Why is this needed?
-				</label>
-				<textarea
-					id="rationale"
-					name="rationale"
-					rows="3"
-					required
-					class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white placeholder-slate-500"
-					placeholder="This goes in the email to the league and into the amendment record"
-				></textarea>
-			</div>
+	.footer {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px;
+		padding-top: 6px;
+		border-top: 1px solid var(--color-line-soft);
+	}
 
-			<div>
-				<label for="effectiveSeason" class="mb-1 block text-sm font-medium text-slate-300">
-					Effective season
-				</label>
-				<input
-					id="effectiveSeason"
-					name="effectiveSeason"
-					type="number"
-					value={nextSeason}
-					min={new Date().getFullYear()}
-					max={nextSeason + 5}
-					required
-					class="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-white"
-				/>
-			</div>
+	.note {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
 
-			{#if error}
-				<p class="text-sm text-red-400">{error}</p>
-			{/if}
+	@media (max-width: 639.98px) {
+		form {
+			padding: 18px 16px calc(24px + env(safe-area-inset-bottom));
+		}
 
-			<div class="flex gap-2 pt-2">
-				<button
-					disabled={submitting}
-					class="rounded bg-amber-500 px-4 py-2 font-semibold text-slate-900 hover:bg-amber-400 disabled:opacity-50"
-				>
-					{submitting ? 'Saving…' : 'Save as draft'}
-				</button>
-				<button
-					type="button"
-					on:click={onClose}
-					class="rounded border border-slate-600 px-4 py-2 text-slate-300 hover:bg-slate-700"
-				>
-					Cancel
-				</button>
-			</div>
-			<p class="text-xs text-slate-500">
-				Saved as a draft first. Nobody sees it until you open it for voting.
-			</p>
-		</form>
-	</div>
-</div>
+		.well-text {
+			line-height: 1.5;
+		}
+
+		form :global(.helper) {
+			line-height: 1.45;
+		}
+
+		form :global(.control) {
+			box-sizing: border-box;
+			width: 100%;
+		}
+
+		.footer {
+			padding-top: 12px;
+		}
+
+		.footer :global(.btn) {
+			flex: 1 1 0;
+		}
+
+		.note {
+			flex: 1 1 100%;
+			line-height: 1.45;
+		}
+	}
+</style>

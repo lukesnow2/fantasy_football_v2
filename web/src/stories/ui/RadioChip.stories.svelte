@@ -15,3 +15,13 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Your vote (Constitution)">
+	{#snippet template()}
+		<div style="display: flex; flex-wrap: wrap; gap: 8px">
+			<RadioChip size="vote" name="vote" value="yes" label="Yes" checked />
+			<RadioChip size="vote" name="vote" value="no" label="No" />
+			<RadioChip size="vote" name="vote" value="abstain" label="Abstain" />
+		</div>
+	{/snippet}
+</Story>

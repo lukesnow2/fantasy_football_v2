@@ -19,6 +19,18 @@
 	 *   full width, border-box, as the board draws "Reasoning (optional)"
 	 * - `wide`: spans every column of the form's grid
 	 *
+	 * The Constitution and the Data Dictionary (WP11) add:
+	 * - `size="lg"`: a 48px control with 10px corners, an input padded 0 16px
+	 *   (the Dictionary's Search and Category)
+	 * - `focusBorder`: the focused control takes a 1.5px field border in place
+	 *   of the outline, as the Propose a change dialog draws "Proposed wording"
+	 * - a `size="sm"` textarea is 10px 12px at 14px (the vote's comment box)
+	 * - `phoneHintInline`: below 640px the hint sits on the label's line
+	 *   ("Title Optional"), as the dialog's phone board draws it; above, it
+	 *   stacks under the label as the desktop board does
+	 * - `helperWeight={400}`: the helper line in weight 400 (the dialog's
+	 *   "This sets how many votes it needs under Article VIII.")
+	 *
 	 * Inputs and textareas are content-box, as the boards draw them, so their
 	 * height is the min-height plus the border; a select is border-box, as
 	 * Chromium draws it. Below 640px every control is 16px, so iOS Safari
@@ -35,7 +47,10 @@
 	type Props = {
 		label: string;
 		kind?: 'input' | 'textarea' | 'select';
-		size?: 'default' | 'sm';
+		size?: 'default' | 'sm' | 'lg';
+		focusBorder?: boolean;
+		phoneHintInline?: boolean;
+		helperWeight?: 400 | 500;
 		hint?: string;
 		helper?: string;
 		hideLabel?: boolean;
@@ -54,6 +69,9 @@
 		helper,
 		hideLabel = false,
 		wide = false,
+		focusBorder = false,
+		phoneHintInline = false,
+		helperWeight = 500,
 		options = [],
 		rows,
 		value = $bindable(),
@@ -62,12 +80,18 @@
 	}: Props = $props();
 </script>
 
-<label class="field size-{size} {className}" class:wide class:bare={hideLabel}>
+<label
+	class="field size-{size} {className}"
+	class:wide
+	class:bare={hideLabel}
+	class:focus-border={focusBorder}
+>
 	{#if hideLabel}
 		<span class="sr-only">{label}</span>
 	{:else}
-		{label}
-		{#if hint}<span class="hint">{hint}</span>{/if}
+		<span class="label-line" class:inline-phone={phoneHintInline}
+			>{label}{#if hint}{' '}<span class="hint">{hint}</span>{/if}</span
+		>
 	{/if}
 	{#if kind === 'textarea'}
 		<textarea
@@ -85,7 +109,9 @@
 	{:else}
 		<input class="control input" bind:value {...rest} />
 	{/if}
-	{#if helper}<span class="helper">{helper}</span>{/if}
+	{#if helper}<span class="helper" style:font-weight={helperWeight === 500 ? undefined : helperWeight}
+			>{helper}</span
+		>{/if}
 </label>
 
 <style>
@@ -106,6 +132,11 @@
 	.size-sm {
 		gap: 5px;
 		font-size: 13px;
+	}
+
+	/* The label and its hint are separate lines in the label's column. */
+	.label-line {
+		display: contents;
 	}
 
 	.hint {
@@ -176,7 +207,36 @@
 		outline-offset: 2px;
 	}
 
+	.size-sm .textarea {
+		min-height: 0;
+		padding: 10px 12px;
+	}
+
+	.size-lg .control {
+		min-height: 48px;
+		border-radius: 10px;
+	}
+
+	/* Border-box, as Chromium draws a search input. */
+	.size-lg .input {
+		box-sizing: border-box;
+		padding: 0 16px;
+	}
+
+	/* 1.5px of field, drawn as the border's color plus a half-pixel ring, so
+	   the control doesn't grow when it takes focus. */
+	.focus-border .control:focus,
+	.focus-border .control:focus-visible {
+		border-color: var(--color-field);
+		box-shadow: 0 0 0 0.5px var(--color-field);
+		outline: none;
+	}
+
 	@media (max-width: 639.98px) {
+		.label-line.inline-phone {
+			display: block;
+		}
+
 		.size-sm .control {
 			min-height: 44px;
 			font-size: 16px;

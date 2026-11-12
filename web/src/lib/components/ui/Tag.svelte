@@ -19,7 +19,8 @@
 		| 'letdown'
 		| 'bust'
 		| 'count'
-		| 'live';
+		| 'live'
+		| 'passed';
 </script>
 
 <script lang="ts">
@@ -67,6 +68,12 @@
 	 *
 	 * League History (WP10) adds `live`, wash with ink-2, at `size="note"`
 	 * (3px 8px, no letter spacing): a record set in the season in progress.
+	 *
+	 * The Constitution (WP11) adds `passed`, field-tint with field text, and
+	 * two sizes with 3px 9px of padding and no letter spacing: `status` (a
+	 * proposal's status and category) and `pill`, a 999px pill ("1 proposed").
+	 * Its other statuses reuse `pending` (Draft), `clinched` (Voting open),
+	 * `champion` (Rejected) and `missed` (Withdrawn, Superseded).
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -83,7 +90,9 @@
 			| 'sample'
 			| 'cell'
 			| 'count'
-			| 'note';
+			| 'note'
+			| 'status'
+			| 'pill';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
 		center?: boolean;
@@ -124,6 +133,21 @@
 	.size-note {
 		padding: 3px 8px;
 		letter-spacing: normal;
+	}
+
+	.size-status,
+	.size-pill {
+		padding: 3px 9px;
+		letter-spacing: normal;
+	}
+
+	.size-pill {
+		border-radius: 999px;
+	}
+
+	.passed {
+		background: var(--color-field-tint);
+		color: var(--color-field);
 	}
 
 	.size-small {

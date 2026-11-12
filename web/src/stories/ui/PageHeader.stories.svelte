@@ -133,6 +133,21 @@
 	{/snippet}
 </Story>
 
+<Story name="Constitution (WP11)">
+	{#snippet template()}
+		<PageHeader
+			kicker="League · Version 1 · in effect since January 1, 2025"
+			title="Constitution"
+			introWidth={640}
+			phoneActionFull
+			phoneKickerLineHeight={1.4}
+		>
+			The rules this league runs on. Every clause is versioned, and changes go to a vote.
+			{#snippet action()}<Button size="lg" padX={20}>Propose a change</Button>{/snippet}
+		</PageHeader>
+	{/snippet}
+</Story>
+
 <style>
 	/* The boards' main column: 1200px wide, 40px 24px 64px, 16px sides on phones. */
 	.frame {

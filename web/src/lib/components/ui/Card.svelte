@@ -50,6 +50,16 @@
 	 *   text, no border, 10px corners (the face-off's numbers, the
 	 *   Championship records tiles)
 	 *
+	 * The Constitution and the Data Dictionary (WP11) add:
+	 * - `as`: the element, when the board draws a <nav> or an <article>
+	 *   (Contents, an article), and `id` for its anchor
+	 * - `titleLead`: a word before the title in field ("I" in "I League
+	 *   makeup and construction")
+	 * - `headRuleGap`, `phoneHeadRuleGap`: px between the header row and its
+	 *   rule (10 unless drawn otherwise: 12 on an article, 0 on its phone card)
+	 * - `phoneHeadSpacing`: the header row's gap below 640px
+	 * - `phoneTitleLineHeight`: the title's line height below 640px (1.2)
+	 *
 	 * Below 640px every card follows the build spec's Phones rules: 16px of
 	 * padding and a 22px title. A phone board that draws something else sets:
 	 * - `phonePadding`: the padding as CSS ("16px 16px 6px" when rows run to the
@@ -102,6 +112,16 @@
 		phoneHeadAlign?: 'baseline' | 'center';
 		/** A 2px ink rule under the header row. */
 		headRule?: boolean;
+		/** Px between the header row and its rule. */
+		headRuleGap?: number;
+		phoneHeadRuleGap?: number;
+		phoneHeadSpacing?: string;
+		phoneTitleLineHeight?: number;
+		/** A word before the title, in field. */
+		titleLead?: string;
+		/** The element: section unless the board draws another. */
+		as?: 'section' | 'article' | 'nav' | 'aside';
+		id?: string;
 		/** Drawn 10px left of the title. */
 		icon?: Snippet;
 		/** Classes for spacing between cards, passed by the page. */
@@ -131,6 +151,13 @@
 		phoneHeadStackGap = 4,
 		phoneHeadAlign = 'baseline',
 		headRule = false,
+		headRuleGap = 10,
+		phoneHeadRuleGap,
+		phoneHeadSpacing,
+		phoneTitleLineHeight,
+		titleLead,
+		as = 'section',
+		id,
 		icon,
 		class: className = '',
 		action,
@@ -140,11 +167,14 @@
 	const headingId = $props.id();
 </script>
 
-<section
+<svelte:element
+	this={as}
 	bind:this={element}
+	{id}
 	class="card {tone} {className}"
 	class:flush
 	class:stack={stack != null}
+	class:title-lh={phoneTitleLineHeight != null}
 	style:--card-stack={stack == null ? undefined : `${stack}px`}
 	style:--card-pad={padding}
 	style:--card-pad-phone={phonePadding}
@@ -155,6 +185,10 @@
 	style:--card-head-align={headAlign}
 	style:--card-head-spacing={headSpacing}
 	style:--card-head-stack-gap={`${phoneHeadStackGap}px`}
+	style:--card-rule-gap={`${headRuleGap}px`}
+	style:--card-rule-gap-phone={`${phoneHeadRuleGap ?? headRuleGap}px`}
+	style:--card-head-spacing-phone={phoneHeadSpacing}
+	style:--card-title-lh-phone={phoneTitleLineHeight}
 	aria-labelledby={title ? `card-${headingId}` : undefined}
 	aria-label={title ? undefined : label}
 >
@@ -169,19 +203,19 @@
 				<div class="title-row">
 					{@render icon()}
 					<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
-						{title}
+						{#if titleLead}<span class="lead">{titleLead}</span>{' '}{/if}{title}
 					</svelte:element>
 				</div>
 			{:else if title && dot}
 				<div class="title-row">
 					<span class="dot" aria-hidden="true" style:background="var(--color-{dot})"></span>
 					<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
-						{title}
+						{#if titleLead}<span class="lead">{titleLead}</span>{' '}{/if}{title}
 					</svelte:element>
 				</div>
 			{:else if title}
 				<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
-					{title}
+					{#if titleLead}<span class="lead">{titleLead}</span>{' '}{/if}{title}
 				</svelte:element>
 			{/if}
 			{#if action}
@@ -190,7 +224,7 @@
 		</div>
 	{/if}
 	{@render children?.()}
-</section>
+</svelte:element>
 
 <style>
 	.card {
@@ -312,8 +346,12 @@
 
 	.head.rule {
 		margin-bottom: 0;
-		padding-bottom: 10px;
+		padding-bottom: var(--card-rule-gap);
 		border-bottom: 2px solid var(--color-ink);
+	}
+
+	.lead {
+		color: var(--color-field);
 	}
 
 	/* A flex box, so whatever sits in the action slot is as tall as its own
@@ -354,6 +392,11 @@
 
 		.head.rule {
 			margin-bottom: 0;
+			padding-bottom: var(--card-rule-gap-phone);
+		}
+
+		.head {
+			gap: var(--card-head-spacing-phone, var(--card-head-spacing));
 		}
 
 		.head.stack-phone {
@@ -376,6 +419,10 @@
 
 		.title {
 			font-size: var(--card-title-phone);
+		}
+
+		.card.title-lh .title {
+			line-height: var(--card-title-lh-phone);
 		}
 	}
 </style>

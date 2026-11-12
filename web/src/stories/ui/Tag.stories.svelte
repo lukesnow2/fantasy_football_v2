@@ -150,3 +150,17 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Proposal status (WP11)">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px; flex-wrap: wrap">
+			<Tag variant="pending" size="status">Draft</Tag>
+			<Tag variant="clinched" size="status">Voting open</Tag>
+			<Tag variant="passed" size="status">Passed</Tag>
+			<Tag variant="champion" size="status">Rejected</Tag>
+			<Tag variant="missed" size="status">Withdrawn</Tag>
+			<Tag variant="missed" size="status">Superseded</Tag>
+			<Tag variant="champion" size="pill">1 proposed</Tag>
+		</div>
+	{/snippet}
+</Story>

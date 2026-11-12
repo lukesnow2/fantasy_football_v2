@@ -34,6 +34,23 @@
 	 * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
 	 *   640px): League History's "Save image" and "Show table"
 	 *
+	 * The Constitution and the Data Dictionary (WP11) add:
+	 * - a pressed primary: with `aria-pressed="true"` it's a 2px field border on
+	 *   field-tint with clubhouse text ("Done proposing")
+	 * - `dashed`: no fill, a 1px dashed field border, 14px weight 600 field,
+	 *   40px with 0 14px of padding, 44px below 640px ("+ Propose a new clause
+	 *   in this article")
+	 * - `icon`: a 34px square on card fill with a 1px line-strong border and a
+	 *   15px icon; 44px with an 18px icon on a touch screen. With
+	 *   `tone="pennant"` the border is pennant-line and the icon pennant-dark
+	 *   (the clause buttons). Give it an aria-label
+	 * - link sizes: `sm` is 14px ("Propose an amendment"), `xs` 13px ("Show
+	 *   details"), both 44px tall targets below 640px
+	 * - `tone="muted"` on a filter chip: ink-2 text ("+ 5 more")
+	 * - at the default size, `height` sets the min-height in px (46 for the
+	 *   dialog's "Save as draft"), `padX` the side padding, and `bold` the
+	 *   weight 700 those buttons draw
+	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
 	 * (onclick, type, aria-*) goes through to the element, and `class` adds to
@@ -54,9 +71,11 @@
 		| 'chip'
 		| 'outline'
 		| 'text'
-		| 'filter';
+		| 'filter'
+		| 'dashed'
+		| 'icon';
 	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm' | 'xs';
-	type Tone = 'default' | 'pennant';
+	type Tone = 'default' | 'pennant' | 'muted';
 
 	type Props = {
 		variant?: Variant;
@@ -64,6 +83,10 @@
 		tone?: Tone;
 		/** Side padding in px, for a board that draws another (lg's "Post it"). */
 		padX?: number;
+		/** Min-height in px at the default size. */
+		height?: number;
+		/** Weight 700. */
+		bold?: boolean;
 		href?: string;
 		children: Snippet;
 	} & Omit<HTMLButtonAttributes, 'children'> &
@@ -74,6 +97,8 @@
 		size = 'default',
 		tone = 'default',
 		padX,
+		height,
+		bold = false,
 		href,
 		children,
 		type = 'button',
@@ -91,7 +116,9 @@
 		aria-disabled={disabled || undefined}
 		onclick={disabled ? undefined : (rest as HTMLAnchorAttributes).onclick}
 		style:--btn-pad-x={padX == null ? undefined : `${padX}px`}
-		class="btn {variant} size-{size} tone-{tone} {className}">{@render children()}</a
+		style:--btn-height={height == null ? undefined : `${height}px`}
+		class="btn {variant} size-{size} tone-{tone} {className}"
+		class:bold>{@render children()}</a
 	>
 {:else}
 	<button
@@ -99,7 +126,9 @@
 		{type}
 		{disabled}
 		style:--btn-pad-x={padX == null ? undefined : `${padX}px`}
-		class="btn {variant} size-{size} tone-{tone} {className}">{@render children()}</button
+		style:--btn-height={height == null ? undefined : `${height}px`}
+		class="btn {variant} size-{size} tone-{tone} {className}"
+		class:bold>{@render children()}</button
 	>
 {/if}
 
@@ -109,8 +138,8 @@
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
-		min-height: 44px;
-		padding: 0 18px;
+		min-height: var(--btn-height, 44px);
+		padding: 0 var(--btn-pad-x, 18px);
 		border: 0;
 		border-radius: var(--radius-control);
 		font-family: var(--font-sans);
@@ -351,6 +380,99 @@
 	@media (max-width: 639.98px) {
 		.size-sm,
 		.size-xs {
+			min-height: 44px;
+		}
+	}
+
+	/* WP11 */
+	.btn.bold {
+		font-weight: 700;
+	}
+
+	.primary[aria-pressed='true'],
+	.primary[aria-pressed='true']:hover {
+		border: 2px solid var(--color-field);
+		background: var(--color-field-tint);
+		color: var(--color-clubhouse);
+	}
+
+	.link.size-sm,
+	.link-pennant.size-sm {
+		min-height: 0;
+		padding: 0;
+		font-size: 14px;
+	}
+
+	.link.size-xs {
+		min-height: 0;
+		padding: 0;
+		font-size: 13px;
+	}
+
+	.filter.tone-muted {
+		color: var(--color-ink-2);
+	}
+
+	.dashed {
+		min-height: 40px;
+		padding: 0 14px;
+		border: 1px dashed var(--color-field);
+		background: transparent;
+		color: var(--color-field);
+		font-size: 14px;
+	}
+
+	.dashed:hover {
+		background: var(--color-field-wash);
+		color: var(--color-field);
+	}
+
+	.icon {
+		width: 34px;
+		height: 34px;
+		min-height: 0;
+		padding: 0;
+		border: 1px solid var(--color-line-strong);
+		background: var(--color-card);
+		color: var(--color-ink);
+	}
+
+	.icon:hover {
+		background: var(--color-field-wash);
+		color: var(--color-ink);
+	}
+
+	.icon.tone-pennant {
+		border-color: var(--color-pennant-line);
+		color: var(--color-pennant-dark);
+	}
+
+	.icon :global(svg) {
+		width: 15px;
+		height: 15px;
+	}
+
+	@media (hover: none) {
+		.icon {
+			width: 44px;
+			height: 44px;
+		}
+
+		.icon :global(svg) {
+			width: 18px;
+			height: 18px;
+		}
+	}
+
+	@media (max-width: 639.98px) {
+		.link.size-sm,
+		.link-pennant.size-sm,
+		.link.size-xs {
+			display: inline-flex;
+			min-height: 44px;
+		}
+
+		.dashed {
 			min-height: 44px;
 		}
 	}
