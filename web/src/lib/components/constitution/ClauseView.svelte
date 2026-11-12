@@ -47,6 +47,7 @@
 					<Button
 						variant="icon"
 						aria-label="Propose an edit to this clause"
+						title="Propose an edit to this clause"
 						onclick={() =>
 							onPropose({
 								type: 'edit_clause',
@@ -68,6 +69,7 @@
 					<Button
 						variant="icon"
 						aria-label="Propose a sub-clause"
+						title="Propose a sub-clause"
 						onclick={() =>
 							onPropose({
 								type: 'add_clause',
@@ -89,6 +91,7 @@
 						variant="icon"
 						tone="pennant"
 						aria-label="Propose removing this clause"
+						title="Propose removing this clause"
 						onclick={() =>
 							onPropose({
 								type: 'delete_clause',

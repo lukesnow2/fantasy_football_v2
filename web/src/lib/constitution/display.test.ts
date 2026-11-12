@@ -152,6 +152,8 @@ describe('closesIn', () => {
 	});
 
 	it('is empty with no deadline', () => expect(closesIn(null, now)).toBe(''));
+
+	it('is empty for a date that does not parse', () => expect(closesIn('not a date', now)).toBe(''));
 });
 
 describe('statusTag', () => {

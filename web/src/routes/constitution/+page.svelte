@@ -90,10 +90,12 @@
 
 	function updateCurrent() {
 		let found = data.sections[0]?.sectionId ?? '';
+		// Every article shares one scroll margin, so read it once.
+		let margin: number | null = null;
 		for (const s of data.sections) {
 			const el = document.getElementById(s.sectionId);
 			if (!el) continue;
-			const margin = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+			margin ??= parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
 			if (el.getBoundingClientRect().top <= margin + 1) found = s.sectionId;
 		}
 		current = found;

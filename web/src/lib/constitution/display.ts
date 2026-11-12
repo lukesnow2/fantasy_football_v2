@@ -138,6 +138,7 @@ export function voteProgress(yes: number, requiredYes: number): number {
 export function closesIn(date: string | Date | null, now: Date = new Date()): string {
 	if (!date) return '';
 	const ms = new Date(date).getTime() - now.getTime();
+	if (Number.isNaN(ms)) return '';
 	if (ms <= 0) return 'closing now';
 	const days = Math.floor(ms / 86_400_000);
 	if (days >= 1) return `${days} day${days === 1 ? '' : 's'} left`;

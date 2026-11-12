@@ -223,9 +223,12 @@
 		padding: 0 16px;
 	}
 
+	/* 1.5px of field, drawn as the border's color plus a half-pixel ring, so
+	   the control doesn't grow when it takes focus. */
 	.focus-border .control:focus,
 	.focus-border .control:focus-visible {
-		border: 1.5px solid var(--color-field);
+		border-color: var(--color-field);
+		box-shadow: 0 0 0 0.5px var(--color-field);
 		outline: none;
 	}
 
