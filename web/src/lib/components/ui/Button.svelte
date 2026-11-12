@@ -232,8 +232,9 @@
 		}
 	}
 
+	/* 3px between the name and its count: a space's width at 14px. */
 	.filter {
-		gap: 4px;
+		gap: 3px;
 		min-height: 0;
 		padding: 7px 12px;
 		border: 1px solid var(--color-line);
@@ -255,9 +256,12 @@
 	}
 
 	@media (max-width: 639.98px) {
+		/* The phone board draws these as buttons, in the browser's button
+		   font, so their counts' digits are proportional. */
 		.filter {
 			min-height: 44px;
 			padding: 0 14px;
+			font-variant-numeric: normal;
 		}
 	}
 
