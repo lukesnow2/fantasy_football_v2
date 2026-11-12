@@ -389,7 +389,7 @@
 				const avg5 = (list: typeof pts) => list.reduce((a, p) => a + p.val, 0) / list.length;
 				const early = pts.slice(0, 5);
 				const late = pts.slice(-5);
-				out.push(`The five-season average went from ${avg5(early).toFixed(2)} (${early[0].year} to ${early[4].year}) to ${avg5(late).toFixed(2)} (${late[0].year} to ${late[4].year}).`);
+				out.push(`The five-season average was ${avg5(early).toFixed(2)} over ${early[0].year} to ${early[4].year} and ${avg5(late).toFixed(2)} over ${late[0].year} to ${late[4].year}.`);
 			}
 			out.push(`On average ${pct(headline.skillShare)} of the spread in records${scope} was skill.`);
 		}
