@@ -1,0 +1,542 @@
+#!/usr/bin/env python3
+"""
+Complete EDW Deployment Script
+Enhanced with better verification and automatic view fixes
+
+This script handles the complete deployment of the Fantasy Football EDW:
+1. Deploy/update schema objects
+2. Run ETL to populate tables
+3. Fix analytical views automatically
+4. Verify data quality and completeness with enhanced checks
+
+Usage:
+    python deploy_complete_edw.py [--database-url URL] [--force-rebuild] [--verify-only]
+
+Environment Variables:
+    DATABASE_URL: PostgreSQL connection string
+"""
+
+import os
+import sys
+import logging
+import argparse
+from datetime import datetime
+from sqlalchemy import create_engine, text
+
+# Add project root to Python path for importing from src
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.edw_schema.edw_etl_processor import EdwEtlProcessor
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+class EdwDeployment:
+    """
+    Enhanced EDW deployment with improved verification and automatic fixes
+    """
+    
+    def __init__(self, database_url: str, force_rebuild: bool = False):
+        self.database_url = database_url
+        self.force_rebuild = force_rebuild
+        self.engine = None
+        self.deployment_stats = {
+            'start_time': datetime.now(),
+            'schema_objects': 0,
+            'dimension_records': 0,
+            'fact_records': 0,
+            'verification_passed': False
+        }
+        
+        # Expected counts for verification (baseline: 2005-2025 seasons)
+        self.expected_counts = {
+            'leagues': 21,
+            'seasons': 21,
+            'weeks': 341,
+            'matchups': 1580,
+            'transactions': 10273,
+            'draft_picks': 3342,
+            'teams': 206,
+            'player_statistics': 43147,
+            'team_performance': 3160
+        }
+    
+    def connect_database(self) -> bool:
+        """Connect to the database"""
+        try:
+            logger.info("🔌 Connecting to database...")
+            
+            url = self.database_url
+            if url.startswith('postgres://'):
+                url = url.replace('postgres://', 'postgresql://', 1)
+            
+            self.engine = create_engine(url)
+            
+            with self.engine.connect() as conn:
+                result = conn.execute(text("SELECT version()"))
+                version = result.fetchone()[0]
+                logger.info(f"✅ Database Connected: {version.split()[0:2]}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            return False
+    
+    def deploy_schema(self) -> bool:
+        """Deploy or update EDW schema using reliable direct SQL approach"""
+        try:
+            logger.info("🏗️ Deploying EDW schema...")
+            
+            # Import psycopg2 for direct connection (more reliable than SQLAlchemy for schema work)
+            import psycopg2
+            
+            # Connect using psycopg2 directly for better transaction control
+            conn = psycopg2.connect(self.database_url)
+            conn.autocommit = True
+            cur = conn.cursor()
+            
+            # 1. Ensure EDW schema exists
+            logger.info("📋 Ensuring EDW schema exists...")
+            cur.execute("CREATE SCHEMA IF NOT EXISTS edw")
+            # The DDL in fantasy_edw_schema.sql is schema-unqualified (CREATE TABLE dim_season),
+            # so set the search_path to edw to ensure objects are created in the edw schema
+            # rather than public (which only worked on Heroku due to a role-level search_path).
+            cur.execute("SET search_path TO edw, public")
+            logger.info("✅ EDW schema ready")
+            
+            # 2. Check which tables exist
+            expected_tables = ['dim_season', 'dim_league', 'dim_team', 'dim_player', 'dim_manager', 'dim_week',
+                             'fact_roster', 'fact_team_performance', 'fact_matchup', 'fact_transaction', 'fact_draft',
+                             'fact_player_statistics', 'mart_league_summary', 'mart_manager_performance',
+                             'mart_player_value', 'mart_weekly_power_rankings', 'mart_manager_h2h']
+            
+            cur.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'edw'
+            """)
+            existing_tables = {row[0] for row in cur.fetchall()}
+            missing_tables = set(expected_tables) - existing_tables
+            
+            logger.info(f"📋 Found {len(existing_tables)} existing tables: {sorted(existing_tables)}")
+            if missing_tables:
+                logger.info(f"📋 Missing {len(missing_tables)} tables: {sorted(missing_tables)}")
+            
+            if not missing_tables:
+                logger.info("✅ All expected tables exist")
+                cur.close()
+                conn.close()
+                return True
+            
+            # 3. Read and parse schema file for complete definitions with constraints
+            schema_file = 'src/edw_schema/fantasy_edw_schema.sql'
+            if not os.path.exists(schema_file):
+                schema_file = 'fantasy_edw_schema.sql'  # Fallback
+            
+            if not os.path.exists(schema_file):
+                logger.error(f"❌ Schema file not found: {schema_file}")
+                cur.close()
+                conn.close()
+                return False
+            
+            logger.info(f"📋 Reading schema from: {schema_file}")
+            with open(schema_file, 'r') as f:
+                schema_sql = f.read()
+            
+            # 4. Parse SQL statements and organize by type
+            statements = [s.strip() for s in schema_sql.split(';') if s.strip()]
+            
+            create_table_stmts = []
+            create_index_stmts = []
+            create_view_stmts = []
+            alter_stmts = []
+            
+            for stmt in statements:
+                stmt_upper = stmt.upper().strip()
+                if 'CREATE TABLE' in stmt_upper:
+                    create_table_stmts.append(stmt)
+                elif 'CREATE INDEX' in stmt_upper or 'CREATE UNIQUE INDEX' in stmt_upper:
+                    create_index_stmts.append(stmt)
+                elif 'CREATE VIEW' in stmt_upper:
+                    create_view_stmts.append(stmt)
+                elif 'ALTER TABLE' in stmt_upper:
+                    alter_stmts.append(stmt)
+            
+            logger.info(f"📋 Found {len(create_table_stmts)} tables, {len(create_index_stmts)} indexes, {len(create_view_stmts)} views, {len(alter_stmts)} constraints")
+            
+            # 5. Create any table that does not yet physically exist in the edw schema.
+            #    Use multi-pass retry to satisfy forward FK references in the DDL
+            #    (e.g. dim_team is defined before dim_manager, which it references).
+            #    Driven by what actually exists rather than a hardcoded expected list,
+            #    so tables omitted from expected_tables (e.g. mart_manager_h2h) still get created.
+            logger.info("🏗️ Creating missing tables...")
+            import re
+            tables_created = 0
+            last_error = None
+            pending = []
+            for stmt in create_table_stmts:
+                match = re.search(r'CREATE\s+TABLE\s+(\w+)', stmt, re.IGNORECASE)
+                table_name = match.group(1) if match else "unknown"
+                if table_name in existing_tables:
+                    logger.info(f"  ✓ {table_name} already exists")
+                else:
+                    pending.append((table_name, stmt))
+
+            # Retry pending creations until all succeed or no further progress is made
+            for _pass in range(len(pending) + 1):
+                if not pending:
+                    break
+                still_pending = []
+                progressed = False
+                for table_name, stmt in pending:
+                    try:
+                        cur.execute(stmt)
+                        logger.info(f"  ✅ {table_name} created successfully")
+                        tables_created += 1
+                        progressed = True
+                    except Exception as e:
+                        if "already exists" in str(e).lower():
+                            logger.info(f"  ✓ {table_name} already exists")
+                            progressed = True
+                        else:
+                            last_error = e
+                            still_pending.append((table_name, stmt))
+                pending = still_pending
+                if not progressed:
+                    break
+            for table_name, stmt in pending:
+                logger.error(f"  ❌ Failed to create {table_name}: {last_error}")
+            
+            # 6. Create indexes (performance optimization)
+            logger.info("📋 Creating indexes...")
+            indexes_created = 0
+            for stmt in create_index_stmts:
+                try:
+                    cur.execute(stmt)
+                    indexes_created += 1
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        logger.debug(f"  ⚠️ Index warning: {str(e)[:100]}...")
+            
+            # 7. Create views (analytics)
+            logger.info("👁️ Creating views...")
+            views_created = 0
+            for stmt in create_view_stmts:
+                try:
+                    cur.execute(stmt)
+                    views_created += 1
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        logger.debug(f"  ⚠️ View warning: {str(e)[:100]}...")
+            
+            # 8. Add additional constraints
+            logger.info("🔗 Adding constraints...")
+            constraints_added = 0
+            for stmt in alter_stmts:
+                try:
+                    cur.execute(stmt)
+                    constraints_added += 1
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        logger.debug(f"  ⚠️ Constraint warning: {str(e)[:100]}...")
+            
+            total_objects = tables_created + indexes_created + views_created + constraints_added
+            self.deployment_stats['schema_objects'] = total_objects
+            
+            logger.info(f"✅ Schema deployment complete:")
+            logger.info(f"  📊 Tables: {tables_created} created")
+            logger.info(f"  📋 Indexes: {indexes_created} created") 
+            logger.info(f"  👁️ Views: {views_created} created")
+            logger.info(f"  🔗 Constraints: {constraints_added} added")
+            logger.info(f"  🎯 Total: {total_objects} schema objects processed")
+            
+            cur.close()
+            conn.close()
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Schema deployment failed: {e}")
+            return False
+    
+    def truncate_edw_tables(self) -> bool:
+        """Truncate EDW tables for clean rebuild if requested"""
+        if not self.force_rebuild:
+            logger.info("ℹ️ Skipping table truncation (use --force-rebuild for clean rebuild)")
+            return True
+        
+        try:
+            logger.info("🗑️ Truncating EDW tables for clean rebuild...")
+
+            # Every edw table EXCEPT dim_manager and edw_metadata, in ONE
+            # statement and WITHOUT CASCADE.
+            #
+            # dim_manager is not warehouse-private. The web app's app.* schema
+            # stores its manager_key in seven columns, and app.user and
+            # app.league_member carry foreign keys into it. This used to run
+            # TRUNCATE edw.dim_manager RESTART IDENTITY CASCADE, which -
+            # proven against a scratch copy of that key graph - cascades into
+            # app.user and app.league_member and from there into chat_message,
+            # wager, rule_proposal, rule_vote, rule_amendment and the whole
+            # constitution: the sign-in allowlist and every piece of user data
+            # the site holds, wiped by the RUNBOOK's documented rebuild. Where
+            # the foreign keys were absent, RESTART IDENTITY instead renumbered
+            # manager_key and silently re-attributed every chat message, bet
+            # and vote to whoever received that number next. load_dimensions
+            # upserts dim_manager on manager_name, so its keys stay stable and
+            # there is nothing to clear.
+            #
+            # No CASCADE: Postgres then requires every table referencing a
+            # truncated table to be truncated in the same statement, so a
+            # reference from outside the warehouse makes this fail loudly
+            # instead of silently emptying someone else's data.
+            with self.engine.connect() as conn:
+                tables = [r[0] for r in conn.execute(text(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'edw' "
+                    "AND tablename NOT IN ('dim_manager', 'edw_metadata') "
+                    "ORDER BY tablename"))]
+                conn.execute(text(
+                    'TRUNCATE TABLE ' + ', '.join(f'edw."{t}"' for t in tables)
+                    + ' RESTART IDENTITY'))
+                conn.commit()
+                logger.info(f"✅ Truncated {len(tables)} tables (dim_manager kept: "
+                            "the app references its keys)")
+
+            return True
+        except Exception as e:
+            logger.error(f"❌ Table truncation failed: {e}")
+            return False
+    
+    def run_etl(self) -> bool:
+        """Run ETL process using enhanced EDW ETL processor"""
+        try:
+            logger.info("🔄 Running EDW ETL process...")
+            
+            # Create and configure ETL processor
+            etl_processor = EdwEtlProcessor(database_url=self.database_url, force_rebuild=self.force_rebuild)
+            
+            # Connect to database first
+            if not etl_processor.connect():
+                logger.error("❌ ETL processor failed to connect to database")
+                return False
+            
+            # Load operational data from database
+            if not etl_processor.load_data():
+                logger.error("❌ ETL processor failed to load operational data")
+                return False
+            
+            # Process operational data to EDW (includes view creation)
+            # Use full ETL process to ensure all dimensions are loaded
+            if etl_processor.run_etl():
+                logger.info("✅ EDW ETL process completed successfully")
+                return True
+            else:
+                logger.error("❌ EDW ETL process failed")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ ETL process failed: {e}")
+            return False
+    
+    def verify_deployment(self) -> bool:
+        """Enhanced verification with better view checking"""
+        try:
+            logger.info("🔍 Verifying EDW deployment...")
+            
+            verification_passed = True
+            
+            with self.engine.connect() as conn:
+                # 1. Check dimension table counts
+                logger.info("📊 Verifying dimension tables...")
+                dimension_tables = {
+                    'dim_season': self.expected_counts['seasons'],
+                    'dim_league': self.expected_counts['leagues'],
+                    'dim_team': self.expected_counts['teams'],
+                    'dim_week': None
+                }
+                
+                total_dimension_records = 0
+                for table, expected in dimension_tables.items():
+                    result = conn.execute(text(f'SELECT COUNT(*) FROM edw.{table}'))
+                    actual = result.scalar()
+                    total_dimension_records += actual
+                    
+                    if expected and actual != expected:
+                        logger.warning(f"  ⚠️ {table}: {actual} records (expected: {expected})")
+                        if table in ['dim_season', 'dim_league']:
+                            verification_passed = False
+                    else:
+                        logger.info(f"  ✅ {table}: {actual} records")
+                
+                # 2. Check fact table counts
+                logger.info("📊 Verifying fact tables...")
+                fact_tables = {
+                    'fact_roster': None,  # Variable based on roster data availability
+                    'fact_matchup': self.expected_counts['matchups'],
+                    'fact_transaction': self.expected_counts['transactions'],
+                    'fact_draft': self.expected_counts['draft_picks'],
+                    'fact_player_statistics': self.expected_counts['player_statistics'],
+                    'fact_team_performance': self.expected_counts['team_performance']
+                }
+                
+                total_fact_records = 0
+                for table, expected in fact_tables.items():
+                    result = conn.execute(text(f'SELECT COUNT(*) FROM edw.{table}'))
+                    actual = result.scalar()
+                    total_fact_records += actual
+                    
+                    if expected and actual < expected * 0.9:
+                        logger.warning(f"  ⚠️ {table}: {actual} records (expected: >= {expected})")
+                        # Don't fail verification for variable count tables, just warn
+                    else:
+                        logger.info(f"  ✅ {table}: {actual} records" + 
+                                   (f" (expected: >= {expected})" if expected else ""))
+                
+                # 3. Enhanced analytical views verification
+                logger.info("👁️ Verifying analytical views...")
+                views_with_expectations = [
+                    ('vw_current_season_dashboard', 10, 'current season team data'),
+                    ('vw_manager_hall_of_fame', 5, 'manager career statistics'),
+                    ('vw_league_competitiveness', 1, 'league analysis'),
+                    ('vw_player_breakout_analysis', 1, 'player performance'),
+                    ('vw_trade_analysis', 100, 'trade transactions')
+                ]
+                
+                view_issues = 0
+                for view, min_expected, description in views_with_expectations:
+                    try:
+                        result = conn.execute(text(f'SELECT COUNT(*) FROM edw.{view}'))
+                        count = result.scalar()
+                        if count >= min_expected:
+                            logger.info(f"  ✅ {view}: {count} records ({description})")
+                        else:
+                            logger.warning(f"  ⚠️ {view}: {count} records (expected >= {min_expected} for {description})")
+                            view_issues += 1
+                    except Exception as e:
+                        logger.error(f"  ❌ {view}: Error - {e}")
+                        view_issues += 1
+                
+                # 4. Critical checks that should fail verification
+                if view_issues > 3:  # If most views are broken
+                    logger.error(f"❌ {view_issues} views have critical issues")
+                    verification_passed = False
+                elif view_issues > 0:
+                    logger.warning(f"⚠️ {view_issues} views have minor issues")
+                
+                # 5. League of record verification
+                logger.info("🏈 Verifying league of record filtering...")
+                result = conn.execute(text('SELECT COUNT(DISTINCT league_id) FROM edw.dim_league'))
+                unique_leagues = result.scalar()
+                
+                if unique_leagues != self.expected_counts['leagues']:
+                    logger.error(f"  ❌ Found {unique_leagues} leagues (expected: {self.expected_counts['leagues']})")
+                    verification_passed = False
+                else:
+                    logger.info(f"  ✅ Found {unique_leagues} leagues (correct)")
+                
+                self.deployment_stats['dimension_records'] = total_dimension_records
+                self.deployment_stats['fact_records'] = total_fact_records
+                self.deployment_stats['verification_passed'] = verification_passed
+                
+                if verification_passed:
+                    logger.info("✅ Deployment verification PASSED")
+                else:
+                    logger.error("❌ Deployment verification FAILED")
+                
+                return verification_passed
+                
+        except Exception as e:
+            logger.error(f"❌ Verification failed: {e}")
+            return False
+    
+    def print_deployment_summary(self):
+        """Print comprehensive deployment summary"""
+        end_time = datetime.now()
+        runtime = end_time - self.deployment_stats['start_time']
+        
+        print("\n" + "="*70)
+        print("🎉 ENHANCED EDW DEPLOYMENT SUMMARY")
+        print("="*70)
+        print(f"📅 Deployment Date: {self.deployment_stats['start_time'].strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"⏱️ Total Runtime: {runtime}")
+        print(f"🏗️ Schema Objects: {self.deployment_stats['schema_objects']} processed")
+        print(f"📊 Dimension Records: {self.deployment_stats['dimension_records']:,}")
+        print(f"📈 Fact Records: {self.deployment_stats['fact_records']:,}")
+        print(f"✅ Verification: {'PASSED' if self.deployment_stats['verification_passed'] else 'FAILED'}")
+        
+        print("\n🔧 DEPLOYMENT IMPROVEMENTS:")
+        print("  📊 Enhanced view verification with data expectations")
+        print("  🔍 Better error detection and reporting")
+        print("  📈 Data quality thresholds")
+        print("  🔄 Dynamic season rollover for current season dashboard")
+        
+        print("\n🚀 EDW IS READY FOR ANALYTICS!")
+        print("="*70)
+    
+    def deploy(self) -> bool:
+        """Execute enhanced deployment workflow"""
+        logger.info("🚀 Starting Enhanced EDW Deployment")
+        logger.info("="*70)
+        
+        steps = [
+            ("Connect to Database", self.connect_database),
+            ("Deploy Schema", self.deploy_schema),
+            ("Truncate Tables (if requested)", self.truncate_edw_tables),
+            ("Run ETL Process", self.run_etl),
+            ("Verify Deployment", self.verify_deployment)
+        ]
+        
+        for step_name, step_func in steps:
+            logger.info(f"📋 Step: {step_name}")
+            if not step_func():
+                logger.error(f"❌ Deployment failed at step: {step_name}")
+                return False
+        
+        self.print_deployment_summary()
+        return True
+
+def main():
+    """Main deployment entry point"""
+    parser = argparse.ArgumentParser(description='Enhanced Fantasy Football EDW Deployment')
+    parser.add_argument('--database-url', 
+                       help='Database URL (or set DATABASE_URL env var)')
+    parser.add_argument('--force-rebuild', action='store_true',
+                       help='Force complete rebuild (truncate all tables)')
+    parser.add_argument('--verify-only', action='store_true',
+                       help='Only run verification (skip deployment)')
+    
+    args = parser.parse_args()
+    
+    database_url = args.database_url or os.getenv('DATABASE_URL')
+    if not database_url:
+        logger.error("❌ DATABASE_URL required: set as environment variable or pass directly")
+        sys.exit(1)
+    
+    try:
+        deployment = EdwDeployment(database_url, args.force_rebuild)
+        
+        if args.verify_only:
+            logger.info("🔍 Running enhanced verification only...")
+            if (deployment.connect_database() and 
+                deployment.verify_deployment()):
+                deployment.print_deployment_summary()
+                logger.info("✅ Enhanced verification completed successfully")
+            else:
+                logger.error("❌ Enhanced verification failed")
+                sys.exit(1)
+        else:
+            if deployment.deploy():
+                logger.info("🎊 Enhanced EDW deployment successful!")
+            else:
+                logger.error("❌ Enhanced EDW deployment failed")
+                sys.exit(1)
+                
+    except Exception as e:
+        logger.error(f"❌ Deployment error: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main() 

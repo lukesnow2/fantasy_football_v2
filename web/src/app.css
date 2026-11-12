@@ -1,0 +1,262 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
+
+@theme static {
+  /*
+   * Record Book tokens (WP1, S1.1). Every color, font, radius and shadow on a
+   * Record Book board maps to one of these. A literal hex anywhere outside this
+   * @theme block is a bug (build spec G2), and so is a stock palette class
+   * (slate-*, gray-*, blue-* and the rest) in markup a work package touches.
+   * The stock palettes further down stay only until the unrestyled pages are
+   * gone; the housekeeping PR after WP12 removes them.
+   *
+   * `static` ships every one of these as a CSS variable even before a page
+   * uses it, so a chart can read a token at runtime.
+   */
+  --color-ground: #F5F6F3;
+  --color-card: #FFFFFF;
+  --color-ink: #18231D;
+  --color-ink-2: #45524A;
+  --color-muted: #5D6A62;
+  --color-faint: #6B776F;
+  --color-line: #DCE0DA;
+  --color-line-soft: #E6E9E4;
+  --color-line-strong: #C7CDC6;
+  --color-wash: #EDEFEB;
+  --color-clubhouse: #15382A;
+  --color-clubhouse-2: #1D4534;
+  --color-clubhouse-3: #24503D;
+  --color-clubhouse-line: #4F7A65;
+  --color-on-clubhouse: #CFE0D6;
+  --color-on-clubhouse-2: #A9C7B6;
+  --color-field: #1E6B45;
+  --color-field-2: #2C5A45;
+  --color-field-tint: #E3EFE7;
+  --color-field-wash: #EDF4EF;
+  --color-field-line: #C9DDD0;
+  --color-sage: #7FA790;
+  --color-sage-tint: #B9D3C3;
+  --color-pennant: #C4531E;
+  --color-pennant-dark: #9A3F14;
+  --color-pennant-light: #F0A06E;
+  --color-pennant-tint: #FBE9DF;
+  --color-pennant-line: #F2CDB7;
+  --color-pennant-wash: #FFFBF8;
+  --color-mention: #FFF6F0;
+  --color-ink-brown: #6B3A1E;
+  --color-chart-teal: #2E8B8B;
+  --color-chart-rose: #C2549A;
+  --color-pos-qb: #C8372D;
+  --color-pos-qb-tint: #FBE4E1;
+  --color-pos-rb: #2F63C7;
+  --color-pos-rb-tint: #E1EBFA;
+  --color-pos-wr: #2E8B4E;
+  --color-pos-wr-tint: #E2F1E6;
+  --color-pos-te: #B88A05;
+  --color-pos-te-tint: #FBF1CF;
+  --color-pos-k: #8A5A2B;
+  --color-pos-k-tint: #F2E6DA;
+  --color-pos-def: #7A4FC2;
+  --color-pos-def-tint: #EDE4F7;
+
+  --font-slab: 'Zilla Slab', Georgia, serif;
+  --font-sans: 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --shadow-tip: 0 14px 36px rgba(21, 56, 42, 0.3);
+  --shadow-popover: 0 16px 40px rgba(21, 56, 42, 0.18);
+  --shadow-dark-pop: 0 12px 32px rgba(0, 0, 0, 0.28);
+  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.3);
+  --shadow-thumb: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-toolbar: 0 4px 14px rgba(21, 56, 42, 0.12);
+
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-tag: 6px;
+}
+
+@theme {
+  /* Stock Tailwind palettes, kept for the unrestyled pages (see the Record
+     Book block above). */
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+  --color-slate-950: #020617;
+
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-gray-950: #030712;
+
+  --color-red-50: #fef2f2;
+  --color-red-100: #fee2e2;
+  --color-red-200: #fecaca;
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-800: #991b1b;
+  --color-red-900: #7f1d1d;
+  --color-red-950: #450a0a;
+
+  --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
+  --color-amber-200: #fde68a;
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-800: #92400e;
+  --color-amber-900: #78350f;
+  --color-amber-950: #451a03;
+
+  --color-yellow-50: #fefce8;
+  --color-yellow-100: #fef9c3;
+  --color-yellow-200: #fef08a;
+  --color-yellow-300: #fde047;
+  --color-yellow-400: #facc15;
+  --color-yellow-500: #eab308;
+  --color-yellow-600: #ca8a04;
+  --color-yellow-700: #a16207;
+  --color-yellow-800: #854d0e;
+  --color-yellow-900: #713f12;
+  --color-yellow-950: #422006;
+
+  --color-green-50: #f0fdf4;
+  --color-green-100: #dcfce7;
+  --color-green-200: #bbf7d0;
+  --color-green-300: #86efac;
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+  --color-green-700: #15803d;
+  --color-green-800: #166534;
+  --color-green-900: #14532d;
+  --color-green-950: #052e16;
+
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1e3a8a;
+  --color-blue-950: #172554;
+
+  --color-indigo-50: #eef2ff;
+  --color-indigo-100: #e0e7ff;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-300: #a5b4fc;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-indigo-600: #4f46e5;
+  --color-indigo-700: #4338ca;
+  --color-indigo-800: #3730a3;
+  --color-indigo-900: #312e81;
+  --color-indigo-950: #1e1b4b;
+
+  --color-purple-50: #faf5ff;
+  --color-purple-100: #f3e8ff;
+  --color-purple-200: #e9d5ff;
+  --color-purple-300: #d8b4fe;
+  --color-purple-400: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+  --color-purple-700: #7c3aed;
+  --color-purple-800: #6b21a8;
+  --color-purple-900: #581c87;
+  --color-purple-950: #3b0764;
+
+  --color-pink-50: #fdf2f8;
+  --color-pink-100: #fce7f3;
+  --color-pink-200: #fbcfe8;
+  --color-pink-300: #f9a8d4;
+  --color-pink-400: #f472b6;
+  --color-pink-500: #ec4899;
+  --color-pink-600: #db2777;
+  --color-pink-700: #be185d;
+  --color-pink-800: #9d174d;
+  --color-pink-900: #831843;
+  --color-pink-950: #500724;
+
+  /* Custom colors for fantasy football positions */
+  --color-position-qb: #dc2626;        /* Red for QB */
+  --color-position-rb: #2563eb;        /* Blue for RB */
+  --color-position-wr: #16a34a;        /* Green for WR */
+  --color-position-te: #eab308;        /* Yellow for TE */
+  --color-position-k: #ea580c;         /* Brown/Orange for K */
+  --color-position-def: #1f2937;       /* Dark gray/black for DEF */
+
+  /* Orange color palette (missing from default) */
+  --color-orange-50: #fff7ed;
+  --color-orange-100: #ffedd5;
+  --color-orange-200: #fed7aa;
+  --color-orange-300: #fdba74;
+  --color-orange-400: #fb923c;
+  --color-orange-500: #f97316;
+  --color-orange-600: #ea580c;
+  --color-orange-700: #c2410c;
+  --color-orange-800: #9a3412;
+  --color-orange-900: #7c2d12;
+  --color-orange-950: #431407;
+
+  /* Essential design tokens */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+}
+
+/*
+ * Record Book base styles (WP1, S1.2), from the boards' page wrapper and their
+ * link rules. A link is ink and turns field on hover. A field link (the "→"
+ * links, Sign in's "try again") is field and turns clubhouse, the System
+ * board's `a.field-link`. The boards set no line height on the page, so neither
+ * does this: text without its own line height reads at the font's normal.
+ */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-ground);
+    font-variant-numeric: tabular-nums;
+    line-height: normal;
+  }
+
+  a {
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--color-field);
+  }
+
+  a.field-link {
+    color: var(--color-field);
+  }
+
+  a.field-link:hover {
+    color: var(--color-clubhouse);
+  }
+}

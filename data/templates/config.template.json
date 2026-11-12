@@ -1,0 +1,6 @@
+{
+  "yahoo_client_key": "your_client_key_here",
+  "yahoo_client_secret": "your_client_secret_here",
+  "yahoo_app_id": "your_app_id_here",
+  "_comment": "Copy this file to config.json and fill in your actual Yahoo API credentials. Get them from https://developer.yahoo.com/apps/"
+} 

@@ -1,0 +1,79 @@
+# Test suite. The Python pipeline tests run against a real Postgres
+# service because the guarantees under test (advisory locks, transactional
+# flag commits, schema-rename restore) are database behaviors.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline-tests:
+    # Pinned with web-tests below: ubuntu-latest moves under us.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: runner
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U runner"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run pipeline tests
+        env:
+          PGHOST: localhost
+          PGUSER: runner
+        run: python -m pytest tests/ -q
+
+  web-tests:
+    # Pinned: ubuntu-latest moved to 26.04 in November 2026, and Playwright
+    # refuses to install Chromium there ("does not support chromium on
+    # ubuntu26.04-x64"), so the job died before any test ran.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Install Playwright Chromium
+        # The client half of the suite runs in vitest browser mode, which
+        # drives a real Chromium. Without this the run dies before any test
+        # executes, reporting only "failed to scan for dependencies".
+        # The browser comes from Playwright's CDN, not apt.
+        run: npx playwright install chromium
+      - name: Install Chromium's system packages
+        # On ubuntu-24.04 the libraries Chromium needs are already on the
+        # image; apt only adds nine font packages, which no test depends on.
+        # On 11-11 the runners couldn't resolve azure.archive.ubuntu.com for
+        # over an hour and the job died here before any test ran, so apt
+        # gets short timeouts and a failure here doesn't stop the tests.
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          echo 'Acquire::Retries "1"; Acquire::http::Timeout "20"; Acquire::https::Timeout "20";' | sudo tee /etc/apt/apt.conf.d/99-fail-fast
+          npx playwright install-deps chromium
+      - name: Run unit tests
+        run: npm run test:unit -- --run

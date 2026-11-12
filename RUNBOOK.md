@@ -1,0 +1,262 @@
+# The League — Operations Runbook
+
+How to rebuild and operate the data layer. The stack: a Python ETL (Yahoo → JSON →
+`public.*` raw → `edw.*` warehouse) feeding a SvelteKit app (Drizzle, `app.*` schema)
+on Vercel, backed by **Neon** (serverless Postgres). Local dev uses a local Postgres.
+
+## Databases & schemas
+- `public.*` — raw Yahoo tables (leagues, teams, rosters, matchups, transactions, draft_picks, statistics). Owned by the Python pipeline.
+- `edw.*` — dimensional warehouse (dim_/fact_/mart_ + analytical views). Built by the ETL. **What the web app reads.**
+- `meta_data.*` — data-dictionary metric definitions.
+- `app.*` — auth/chat/rules (user, session, webauthn_*, chat_*, rule_*). Owned by Drizzle.
+- `model.*` — saved playoff-odds forecasts (migration 015). Created by a pipeline migration, written by `web/scripts/snapshot-playoff-odds.ts`. **Never rebuilt**: a forecast can't be re-derived later, so nothing that drops `edw` (full rebuild, `promote_to_neon.sh`) or `app` touches it, and it has no foreign keys into `edw`.
+
+Every connection must resolve `app, edw, public` on its search_path. This is set at the
+**database level** (`ALTER DATABASE <db> SET search_path TO app, edw, public`) — do this once
+per database. (The app's per-connection search_path option is not reliable on Neon/PG18.)
+
+## One-time setup
+```bash
+# Local Postgres (Homebrew) + dev DB
+createdb the_league
+psql "postgresql://<user>@localhost:5432/the_league" -c "ALTER DATABASE the_league SET search_path TO app, edw, public;"
+
+# Python env (must match your CPU arch — Apple Silicon needs arm64 wheels)
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+# Web env: web/.env -> DATABASE_URL=postgres://<user>@localhost:5432/the_league
+```
+
+## Full warehouse rebuild from existing JSON
+Run against any `DATABASE_URL` (local or Neon). The tracked canonical baseline
+is the **sanitized 2005–2025 combined snapshot**, stored gzipped (sensitive
+fields nulled by `scripts/sanitize_snapshot.py`; ETL-equivalence proven against
+the original). The loader reads `.json` and `.json.gz` alike. Seasons after the
+baseline are recovered by the pipeline itself:
+`scripts/incremental_load.py --season <year>` re-extracts from Yahoo.
+```bash
+DB="postgresql://<user>@localhost:5432/the_league"
+# 1. raw JSON -> public.*
+.venv/bin/python src/deployment/heroku_deployer.py \
+  --data-file data/current/yahoo_fantasy_combined_2005_2025_sanitized.json.gz --database-url "$DB"
+# 2. build edw.* (schema + ETL + views). --force-rebuild = clean bulk reload.
+.venv/bin/python scripts/deploy_complete_edw.py --database-url "$DB" --force-rebuild
+# 3. app.* schema (auth/chat/rules) — from the committed migration, not push
+cd web && DATABASE_URL="$DB" npm run db:migrate
+DATABASE_URL="$DB" npm run seed:constitution   # constitution v1, idempotent
+DATABASE_URL="$DB" npm run seed:members        # league allowlist, idempotent
+# 4. meta_data.* (data dictionary)
+psql "$DB" -f src/edw_schema/meta_data_schema.sql
+psql "$DB" -f src/edw_schema/populate_metric_definitions.sql
+# Adds the limitations column, corrects the definitions whose stored range or
+# thresholds contradicted the ETL, and rebuilds vw_active_metrics. Must run
+# after populate; idempotent, so re-running is safe.
+psql "$DB" -f src/edw_schema/add_metric_limitations.sql
+```
+Expected counts from the 2005–2025 baseline (verified on a clean rebuild, and
+matching `deploy_complete_edw.py`'s own verification): fact_matchup 1580,
+fact_transaction 10273, fact_draft 3342, fact_player_statistics 43147,
+fact_team_performance 3160.
+
+**Then run the history backfill.** The baseline predates the 2026-09 fix: its
+player stats cover only players rostered at each season's END (2016 has 32 of
+150), it has no weekly rosters, and every championship week is missing. Reload
+every past season through the pipeline, which fetches each week's rosters and
+then that week's stats for exactly those players (~8 min of Yahoo calls per
+season, ~2.7 h for all; stops at the first failure, resumable by season):
+```bash
+# DATABASE_URL via the environment keeps the password out of the process list
+# for the ~2.7 h run; the driver queues behind any running pipeline.
+export DATABASE_URL="$DB"
+.venv/bin/python scripts/incremental_load.py --dry-run   # applies nothing; checks access
+.venv/bin/python scripts/backfill_history.py --dry-run   # the per-season plan
+.venv/bin/python scripts/backfill_history.py
+```
+The first incremental run also applies the migrations (e.g. 010 removes the
+week-1 stats of 2006/2007, whose seasons started in week 2). Afterwards every
+rostered player-week has exactly one stats row, raw and warehouse alike.
+Do NOT re-extract history with `scripts/full_extraction.py` instead: it still
+fetches each week's stats for today's rosters and recreates the gaps.
+
+## Promote local → Neon
+Copy dev's **raw layer, pipeline state and warehouse together**; rebuild none of
+them on Neon. The per-row ETL is slow over the network, and dev holds the
+corrected history: the tracked snapshot predates the 2026-09 history backfill.
+`scripts/promote_to_neon.sh` does it in **one transaction** - the target is
+either fully promoted or untouched - and leaves `app.*` / `drizzle.*` alone:
+```bash
+export TARGET_DATABASE_URL="postgresql://...neon.tech/<db>?sslmode=require"   # DIRECT host, not -pooler
+scripts/promote_to_neon.sh
+.venv/bin/python scripts/incremental_load.py --dry-run    # with DATABASE_URL = the target
+```
+It copies raw `public.*` + `public.pipeline_*` + `edw` + `meta_data`, re-adds
+both `app -> edw.dim_manager` FKs (dropping `edw` removes them), and refuses to
+start if the source is mid-run or has unpublished periods, if the target's
+`edw.dim_manager` keys differ from the source's (`app.*` stores them), or if a
+pipeline run holds the target's lock. The source's pipeline lock is held from
+the checks through both dumps, so no run can commit mid-copy. It needs a
+PostgreSQL 18 client (`brew install postgresql@18`; `PG_BIN` overrides the
+path): Neon runs PG18. For a brand-new target: `ALTER DATABASE <db> SET
+search_path TO app, edw, public`, then promote, THEN `cd web &&
+DATABASE_URL=... npm run db:migrate` plus the two seeds - the app migration
+declares FKs into `edw.dim_manager`, so it can't run before the warehouse exists.
+
+Before promoting production, rehearse: restore a dump of production into
+`neondb_rehearsal` (`pg_dump -Fc` / `pg_restore --no-owner --no-privileges`,
+same search_path), promote into it, dry-run, run once, point a local site at
+it. Take a Neon branch of `neondb` immediately before the real promote; it is
+the rollback.
+
+Do **not** load Neon's `public.*` from the snapshot (rebuild step 1) instead of
+promoting it: the snapshot's stats predate the backfill, and the first weekly run
+refreshes the warehouse from `public.*` - `fact_draft.season_points` is recomputed
+from `public.statistics` - so the corrected history would quietly revert (2016's
+board back to 130 zero-point picks). After promoting, `incremental_load.py
+--dry-run` against Neon should report no pending migrations and a gap of just
+the rolling reload window.
+
+## Authentication & the league roster
+Sign-in is an emailed magic link. There is no password and no registration: a link
+is only ever issued to an address already in `app.league_member`, which is the
+allowlist and the only access control. Everything else (rate limiting, the
+identical-response behaviour of the login form) is a second layer.
+
+```bash
+# Add or correct an address, then re-seed. Keyed on managerKey, so re-running
+# updates in place. Blank emails are skipped — that manager just cannot sign in yet.
+$EDITOR web/data/league-members.json
+cd web && DATABASE_URL="$DB" npm run seed:members
+```
+
+The commissioner can send invites, correct addresses and deactivate managers at
+`/admin/members`. Deactivating both blocks future sign-ins and kills any live
+session.
+
+**Resend**: the sending domain must be verified before any mail leaves. Sends
+log rather than throw on failure — deliberately, so that a mail outage cannot
+turn the login form into a roster-enumeration oracle — which also means an
+unverified domain fails *silently*. Send yourself a link before inviting anyone.
+
+Verification scripts (need a running dev server with `EMAIL_PROVIDER=console`):
+```bash
+cd web
+ORIGIN=http://localhost:5175 DATABASE_URL="$DB" ./scripts/verify-login-flow.sh
+ORIGIN=http://localhost:5175 DATABASE_URL="$DB" ./scripts/verify-voting-flow.sh
+DATABASE_URL="$DB" node scripts/verify-attribution.js
+```
+Note `verify-voting-flow.sh` rewrites `app.*` test data — never point it at production.
+
+## Constitution & amendments
+The constitution is data, in `app.constitution_version/_section/_clause`. It is
+versioned copy-on-write: a passing proposal clones the whole document into a new
+version and edits the clone, so history is queryable and "Last Updated" is real.
+Proposals target a clause by its stable `clause_uid`, which survives the clone.
+
+Vote thresholds come from Article 8 and are chosen explicitly on the proposal
+form (`src/lib/server/constitution/thresholds.ts`). The denominator is the count
+of active `league_member` rows — never `edw.dim_manager`, or an ETL run could
+silently change what counts as a super-majority. Abstaining and not voting both
+count against passage.
+
+Proposals settle on every vote and on every page load, so there is no cron to
+depend on. `computeOutcome` in `constitution/outcome.ts` is pure and unit-tested;
+it is the single source of truth for passage.
+
+## Migrations
+`db:push` is local-dev only. Production uses committed migrations:
+```bash
+cd web
+npm run db:generate   # drizzle-kit generate, then scripts/filter-migration.js
+npm run db:migrate
+```
+The filter step is not optional. `schemaFilter: ['app']` in `drizzle.config.ts`
+only constrains `push` and `introspect` — `generate` renders every table in
+`schema.ts`, including the `edw.*` read models, and will happily emit
+`CREATE TABLE "edw"."dim_manager"`. The filter strips anything whose target is a
+pipeline-owned schema and aborts if any survives.
+
+## Weekly in-season updates
+`scripts/incremental_load.py` is the one mechanism for weekly loads, backfills,
+and repairs. It computes the gap from `public.pipeline_periods` (verified
+complete periods, not max-week), holds a Postgres advisory lock (a concurrent
+invocation exits 0), loads the raw delta in one transaction, and publishes to
+`edw.*` behind a snapshot that atomically restores the previous generation on
+any failure. Useful invocations:
+```bash
+python scripts/incremental_load.py --dry-run        # show the computed gap
+python scripts/incremental_load.py                  # load it
+python scripts/incremental_load.py --season 2007 --weeks 15 16   # repair
+python scripts/incremental_load.py --season 2019 --stats-only    # stats repair
+```
+`.github/workflows/weekly-data-extraction.yml` invokes it Tuesdays 08:00
+America/Denver in-season. GitHub cron is UTC-only, so it schedules both
+14:00 and 15:00 UTC and `--require-local-hour 8 --local-tz America/Denver` lets
+exactly one through across DST. The gate judges the cron entry that fired
+(`SCHEDULED_CRON`, from `github.event.schedule`), not the clock when the run
+starts: GitHub can start scheduled runs hours late (both 2026-10-13 runs
+started after 13:00 Mountain and, under the old wall-clock gate, both
+skipped). The run log says which slot it judged ("Scheduled slot ..."). Plus a monthly heartbeat (token keepalive + repo-activity commit
+against GitHub's 60-day scheduled-workflow auto-disable). Repo secrets:
+`DATABASE_URL`, `YAHOO_CLIENT_KEY`, `YAHOO_CLIENT_SECRET`, `YAHOO_REFRESH_TOKEN`.
+`DATABASE_URL` must be Neon's **direct** host (as in `web/.env.production.local`),
+not the `-pooler` host Vercel uses: the session advisory lock and per-session
+settings don't survive transaction pooling.
+Failure files a GitHub issue. The dead-man's check (`scripts/staleness_check.py`)
+runs from OUTSIDE GitHub Actions and files an issue when no successful run has
+finished within 6.5 days in-season. Run ledger: `public.pipeline_runs`.
+
+### Playoff-odds snapshots
+After each load the workflow saves the playoff-odds forecast the site is showing
+to `model.playoff_odds_snapshots` (one row per season, week and model version)
+and `model.playoff_odds_snapshot_teams` (each team's odds and record). The model
+version (`web/src/lib/server/playoff-odds-version.ts`) is a hash of what the
+model returns on three fixed sample seasons, plus the site's simulation count
+and seed rule. A change to the numbers starts a new version by itself, and a
+refactor, comment or new export doesn't. The next run after a new version
+rebuilds the season's earlier weeks under it (`captured_live = false`) so versions compare week for week. Only rows with
+`captured_live = true` were taken the week they were shown. A stat correction
+to the current week saves a second snapshot; grading uses the last.
+```bash
+cd web
+DATABASE_URL=... npm run odds:snapshot -- --dry-run      # what it would save
+DATABASE_URL=... npm run odds:snapshot -- --season 2025  # rebuild a past season
+DATABASE_URL=... npm run odds:grade                      # Brier, log loss, calibration
+```
+The grade report scores playoffs, bye, top seed and title against a no-skill
+baseline (every team equal), split by model version and live vs rebuilt. A
+season grades once its playoffs start. Past seasons rebuilt with
+`--season` are in-sample for 2008-2018, the years the model was tuned on.
+
+### Dead-man's check on Luke's Mac
+- LaunchAgent `~/Library/LaunchAgents/com.theleague.staleness-check.plist`:
+  Wednesdays 09:00 local (`StartCalendarInterval` Weekday 3, Hour 9), runs
+  `~/.local/bin/the-league-staleness-check` (`--max-age-days 6.5`); log in
+  `~/Library/Logs/the-league-staleness-check.log`. A missed time (Mac asleep)
+  runs at the next wake.
+- macOS privacy protection (TCC) blocks background jobs from reading
+  `~/Desktop`, where the repo lives. So the wrapper runs a **copy** of the
+  script from `~/.local/share/the-league-staleness/` with its own venv
+  (SQLAlchemy 2.0.x + psycopg2-binary), and reads the production connection
+  string (Neon **direct** host) from `~/.config/the-league/database_url` (0600).
+  After changing `scripts/staleness_check.py`, re-copy it:
+  `cp scripts/staleness_check.py ~/.local/share/the-league-staleness/`.
+- `gh` is pinned to lukesnow2 (`GH_TOKEN=$(gh auth token --user lukesnow2)`):
+  the active `gh` account drifts back to luke-priora, which is read-only.
+- Test: `launchctl kickstart gui/$(id -u)/com.theleague.staleness-check`, then
+  tail the log.
+
+## Gotchas
+- **Don't run `drizzle-kit push` without `schemaFilter: ['app']`** — it defaults to managing only `public` and will DROP the pipeline's raw tables.
+- **SSL**: app/drizzle disable SSL for `localhost`, require it for remote (Neon). Set automatically by host detection.
+- **Manager attribution**: some teams have Yahoo-private (`--hidden--`) names and are mapped by team_id in `edw_etl_processor.get_manager_name_by_team_id`. Add new ones there.
+- **Neon kills sessions idle inside a transaction after 5 minutes** (`idle_in_transaction_session_timeout`); local Postgres has no limit, so dev can't catch it. Never hold a connection in an open transaction across slow work (Yahoo calls, the EDW refresh). The pipeline lock connection is AUTOCOMMIT for this reason (`PipelineState._lock_connection`).
+- **A re-enabled workflow may not run on schedule**: after GitHub auto-disabled the weekly workflow and it was re-enabled (2026-09-16), it read "active" but no scheduled run fired for three weeks. Pushing a change to the workflow file on `main` re-registers the schedule. Manual `workflow_dispatch` runs are unaffected, so they don't prove the schedule works.
+- **PostgreSQL client version**: Neon is PG18; use `$(brew --prefix postgresql@18)/bin` for `pg_dump`/`psql` against it (the default 14 client can't dump a newer server).
+- **League of record**: only one league per season is loaded into `edw.*` (the canonical league); list lives in the ETL / `src/utils/fix_championship_flags.py`.
+
+## Owner / config
+- Manager canonical names + aliases: `edw_etl_processor.consolidate_manager_name` and `get_manager_name_by_team_id`.
+- Vercel env: `DATABASE_URL`, `ORIGIN` (prod URL, no trailing slash), `NODE_ENV=production`,
+  `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`.
+  (`AUTH_SECRET`/`SESSION_SECRET` are no longer read by anything — sessions are random
+  tokens stored as their sha256, so there is nothing to sign.)

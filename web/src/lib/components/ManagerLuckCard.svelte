@@ -1,0 +1,242 @@
+<script lang="ts">
+	/**
+	 * Expected (Pythagorean) wins and luck over a manager's career. The numbers
+	 * are the power rankings' own, carried over by /api/managers/performance, so
+	 * the pages always agree. Career adds up every season, the one in progress
+	 * too, as the career record does.
+	 *
+	 * Career only (Luke, 2026-11-10): the boards also drew the season being
+	 * played and its playoff odds, which read oddly among career figures. The
+	 * live season is on the profile's Season history and on This Season.
+	 *
+	 * - `variant="compact"` (Managers board): a pennant-tint card of rows, the
+	 *   career luck first, then the wins and expected wins it comes from.
+	 * - `variant="full"` (Manager profile Overview board): a white card with the
+	 *   career box.
+	 *
+	 * `stacked` is left over from the old card. It still compiles and means
+	 * `variant="full"`, so callers keep working until WP6 moves them.
+	 */
+	import { Card, EmptyValue, StatTip } from '$lib/components/ui';
+	import { formatLuck, luckTone, seasonCount } from '$lib/utils/power-rankings';
+
+	interface LuckSummary {
+		careerRegularSeasonWins?: number | null;
+		careerPythagoreanWins?: number | null;
+		careerLuckFactor?: number | null;
+		luckSeasons?: number | null;
+	}
+
+	interface Props {
+		manager: LuckSummary | null | undefined;
+		variant?: 'compact' | 'full';
+		/** Deprecated: use `variant="full"`. */
+		stacked?: boolean;
+	}
+
+	let { manager, variant = 'full', stacked = false }: Props = $props();
+
+	const shape = $derived(stacked ? 'full' : variant);
+	const seasons = $derived(manager?.luckSeasons ?? 0);
+
+	// A manager with no ranked week yet has no seasons to count, so the count
+	// drops rather than reading "0 seasons".
+	const careerCompact = $derived(seasons > 0 ? `Career, ${seasonCount(seasons)}` : 'Career');
+	const careerFull = $derived(seasons > 0 ? `Career · ${seasonCount(seasons)}` : 'Career');
+
+	function oneplace(value: number | null | undefined): string | null {
+		return value == null || !Number.isFinite(value) ? null : value.toFixed(1);
+	}
+</script>
+
+{#snippet luck(value: number | null | undefined)}
+	{@const text = formatLuck(value, 1)}
+	{#if text === null}<EmptyValue />{:else}<span class="luck {luckTone(value, 1)}">{text} W</span
+		>{/if}
+{/snippet}
+
+{#snippet number(value: number | null | undefined)}
+	{@const text = oneplace(value)}
+	{#if text === null}<EmptyValue />{:else}{text}{/if}
+{/snippet}
+
+{#if shape === 'compact'}
+	<Card
+		tone="pennant"
+		title="Expected wins & luck"
+		level={3}
+		titleSize={24}
+		phoneTitleSize={18}
+		headGap={4}
+		class="luck-card compact"
+	>
+		<p class="intro">Regular season. Luck is the gap between wins and expected wins.</p>
+		<div class="row">
+			<span>{careerCompact}</span>
+			<b>{@render luck(manager?.careerLuckFactor)}</b>
+		</div>
+		<div class="row">
+			<span>Wins</span>
+			<b>{@render number(manager?.careerRegularSeasonWins)}</b>
+		</div>
+		<div class="row">
+			<span><StatTip metricId="pythagorean_wins" label="Expected wins" phoneTap="inline" /></span>
+			<b>{@render number(manager?.careerPythagoreanWins)}</b>
+		</div>
+	</Card>
+{:else}
+	<Card title="Expected wins & luck" headGap={6} class="luck-card full">
+		<p class="intro">
+			Regular season. Expected wins come from points scored and allowed; luck is the gap.
+		</p>
+		<div class="boxes">
+			<div class="box">
+				<div class="span">{careerFull}</div>
+				<div class="line first">
+					<span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b>
+				</div>
+				<div class="line">
+					<span><StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline" /></span><b
+						>{@render number(manager?.careerPythagoreanWins)}</b
+					>
+				</div>
+				<div class="big">{@render luck(manager?.careerLuckFactor)}</div>
+			</div>
+		</div>
+	</Card>
+{/if}
+
+<style>
+	.intro {
+		margin: 0;
+	}
+
+	/* ---------- Compact (Managers board) ---------- */
+	:global(.luck-card.compact) .intro {
+		margin-bottom: 10px;
+		font-size: 13px;
+		color: var(--color-ink-brown);
+	}
+
+	.row {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 8px 0;
+		font-size: 15px;
+		color: var(--color-ink);
+	}
+
+	.row + .row {
+		border-top: 1px solid var(--color-pennant-line);
+	}
+
+	.row b {
+		font-weight: 700;
+	}
+
+	:global(.luck-card.compact) .luck.up {
+		color: var(--color-field);
+	}
+
+	:global(.luck-card.compact) .luck.down {
+		color: var(--color-pennant-dark);
+	}
+
+	:global(.luck-card.compact) .luck.flat {
+		color: var(--color-ink);
+	}
+
+	/* ---------- Full (profile Overview board) ---------- */
+	:global(.luck-card.full) .intro {
+		margin-bottom: 14px;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.boxes {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 12px;
+	}
+
+	.box {
+		border: 1px solid var(--color-line);
+		border-radius: 10px;
+		padding: 14px 16px;
+		min-width: 0;
+	}
+
+	.span {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+	}
+
+	.line {
+		display: flex;
+		justify-content: space-between;
+		gap: 8px;
+		margin-top: 4px;
+		font-size: 14px;
+	}
+
+	.line.first {
+		margin-top: 8px;
+	}
+
+	.line > span {
+		color: var(--color-ink-2);
+	}
+
+	.line b {
+		font-weight: 700;
+		color: var(--color-ink);
+	}
+
+	.big {
+		margin-top: 8px;
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 28px;
+	}
+
+	:global(.luck-card.full) .luck.up {
+		color: var(--color-field);
+	}
+
+	:global(.luck-card.full) .luck.down {
+		color: var(--color-pennant);
+	}
+
+	:global(.luck-card.full) .luck.flat {
+		color: var(--color-ink);
+	}
+
+	/* ---------- Phones (WP6 S6.9) ---------- */
+	@media (max-width: 639.98px) {
+		:global(.luck-card.compact) .intro {
+			line-height: 1.5;
+		}
+
+		:global(.luck-card.full) .intro {
+			margin-bottom: 12px;
+		}
+
+		.boxes {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 10px;
+		}
+
+		.box {
+			padding: 12px;
+		}
+
+		.big {
+			font-size: 24px;
+		}
+	}
+</style>
