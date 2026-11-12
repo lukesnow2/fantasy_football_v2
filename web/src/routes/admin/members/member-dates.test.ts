@@ -3,9 +3,15 @@ import { formatMemberDate } from './member-dates';
 
 describe('formatMemberDate', () => {
 	it('writes a date as the board does', () => {
-		// Midday, so the viewer's time zone can't move it to another day.
-		expect(formatMemberDate(new Date(2026, 10, 9, 12))).toBe('Nov 9, 2026');
-		expect(formatMemberDate('2026-11-09T12:00:00')).toBe('Nov 9, 2026');
+		expect(formatMemberDate(new Date('2026-11-09T18:00:00Z'))).toBe('Nov 9, 2026');
+		expect(formatMemberDate('2026-11-09T18:00:00Z')).toBe('Nov 9, 2026');
+	});
+
+	it('writes the Mountain time day, whatever zone it runs in', () => {
+		// 7pm Mountain on Nov 9 is already Nov 10 in UTC.
+		expect(formatMemberDate('2026-11-10T02:00:00Z')).toBe('Nov 9, 2026');
+		// Just after midnight Mountain is the new day.
+		expect(formatMemberDate('2026-11-10T07:30:00Z')).toBe('Nov 10, 2026');
 	});
 
 	it('has nothing to show for no date', () => {
