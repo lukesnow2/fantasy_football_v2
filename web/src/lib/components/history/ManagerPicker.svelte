@@ -39,8 +39,10 @@
 		ontoggle(next);
 		if (next) {
 			await tick();
+			// Focus the current manager without scrolling the list, so it opens
+			// at the top as drawn; the arrow keys scroll from there.
 			const current = options.indexOf(name);
-			optionEls[current >= 0 ? current : 0]?.focus();
+			optionEls[current >= 0 ? current : 0]?.focus({ preventScroll: true });
 		}
 	}
 
@@ -160,7 +162,8 @@
 	.list {
 		position: absolute;
 		top: calc(100% + 6px);
-		left: 0;
+		/* The board lines it up 8px outside the name, over the avatar's ring. */
+		left: -8px;
 		z-index: 3;
 		/* The board's 240px and 300px are content-box, inside the 6px of padding. */
 		box-sizing: content-box;
@@ -177,7 +180,7 @@
 
 	.align-end .list {
 		left: auto;
-		right: 0;
+		right: -8px;
 	}
 
 	.option {
@@ -223,7 +226,6 @@
 
 		.list {
 			position: static;
-			box-sizing: border-box;
 			margin-top: 8px;
 			width: auto;
 		}

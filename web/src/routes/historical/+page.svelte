@@ -225,12 +225,12 @@
 
 	const columns = $derived<Column[]>([
 		{ key: 'match', label: 'Matchup', width: phone.current ? '168px' : undefined },
-		{ key: 'games', label: 'Games', numeric: true, width: phone.current ? '44px' : '50px' },
+		{ key: 'games', label: 'Games', numeric: true, width: phone.current ? '44px' : '50px', fixedHeader: true },
 		{ key: 'record', label: 'Record', numeric: true, width: phone.current ? '64px' : '70px' },
 		{ key: 'leader', label: 'Leader', width: '130px' },
-		{ key: 'avg', label: 'Avg total', numeric: true, width: '64px', fixedHeader: true },
-		{ key: 'best', label: 'Best win', numeric: true, width: '64px', fixedHeader: true },
-		{ key: 'expected', label: 'Expected', numeric: true, width: '84px' },
+		{ key: 'avg', label: 'Avg total', numeric: true, width: '64px', wrapHeader: true },
+		{ key: 'best', label: 'Best win', numeric: true, width: '64px', wrapHeader: true },
+		{ key: 'expected', label: 'Expected', numeric: true, width: '84px', wrapHeader: true },
 		{ key: 'luckier', label: 'Luckier', numeric: true, width: '130px' }
 	]);
 
@@ -510,9 +510,10 @@
 						label="Every rivalry"
 						rowPadding={10}
 						columnGap={12}
-						minWidth={phone.current ? '832px' : '860px'}
+						minWidth={phone.current ? '832px' : '866px'}
 						fontSize={phone.current ? 14 : 15}
 						stickyFirst={phone.current}
+						headerAlign="top"
 						rowKey={(r) => `${r.managerAName}|${r.managerBName}`}
 					>
 						{#snippet header(column)}
@@ -966,13 +967,15 @@
 		align-items: flex-start;
 	}
 
+	/* The board's bases are content-box: 640px and 320px inside each card's
+	   24px sides and 1px border. */
 	.every {
-		flex: 999 1 640px;
+		flex: 999 1 690px;
 		min-width: 0;
 	}
 
 	.title-games {
-		flex: 1 1 320px;
+		flex: 1 1 370px;
 		min-width: 0;
 	}
 
@@ -981,8 +984,12 @@
 		color: var(--color-muted);
 	}
 
+	/* The board's minmax(190px, 1fr): at least 190px, and the rest of the row.
+	   Its columns and gaps come to 866px, past the 860px minimum it sets, so
+	   the table's minimum is 866px. */
 	.match {
 		display: block;
+		min-width: 190px;
 		font-weight: 600;
 	}
 
@@ -1313,6 +1320,13 @@
 
 		.note {
 			line-height: 1.45;
+		}
+
+		/* The sticky matchup keeps 10px clear of its rule, as drawn. */
+		.match,
+		.match-sub {
+			min-width: 0;
+			padding-right: 10px;
 		}
 
 		.match-sub {
