@@ -168,9 +168,12 @@
 		color: var(--color-ink);
 	}
 
+	/* The boards' buttons take the browser's button font, so their digits
+	   are proportional ("05 to 12"). */
 	.size-compact button {
 		min-height: var(--seg-min-height, 36px);
 		font-size: 13px;
+		font-variant-numeric: normal;
 	}
 
 	.sub {
@@ -184,7 +187,7 @@
 	}
 
 	@media (max-width: 639.98px) {
-		button {
+		.segmented button {
 			min-height: 44px;
 		}
 

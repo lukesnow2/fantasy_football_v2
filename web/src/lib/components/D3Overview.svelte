@@ -21,8 +21,13 @@
 	import { getInitials, getManagerProfilePicture } from '$lib/utils/managerUtils';
 	import { kde, quantile } from '$lib/league-trends';
 	import { saveChartImage, type LegendItem } from '$lib/utils/chart-image';
+	import { Button, Card, DataTable, Segmented, Select } from '$lib/components/ui';
+	import type { Column } from '$lib/components/ui';
+	import { eraButton, findings } from '$lib/history-display';
 
 	export let data: any = null;
+	/** The era picked above the chart (bindable): "all" or an era id. */
+	export let selectedEra = 'all';
 
 	let d3: any = null;
 	let container: HTMLDivElement;
@@ -48,6 +53,7 @@
 	interface MetricDef {
 		id: string;
 		name: string;
+		short: string;
 		question: string;
 		description: string;
 		kind: 'series' | 'champion' | 'titles' | 'stacked';
@@ -55,23 +61,58 @@
 		layout?: 'shared' | 'panels';
 		series: SeriesDef[];
 		/** Ranges drawn behind the series. `neutral` bands are gray and grow from the reference line. */
-		bands?: { lo: string; hi: string; label: string; opacity: number; neutral?: boolean }[];
+		bands?: { lo: string; hi: string; label: string; opacity: number; neutral?: boolean; color?: string }[];
 		refLine?: { value: number; label: string };
 		axisLabel?: string;
 		source: 'scoring' | 'trends';
 	}
 
-	// Categorical slots, dark steps, validated against this page's navy surface
-	// (six adjacent for the stack: all checks pass; green is under 3:1 contrast,
-	// so the table view is the relief).
-	const BLUE = '#3987e5';
-	const ORANGE = '#d95926';
-	const AQUA = '#199e70';
-	const YELLOW = '#c98500';
-	const MAGENTA = '#d55181';
-	const GREEN = '#008300';
+	// The Record Book palette (WP10 S10.4). D3 sets colors as attributes,
+	// which can't hold var(), so the tokens are read from the page once at
+	// mount into these. Until then they're the var() strings, which the
+	// legend's HTML swatches can use. The names are the old slots': series
+	// one is field, two pennant, three sage, and the last three are grays.
+	const token = (name: string) => `var(--color-${name})`;
+	let BLUE = token('field');
+	let ORANGE = token('pennant');
+	let AQUA = token('sage');
+	let YELLOW = token('ink-2');
+	let MAGENTA = token('line-strong');
+	let GREEN = token('faint');
+	let TEXT_PRIMARY = token('ink');
+	let TEXT_SECONDARY = token('ink-2');
+	let TEXT_MUTED = token('muted');
+	let GRID = token('line-soft');
+	let SURFACE = token('card');
+	// Score bands, solid: the middle half and the middle 80%. The coin-flip band.
+	let BAND_50 = token('sage-tint');
+	let BAND_80 = token('field-tint');
+	let NEUTRAL = token('wash');
+	let WHITE = token('white');
 
-	const POSITIONS: [string, string, string][] = [
+	function readTokens() {
+		const css = getComputedStyle(document.documentElement);
+		const read = (name: string, current: string) => css.getPropertyValue(`--color-${name}`).trim() || current;
+		BLUE = read('field', BLUE);
+		ORANGE = read('pennant', ORANGE);
+		AQUA = read('sage', AQUA);
+		YELLOW = read('ink-2', YELLOW);
+		MAGENTA = read('line-strong', MAGENTA);
+		GREEN = read('faint', GREEN);
+		TEXT_PRIMARY = read('ink', TEXT_PRIMARY);
+		TEXT_SECONDARY = read('ink-2', TEXT_SECONDARY);
+		TEXT_MUTED = read('muted', TEXT_MUTED);
+		GRID = read('line-soft', GRID);
+		SURFACE = read('card', SURFACE);
+		BAND_50 = read('sage-tint', BAND_50);
+		BAND_80 = read('field-tint', BAND_80);
+		NEUTRAL = read('wash', NEUTRAL);
+		WHITE = read('white', WHITE);
+		POSITIONS = buildPositions();
+		metrics = buildMetrics();
+	}
+
+	const buildPositions = (): [string, string, string][] => [
 		['QB', 'Quarterbacks', BLUE],
 		['RB', 'Running backs', ORANGE],
 		['WR', 'Wide receivers', AQUA],
@@ -79,28 +120,32 @@
 		['K', 'Kickers', MAGENTA],
 		['DEF', 'Defenses', GREEN]
 	];
+	let POSITIONS = buildPositions();
 
-	const metrics: MetricDef[] = [
+	// `name` is the chart card's title; `short` labels the Measure control.
+	const buildMetrics = (): MetricDef[] => [
 		{
 			id: 'scoring',
-			name: 'Scoring Evolution',
+			name: 'Scoring by season',
+			short: 'Scoring',
 			question: 'How much do teams score, and how far apart are good and bad weeks?',
 			description:
-				'Average team score per game, inside the range of real weekly scores: the darker band is the middle half of all scores that season, the lighter one the middle 80%.',
+				"Average team score per game. The darker band is the middle half of that season's weekly scores, the lighter one the middle 80%.",
 			kind: 'series',
 			views: ['line', 'ridgeline'],
 			layout: 'shared',
 			series: [{ key: 'avgWeeklyScore', label: 'Average team score', unit: ' pts', decimals: 1, color: BLUE }],
 			bands: [
-				{ lo: 'p10Score', hi: 'p90Score', label: 'Middle 80% of weekly scores', opacity: 0.12 },
-				{ lo: 'p25Score', hi: 'p75Score', label: 'Middle 50%', opacity: 0.2 }
+				{ lo: 'p10Score', hi: 'p90Score', label: 'Middle 80% of weekly scores', opacity: 1, color: BAND_80 },
+				{ lo: 'p25Score', hi: 'p75Score', label: 'Middle 50%', opacity: 1, color: BAND_50 }
 			],
 			axisLabel: 'Points per game',
 			source: 'scoring'
 		},
 		{
 			id: 'balance',
-			name: 'Skill vs Luck',
+			name: 'Skill vs luck',
+			short: 'Skill vs luck',
 			question: 'Do records spread out more than coin flips would?',
 			description:
 				"The Noll-Scully ratio: how far apart the season's records were, against how far apart they'd be if every game were a coin flip (1.0). The gray band is where 90% of simulated coin-flip seasons land, with the same teams and games; a season above it spread out more than luck usually manages. The hover gives the share of the spread that's skill (Tango's method).",
@@ -111,14 +156,15 @@
 				{ key: 'nollScully', label: 'Noll-Scully ratio', unit: '', decimals: 2, color: BLUE },
 				{ key: 'nollScullyRolling', label: 'Five-season average', unit: '', decimals: 2, color: ORANGE, overlay: true }
 			],
-			bands: [{ lo: 'chanceLo', hi: 'chanceHi', label: '90% of coin-flip seasons', opacity: 0.16, neutral: true }],
+			bands: [{ lo: 'chanceLo', hi: 'chanceHi', label: '90% of coin-flip seasons', opacity: 1, neutral: true, color: NEUTRAL }],
 			refLine: { value: 1, label: 'A league of coin flips' },
 			axisLabel: 'Spread of records vs chance',
 			source: 'trends'
 		},
 		{
 			id: 'champion',
-			name: 'Does the Best Team Win?',
+			name: 'Does the best team win?',
+			short: 'Does the best team win?',
 			question: 'Did the champion have the best team in the regular season?',
 			description:
 				"Each season's champion at two ranks from the regular season: points per game (1 = the top scorer) and record. The shaded band is the top three scorers.",
@@ -130,6 +176,7 @@
 		{
 			id: 'titles',
 			name: 'Championships',
+			short: 'Championships',
 			question: 'Who has won, and who keeps coming close?',
 			description:
 				'Every final, by manager and season. The grid shows titles and finals lost against the seasons each manager played; the race shows how the title count built up.',
@@ -140,7 +187,8 @@
 		},
 		{
 			id: 'positions',
-			name: 'Where the Points Come From',
+			name: 'Where the points come from',
+			short: 'Where points come from',
 			question: "Which positions score a starting lineup's points?",
 			description:
 				"Share of every starting lineup's regular-season points, by position. Small multiples put each position on its own baseline, so its trend reads; the stacks show each season's split. The 2008 shift (defenses halve, receivers jump) is the biggest in league history, and nothing in the stored settings (teams, schedule) explains it, so it most likely reflects a scoring or roster change.",
@@ -158,7 +206,8 @@
 		},
 		{
 			id: 'activity',
-			name: 'League Activity',
+			name: 'League activity',
+			short: 'Activity',
 			question: 'How busy is the waiver wire, and how often do managers trade?',
 			description:
 				'Adds, drops and add/drops per team (per team, so the 8-team seasons compare fairly), and trades across the league.',
@@ -172,6 +221,7 @@
 			source: 'trends'
 		}
 	];
+	let metrics = buildMetrics();
 
 	const VIEW_NAMES: Record<ViewId, string> = {
 		line: 'Line',
@@ -220,18 +270,23 @@
 	$: isLive = (year: number) => live != null && year === live.seasonYear;
 
 	function fmt(s: SeriesDef, v: number | null): string {
-		if (v == null) return '—';
+		if (v == null) return 'None';
 		if (s.percent) return `${(v * 100).toFixed(s.decimals)}%`;
 		return v.toLocaleString(undefined, { minimumFractionDigits: s.decimals, maximumFractionDigits: s.decimals }) + s.unit;
 	}
 
-	const pct = (v: number | null | undefined, digits = 0) => (v == null ? '—' : `${(v * 100).toFixed(digits)}%`);
+	const pct = (v: number | null | undefined, digits = 0) => (v == null ? 'None' : `${(v * 100).toFixed(digits)}%`);
+	/** A series value with no unit, for the insight sentences ("106.4"). */
+	function plain(s: SeriesDef, v: number | null): string {
+		if (v == null) return 'None';
+		if (s.percent) return `${(v * 100).toFixed(s.decimals)}%`;
+		return v.toLocaleString('en-US', { minimumFractionDigits: s.decimals, maximumFractionDigits: s.decimals });
+	}
 
 	// ---- era and manager filters ---------------------------------------------
 
 	// One filter row above the chart scopes the tiles, insights and table to an
 	// era; the chart keeps every season and dims the ones outside it.
-	let selectedEra = 'all';
 	let highlightManager = '';
 	$: eras = (trends?.eras ?? []) as { id: string; name: string; start: number; end: number; headline: any }[];
 	$: era = eras.find((e) => e.id === selectedEra) ?? null;
@@ -248,7 +303,7 @@
 	$: insights = (() => {
 		const m = currentMetric;
 		const done = rows.filter((r) => !isLive(r.seasonYear) && inEra(r.seasonYear));
-		const scope = era ? ` in ${era.start}–${era.end}` : '';
+		const scope = era ? ` in ${era.start} to ${era.end}` : '';
 		if (m.kind === 'champion') {
 			const champs = done.filter((r) => r.champion?.pointsRank != null);
 			if (!champs.length) return [];
@@ -276,13 +331,13 @@
 			const never = [...lost.entries()].filter(([name]) => !won.has(name)).sort((a, b) => b[1] - a[1]);
 			const recent = finals.slice(-10).map((r) => r.champion.manager);
 			return [
-				`${lead[0]} has ${lead[1]} of ${finals.length} titles${scope} and is ${lead[1]}–${lost.get(lead[0]) ?? 0} in finals.`,
+				`${lead[0]} has ${lead[1]} of ${finals.length} titles${scope} and is ${lead[1]}-${lost.get(lead[0]) ?? 0} in finals.`,
 				never.length
-					? `Reached a final, never won one${scope}: ${never.map(([name, n]) => `${name} (0–${n})`).join(', ')}.`
+					? `Reached a final, never won one${scope}: ${never.map(([name, n]) => `${name} (0-${n})`).join(', ')}.`
 					: '',
 				`${won.size} different champions in ${finals.length} seasons${era ? '' : `; ${new Set(recent).size} in the last ${recent.length}`}.`,
 				highlightManager && highlightManager !== lead[0] && reached(highlightManager)
-					? `${highlightManager}: ${won.get(highlightManager) ?? 0}–${lost.get(highlightManager) ?? 0} in finals${scope}.`
+					? `${highlightManager}: ${won.get(highlightManager) ?? 0}-${lost.get(highlightManager) ?? 0} in finals${scope}.`
 					: ''
 			].filter(Boolean);
 		}
@@ -293,18 +348,18 @@
 			if (!first || !last || first === last) return [];
 			const moves = POSITIONS.map(([k, label]) => ({ label, from: first.positionShare[k], to: last.positionShare[k] }))
 				.sort((a, b) => Math.abs(b.to - b.from) - Math.abs(a.to - a.from));
-			return moves.slice(0, 3).map((d) => `${d.label}: ${pct(d.from)} in ${first.seasonYear} → ${pct(d.to)} in ${last.seasonYear}`);
+			return moves.slice(0, 3).map((d) => `${d.label} went from ${pct(d.from)} in ${first.seasonYear} to ${pct(d.to)} in ${last.seasonYear}.`);
 		}
 		if (m.id === 'scoring' && selectedView === 'ridgeline') {
 			const dist = done.map((r) => ({ year: r.seasonYear, scores: (trends?.scores?.[r.seasonYear] ?? []) as number[] })).filter((d) => d.scores.length);
 			if (dist.length < 2) return [];
 			const a = dist[0];
 			const b = dist[dist.length - 1];
-			const iqr = (v: number[]) => `${quantile(v, 0.25)!.toFixed(0)}–${quantile(v, 0.75)!.toFixed(0)}`;
+			const iqr = (v: number[]) => `${quantile(v, 0.25)!.toFixed(0)} to ${quantile(v, 0.75)!.toFixed(0)}`;
 			const top = dist.flatMap((d) => d.scores.map((v) => ({ v, year: d.year }))).reduce((x, y) => (y.v > x.v ? y : x));
 			return [
-				`Median score: ${quantile(a.scores, 0.5)!.toFixed(1)} in ${a.year} → ${quantile(b.scores, 0.5)!.toFixed(1)} in ${b.year}.`,
-				`Middle half of scores: ${iqr(a.scores)} in ${a.year} → ${iqr(b.scores)} in ${b.year}.`,
+				`The median score went from ${quantile(a.scores, 0.5)!.toFixed(1)} in ${a.year} to ${quantile(b.scores, 0.5)!.toFixed(1)} in ${b.year}.`,
+				`The middle half of scores ran ${iqr(a.scores)} in ${a.year} and ${iqr(b.scores)} in ${b.year}.`,
 				`Best single game${scope}: ${top.v.toFixed(1)} (${top.year}).`
 			];
 		}
@@ -319,8 +374,8 @@
 		const low = pts.reduce((a, p) => (p.val < a.val ? p : a));
 		const avg = pts.reduce((a, p) => a + p.val, 0) / pts.length;
 		const out = [
-			`${s.label}: ${fmt(s, first.val)} in ${first.year} → ${fmt(s, last.val)} in ${last.year}`,
-			`Peak ${fmt(s, peak.val)} (${peak.year}) · low ${fmt(s, low.val)} (${low.year}) · ${pts.length}-season average ${fmt(s, avg)}`
+			`${s.label} went from ${plain(s, first.val)} in ${first.year} to ${plain(s, last.val)} in ${last.year}.`,
+			`Peak ${plain(s, peak.val)} in ${peak.year}, low ${plain(s, low.val)} in ${low.year}, and a ${pts.length}-season average of ${plain(s, avg)}.`
 		];
 		if (m.id === 'balance' && headline) {
 			const beyond = done.filter(beyondChance);
@@ -334,7 +389,7 @@
 				const avg5 = (list: typeof pts) => list.reduce((a, p) => a + p.val, 0) / list.length;
 				const early = pts.slice(0, 5);
 				const late = pts.slice(-5);
-				out.push(`Five-season average: ${avg5(early).toFixed(2)} in ${early[0].year}–${early[4].year} → ${avg5(late).toFixed(2)} in ${late[0].year}–${late[4].year}.`);
+				out.push(`The five-season average went from ${avg5(early).toFixed(2)} (${early[0].year} to ${early[4].year}) to ${avg5(late).toFixed(2)} (${late[0].year} to ${late[4].year}).`);
 			}
 			out.push(`On average ${pct(headline.skillShare)} of the spread in records${scope} was skill.`);
 		}
@@ -350,11 +405,6 @@
 
 	// ---- rendering -----------------------------------------------------------
 
-	const TEXT_PRIMARY = '#f1f5f9';
-	const TEXT_SECONDARY = '#cbd5e1';
-	const TEXT_MUTED = '#94a3b8';
-	const GRID = '#334155';
-	const SURFACE = '#1c2746';
 	const PANEL_GAP = 48;
 	// Room under the season axis for the numbered league-change markers.
 	const EVENT_BAND = 26;
@@ -518,9 +568,11 @@
 	}
 
 	function styleAxis(sel: any) {
+		// d3 sets its own family and size on the axis; the labels are the sans.
+		sel.attr('font-family', null).attr('font-size', null);
 		sel.select('.domain').remove();
 		sel.selectAll('.tick line').attr('stroke', GRID);
-		sel.selectAll('.tick text').attr('fill', TEXT_MUTED).style('font-size', '11px').style('font-variant-numeric', 'tabular-nums');
+		sel.selectAll('.tick text').attr('fill', TEXT_MUTED).style('font-size', '12px').style('font-variant-numeric', 'tabular-nums');
 	}
 
 	function seasonAxis(frame: any, x: any, y: number, plotW: number, count: number, animate: boolean) {
@@ -565,12 +617,12 @@
 
 	const eventNumber = (season: number) => events.findIndex((e) => e.season === season) + 1;
 
-	/** A league-change marker: a numbered circle, or a dot when space is tight. */
+	/** A league-change marker: a pennant circle with a white number, or a dot when space is tight. */
 	function eventMarker(g: any, season: number, r: number, compact = false) {
-		g.append('circle').attr('r', compact ? 3 : r).attr('fill', compact ? TEXT_MUTED : SURFACE).attr('stroke', TEXT_MUTED).attr('stroke-width', 1);
+		g.append('circle').attr('r', compact ? 3 : r).attr('fill', ORANGE);
 		if (!compact) {
-			g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', TEXT_SECONDARY)
-				.style('font-size', `${r + 2}px`).style('font-weight', '600').text(String(eventNumber(season)));
+			g.append('text').attr('text-anchor', 'middle').attr('dy', '0.35em').attr('fill', WHITE)
+				.style('font-size', `${r >= 10 ? 11 : 10}px`).style('font-weight', '700').text(String(eventNumber(season)));
 		}
 	}
 
@@ -584,16 +636,19 @@
 		const shown = events.filter((e) => years.includes(e.season));
 		const back = frame.insert('g', ':first-child').style('pointer-events', 'none');
 		const marks = frame.append('g');
-		// Numbered markers need 18px apart; closer (a phone), they become dots
+		// Numbered markers are 20px across, as small as 10px when the seasons
+		// sit closer (a phone) without touching; closer still, they become dots
 		// and the list under the chart names each season.
 		const xs = shown.map((e) => x(e.season));
-		const compact = xs.some((v, i) => i > 0 && v - xs[i - 1] < 18);
+		const gap = Math.min(Infinity, ...xs.slice(1).map((v, i) => v - xs[i]));
+		const r = gap >= 22 ? 10 : Math.max(5, Math.min(6, Math.floor((gap - 1) / 2)));
+		const compact = gap < 10.5;
 		for (const e of shown) {
 			const cx = x(e.season);
 			back.append('line').attr('x1', cx).attr('x2', cx).attr('y1', 0).attr('y2', bottom)
-				.attr('stroke', TEXT_MUTED).attr('stroke-opacity', 0.22);
+				.attr('stroke', ORANGE).attr('stroke-width', 1).attr('stroke-dasharray', '3 4');
 			const m = marks.append('g').attr('transform', `translate(${cx},${bottom + (compact ? 30 : 34)})`).style('cursor', 'default');
-			eventMarker(m, e.season, 8, compact);
+			eventMarker(m, e.season, r, compact);
 			m.append('circle').attr('r', 13).attr('fill', 'transparent')
 				.on('pointerenter', () => {
 					showTooltip(`${e.season}: league change`, e.labels.map((label) => ({ value: label, label: '' })));
@@ -729,7 +784,7 @@
 					const toLine = (r: any) => y(b.neutral && metric.refLine ? metric.refLine.value : read(r, metric.series[0].key));
 					const collapsed = d3.area().x((r: any) => x(r.seasonYear)).y0(toLine).y1(toLine).curve(d3.curveMonotoneX);
 					const path = p.append('path').datum(withBand)
-						.attr('fill', b.neutral ? TEXT_MUTED : metric.series[0].color).attr('fill-opacity', b.opacity);
+						.attr('fill', b.color ?? (b.neutral ? NEUTRAL : metric.series[0].color)).attr('fill-opacity', b.opacity);
 					if (animate) path.attr('d', collapsed).transition().delay(dur(b.neutral ? 150 : 350)).duration(dur(700)).ease(ease).attr('d', band);
 					else path.attr('d', band);
 					if (b.neutral && withBand.length && plotW >= 300) {
@@ -826,7 +881,7 @@
 						g.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 4).attr('fill', s.color).attr('stroke', SURFACE).attr('stroke-width', 2);
 						g.append('text').attr('x', cx).attr('y', above ? cy - 10 : cy + 18)
 							.attr('text-anchor', cx < 40 ? 'start' : cx > plotW - 40 ? 'end' : 'middle')
-							.attr('fill', TEXT_SECONDARY).style('font-size', '11px')
+							.attr('fill', TEXT_PRIMARY).style('font-size', '12px').style('font-weight', '700')
 							.text(`${where === 'peak' ? 'Peak' : 'Low'} ${fmt(s, read(r, s.key))} · ${r.seasonYear}`);
 						g.transition().delay(dur(animate ? 900 : 0)).duration(dur(400)).style('opacity', 1);
 					}
@@ -837,8 +892,8 @@
 					// Near the floor the two lines go above the point, clear of the axis.
 					const ey = y(read(end, s.key)) - (y(read(end, s.key)) + 18 > panelH - 4 ? 16 : 0);
 					const label = p.append('g').style('opacity', 0);
-					label.append('text').attr('x', ex + 10).attr('y', ey + 4).attr('fill', TEXT_PRIMARY).style('font-size', '12px').style('font-weight', '600').text(fmt(s, read(end, s.key)));
-					label.append('text').attr('x', ex + 10).attr('y', ey + 18).attr('fill', TEXT_MUTED).style('font-size', '10px')
+					label.append('text').attr('x', ex + 10).attr('y', ey + 4).attr('fill', isLive(end.seasonYear) ? s.color : TEXT_PRIMARY).style('font-size', '12px').style('font-weight', '700').text(fmt(s, read(end, s.key)));
+					label.append('text').attr('x', ex + 10).attr('y', ey + 18).attr('fill', TEXT_MUTED).style('font-size', '12px')
 						.text(isLive(end.seasonYear) && live ? `${end.seasonYear} · wk ${live.throughWeek}` : s.overlay ? '5-yr avg' : `${end.seasonYear}`);
 					label.transition().delay(dur(animate ? 1100 : 0)).duration(dur(300)).style('opacity', 1);
 				}
@@ -868,7 +923,7 @@
 				const lines: TipLine[] = metric.series.map((s) => ({ color: s.color, value: fmt(s, read(r, s.key)), label: s.label }));
 				for (const b of metric.bands ?? []) {
 					if (read(r, b.lo) == null) continue;
-					lines.push({ value: `${fmt(metric.series[0], read(r, b.lo))} – ${fmt(metric.series[0], read(r, b.hi))}`, label: b.label });
+					lines.push({ value: `${fmt(metric.series[0], read(r, b.lo))} to ${fmt(metric.series[0], read(r, b.hi))}`, label: b.label });
 				}
 				if (metric.source === 'scoring' && read(r, 'maxWeeklyScore') != null) {
 					lines.push({ value: fmt(metric.series[0], read(r, 'maxWeeklyScore')), label: 'Best single week' });
@@ -1055,7 +1110,7 @@
 			focus(i);
 			const lines: TipLine[] = [
 				{ color: BLUE, value: `${d.median.toFixed(1)}`, label: 'median score' },
-				{ value: `${d.lo.toFixed(0)}–${d.hi.toFixed(0)}`, label: 'middle half' },
+				{ value: `${d.lo.toFixed(0)} to ${d.hi.toFixed(0)}`, label: 'middle half' },
 				{ value: `${d.scores[d.scores.length - 1].toFixed(1)}`, label: 'best single game' },
 				{ value: String(d.scores.length), label: 'team scores' }
 			];
@@ -1105,7 +1160,7 @@
 				.attr('preserveAspectRatio', 'xMidYMid slice')
 				.attr('clip-path', 'url(#avatar-clip)');
 		} else {
-			g.append('circle').attr('r', r).attr('fill', '#334155');
+			g.append('circle').attr('r', r).attr('fill', NEUTRAL);
 			g.append('text')
 				.attr('text-anchor', 'middle')
 				.attr('dy', '0.35em')
@@ -1124,7 +1179,7 @@
 		const nth = t ? t.years.indexOf(season.seasonYear) + 1 : null;
 		const lines: TipLine[] = [{ color: YELLOW, value: c.manager, label: nth ? `won · title #${nth}` : 'won' }];
 		if (c.runnerUp) lines.push({ value: c.runnerUp, label: 'lost the final' });
-		if (c.score) lines.push({ value: `${c.score[0].toFixed(1)}–${c.score[1].toFixed(1)}`, label: 'final score' });
+		if (c.score) lines.push({ value: `${c.score[0].toFixed(1)}-${c.score[1].toFixed(1)}`, label: 'final score' });
 		if (c.pointsRank) lines.push({ value: `#${c.pointsRank}`, label: 'scorer in the regular season' });
 		return lines;
 	}
@@ -1788,28 +1843,40 @@
 		const m = currentMetric;
 		if (m.kind === 'champion')
 			return [
-				{ label: 'Champion', value: (r: any) => r.champion?.manager ?? '—' },
-				{ label: 'Scoring rank', value: (r: any) => (r.champion ? `#${r.champion.pointsRank} of ${r.teams}` : '—') },
-				{ label: 'Record rank', value: (r: any) => (r.champion ? `#${r.champion.recordRank}` : '—') }
+				{ label: 'Champion', value: (r: any) => r.champion?.manager ?? 'None' },
+				{ label: 'Scoring rank', value: (r: any) => (r.champion ? `#${r.champion.pointsRank} of ${r.teams}` : 'None') },
+				{ label: 'Record rank', value: (r: any) => (r.champion ? `#${r.champion.recordRank}` : 'None') }
 			];
 		if (m.kind === 'titles')
 			return [
-				{ label: 'Champion', value: (r: any) => r.champion?.manager ?? '—' },
-				{ label: 'Lost the final', value: (r: any) => r.champion?.runnerUp ?? '—' },
-				{ label: 'Final score', value: (r: any) => (r.champion?.score ? `${r.champion.score[0].toFixed(1)}–${r.champion.score[1].toFixed(1)}` : '—') }
+				{ label: 'Champion', value: (r: any) => r.champion?.manager ?? 'None' },
+				{ label: 'Lost the final', value: (r: any) => r.champion?.runnerUp ?? 'None' },
+				{ label: 'Final score', value: (r: any) => (r.champion?.score ? `${r.champion.score[0].toFixed(1)}-${r.champion.score[1].toFixed(1)}` : 'None') }
 			];
 		const cols = m.series.map((s) => ({ label: s.label, value: (r: any) => fmt(s, read(r, s.key)) }));
 		for (const b of m.bands ?? []) {
-			cols.push({ label: b.label, value: (r: any) => `${fmt(m.series[0], read(r, b.lo))} – ${fmt(m.series[0], read(r, b.hi))}` });
+			cols.push({ label: b.label, value: (r: any) => `${fmt(m.series[0], read(r, b.lo))} to ${fmt(m.series[0], read(r, b.hi))}` });
 		}
 		if (m.id === 'balance') cols.push({ label: 'Skill share', value: (r: any) => pct(r.skillShare) });
 		return cols;
 	})();
 
+	// The table as a DataTable: the season, then one numeric column per value.
+	$: dataColumns = [
+		{ key: 'season', label: 'Season' },
+		...tableColumns.map((c, i) => ({ key: `c${i}`, label: c.label, numeric: true }))
+	] as Column[];
+	$: dataRows = tableRows.map((r) => ({
+		season: r.seasonYear,
+		live: isLive(r.seasonYear),
+		...Object.fromEntries(tableColumns.map((c, i) => [`c${i}`, c.value(r)]))
+	}));
+
 	// ---- lifecycle -----------------------------------------------------------
 
 	onMount(async () => {
 		if (!browser) return;
+		readTokens();
 		reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 		d3 = await import('d3');
 		let lastWidth = container?.clientWidth ?? 0;
@@ -1841,11 +1908,20 @@
 
 	$: tableRows = rows.filter((r) => inEra(r.seasonYear));
 
-	// The legend, from the same list the saved image draws.
+	// The legend, from the same list the saved image draws. Scoring's line
+	// view is the board's (S10.3): the average, then the two bands.
 	$: legendItems = ((): LegendItem[] => {
 		const m = currentMetric;
 		const v = selectedView;
 		const out: LegendItem[] = [];
+		if (m.id === 'scoring' && v === 'line') {
+			out.push(
+				{ kind: 'line', color: BLUE, label: 'Average' },
+				{ kind: 'rect', color: BAND_50, label: 'Middle 50%' },
+				{ kind: 'rect', color: BAND_80, label: 'Middle 80%' }
+			);
+			return out;
+		}
 		if (m.kind === 'stacked') {
 			for (const s of m.series) out.push({ kind: v === 'multiples' ? 'line' : 'rect', color: s.color, label: s.label });
 		} else if (m.kind === 'champion') {
@@ -1860,7 +1936,7 @@
 			// Bars that didn't beat the coin-flip band are faded.
 			if (v === 'bar' && m.bands?.some((b) => b.neutral)) out.push({ kind: 'rect', color: m.series[0].color, opacity: 0.38, label: 'Within what luck gives' });
 			for (const b of m.bands ?? []) {
-				out.push({ kind: 'rect', color: b.neutral ? TEXT_MUTED : m.series[0].color, opacity: b.neutral ? 0.45 : b.opacity * 2.5, label: b.label });
+				out.push({ kind: 'rect', color: b.color ?? (b.neutral ? NEUTRAL : m.series[0].color), opacity: b.color ? 1 : b.opacity * 2.5, label: b.label });
 			}
 		}
 		if (live && (m.kind === 'stacked' || (m.kind === 'series' && v !== 'ridgeline')) && m.id !== 'balance') {
@@ -1878,288 +1954,553 @@
 		saveError = '';
 		try {
 			const years = rows.map((r) => r.seasonYear as number);
-			const range = years.length ? `${Math.min(...years)}–${Math.max(...years)}` : '';
+			const range = years.length ? `${Math.min(...years)} to ${Math.max(...years)}` : '';
 			await saveChartImage(svg, {
 				title: currentMetric.name,
-				subtitle: currentMetric.question + (era ? ` ${era.name}, ${era.start}–${era.end}.` : ''),
+				subtitle: currentMetric.question + (era ? ` ${era.name}, ${era.start} to ${era.end}.` : ''),
 				legend: legendItems,
 				footer: `The League · ${range}${showsEvents ? ' · League changes: ' + events.map((e, i) => `(${i + 1}) ${e.season} ${e.labels.join(', ')}`).join('; ') : ''}`,
 				filename: `league-${currentMetric.id}-${selectedView}${era ? `-${era.id}` : ''}.png`,
 				fontFamily: getComputedStyle(container).fontFamily
 			});
 		} catch (e) {
-			saveError = e instanceof Error ? e.message : 'The image could not be saved.';
+			saveError = e instanceof Error ? e.message : "The image didn't save.";
 		} finally {
 			saving = false;
 		}
 	}
+
+	$: eraOptions = [
+		{ value: 'all', label: 'All' },
+		...eras.map((e) => {
+			const b = eraButton(e);
+			return { value: e.id, label: b.name, sub: b.years };
+		})
+	];
+	$: measureOptions = metrics.map((m) => ({ value: m.id, label: m.short }));
+	$: viewOptions = currentMetric.views.map((v) => ({ value: v, label: VIEW_NAMES[v] }));
+	$: findingCards = findings(headline);
+	$: highlightOptions = [{ value: '', label: 'Nobody' }, ...managerOptions.map((name) => ({ value: name, label: name }))];
 </script>
 
-<div class="d3-overview-container">
-	<!-- Filters: scope the tiles, chart, insights and table below -->
+<div class="d3-overview">
 	{#if eras.length}
-		<div class="mb-4 flex flex-wrap items-end gap-4">
-			<div>
-				<span class="mb-2 block text-sm font-medium text-slate-300" id="era-label">Seasons</span>
-				<div class="inline-flex flex-wrap rounded-lg border border-slate-600 bg-slate-800/60 p-1" role="group" aria-labelledby="era-label">
-					{#each [{ id: 'all', name: 'All', start: null, end: null }, ...eras] as e}
-						<button
-							type="button"
-							class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {selectedEra === e.id
-								? 'bg-slate-600 text-white'
-								: 'text-slate-300 hover:text-white'}"
-							aria-pressed={selectedEra === e.id}
-							on:click={() => (selectedEra = e.id)}
-						>
-							{e.name.replace(' Era', '')}{#if e.start}<span class="ml-1 text-xs text-slate-400">{e.start}–{String(e.end).slice(2)}</span>{/if}
-						</button>
-					{/each}
-				</div>
+		<div class="era-row">
+			<span class="era-label" aria-hidden="true">Seasons</span>
+			<Segmented label="Seasons" size="compact" wrap phoneColumns={2} options={eraOptions} bind:value={selectedEra} />
+			<span class="era-help">Picking an era scopes the numbers and the table. The chart keeps every season and fades the rest.</span>
+		</div>
+	{/if}
+
+	{#if findingCards.length}
+		<div class="findings">
+			{#each findingCards as f (f.head)}
+				<Card padding="20px 22px">
+					<div class="finding-value" style:color="var(--color-{f.tone})">{f.value}</div>
+					<div class="finding-head">{f.head}</div>
+					<div class="finding-sub">{f.sub}</div>
+				</Card>
+			{/each}
+		</div>
+	{/if}
+
+	<Card
+		class="chart-card"
+		title={currentMetric.name}
+		headGap={14}
+		headSpacing="12px"
+		phoneHeadStack
+		phoneHeadStackGap={12}
+	>
+		{#snippet action()}
+			<Segmented label="Measure" size="compact" padX={12} wrap bleed={16} options={measureOptions} bind:value={selectedMetric} />
+		{/snippet}
+
+		<div class="question-row">
+			<div class="question-text">
+				<div class="question">{currentMetric.question}</div>
+				<p class="description">{currentMetric.description}</p>
 			</div>
-			{#if managerScoped && managerOptions.length}
-				<label>
-					<span class="mb-2 block text-sm font-medium text-slate-300">Highlight a manager</span>
-					<select bind:value={highlightManager} class="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-white">
-						<option value="">Nobody</option>
-						{#each managerOptions as name}
-							<option value={name}>{name}</option>
-						{/each}
-					</select>
-				</label>
+			<div class="controls" class:no-view={currentMetric.views.length < 2}>
+				{#if currentMetric.views.length > 1}
+					<div class="view-control">
+						<Segmented
+							label="View"
+							size="compact"
+							minHeight={34}
+							padX={12}
+							phoneColumns={currentMetric.views.length}
+							options={viewOptions}
+							bind:value={selectedView}
+						/>
+					</div>
+				{/if}
+				<Button variant="secondary" size="xs" disabled={saving} onclick={saveImage}>
+					{saving ? 'Saving' : 'Save image'}
+				</Button>
+				<Button variant="secondary" size="xs" aria-pressed={showTable} onclick={() => (showTable = !showTable)}>
+					{showTable ? 'Hide table' : 'Show table'}
+				</Button>
+			</div>
+		</div>
+
+		{#if managerScoped && managerOptions.length}
+			<div class="highlight">
+				<Select label="Highlight a manager" options={highlightOptions} bind:value={highlightManager} />
+			</div>
+		{/if}
+
+		<div class="legend">
+			{#each legendItems as item (item.label)}
+				<span class="legend-item">
+					<span
+						class="swatch {item.kind}"
+						style:--swatch={item.color}
+						style:opacity={item.kind === 'line' || item.kind === 'rect' ? (item.opacity ?? 1) : undefined}
+					></span>
+					{item.label}
+				</span>
+			{/each}
+			{#if currentMetric.id === 'scoring' && selectedView === 'line' && showsEvents}
+				<span class="legend-item"><span class="swatch marker" aria-hidden="true">1</span>Format change</span>
 			{/if}
 		</div>
-	{/if}
 
-	<!-- Headline numbers: what twenty seasons say about this league -->
-	{#if headline}
-		<div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-			<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-4">
-				<div class="text-sm text-slate-400">Last season's record predicts this one's</div>
-				<div class="mt-1 text-2xl font-semibold text-white">
-					r = {headline.recordPersistence.r == null ? '—' : headline.recordPersistence.r.toFixed(2)}
-				</div>
-				<div class="mt-1 text-xs text-slate-400">
-					Essentially no carry-over, across {headline.recordPersistence.n} manager-seasons.
-				</div>
-			</div>
-			<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-4">
-				<div class="text-sm text-slate-400">Share of the spread in records that's skill</div>
-				<div class="mt-1 text-2xl font-semibold text-white">{pct(headline.skillShare)}</div>
-				<div class="mt-1 text-xs text-slate-400">The rest is luck (Tango's method, {headline.seasons} seasons).</div>
-			</div>
-			<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-4">
-				<div class="text-sm text-slate-400">Champions who were a top-3 scorer</div>
-				<div class="mt-1 text-2xl font-semibold text-white">
-					{headline.championTopThree.count} of {headline.championTopThree.seasons}
-				</div>
-				<div class="mt-1 text-xs text-slate-400">The season's top scorer won {headline.topScorerTitles}.</div>
-			</div>
-			<div class="rounded-xl border border-slate-700/50 bg-slate-800/40 p-4">
-				<div class="text-sm text-slate-400">Starting points from a team's own picks</div>
-				<div class="mt-1 text-2xl font-semibold text-white">{pct(headline.draftedShare)}</div>
-				<div class="mt-1 text-xs text-slate-400">The rest came off waivers and trades.</div>
+		<div class="chart-scroll">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div
+				bind:this={container}
+				class="viz-host"
+				tabindex="0"
+				role="group"
+				aria-label="{currentMetric.name}. Use left and right arrow keys to read each season{rowNavLength ? ', up and down for each manager' : ''}."
+				on:keydown={onKey}
+				on:pointermove|capture={(e) => (pointerY = e.clientY - container.getBoundingClientRect().top)}
+				on:pointerleave={() => (pointerY = null)}
+				on:blur={() => keyboardHide()}
+			>
+				<div bind:this={tooltipEl} class="tooltip" role="status" aria-live="polite"></div>
 			</div>
 		</div>
-	{/if}
-
-	<!-- Controls: measure, then the views that suit it -->
-	<div class="mb-3 flex flex-wrap items-end gap-4">
-		<label class="min-w-[14rem] flex-1">
-			<span class="mb-2 block text-sm font-medium text-slate-300">Measure</span>
-			<select bind:value={selectedMetric} class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-white">
-				{#each metrics as metric}
-					<option value={metric.id}>{metric.name}</option>
-				{/each}
-			</select>
-		</label>
-		{#if currentMetric.views.length > 1}
-			<div>
-				<span class="mb-2 block text-sm font-medium text-slate-300" id="view-label">View</span>
-				<div class="inline-flex rounded-lg border border-slate-600 bg-slate-800/60 p-1" role="group" aria-labelledby="view-label">
-					{#each currentMetric.views as view}
-						<button
-							type="button"
-							class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {selectedView === view
-								? 'bg-slate-600 text-white'
-								: 'text-slate-300 hover:text-white'}"
-							aria-pressed={selectedView === view}
-							on:click={() => (selectedView = view)}
-						>
-							{VIEW_NAMES[view]}
-						</button>
-					{/each}
-				</div>
-			</div>
-		{/if}
-	</div>
-
-	<p class="mb-1 text-base font-medium text-slate-200">{currentMetric.question}</p>
-	<p class="mb-4 text-sm text-slate-400">{currentMetric.description}</p>
-
-	<div class="chart-container relative rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 sm:p-6">
-		<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-			<h3 class="text-lg font-semibold text-white">{currentMetric.name}</h3>
-			<div class="flex flex-wrap items-center gap-4 text-xs text-slate-300">
-				{#each legendItems as item}
-					<span class="flex items-center gap-2">
-						{#if item.kind === 'line'}
-							<span class="h-0.5 w-4 rounded" style="background:{item.color};opacity:{item.opacity ?? 1}"></span>
-						{:else if item.kind === 'rect'}
-							<span class="h-2.5 w-3 rounded-sm" style="background:{item.color};opacity:{item.opacity ?? 1}"></span>
-						{:else if item.kind === 'dot'}
-							<span class="h-2.5 w-2.5 rounded-full" style="background:{item.color}"></span>
-						{:else}
-							<span class="h-2.5 w-2.5 rounded-full border-2" style="border-color:{item.color}"></span>
-						{/if}
-						{item.label}
-					</span>
-				{/each}
-				<button
-					type="button"
-					class="rounded-md border border-slate-600 px-2 py-1 text-slate-300 hover:text-white disabled:opacity-50"
-					disabled={saving}
-					on:click={saveImage}
-				>
-					{saving ? 'Saving…' : 'Save image'}
-				</button>
-				<button
-					type="button"
-					class="rounded-md border border-slate-600 px-2 py-1 text-slate-300 hover:text-white"
-					aria-pressed={showTable}
-					on:click={() => (showTable = !showTable)}
-				>
-					{showTable ? 'Hide table' : 'Show table'}
-				</button>
-			</div>
-		</div>
-
-		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-		<div
-			bind:this={container}
-			class="viz-host relative w-full outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-			tabindex="0"
-			role="group"
-			aria-label="{currentMetric.name}. Use left and right arrow keys to read each season{rowNavLength ? ', up and down for each manager' : ''}."
-			on:keydown={onKey}
-			on:pointermove|capture={(e) => (pointerY = e.clientY - container.getBoundingClientRect().top)}
-			on:pointerleave={() => (pointerY = null)}
-			on:blur={() => keyboardHide()}
-		>
-			<div bind:this={tooltipEl} class="tooltip" role="status" aria-live="polite"></div>
-		</div>
-
-		{#if !data}
-			<div class="flex h-64 items-center justify-center text-slate-400">Loading league data...</div>
-		{/if}
 
 		{#if saveError}
-			<p class="mt-2 text-sm text-rose-300" role="alert">{saveError}</p>
+			<p class="save-error" role="alert">{saveError}</p>
 		{/if}
 
 		{#if showsEvents && data}
-			<div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-				<span class="font-medium text-slate-300">League changes</span>
-				{#each events as e, i}
-					<span class="flex items-center gap-1.5">
-						<span class="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-500 text-[10px] font-semibold text-slate-300">{i + 1}</span>
-						{e.season}: {e.labels.join(', ')}
-					</span>
+			<ol class="changes" aria-label="League changes">
+				{#each events as e, i (e.season)}
+					<li><span class="change-number" aria-hidden="true">{i + 1}</span><span><b>{e.season}</b> {e.labels.join(', ')}</span></li>
 				{/each}
-			</div>
+			</ol>
 		{/if}
 
 		{#if showTable && tableRows.length}
-			<div class="mt-4 max-h-80 overflow-auto rounded-lg border border-slate-700/60">
-				<table class="w-full text-sm">
-					<thead class="sticky top-0 bg-slate-800 text-left text-xs uppercase tracking-wide text-slate-400">
-						<tr>
-							<th class="px-3 py-2">Season</th>
-							{#each tableColumns as c}<th class="px-3 py-2 text-right">{c.label}</th>{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each tableRows as r}
-							<tr class="border-t border-slate-700/40 text-slate-200" class:bg-slate-700={highlightManager && r.champion?.manager === highlightManager}>
-								<td class="px-3 py-1.5"
-									>{r.seasonYear}{#if isLive(r.seasonYear)}<span class="ml-1 text-xs text-slate-400">(in progress)</span>{/if}</td
-								>
-								{#each tableColumns as c}<td class="px-3 py-1.5 text-right tabular-nums">{c.value(r)}</td>{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+			<div class="table">
+				<DataTable columns={dataColumns} rows={dataRows} maxHeight="320px" label="{currentMetric.name} by season">
+					{#snippet cell(row, column)}
+						{#if column.key === 'season'}{row.season}{#if row.live}{' '}<span class="in-progress">(in progress)</span>{/if}{:else}{row[column.key]}{/if}
+					{/snippet}
+				</DataTable>
 			</div>
 		{/if}
-	</div>
 
-	{#if data}
-		<div class="mt-6 rounded-lg bg-slate-800/50 p-4">
-			<h3 class="mb-2 font-bold text-white">Key Insights</h3>
-			<div class="space-y-1 text-sm text-slate-300">
-				{#each insights as insight}
-					<div>• {insight}</div>
+		{#if data}
+			<div class="insights">
+				<div class="insights-title">Key insights</div>
+				{#if insights.length}
+					<ul>
+						{#each insights as insight (insight)}
+							<li>{insight}</li>
+						{/each}
+					</ul>
 				{:else}
-					<div class="text-slate-400">Insights appear once season data loads.</div>
-				{/each}
+					<p class="insights-empty">Insights show once the season data loads.</p>
+				{/if}
 			</div>
-		</div>
-	{/if}
+		{/if}
+	</Card>
 </div>
 
 <style>
-	.d3-overview-container {
+	.d3-overview {
 		width: 100%;
-		max-width: 1200px;
-		margin: 0 auto;
 	}
+
+	/* The era control (S10.2). */
+	.era-row {
+		margin-top: 20px;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 10px 16px;
+	}
+
+	.era-label {
+		font-size: 13px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-ink-2);
+	}
+
+	.era-help {
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
+	.findings {
+		margin-top: 16px;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+		gap: 16px;
+	}
+
+	.finding-value {
+		font-family: var(--font-slab);
+		font-weight: 700;
+		font-size: 40px;
+		line-height: 1;
+	}
+
+	.finding-head {
+		margin-top: 10px;
+		font-size: 15px;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.finding-sub {
+		margin-top: 6px;
+		font-size: 14px;
+		line-height: 1.45;
+		color: var(--color-muted);
+	}
+
+	/* The chart card (S10.3). */
+	.d3-overview :global(.chart-card) {
+		margin-top: 20px;
+	}
+
+	.question-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+	}
+
+	.question {
+		font-size: 16px;
+		font-weight: 700;
+	}
+
+	.description {
+		margin: 4px 0 0;
+		max-width: 680px;
+		font-size: 14px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	.controls {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.highlight {
+		margin-top: 14px;
+	}
+
+	.legend {
+		margin-top: 14px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 18px;
+		font-size: 13px;
+		color: var(--color-ink-2);
+	}
+
+	.legend-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.swatch {
+		flex: none;
+		background: var(--swatch);
+	}
+
+	.swatch.line {
+		width: 18px;
+		height: 3px;
+	}
+
+	.swatch.rect {
+		width: 14px;
+		height: 12px;
+	}
+
+	.swatch.dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+	}
+
+	.swatch.ring {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: transparent;
+		border: 2px solid var(--swatch);
+	}
+
+	.swatch.marker {
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--color-pennant);
+		color: var(--color-white);
+		font-size: 10px;
+		font-weight: 700;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.chart-scroll {
+		margin-top: 8px;
+		overflow-x: auto;
+	}
+
+	.viz-host {
+		position: relative;
+		width: 100%;
+		min-width: 760px;
+		outline: none;
+	}
+
+	.viz-host:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: 2px;
+	}
+
 	.viz-host :global(svg.viz) {
 		display: block;
 		overflow: visible;
-		font-family: inherit;
+		font-family: var(--font-sans);
 	}
+
 	/* A hovered season's bars and marks lift. */
 	.viz-host :global(.hot) {
-		filter: brightness(1.35);
+		filter: brightness(1.15);
 	}
+
+	.save-error {
+		margin: 8px 0 0;
+		font-size: 13px;
+		color: var(--color-pennant-dark);
+	}
+
+	.changes {
+		margin: 14px 0 0;
+		padding: 0;
+		list-style: none;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+		gap: 8px 20px;
+		font-size: 14px;
+		color: var(--color-ink-2);
+	}
+
+	.changes li {
+		display: flex;
+		gap: 8px;
+	}
+
+	.changes b {
+		color: var(--color-ink);
+	}
+
+	.change-number {
+		flex: none;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: var(--color-pennant);
+		color: var(--color-white);
+		font-size: 11px;
+		font-weight: 700;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.table {
+		margin-top: 16px;
+	}
+
+	.in-progress {
+		color: var(--color-muted);
+	}
+
+	.insights {
+		margin-top: 16px;
+		padding: 14px 16px;
+		border-radius: 10px;
+		background: var(--color-ground);
+	}
+
+	.insights-title {
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-field);
+	}
+
+	/* The board draws this text in a color with no token: ink-2 until one is settled (G1). */
+	.insights ul {
+		margin: 6px 0 0;
+		padding-left: 18px;
+		list-style: disc;
+		font-size: 14px;
+		line-height: 1.6;
+		color: var(--color-ink-2);
+	}
+
+	.insights-empty {
+		margin: 6px 0 0;
+		font-size: 14px;
+		color: var(--color-muted);
+	}
+
+	/* The hover card. */
 	.tooltip {
 		display: none;
 		position: absolute;
 		z-index: 10;
 		pointer-events: none;
 		min-width: 11rem;
-		padding: 0.5rem 0.65rem;
-		border-radius: 0.5rem;
-		border: 1px solid rgb(71 85 105 / 0.7);
-		background: rgb(15 23 42 / 0.96);
-		box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-		color: #f1f5f9;
-		font-size: 12px;
+		padding: 8px 10px;
+		border-radius: 8px;
+		border: 1px solid var(--color-line);
+		background: var(--color-card);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+		font-size: 13px;
 	}
+
 	.tooltip :global(.tt-head) {
-		margin-bottom: 0.3rem;
-		color: #94a3b8;
+		margin-bottom: 4px;
+		color: var(--color-muted);
 		font-weight: 600;
 	}
+
 	.tooltip :global(.tt-row) {
 		display: flex;
 		align-items: center;
 		gap: 0.45rem;
 		line-height: 1.6;
 	}
+
 	.tooltip :global(.tt-row strong) {
 		font-variant-numeric: tabular-nums;
 	}
+
 	.tooltip :global(.tt-key) {
 		display: inline-block;
 		width: 12px;
 		height: 2px;
 		border-radius: 1px;
 	}
+
 	.tooltip :global(.tt-label) {
-		color: #cbd5e1;
+		color: var(--color-muted);
 	}
+
 	.tooltip :global(.tt-sub) {
 		padding-left: calc(12px + 0.45rem);
-		color: #cbd5e1;
+		color: var(--color-muted);
+	}
+
+	@media (max-width: 639.98px) {
+		.era-row {
+			margin-top: 16px;
+			display: block;
+		}
+
+		.era-label {
+			display: block;
+		}
+
+		.era-row :global(.segmented) {
+			margin-top: 8px;
+		}
+
+		.era-help {
+			display: block;
+			margin-top: 8px;
+			line-height: 1.45;
+		}
+
+		.findings {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 12px;
+		}
+
+		.finding-value {
+			font-size: 32px;
+		}
+
+		.finding-head {
+			margin-top: 8px;
+		}
+
+		.finding-sub {
+			margin-top: 4px;
+		}
+
+		.d3-overview :global(.chart-card) {
+			margin-top: 16px;
+		}
+
+		.question-row {
+			display: block;
+		}
+
+		.question {
+			line-height: 1.35;
+		}
+
+		.controls {
+			margin-top: 12px;
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.view-control {
+			grid-column: 1 / -1;
+		}
+
+		.chart-scroll {
+			margin-top: 12px;
+			overflow-x: visible;
+		}
+
+		.viz-host {
+			min-width: 0;
+		}
+
+		.changes {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 8px;
+		}
+
+		.insights {
+			padding: 14px;
+		}
 	}
 </style>

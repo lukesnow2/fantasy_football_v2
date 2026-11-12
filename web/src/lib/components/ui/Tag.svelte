@@ -18,7 +18,8 @@
 		| 'value'
 		| 'letdown'
 		| 'bust'
-		| 'count';
+		| 'count'
+		| 'live';
 </script>
 
 <script lang="ts">
@@ -63,6 +64,9 @@
 	 * ink-2 text, at `size="count"`: a 999px pill, 6px 12px, 14px weight 600
 	 * ("1 on the board"). `center` centers the text when the tag is stretched
 	 * across a grid cell, as the phone board draws the counts.
+	 *
+	 * League History (WP10) adds `live`, wash with ink-2, at `size="note"`
+	 * (3px 8px, no letter spacing): a record set in the season in progress.
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -78,7 +82,8 @@
 			| 'trade'
 			| 'sample'
 			| 'cell'
-			| 'count';
+			| 'count'
+			| 'note';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
 		center?: boolean;
@@ -113,6 +118,11 @@
 
 	.size-row {
 		padding: 2px 8px;
+		letter-spacing: normal;
+	}
+
+	.size-note {
+		padding: 3px 8px;
 		letter-spacing: normal;
 	}
 
@@ -205,6 +215,11 @@
 	.bye {
 		background: var(--color-field-tint);
 		color: var(--color-clubhouse);
+	}
+
+	.live {
+		background: var(--color-wash);
+		color: var(--color-ink-2);
 	}
 
 	.eliminated {

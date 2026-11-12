@@ -58,6 +58,8 @@
 		avatar?: string | null;
 		/** With layout="record": the manager after the value. */
 		holder?: string;
+		/** With layout="record": a link for the holder (their profile). */
+		holderHref?: string;
 		tone?: 'ink' | 'field' | 'pennant' | 'pennant-dark';
 	}
 
@@ -74,6 +76,7 @@
 		layout = 'stack',
 		avatar,
 		holder,
+		holderHref,
 		tone
 	}: Props = $props();
 
@@ -98,7 +101,8 @@
 		<div class="text">
 			<div class="record-label">{@render labelText()}</div>
 			<div class="record-value">
-				{@render valueText()}{#if holder}{' '}<span class="holder">{holder}</span>{/if}
+				{@render valueText()}{#if holder && holderHref}{' '}<a class="holder" href={holderHref}>{holder}</a
+				>{:else if holder}{' '}<span class="holder">{holder}</span>{/if}
 			</div>
 		</div>
 	</div>
@@ -351,6 +355,12 @@
 		font-family: var(--font-sans);
 		font-size: 14px;
 		font-weight: 600;
+		color: var(--color-ink);
+		text-decoration: none;
+	}
+
+	a.holder:hover {
+		color: var(--color-field);
 	}
 
 	@media (max-width: 639.98px) {
