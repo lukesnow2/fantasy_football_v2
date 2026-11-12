@@ -86,12 +86,31 @@
 <div
 	bind:this={host}
 	use:clickOutside={{ onOutside: onClose, ignore: [anchor] }}
-	class="fixed z-50 overflow-hidden rounded-xl border border-slate-700 shadow-2xl"
-	style="--background:#1e293b; --border-color:#334155; --input-border-color:#475569;
-	       --input-font-color:#f1f5f9; --input-placeholder-color:#94a3b8;
-	       --category-font-color:#cbd5e1; --indicator-color:#f59e0b;
-	       --button-hover-background:#334155; --button-active-background:#475569;
-	       --emoji-size:1.375rem; --num-columns:8;"
+	class="picker"
 	role="dialog"
 	aria-label="Choose an emoji"
 ></div>
+
+<style>
+	/* emoji-picker-element reads these custom properties; every one is a
+	   Record Book token (WP12 S12.3). */
+	.picker {
+		position: fixed;
+		z-index: 50;
+		overflow: hidden;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius-card);
+		box-shadow: var(--shadow-popover);
+		--background: var(--color-card);
+		--border-color: var(--color-line);
+		--input-border-color: var(--color-line-strong);
+		--input-font-color: var(--color-ink);
+		--input-placeholder-color: var(--color-faint);
+		--category-font-color: var(--color-ink-2);
+		--indicator-color: var(--color-field);
+		--button-hover-background: var(--color-field-wash);
+		--button-active-background: var(--color-field-tint);
+		--emoji-size: 1.375rem;
+		--num-columns: 8;
+	}
+</style>

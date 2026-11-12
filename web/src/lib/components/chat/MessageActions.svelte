@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-	import { MessageSquare, MoreHorizontal, Pencil, Smile, Trash2 } from 'lucide-svelte';
 	import { clickOutside } from '$lib/actions/clickOutside';
 	import { MAX_RECENT_EMOJI, QUICK_EMOJI, RECENT_EMOJI_STORAGE_KEY } from '$lib/chat/constants';
 	import type { EmojiType } from '$lib/chat/types';
@@ -21,6 +20,14 @@
 	let confirmingDelete = $state(false);
 	let menuTrigger = $state<HTMLButtonElement | null>(null);
 	let menu = $state<HTMLDivElement | null>(null);
+
+	// The board's labels for the league's three defaults; any other emoji is
+	// named by itself.
+	const EMOJI_NAMES: Record<string, string> = {
+		'👍': 'thumbs up',
+		'🔥': 'fire',
+		'😂': 'laughing'
+	};
 
 	// The three offered emoji start as league defaults and become whatever this
 	// person actually reaches for. Read once, lazily, so it survives a reload
@@ -60,6 +67,8 @@
 
 	// Same clipping problem as the emoji picker: this menu lives inside the
 	// overflow-y-auto message list, so it has to be positioned fixed to escape it.
+	// flip() puts it above the toolbar when the row sits at the bottom of the
+	// feed, as the phone board draws it.
 	$effect(() => {
 		if (!menuOpen || !menu || !menuTrigger) return;
 		const menuEl = menu;
@@ -77,17 +86,16 @@
 </script>
 
 <!-- Shown on hover *and* focus-within: the old action bar was hover-only, so
-     none of this was reachable from the keyboard. -->
-<div
-	class="absolute -top-3 right-2 flex items-center gap-0.5 rounded-lg border border-slate-600 bg-slate-800 p-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
->
+     none of this was reachable from the keyboard. On a touch screen the row
+     opens it on a tap instead (MessageRow). -->
+<div class="toolbar" role="toolbar" aria-label="Message actions">
 	{#each quick as emoji (emoji)}
 		<button
 			type="button"
-			title="React with {emoji}"
-			aria-label="React with {emoji}"
+			class="tool emoji"
+			title="React with {EMOJI_NAMES[emoji] ?? emoji}"
+			aria-label="React with {EMOJI_NAMES[emoji] ?? emoji}"
 			onclick={() => quickReact(emoji)}
-			class="rounded px-1.5 py-0.5 text-sm leading-none transition-colors hover:bg-slate-700"
 		>
 			{emoji}
 		</button>
@@ -95,81 +103,182 @@
 
 	<button
 		type="button"
+		class="tool"
 		title="Add a reaction"
 		aria-label="Add a reaction"
 		onclick={(event) => onOpenPicker(event.currentTarget as HTMLElement)}
-		class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
 	>
-		<Smile class="h-4 w-4" />
+		<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"
+			><circle cx="11" cy="13" r="8"></circle><path d="M8 15c.8 1 1.8 1.5 3 1.5s2.2-.5 3-1.5M8.5 11h.01M13.5 11h.01"></path><path d="M19 2v6M16 5h6"></path></svg
+		>
 	</button>
 
 	{#if canReply}
 		<button
 			type="button"
+			class="tool"
 			title="Reply in thread"
 			aria-label="Reply in thread"
 			onclick={onReply}
-			class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
 		>
-			<MessageSquare class="h-4 w-4" />
+			<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+				><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"></path></svg
+			>
 		</button>
 	{/if}
 
 	{#if isAuthor}
-		<div class="relative">
-			<button
-				bind:this={menuTrigger}
-				type="button"
-				title="More actions"
-				aria-label="More actions"
-				aria-expanded={menuOpen}
-				aria-haspopup="menu"
-				onclick={() => (menuOpen = !menuOpen)}
-				class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+		<button
+			bind:this={menuTrigger}
+			type="button"
+			class="tool more"
+			class:open={menuOpen}
+			title="More actions"
+			aria-label="More actions"
+			aria-expanded={menuOpen}
+			aria-haspopup="menu"
+			onclick={() => (menuOpen ? closeMenu() : (menuOpen = true))}
+		>
+			⋯
+		</button>
+
+		{#if menuOpen}
+			<div
+				bind:this={menu}
+				use:clickOutside={{ onOutside: closeMenu, ignore: [menuTrigger] }}
+				role="menu"
+				class="menu"
 			>
-				<MoreHorizontal class="h-4 w-4" />
-			</button>
-
-			{#if menuOpen}
-				<div
-					bind:this={menu}
-					use:clickOutside={{ onOutside: closeMenu, ignore: [menuTrigger] }}
-					role="menu"
-					class="fixed z-50 w-40 rounded-lg border border-slate-600 bg-slate-800 py-1 shadow-xl"
+				<button
+					type="button"
+					role="menuitem"
+					class="item"
+					onclick={() => {
+						closeMenu();
+						onEdit();
+					}}
 				>
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							closeMenu();
-							onEdit();
-						}}
-						class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-700 hover:text-white"
-					>
-						<Pencil class="h-3.5 w-3.5" /> Edit
-					</button>
+					Edit
+				</button>
 
-					<!-- Two-state button rather than window.confirm, which is modal,
-					     unstyled, and blocks the whole tab. -->
-					<button
-						type="button"
-						role="menuitem"
-						onclick={() => {
-							if (!confirmingDelete) {
-								confirmingDelete = true;
-								return;
-							}
-							closeMenu();
-							onDelete();
-						}}
-						class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-slate-700
-							{confirmingDelete ? 'font-medium text-red-300' : 'text-red-400'}"
-					>
-						<Trash2 class="h-3.5 w-3.5" />
-						{confirmingDelete ? 'Really delete?' : 'Delete'}
-					</button>
-				</div>
-			{/if}
-		</div>
+				<!-- Two-state button rather than window.confirm, which is modal,
+				     unstyled, and blocks the whole tab. -->
+				<button
+					type="button"
+					role="menuitem"
+					class="item"
+					class:confirm={confirmingDelete}
+					onclick={() => {
+						if (!confirmingDelete) {
+							confirmingDelete = true;
+							return;
+						}
+						closeMenu();
+						onDelete();
+					}}
+				>
+					{confirmingDelete ? 'Really delete?' : 'Delete'}
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>
+
+<style>
+	.toolbar {
+		display: flex;
+		gap: 2px;
+		padding: 3px;
+		border: 1px solid var(--color-line);
+		border-radius: 10px;
+		background: var(--color-card);
+		box-shadow: var(--shadow-toolbar);
+	}
+
+	.tool {
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		border: 0;
+		border-radius: 8px;
+		background: transparent;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-ink-2);
+		font-family: var(--font-sans);
+		cursor: pointer;
+	}
+
+	.tool:hover {
+		background: var(--color-field-wash);
+	}
+
+	.tool:focus-visible {
+		outline: 2px solid var(--color-field);
+		outline-offset: -2px;
+	}
+
+	.emoji {
+		font-size: 16px;
+		line-height: 1;
+	}
+
+	.more {
+		font-weight: 700;
+	}
+
+	.more.open {
+		background: var(--color-wash);
+	}
+
+	.menu {
+		position: fixed;
+		z-index: 50;
+		box-sizing: border-box;
+		width: 170px;
+		padding: 4px;
+		border: 1px solid var(--color-line);
+		border-radius: 10px;
+		background: var(--color-card);
+		box-shadow: var(--shadow-popover);
+	}
+
+	.item {
+		display: block;
+		width: 100%;
+		padding: 9px 10px;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		text-align: left;
+		font-family: var(--font-sans);
+		font-size: 14px;
+		color: var(--color-ink);
+		cursor: pointer;
+	}
+
+	.item:hover,
+	.item:focus-visible {
+		background: var(--color-field-wash);
+		outline: none;
+	}
+
+	.item.confirm {
+		background: var(--color-pennant-tint);
+		color: var(--color-pennant-dark);
+		font-weight: 700;
+	}
+
+	@media (hover: none) {
+		.tool {
+			width: 44px;
+			height: 44px;
+		}
+
+		.item {
+			min-height: 44px;
+			padding: 0 10px;
+		}
+	}
+</style>

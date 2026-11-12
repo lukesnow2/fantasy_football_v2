@@ -24,7 +24,11 @@
 	 * `tone="pennant"` turns primary into a pennant fill with white text ("Record
 	 * the ruling") and text into pennant-dark.
 	 *
-	 * Sizes beyond the default (WP9 adds the last two):
+	 * - pill (WP12): card fill, a 1px line border, a 999px radius, 13px weight
+ *   600 ink-2, 36px tall with 0 14px of padding (44px below 640px): Chat's
+ *   "Load earlier messages"
+ *
+ * Sizes beyond the default (WP9 adds the last two):
 	 * - `large`: 48px with 0 22px of padding at 16px, content-box (Home's band)
 	 * - `lg`: 48px with 0 22px of padding at 16px weight 700 ("Post a bet");
 	 *   `padX` sets another side padding in px ("Post it", 26)
@@ -72,6 +76,7 @@
 		| 'band-outline'
 		| 'band-white'
 		| 'chip'
+		| 'pill'
 		| 'outline'
 		| 'text'
 		| 'filter'
@@ -235,6 +240,32 @@
 	.band-outline:hover {
 		background: var(--color-clubhouse-3);
 		color: var(--color-white);
+	}
+
+	.pill {
+		min-height: 36px;
+		padding: 0 14px;
+		border: 1px solid var(--color-line);
+		border-radius: 999px;
+		background: var(--color-card);
+		color: var(--color-ink-2);
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.pill:hover {
+		color: var(--color-ink);
+	}
+
+	.pill:disabled {
+		cursor: default;
+		opacity: 0.6;
+	}
+
+	@media (max-width: 639.98px) {
+		.pill {
+			min-height: 44px;
+		}
 	}
 
 	.chip {
