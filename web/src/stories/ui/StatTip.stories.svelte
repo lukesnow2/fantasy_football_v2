@@ -96,6 +96,15 @@
 	{/snippet}
 </Story>
 
+<Story name="As a chip (Data Dictionary)">
+	{#snippet template()}
+		<p style="font-size: 14px">
+			Hover the ⓘ next to any stat, like <StatTip metricId="luck_factor" label="Luck Factor" chip />, to get the
+			same definition you'll find on this page.
+		</p>
+	{/snippet}
+</Story>
+
 <style>
 	.header-label {
 		font-size: 12px;

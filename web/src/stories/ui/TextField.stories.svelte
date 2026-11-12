@@ -47,3 +47,30 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Propose a change dialog (WP11)">
+	{#snippet template()}
+		<div style="display: grid; gap: 16px; max-width: 588px">
+			<TextField label="Title" hint="Optional" phoneHintInline focusBorder placeholder="Short name for this proposal" />
+			<TextField
+				kind="select"
+				label="What kind of change is this?"
+				focusBorder
+				helperWeight={400}
+				helper="This sets how many votes it needs under Article VIII. Other changes need a super-majority."
+				options={[{ value: 'general', label: 'Other constitutional change' }]}
+			/>
+			<TextField kind="textarea" label="Proposed wording" rows={3} focusBorder value="The trade deadline starts after week 10." />
+			<TextField kind="textarea" size="sm" label="Comment" hideLabel rows={2} placeholder="Add a comment (optional)" />
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Data Dictionary search (WP11)">
+	{#snippet template()}
+		<div style="display: flex; gap: 12px; align-items: flex-end">
+			<TextField label="Search" type="search" size="lg" placeholder="Search by name, description or category" />
+			<TextField kind="select" label="Category" size="lg" options={[{ value: 'all', label: 'All categories' }]} />
+		</div>
+	{/snippet}
+</Story>

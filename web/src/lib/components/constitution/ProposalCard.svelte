@@ -63,7 +63,11 @@
 			.filter(Boolean)
 			.join(' · ')
 	);
-	const rows = $derived(ballotRows(members, proposal.ballots ?? [], proposal.subjectManagerKey ?? null));
+	const rows = $derived(
+		ballotRows(members, proposal.ballots ?? [], proposal.subjectManagerKey ?? null, settled)
+	);
+	// Nobody votes on a draft, so it has no ballots to list.
+	const listBallots = $derived(showBallots && proposal.status !== 'draft');
 	// Signed in, the proposal open and no vote allowed: the only reason is that
 	// it's about you.
 	const isSubject = $derived(
@@ -210,7 +214,7 @@
 				{/if}
 			</div>
 
-			{#if showBallots}
+			{#if listBallots}
 				<div class="ballots">
 					<div class="ballots-head">Ballots ({proposal.ballots?.length ?? 0})</div>
 					{#each rows as row (row.managerKey)}

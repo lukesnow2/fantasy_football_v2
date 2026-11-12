@@ -263,8 +263,9 @@
 					class="i"
 					aria-hidden="true">ⓘ</span
 				>{/if}
-		</button>
-		{#if definition}
+		</button
+		><!-- No space after the button: mid-sentence, it would sit before the
+		     punctuation that follows the label. -->{#if definition}
 			<StatTipCard
 				bind:element={card}
 				{definition}

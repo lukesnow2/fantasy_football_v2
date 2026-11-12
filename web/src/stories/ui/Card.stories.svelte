@@ -189,3 +189,31 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Ruled header with a title lead (WP11)">
+	{#snippet template()}
+		<div style="max-width: 760px; display: grid; gap: 20px">
+			<Card
+				as="article"
+				title="Trades"
+				titleLead="II"
+				titleSize={30}
+				padding="26px 28px"
+				headRule
+				headRuleGap={12}
+				phoneHeadRuleGap={0}
+				headSpacing="8px 16px"
+				phoneHeadStack
+				phoneHeadStackGap={0}
+				phoneTitleLineHeight={1.2}
+			>
+				{#snippet action()}<Button variant="link" size="sm" href="#">Propose an amendment</Button>{/snippet}
+				<p style="margin: 8px 0 0">The trade deadline starts after week 10.</p>
+			</Card>
+			<Card title="Head to head" titleSize={26} headRule headSpacing="6px 16px" phoneHeadSpacing="4px 16px">
+				{#snippet action()}<span style="font-size: 14px; color: var(--color-muted)">Matchups and expected results</span>{/snippet}
+				<p style="margin: 14px 0 0">Luck Factor</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>

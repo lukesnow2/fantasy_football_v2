@@ -224,6 +224,12 @@ describe('ballotRows', () => {
 		expect(rows.find((r) => r.managerKey === 3)).toMatchObject({ mark: "Doesn't vote", tone: 'excluded' });
 	});
 
+	it("reads Didn't vote once the vote has closed", () => {
+		const rows = ballotRows(members, [], 3, true);
+		expect(rows.find((r) => r.managerKey === 1)?.mark).toBe("Didn't vote");
+		expect(rows.find((r) => r.managerKey === 3)?.mark).toBe("Doesn't vote");
+	});
+
 	it('keeps a ballot from someone no longer active', () => {
 		const rows = ballotRows(
 			members,

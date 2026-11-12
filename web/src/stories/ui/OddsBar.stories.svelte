@@ -55,3 +55,14 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Vote count (Constitution)">
+	{#snippet template()}
+		<div style="width: 560px">
+			<OddsBar percent={14.3} height={10} track="wash" gap={12} phoneGap={10}>
+				<span style="font-size: 14px; font-weight: 700">1 of 7 yes</span>
+				<span style="font-size: 13px; color: var(--color-muted)">Super-majority</span>
+			</OddsBar>
+		</div>
+	{/snippet}
+</Story>

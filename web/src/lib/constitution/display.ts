@@ -198,7 +198,7 @@ export function ruleName(label: string): string {
 export interface BallotRow {
 	managerKey: number;
 	name: string;
-	/** "✓ Yes", "✗ No", "Abstain", "Not yet", "Doesn't vote". */
+	/** "✓ Yes", "✗ No", "Abstain", "Not yet" ("Didn't vote" once closed), "Doesn't vote". */
 	mark: string;
 	tone: 'yes' | 'no' | 'abstain' | 'pending' | 'excluded';
 	voted: boolean;
@@ -214,7 +214,8 @@ const MARKS = {
 /**
  * One row per active member: those who voted first, newest vote first, then
  * everyone else by name. A ballot from someone no longer active still counts,
- * so it still shows. The subject of a removal reads "Doesn't vote".
+ * so it still shows. The subject of a removal reads "Doesn't vote". Once the
+ * vote has closed, anyone who didn't vote reads "Didn't vote".
  */
 export function ballotRows(
 	members: Array<{ managerKey: number; displayName: string | null }>,
@@ -225,7 +226,8 @@ export function ballotRows(
 		comment: string | null;
 		votedAt: string | Date | null;
 	}>,
-	subjectKey: number | null
+	subjectKey: number | null,
+	closed = false
 ): BallotRow[] {
 	const names = new Map(members.map((m) => [m.managerKey, m.displayName]));
 	const time = (d: string | Date | null) => (d ? new Date(d).getTime() : 0);
@@ -252,7 +254,7 @@ export function ballotRows(
 			return {
 				managerKey: m.managerKey,
 				name: m.displayName ?? 'Unknown',
-				mark: excluded ? "Doesn't vote" : 'Not yet',
+				mark: excluded ? "Doesn't vote" : closed ? "Didn't vote" : 'Not yet',
 				tone: excluded ? ('excluded' as const) : ('pending' as const),
 				voted: false,
 				comment: null

@@ -128,3 +128,32 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Constitution and Data Dictionary (WP11)">
+	{#snippet template()}
+		<div style="display: grid; gap: 14px; justify-items: start">
+			<Button size="lg" padX={20}>Propose a change</Button>
+			<Button size="lg" padX={20} aria-pressed="true">Done proposing</Button>
+			<Button variant="dashed">+ Propose a new clause in this article</Button>
+			<div style="display: flex; gap: 4px">
+				<Button variant="icon" aria-label="Propose an edit to this clause"
+					><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></Button
+				>
+				<Button variant="icon" tone="pennant" aria-label="Propose removing this clause"
+					><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg></Button
+				>
+			</div>
+			<Button variant="link" size="sm">Propose an amendment</Button>
+			<Button variant="link" size="xs">Show details</Button>
+			<div style="display: flex; gap: 8px">
+				<Button variant="filter" aria-pressed="true">All <span style="opacity: 0.7">21</span></Button>
+				<Button variant="filter" aria-pressed="false">Trades <span style="opacity: 0.7">2</span></Button>
+				<Button variant="filter" tone="muted">+ 5 more</Button>
+			</div>
+			<div style="display: flex; gap: 10px">
+				<Button height={46} padX={20} bold>Save as draft</Button>
+				<Button variant="secondary" height={46}>Cancel</Button>
+			</div>
+		</div>
+	{/snippet}
+</Story>
