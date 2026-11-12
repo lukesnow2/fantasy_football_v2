@@ -6,6 +6,7 @@
  * that's still `canAccept`, `isMine` and `isCommissioner` in the page, as before.
  */
 import type { LedgerEntry, WagerRow } from '$lib/server/wagers';
+import { LEAGUE_TIME_ZONE, formatShortDate } from '$lib/utils/time-zone';
 
 /** The fields of a bet these helpers read. Load serialises dates, so either form is fine. */
 export type BetLike = Pick<
@@ -114,12 +115,15 @@ export function ledgerRows(
 	return [...withRecord, ...rest];
 }
 
-/** "Nov 7, 2026", or null when there's no date, so the page shows a word instead. */
-export function betDate(value: string | Date | null | undefined): string | null {
-	if (!value) return null;
-	const date = new Date(value);
-	if (Number.isNaN(date.getTime())) return null;
-	return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+/**
+ * "Nov 7, 2026" in the reader's zone, or null when there's no date, so the
+ * page shows a word instead.
+ */
+export function betDate(
+	value: string | Date | null | undefined,
+	timeZone: string = LEAGUE_TIME_ZONE
+): string | null {
+	return formatShortDate(value, timeZone);
 }
 
 export type StageKey = 'onBoard' | 'live' | 'awaitingRuling' | 'settled' | 'passed';

@@ -20,11 +20,15 @@
 		STAGES,
 		verdictLabel
 	} from '$lib/bet-board';
+	import { readerTimeZone } from '$lib/utils/reader-time-zone.svelte';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	type Bet = PageData['wagers'][number];
+
+	// The reader's zone for ruling dates (see readerTimeZone).
+	const zone = readerTimeZone(data.timeZone);
 
 	let showForm = $state(false);
 	let counterpartyKey = $state('');
@@ -209,7 +213,7 @@
 
 {#snippet settledBet(w: Bet)}
 	{@const verdict = verdictLabel(w)}
-	{@const ruled = betDate(w.resolvedAt)}
+	{@const ruled = betDate(w.resolvedAt, zone.current)}
 	<Card tone="inset" padding="14px 16px" phonePadding="12px 14px" label={w.title}>
 		<div class="bet-head">
 			<b class="bet-title">{w.title}</b><span class="verdict {verdict.tone}">{verdict.text}</span>

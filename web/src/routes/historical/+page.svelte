@@ -22,6 +22,7 @@
 	} from '$lib/components/ui';
 	import { profileHref } from '$lib/home';
 	import { rivalryHref } from '$lib/utils/managers';
+	import { LEAGUE_TIME_ZONE, browserTimeZone } from '$lib/utils/time-zone';
 	import {
 		HISTORY_TABS,
 		TABLE_ROWS,
@@ -675,7 +676,11 @@
 			</div>
 		{/each}
 
-		<p class="footnote">{recordFootnote(liveSeason, recordBookData.lastUpdated)}</p>
+		<p class="footnote">{recordFootnote(
+				liveSeason,
+				recordBookData.lastUpdated,
+				browserTimeZone() ?? LEAGUE_TIME_ZONE
+			)}</p>
 	{/if}
 {/if}
 
