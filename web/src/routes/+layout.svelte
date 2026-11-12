@@ -32,6 +32,14 @@
 	 */
 	const COMPACT_TOP_ROUTES = new Set(['/managers/[slug]']);
 
+	/**
+	 * Routes that fill one screen: Chat, whose board draws <main> at 28px 24px
+	 * 40px so the feed and composer fit the viewport, and 16px all round on a
+	 * phone, where the page is exactly the screen under the band (WP12 S12.1,
+	 * S12.10).
+	 */
+	const SCREEN_ROUTES = new Set(['/chat']);
+
 	let showUserMenu = $state(false);
 	let showMobileMenu = $state(false);
 	// One open menu at a time, held here rather than in each dropdown, otherwise
@@ -45,6 +53,7 @@
 	const pathname = $derived(page.url.pathname);
 	const fullBleed = $derived(FULL_BLEED_ROUTES.has(pathname));
 	const compactTop = $derived(COMPACT_TOP_ROUTES.has(page.route?.id ?? ''));
+	const screen = $derived(SCREEN_ROUTES.has(page.route?.id ?? ''));
 	const isCommissioner = $derived(data.member?.role === 'commissioner');
 	// The dropdown links to the manager's public stats page. Encoded because every
 	// name in the roster has a space in it ("Gabe the Younger", "Troy Colvin").
@@ -364,6 +373,7 @@
 		class="content"
 		class:full-bleed={fullBleed}
 		class:compact-top={compactTop}
+		class:screen
 		inert={showMobileMenu}
 	>
 		{@render children()}
@@ -778,6 +788,10 @@
 		padding-top: 28px;
 	}
 
+	.content.screen {
+		padding: 28px 24px 40px;
+	}
+
 	.foot {
 		border-top: 1px solid var(--color-line);
 		background: var(--color-card);
@@ -814,6 +828,10 @@
 
 		.content.full-bleed {
 			padding: 0;
+		}
+
+		.content.screen {
+			padding: 16px;
 		}
 
 		.foot-row {
