@@ -66,6 +66,9 @@
 	const profileCurrent = $derived(isActivePath(pathname, profileHref));
 	const settingsCurrent = $derived(isActivePath(pathname, '/settings'));
 	const adminCurrent = $derived(isActivePath(pathname, '/admin/members'));
+	// On the commissioner's pages the pill says whose hat you're wearing: the
+	// Commissioner board draws "Commissioner ▾" in place of the name (WP12 S12.7).
+	const commissionerPill = $derived(isCommissioner && pathname.startsWith('/admin'));
 
 	// Any navigation closes every menu, including one a link didn't close itself
 	// (the back button, a link in the page behind an open menu).
@@ -206,16 +209,23 @@
 						type="button"
 						class="pill"
 						class:open={showUserMenu}
+						class:commissioner={commissionerPill}
 						onclick={toggleUserMenu}
 						aria-expanded={showUserMenu}
 						aria-haspopup="menu"
 					>
-						<Avatar name={data.authenticatedManager.managerName} size={30} />
-						<span
-							>{data.authenticatedManager.displayName}<span aria-hidden="true"
-								>&nbsp;{showUserMenu ? '▴' : '▾'}</span
-							></span
-						>
+						{#if commissionerPill}
+							<span
+								>Commissioner<span aria-hidden="true">&nbsp;{showUserMenu ? '▴' : '▾'}</span></span
+							>
+						{:else}
+							<Avatar name={data.authenticatedManager.managerName} size={30} />
+							<span
+								>{data.authenticatedManager.displayName}<span aria-hidden="true"
+									>&nbsp;{showUserMenu ? '▴' : '▾'}</span
+								></span
+							>
+						{/if}
 					</button>
 
 					{#if showUserMenu}
@@ -522,6 +532,19 @@
 
 	.pill.open {
 		box-shadow: inset 0 0 0 2px var(--color-pennant-light);
+	}
+
+	.pill.commissioner {
+		gap: 8px;
+		padding: 8px 14px;
+		background: var(--color-pennant-light);
+		color: var(--color-clubhouse);
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.pill.commissioner.open {
+		box-shadow: inset 0 0 0 2px var(--color-white);
 	}
 
 	.pill:focus-visible,
