@@ -31,7 +31,10 @@
 	 * - `sm`: 40px at 14px (44px below 640px, the phone tap target). Primary and
 	 *   outline are 0 16px at weight 700, secondary 0 14px at 600, text 0 12px at
 	 *   600, and the pennant text button is 13px ("Take it", "Pass", "Pull it")
-	 * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
+	 * - `xl` (WP12): 50px with 0 22px of padding, a 10px radius, 16px weight
+ *   700: the sign-in cards' "Email me a sign-in link" and "Send me a new
+ *   link"; `padX` sets another side padding
+ * - `xs` (WP10): 40px at 13px weight 600, secondary 0 14px (44px below
 	 *   640px): League History's "Save image" and "Show table"
 	 *
 	 * The Constitution and the Data Dictionary (WP11) add:
@@ -74,7 +77,7 @@
 		| 'filter'
 		| 'dashed'
 		| 'icon';
-	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm' | 'xs';
+	type Size = 'default' | 'large' | 'tap' | 'lg' | 'xl' | 'sm' | 'xs';
 	type Tone = 'default' | 'pennant' | 'muted';
 
 	type Props = {
@@ -344,6 +347,14 @@
 	.size-lg {
 		min-height: 48px;
 		padding: 0 var(--btn-pad-x, 22px);
+		font-size: 16px;
+		font-weight: 700;
+	}
+
+	.size-xl {
+		min-height: 50px;
+		padding: 0 var(--btn-pad-x, 22px);
+		border-radius: 10px;
 		font-size: 16px;
 		font-weight: 700;
 	}

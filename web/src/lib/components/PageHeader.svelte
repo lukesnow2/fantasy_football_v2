@@ -23,6 +23,16 @@
 	 * `phoneKickerLineHeight` sets the kicker's line height below 640px, for
 	 * the boards that let a long kicker wrap (WP11's, at 1.4).
 	 *
+	 * The members-only pages (WP12) add:
+	 * - `kickerTone="pennant"`: a pennant-dark kicker ("Commissioner only")
+	 * - `tight`: Chat's header. The title at line height 1 with 6px under the
+	 *   kicker, the intro 6px under it at 16px and the normal line height, and
+	 *   12px 24px between the block and the action
+	 * - `titleSuffix`: text after the title in sans 600 muted, 20px (16px below
+	 *   640px), as Chat's " #general"
+	 * - `phoneActionBesideTitle`: below 640px the action sits at the right end
+	 *   of the title row, centered on it, with 12px between (Chat's Live pill)
+	 *
 	 * `icon` and `accent` are left over from the old centered header. They still
 	 * compile so unrestyled callers don't break, and they render nothing. The
 	 * housekeeping PR after WP12 removes them.
@@ -49,6 +59,14 @@
 		introWidth?: number;
 		/** The title block's flex basis in px: 520 unless the board draws another (Bet Board, 560). */
 		blockBasis?: number;
+		/** The kicker's color: field, or pennant-dark for the Commissioner page. */
+		kickerTone?: 'field' | 'pennant';
+		/** Chat's tighter header (WP12 S12.1). */
+		tight?: boolean;
+		/** Text after the title in sans 600 muted ("#general"). */
+		titleSuffix?: string;
+		/** Below 640px, the action sits on the title's row. */
+		phoneActionBesideTitle?: boolean;
 		/** Deprecated: renders nothing. */
 		icon?: unknown;
 		/** Deprecated: renders nothing. */
@@ -71,6 +89,10 @@
 		size = 60,
 		introWidth = 620,
 		blockBasis = 520,
+		kickerTone = 'field',
+		tight = false,
+		titleSuffix,
+		phoneActionBesideTitle = false,
 		children,
 		action
 	}: Props = $props();
@@ -78,6 +100,8 @@
 
 <div
 	class="page-header"
+	class:tight
+	class:beside={phoneActionBesideTitle}
 	aria-busy={pending || undefined}
 	style:--phone-action-gap="{phoneActionGap}px"
 	style:--phone-kicker-lh={phoneKickerLineHeight}
@@ -86,7 +110,7 @@
 		{#if pending}
 			<div class="kicker"><span class="bar kicker-bar"></span></div>
 		{:else if kicker}
-			<div class="kicker">
+			<div class="kicker" class:pennant={kickerTone === 'pennant'}>
 				{#if phoneKicker}
 					<span class="desktop-only">{kicker}</span><span class="phone-only">{phoneKicker}</span>
 				{:else}
@@ -94,7 +118,9 @@
 				{/if}
 			</div>
 		{/if}
-		<h1 class:first={!kicker && !pending} style:--title-size="{size}px">{title}</h1>
+		<h1 class:first={!kicker && !pending} style:--title-size="{size}px"
+			>{title}{#if titleSuffix}{' '}<span class="suffix">{titleSuffix}</span>{/if}</h1
+		>
 		{#if pending}
 			<p><span class="bar intro-bar"></span></p>
 		{:else if children}
@@ -140,6 +166,34 @@
 
 	h1.first {
 		margin-top: 0;
+	}
+
+	.kicker.pennant {
+		color: var(--color-pennant-dark);
+	}
+
+	.suffix {
+		font-family: var(--font-sans);
+		font-size: 20px;
+		font-weight: 600;
+		letter-spacing: normal;
+		color: var(--color-muted);
+	}
+
+	.tight {
+		gap: 12px 24px;
+	}
+
+	.tight h1 {
+		margin: 6px 0 0;
+		line-height: 1;
+	}
+
+	.tight p {
+		margin-top: 6px;
+		max-width: none;
+		font-size: 16px;
+		line-height: normal;
 	}
 
 	p {
@@ -204,6 +258,53 @@
 
 		.intro-bar {
 			height: 48px;
+		}
+
+		.tight p {
+			margin-top: 10px;
+			line-height: 1.5;
+		}
+
+		.suffix {
+			font-size: 16px;
+		}
+
+		/* The block's three lines and the action on one grid, so the action can
+		   take the title's row without rendering twice. */
+		.beside {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			column-gap: 12px;
+			row-gap: 0;
+		}
+
+		.beside .block {
+			display: contents;
+		}
+
+		.beside .kicker,
+		.beside p {
+			grid-column: 1 / -1;
+		}
+
+		.beside .kicker {
+			grid-row: 1;
+		}
+
+		.beside h1 {
+			grid-row: 2;
+			grid-column: 1;
+		}
+
+		.beside .action {
+			grid-row: 2;
+			grid-column: 2;
+			align-self: center;
+			margin-top: 6px;
+		}
+
+		.beside p {
+			grid-row: 3;
 		}
 
 		.action.full-phone {

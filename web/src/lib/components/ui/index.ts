@@ -19,6 +19,7 @@ export { default as StatStrip } from './StatStrip.svelte';
 export { default as StatTile } from './StatTile.svelte';
 export { default as StatTip } from './StatTip.svelte';
 export { default as StatTipCard } from './StatTipCard.svelte';
+export { default as Switch } from './Switch.svelte';
 export { default as TextField } from './TextField.svelte';
 export { default as TabNav } from './TabNav.svelte';
 export type { TabItem } from './TabNav.svelte';
