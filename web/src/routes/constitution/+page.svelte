@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Card, Tag } from '$lib/components/ui';
+	import { Button, Card, PointerCopy, Tag } from '$lib/components/ui';
 	import ClauseView from '$lib/components/constitution/ClauseView.svelte';
 	import ProposalCard from '$lib/components/constitution/ProposalCard.svelte';
 	import ProposalForm from '$lib/components/constitution/ProposalForm.svelte';
@@ -164,10 +164,10 @@
 
 {#if editMode}
 	<div class="strip hint">
-		<span class="hover-copy">Hover any clause to edit it, add a sub-clause, or propose removing it.</span>
-		<span class="touch-copy"
-			>Tap the buttons under any clause to edit it, add a sub-clause, or propose removing it.</span
-		>
+		<PointerCopy
+			hover="Hover any clause to edit it, add a sub-clause, or propose removing it."
+			touch="Tap the buttons under any clause to edit it, add a sub-clause, or propose removing it."
+		/>
 	</div>
 {/if}
 
@@ -396,20 +396,6 @@
 	.error {
 		background: var(--color-pennant-tint);
 		color: var(--color-pennant-dark);
-	}
-
-	.touch-copy {
-		display: none;
-	}
-
-	@media (hover: none) {
-		.hover-copy {
-			display: none;
-		}
-
-		.touch-copy {
-			display: inline;
-		}
 	}
 
 	.proposals {

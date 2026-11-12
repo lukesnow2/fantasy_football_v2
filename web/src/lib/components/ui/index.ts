@@ -10,6 +10,7 @@ export { default as GradeChip } from './GradeChip.svelte';
 export { default as Movement } from './Movement.svelte';
 export { default as OddsBar } from './OddsBar.svelte';
 export { default as Pennant } from './Pennant.svelte';
+export { default as PointerCopy } from './PointerCopy.svelte';
 export { default as PositionChip } from './PositionChip.svelte';
 export { default as RadioChip } from './RadioChip.svelte';
 export { default as Segmented } from './Segmented.svelte';

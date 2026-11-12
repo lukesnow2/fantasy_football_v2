@@ -14,7 +14,7 @@
 	import { onMount, tick } from 'svelte';
 	import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { Button, Card, StatTip, TextField } from '$lib/components/ui';
+	import { Button, Card, PointerCopy, StatTip, TextField } from '$lib/components/ui';
 	import {
 		VISIBLE_CATEGORY_CHIPS,
 		categoryBlurb,
@@ -148,7 +148,7 @@
 <div class="tip">
 	<span class="tip-lead">Metrics are explained everywhere.</span>
 	<span class="tip-text"
-		><span class="hover-copy">Hover</span><span class="touch-copy">Tap</span> the ⓘ next to any stat, like
+		><PointerCopy hover="Hover" touch="Tap" /> the ⓘ next to any stat, like
 		<StatTip metricId="hall_of_fame_index" label="Hall of Fame Index" chip />, to get the same
 		definition you'll find on this page.</span
 	>
@@ -313,20 +313,6 @@
 	.tip-text {
 		font-size: 14px;
 		color: var(--color-ink);
-	}
-
-	.touch-copy {
-		display: none;
-	}
-
-	@media (hover: none) {
-		.hover-copy {
-			display: none;
-		}
-
-		.touch-copy {
-			display: inline;
-		}
 	}
 
 	.filters {

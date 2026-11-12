@@ -130,31 +130,32 @@ export const load: PageServerLoad = async ({ locals }) => {
 		};
 	});
 
-	const amendments = await db
-		.select({
-			amendmentKey: ruleAmendment.amendmentKey,
-			year: ruleAmendment.amendmentYear,
-			title: ruleAmendment.amendmentTitle,
-			description: ruleAmendment.amendmentDescription,
-			effectiveSeason: ruleAmendment.effectiveSeason,
-			voteResults: ruleAmendment.voteResults,
-			approvedAt: ruleAmendment.approvedAt
-		})
-		.from(ruleAmendment)
-		.orderBy(desc(ruleAmendment.amendmentYear), desc(ruleAmendment.amendmentKey));
-
-	// Every version, newest first, for the Versions card (WP11 S11.3). A
-	// version passed but not yet in force is listed too, marked pending against
-	// the same clock that picked the current version.
-	const versionRows = await db
-		.select({
-			versionNo: constitutionVersion.versionNo,
-			effectiveAt: constitutionVersion.effectiveAt,
-			note: constitutionVersion.note,
-			amendmentKey: constitutionVersion.amendmentKey
-		})
-		.from(constitutionVersion)
-		.orderBy(desc(constitutionVersion.versionNo));
+	// Every version, newest first, for the Versions card (WP11 S11.3), read
+	// alongside the amendments. A version passed but not yet in force is listed
+	// too, marked pending against the same clock that picked the current one.
+	const [amendments, versionRows] = await Promise.all([
+		db
+			.select({
+				amendmentKey: ruleAmendment.amendmentKey,
+				year: ruleAmendment.amendmentYear,
+				title: ruleAmendment.amendmentTitle,
+				description: ruleAmendment.amendmentDescription,
+				effectiveSeason: ruleAmendment.effectiveSeason,
+				voteResults: ruleAmendment.voteResults,
+				approvedAt: ruleAmendment.approvedAt
+			})
+			.from(ruleAmendment)
+			.orderBy(desc(ruleAmendment.amendmentYear), desc(ruleAmendment.amendmentKey)),
+		db
+			.select({
+				versionNo: constitutionVersion.versionNo,
+				effectiveAt: constitutionVersion.effectiveAt,
+				note: constitutionVersion.note,
+				amendmentKey: constitutionVersion.amendmentKey
+			})
+			.from(constitutionVersion)
+			.orderBy(desc(constitutionVersion.versionNo))
+	]);
 
 	const versions = versionRows.map((v) => ({ ...v, pending: v.effectiveAt > now }));
 

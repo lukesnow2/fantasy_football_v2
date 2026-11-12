@@ -49,7 +49,8 @@
 	const id = $props.id();
 	const bodyId = `proposal-${id}`;
 
-	const isOpen = $derived(proposal.outcome?.state === 'open');
+	// A draft's outcome reads "open" too, but nobody can vote on it yet.
+	const isOpen = $derived(proposal.status === 'active' && proposal.outcome?.state === 'open');
 	const settled = $derived(SETTLED.includes(proposal.status));
 	const tag = $derived(statusTag(proposal.status));
 	const progress = $derived(voteProgress(proposal.yesVotes, proposal.threshold.requiredYes));
