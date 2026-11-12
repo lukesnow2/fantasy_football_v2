@@ -9,10 +9,11 @@ import { emailService, generateMagicLinkEmail } from '$lib/server/email';
 import { describeMailConfig, requireOrigin } from '$lib/server/env';
 import { issueLoginToken } from '$lib/server/login-token';
 import { consumeLoginEmailBudget } from '$lib/server/rate-limit';
-import { TIME_ZONE_COOKIE, resolveTimeZone } from '$lib/utils/time-zone';
+import { requestTimeZone } from '$lib/utils/time-zone';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ locals, cookies, request }) => {
+export const load: PageServerLoad = async (event) => {
+	const { locals } = event;
 	// Checked here as well as in hooks.server.ts. A guard you cannot see from the
 	// route file is a guard someone later removes by accident.
 	requireCommissioner(locals);
@@ -43,10 +44,7 @@ export const load: PageServerLoad = async ({ locals, cookies, request }) => {
 		mailConfig: describeMailConfig(),
 		// The reader's zone for the Invited and First login dates, so the server
 		// writes the day they'd see on their own clock.
-		timeZone: resolveTimeZone(
-			cookies.get(TIME_ZONE_COOKIE),
-			request.headers.get('x-vercel-ip-timezone')
-		)
+		timeZone: requestTimeZone(event)
 	};
 };
 

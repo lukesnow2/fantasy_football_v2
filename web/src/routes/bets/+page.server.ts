@@ -11,6 +11,7 @@ import {
 	listBettableManagers,
 	listWagers
 } from '$lib/server/wagers';
+import { requestTimeZone } from '$lib/utils/time-zone';
 import type { Actions, PageServerLoad } from './$types';
 
 const MAX_TITLE = 200;
@@ -31,7 +32,8 @@ const LATEST_SEASON = () => new Date().getFullYear() + 1;
  * because a guard nobody can see from the route file is a guard someone will
  * later remove by accident.
  */
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async (event) => {
+	const { locals } = event;
 	if (!locals.user) throw redirect(302, '/login?redirect=/bets');
 
 	const managerKey = locals.member?.active ? locals.member.managerKey : null;
@@ -50,7 +52,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		ledger: computeLedger(wagers),
 		members: await listBettableManagers(),
 		myManagerKey: managerKey,
-		isCommissioner: locals.member?.role === 'commissioner'
+		isCommissioner: locals.member?.role === 'commissioner',
+		// The reader's zone, so ruling dates render on their day.
+		timeZone: requestTimeZone(event)
 	};
 };
 

@@ -130,7 +130,13 @@ describe('the counts', () => {
 
 describe('betDate', () => {
 	it('formats a date the way the page always has', () => {
-		expect(betDate(new Date(2026, 10, 7))).toBe('Nov 7, 2026');
+		expect(betDate('2026-11-07T18:00:00Z')).toBe('Nov 7, 2026');
+	});
+
+	it("writes the reader's day", () => {
+		// 11:30pm Pacific on Nov 6 is already Nov 7 in Mountain time.
+		expect(betDate('2026-11-07T07:30:00Z', 'America/Los_Angeles')).toBe('Nov 6, 2026');
+		expect(betDate('2026-11-07T07:30:00Z', 'America/Denver')).toBe('Nov 7, 2026');
 	});
 
 	it('is null for a missing or broken date, never a dash', () => {
