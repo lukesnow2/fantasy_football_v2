@@ -51,7 +51,10 @@
      row can hold both cards, it covers the screen as a sheet (S12.10). -->
 <svelte:window
 	onkeydown={(event) => {
-		if (event.key === 'Escape' && !event.defaultPrevented && sheet.current) onCollapse();
+		// The emoji picker closes first: Escape over it is for it, not the sheet.
+		if (event.key !== 'Escape' || event.defaultPrevented || !sheet.current) return;
+		if (document.querySelector('[role="dialog"][aria-label="Choose an emoji"]')) return;
+		onCollapse();
 	}}
 />
 
