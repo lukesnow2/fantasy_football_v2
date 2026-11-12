@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
 	dayKey,
 	formatDayDivider,
+	connectionPill,
 	formatReactionTooltip,
 	formatRelative,
+	newestRepliers,
+	threadChipLabel,
 	shouldGroupWith,
 	toPlainText
 } from './format';
@@ -147,13 +150,31 @@ describe('formatReactionTooltip', () => {
 		);
 	});
 
-	it('puts "you" last however the server ordered the users', () => {
+	it('puts you first however the server ordered the users (D12)', () => {
 		const groups = group([
-			{ managerKey: me, name: 'Luke S' },
-			{ managerKey: 18, name: 'Trevor' },
-			{ managerKey: 15, name: 'Nick' }
+			{ managerKey: 5, name: 'Craig' },
+			{ managerKey: 16, name: 'Omar' },
+			{ managerKey: me, name: 'Luke S' }
 		]);
-		expect(formatReactionTooltip(groups, me)).toBe('Trevor, Nick and you reacted with 🔥');
+		expect(formatReactionTooltip(groups, me)).toBe('You, Craig and Omar reacted with 🔥');
+	});
+
+	it('keeps you first when the list collapses to a count', () => {
+		const groups = group([
+			{ managerKey: 18, name: 'Trevor' },
+			{ managerKey: 15, name: 'Nick' },
+			{ managerKey: me, name: 'Luke S' },
+			{ managerKey: 16, name: 'Omar' }
+		]);
+		expect(formatReactionTooltip(groups, me)).toBe('You, Trevor and 2 others reacted with 🔥');
+	});
+
+	it('names two people with "and"', () => {
+		const groups = group([
+			{ managerKey: 18, name: 'Trevor' },
+			{ managerKey: me, name: 'Luke S' }
+		]);
+		expect(formatReactionTooltip(groups, me)).toBe('You and Trevor reacted with 🔥');
 	});
 
 	it('collapses to a count past three', () => {
@@ -179,5 +200,74 @@ describe('toPlainText', () => {
 
 	it('collapses a fenced block rather than dumping it inline', () => {
 		expect(toPlainText('before\n```\nlots\nof\ncode\n```\nafter')).toBe('before [code] after');
+	});
+});
+
+describe('connectionPill', () => {
+	it.each([
+		['live', 'Live', 'live'],
+		['connecting', 'Connecting…', 'connecting'],
+		['reconnecting', 'Reconnecting…', 'trouble'],
+		['offline', 'Offline', 'trouble']
+	] as const)('%s reads %s in the %s tone', (state, label, tone) => {
+		expect(connectionPill(state)).toEqual({ label, tone });
+	});
+
+	it.each(['idle', 'unauthorized'] as const)('%s shows no pill', (state) => {
+		expect(connectionPill(state)).toBeNull();
+	});
+});
+
+describe('threadChipLabel', () => {
+	const now = 1_700_000_000_000;
+
+	it('reads "· hide" while the thread is open', () => {
+		expect(threadChipLabel(3, true, now - 60_000, now)).toBe('3 replies · hide');
+	});
+
+	it('reads when the last reply came while closed', () => {
+		expect(threadChipLabel(3, false, now - 4 * 60_000, now)).toBe('3 replies · last 4m ago');
+	});
+
+	it('says "1 reply" for one', () => {
+		expect(threadChipLabel(1, false, now - 3 * 3_600_000, now)).toBe('1 reply · last 3h ago');
+		expect(threadChipLabel(1, true, null, now)).toBe('1 reply · hide');
+	});
+
+	it('drops the "last" part when there is no last reply time', () => {
+		expect(threadChipLabel(12, false, null, now)).toBe('12 replies');
+	});
+});
+
+describe('newestRepliers', () => {
+	const reply = (authorKey: number, name: string, createdAt: number) => ({
+		authorKey,
+		authorName: name,
+		authorDisplayName: name,
+		createdAt
+	});
+
+	it('takes the newest distinct repliers, newest first, capped at two', () => {
+		const replies = [
+			reply(18, 'Trevor', 1),
+			reply(20, 'Troy Colvin', 2),
+			reply(18, 'Trevor', 3),
+			reply(7, 'Gabe Flores', 4),
+			reply(7, 'Gabe Flores', 5)
+		];
+		expect(newestRepliers(replies)).toEqual([
+			{ authorKey: 7, name: 'Gabe Flores' },
+			{ authorKey: 18, name: 'Trevor' }
+		]);
+	});
+
+	it('shows one replier once, however many times they replied', () => {
+		expect(newestRepliers([reply(18, 'Trevor', 1), reply(18, 'Trevor', 2)])).toEqual([
+			{ authorKey: 18, name: 'Trevor' }
+		]);
+	});
+
+	it('is empty before any replies have loaded', () => {
+		expect(newestRepliers([])).toEqual([]);
 	});
 });

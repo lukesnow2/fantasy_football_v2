@@ -1,5 +1,6 @@
 import { GROUPING_WINDOW_MS } from './constants';
 import type { ChatMessageView, ReactionGroup } from './types';
+import type { ConnectionState } from '$lib/stores/chat.svelte';
 
 /** Pure formatting helpers, kept out of components so they can be tested in node. */
 
@@ -96,17 +97,17 @@ export function shouldGroupWith(
 }
 
 /**
- * "Trevor, Nick and you reacted with 🔥".
+ * "You, Craig and Omar reacted with 😂".
  *
- * "you" always goes last, however the server ordered the users — reading your own
- * name first in a list of other people is jarring.
+ * You go first, however the server ordered the users, as the Chat board's
+ * tooltip note draws it (build spec D12): the first thing you want to know
+ * about a reaction is whether it's yours.
  */
 export function formatReactionTooltip(group: ReactionGroup, meManagerKey: number | null): string {
 	const others = group.users.filter((u) => u.managerKey !== meManagerKey).map((u) => u.name);
 	const includesMe = group.users.some((u) => u.managerKey === meManagerKey);
 
-	const names = [...others];
-	if (includesMe) names.push('you');
+	const names = includesMe ? ['You', ...others] : others;
 
 	let subject: string;
 	if (names.length === 0) {
@@ -121,7 +122,64 @@ export function formatReactionTooltip(group: ReactionGroup, meManagerKey: number
 		subject = `${shown} and ${remaining} other${remaining === 1 ? '' : 's'}`;
 	}
 
-	// "You reacted", not "you reacted", when it opens the sentence.
-	const opener = subject === 'you' ? 'You' : subject;
-	return `${opener} reacted with ${group.emoji}`;
+	return `${subject} reacted with ${group.emoji}`;
+}
+
+export type ConnectionTone = 'live' | 'connecting' | 'trouble';
+
+/**
+ * The status pill beside Chat's header (WP12 S12.1), or null when there's no
+ * pill: idle (nothing has started) and unauthorized (the card says why).
+ */
+export function connectionPill(
+	state: ConnectionState
+): { label: string; tone: ConnectionTone } | null {
+	switch (state) {
+		case 'live':
+			return { label: 'Live', tone: 'live' };
+		case 'connecting':
+			return { label: 'Connecting…', tone: 'connecting' };
+		case 'reconnecting':
+			return { label: 'Reconnecting…', tone: 'trouble' };
+		case 'offline':
+			return { label: 'Offline', tone: 'trouble' };
+		default:
+			return null;
+	}
+}
+
+/**
+ * The thread chip under a root message: "3 replies · hide" while its thread is
+ * open, "3 replies · last 4m ago" while it's closed, "1 reply" for one.
+ */
+export function threadChipLabel(
+	replyCount: number,
+	open: boolean,
+	lastReplyAt: number | null,
+	now: number = Date.now()
+): string {
+	const count = `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`;
+	if (open) return `${count} · hide`;
+	if (lastReplyAt === null) return count;
+	return `${count} · last ${formatRelative(lastReplyAt, now)}`;
+}
+
+/**
+ * Who to show on an open thread chip: the newest distinct repliers among the
+ * loaded replies, newest first, at most `limit` of them.
+ */
+export function newestRepliers(
+	replies: Pick<ChatMessageView, 'authorKey' | 'authorName' | 'authorDisplayName' | 'createdAt'>[],
+	limit = 2
+): { authorKey: number; name: string }[] {
+	const seen = new Set<number>();
+	const out: { authorKey: number; name: string }[] = [];
+	const newestFirst = [...replies].sort((a, b) => b.createdAt - a.createdAt);
+	for (const reply of newestFirst) {
+		if (out.length >= limit) break;
+		if (seen.has(reply.authorKey)) continue;
+		seen.add(reply.authorKey);
+		out.push({ authorKey: reply.authorKey, name: reply.authorName ?? reply.authorDisplayName });
+	}
+	return out;
 }
