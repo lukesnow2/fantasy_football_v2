@@ -3,6 +3,7 @@ export { default as Avatar } from './Avatar.svelte';
 export { default as Button } from './Button.svelte';
 export { default as Card } from './Card.svelte';
 export { default as DataTable } from './DataTable.svelte';
+export { default as Dialog } from './Dialog.svelte';
 export type { Column } from './DataTable.svelte';
 export { default as EmptyValue } from './EmptyValue.svelte';
 export { default as GradeChip } from './GradeChip.svelte';

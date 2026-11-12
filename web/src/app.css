@@ -62,6 +62,7 @@
 
   --font-slab: 'Zilla Slab', Georgia, serif;
   --font-sans: 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   --shadow-tip: 0 14px 36px rgba(21, 56, 42, 0.3);
   --shadow-popover: 0 16px 40px rgba(21, 56, 42, 0.18);

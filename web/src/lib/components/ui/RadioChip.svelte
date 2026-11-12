@@ -8,20 +8,26 @@
 	 *
 	 *   <RadioChip name="outcome" value="push" label="Push" />
 	 *
+	 * `size="vote"` is the Constitution's ballot (WP11 S11.6): 40px with 0 16px
+	 * of padding at 14px; the checked chip has a 2px field border and weight
+	 * 700. Below 640px it centers its radio and label in whatever width the
+	 * page gives it, as the phone board's three equal columns draw it.
+	 *
 	 * Every other attribute (required, checked) goes through to the radio.
 	 */
 	import type { HTMLInputAttributes } from 'svelte/elements';
 
 	type Props = {
 		label: string;
+		size?: 'default' | 'vote';
 		name: string;
 		value: string;
-	} & Omit<HTMLInputAttributes, 'type' | 'name' | 'value'>;
+	} & Omit<HTMLInputAttributes, 'type' | 'name' | 'value' | 'size'>;
 
-	let { label, name, value, ...rest }: Props = $props();
+	let { label, name, value, size = 'default', ...rest }: Props = $props();
 </script>
 
-<label class="chip"><input type="radio" {name} {value} {...rest} /> {label}</label>
+<label class="chip size-{size}"><input type="radio" {name} {value} {...rest} /> {label}</label>
 
 <style>
 	.chip {
@@ -64,7 +70,24 @@
 		outline-offset: 2px;
 	}
 
+	.size-vote {
+		box-sizing: content-box;
+		min-height: 40px;
+		padding: 0 16px;
+		font-size: 14px;
+	}
+
+	.size-vote:has(input:checked) {
+		border-width: 2px;
+		font-weight: 700;
+	}
+
 	@media (max-width: 639.98px) {
+		.size-vote {
+			display: flex;
+			justify-content: center;
+		}
+
 		.chip {
 			box-sizing: content-box;
 			min-height: 44px;

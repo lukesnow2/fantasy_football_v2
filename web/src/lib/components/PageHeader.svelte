@@ -20,6 +20,8 @@
 	 * `phoneActionFull` stretches the action across the column (Trade Center's
 	 * and Draft Central's Season select). `pending` shows
 	 * the kicker and intro as line-soft bars while the page loads.
+	 * `phoneKickerLineHeight` sets the kicker's line height below 640px, for
+	 * the boards that let a long kicker wrap (WP11's, at 1.4).
 	 *
 	 * `icon` and `accent` are left over from the old centered header. They still
 	 * compile so unrestyled callers don't break, and they render nothing. The
@@ -39,6 +41,8 @@
 		phoneActionGap?: number;
 		/** Below 640px, the action runs the full width of the column. */
 		phoneActionFull?: boolean;
+		/** The kicker's line height below 640px, when the phone board sets one. */
+		phoneKickerLineHeight?: number;
 		/** The title's size in px, from the page's board. 60 on most pages. */
 		size?: number;
 		/** The intro's max-width in px: 620 unless the board draws another (Managers, 640). */
@@ -63,6 +67,7 @@
 		hideActionOnPhone = false,
 		phoneActionGap = 20,
 		phoneActionFull = false,
+		phoneKickerLineHeight,
 		size = 60,
 		introWidth = 620,
 		blockBasis = 520,
@@ -75,6 +80,7 @@
 	class="page-header"
 	aria-busy={pending || undefined}
 	style:--phone-action-gap="{phoneActionGap}px"
+	style:--phone-kicker-lh={phoneKickerLineHeight}
 >
 	<div class="block" style:--block-basis="{blockBasis}px">
 		{#if pending}
@@ -172,6 +178,7 @@
 
 		.kicker {
 			font-size: 12px;
+			line-height: var(--phone-kicker-lh, normal);
 		}
 
 		h1 {

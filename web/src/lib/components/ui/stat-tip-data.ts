@@ -26,10 +26,8 @@ const inFlight = new Map<string, Promise<StatTipDefinition | null>>();
 const missing = new Set<string>();
 const warned = new Set<string>();
 
-/** The Data Dictionary entry for a metric. */
-export function dictionaryHref(metricId: string): string {
-	return `/data-dictionary#${encodeURIComponent(metricId)}`;
-}
+/** The Data Dictionary entry for a metric, from the Dictionary's own helper so the two can't drift. */
+export { dictionaryHref } from '$lib/metrics/dictionary';
 
 /** One console warning per metric, however many labels ask for it. */
 export function warnOnce(metricId: string, reason: string): void {
