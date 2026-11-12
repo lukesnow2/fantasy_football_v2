@@ -87,7 +87,7 @@
 		type="button"
 		class="head"
 		aria-expanded={expanded}
-		aria-controls={bodyId}
+		aria-controls={expanded ? bodyId : undefined}
 		onclick={() => (expanded = !expanded)}
 	>
 		<span class="line">

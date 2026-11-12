@@ -144,8 +144,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.orderBy(desc(ruleAmendment.amendmentYear), desc(ruleAmendment.amendmentKey));
 
 	// Every version, newest first, for the Versions card (WP11 S11.3). A
-	// version passed but not yet in force is listed too, with its date ahead.
-	const versions = await db
+	// version passed but not yet in force is listed too, marked pending against
+	// the same clock that picked the current version.
+	const versionRows = await db
 		.select({
 			versionNo: constitutionVersion.versionNo,
 			effectiveAt: constitutionVersion.effectiveAt,
@@ -154,6 +155,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 		})
 		.from(constitutionVersion)
 		.orderBy(desc(constitutionVersion.versionNo));
+
+	const versions = versionRows.map((v) => ({ ...v, pending: v.effectiveAt > now }));
 
 	return {
 		version,

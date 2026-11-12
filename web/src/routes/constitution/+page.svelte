@@ -70,7 +70,11 @@
 	async function proposeAmendment(sectionId: string) {
 		openProposeMode(sectionId);
 		await tick();
-		document.getElementById(sectionId)?.scrollIntoView({ block: 'start' });
+		const article = document.getElementById(sectionId);
+		article?.scrollIntoView({ block: 'start' });
+		// The button that was pressed is gone with the reading layout, so focus
+		// moves to the article it opened.
+		article?.querySelector<HTMLElement>('.acc-head')?.focus({ preventScroll: true });
 	}
 
 	function versionWhat(v: { versionNo: number; note: string | null; amendmentKey: number | null }) {
@@ -214,7 +218,7 @@
 						class="acc-head"
 						class:open
 						aria-expanded={!!open}
-						aria-controls="{section.sectionId}-clauses"
+						aria-controls={open ? `${section.sectionId}-clauses` : undefined}
 						onclick={() => (expanded = { ...expanded, [section.sectionId]: !open })}
 					>
 						<span class="acc-name"><span class="numeral">{numeral}</span> {name}</span>
@@ -315,10 +319,9 @@
 			{#if data.versions.length > 0}
 				<Card title="Versions" titleSize={22} headGap={6} padding="20px 22px">
 					{#each data.versions as v (v.versionNo)}
-						{@const ahead = new Date(v.effectiveAt).getTime() > Date.now()}
 						<div class="version">
 							<span><b>Version {v.versionNo}</b> · {versionWhat(v)}</span>
-							<span class="date">{ahead ? 'Takes effect ' : ''}{shortDate(v.effectiveAt)}</span>
+							<span class="date">{v.pending ? 'Takes effect ' : ''}{shortDate(v.effectiveAt)}</span>
 						</div>
 					{/each}
 					<p class="versions-note">

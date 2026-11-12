@@ -48,3 +48,14 @@ test('a malformed hash opens nothing and throws nothing', async ({ page }) => {
 	await expect(page.getByRole('button', { name: 'Hide details' })).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
+
+test('"+ n more" shows every category and moves focus to the first one it revealed', async ({ page }) => {
+	await page.goto('/data-dictionary');
+	const more = page.getByRole('button', { name: /^\+ \d+ more$/ });
+	await more.focus();
+	await page.keyboard.press('Enter');
+	await expect(more).toHaveCount(0);
+	const chips = page.locator('.chips .btn');
+	await expect(chips).toHaveCount(f.categories.length + 1);
+	await expect(chips.nth(8)).toBeFocused();
+});

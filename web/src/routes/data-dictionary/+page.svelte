@@ -48,6 +48,15 @@
 		...categories.map((c) => ({ value: c.categoryId, label: categoryLabel(c.categoryId, c.categoryName) }))
 	];
 
+	let chipRow: HTMLDivElement | undefined;
+
+	/** "+ n more" goes away when pressed, so focus moves to the first chip it revealed. */
+	async function revealChips() {
+		showAllChips = true;
+		await tick();
+		chipRow?.querySelectorAll<HTMLElement>('.btn')[VISIBLE_CATEGORY_CHIPS + 1]?.focus();
+	}
+
 	function toggle(metricId: string) {
 		// Reassigned rather than mutated so Svelte sees the change.
 		const next = new Set(expanded);
@@ -165,7 +174,7 @@
 </div>
 
 {#if !loading && !error && chips.length > 1}
-	<div class="chips">
+	<div class="chips" bind:this={chipRow}>
 		{#each visibleChips as chip (chip.value)}
 			<Button
 				variant="filter"
@@ -175,7 +184,7 @@
 			>
 		{/each}
 		{#if hiddenChips > 0}
-			<Button variant="filter" tone="muted" onclick={() => (showAllChips = true)}>+ {hiddenChips} more</Button>
+			<Button variant="filter" tone="muted" onclick={revealChips}>+ {hiddenChips} more</Button>
 		{/if}
 	</div>
 {/if}
@@ -213,7 +222,6 @@
 				{/snippet}
 				{#each category.metrics as metric (metric.metricId)}
 					{@const isOpen = expanded.has(metric.metricId)}
-					{@const tiles = factTiles(metric)}
 					{@const hasDetail =
 						!!metric.calculationFormula || !!metric.interpretationGuide || !!metric.limitations}
 					<div class="metric" id={metric.metricId}>
@@ -237,6 +245,7 @@
 						{#if metric.shortDescription}<p class="desc">{metric.shortDescription}</p>{/if}
 						<div id="{metric.metricId}-details" hidden={!isOpen}>
 							{#if isOpen}
+								{@const tiles = factTiles(metric)}
 								{#if tiles.length > 0}
 									<div class="tiles">
 										{#each tiles as tile (tile.key)}
