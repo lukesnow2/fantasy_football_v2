@@ -378,4 +378,69 @@ describe('generateMagicLinkEmail', () => {
 		const login = generateMagicLinkEmail(url, 'a@b.c', { purpose: 'login' });
 		expect(invite.subject).not.toBe(login.subject);
 	});
+
+	it('keeps both subjects', async () => {
+		expect(generateMagicLinkEmail(url, 'a@b.c', { purpose: 'login' }).subject).toBe(
+			'Your sign-in link for The League'
+		);
+		expect(generateMagicLinkEmail(url, 'a@b.c', { purpose: 'invite' }).subject).toBe(
+			"You're invited to The League"
+		);
+	});
+
+	it('greets by first name in both bodies', async () => {
+		const mail = generateMagicLinkEmail(url, 'a@b.c', { purpose: 'login', displayName: 'Luke S' });
+		expect(mail.text).toContain('Hi Luke,');
+		expect(mail.html).toContain('Hi Luke,');
+		expect(mail.text).not.toContain('Luke S');
+	});
+
+	it('says "Hi," when the name is blank', async () => {
+		const mail = generateMagicLinkEmail(url, 'a@b.c', { purpose: 'invite', displayName: '  ' });
+		expect(mail.text?.startsWith('Hi,\n')).toBe(true);
+		expect(mail.html).toContain('>Hi,</p>');
+	});
+
+	it('writes the sign-in email as drawn', async () => {
+		const mail = generateMagicLinkEmail(url, 'a@b.c', {
+			purpose: 'login',
+			displayName: 'Luke S',
+			origin: 'https://league.example'
+		});
+		expect(mail.html).toContain('>Members only</div>');
+		expect(mail.html).toContain('>Sign in to The League</h1>');
+		expect(mail.html).toContain(
+			"Here&#39;s your sign-in link. It works once and expires in 15 minutes."
+		);
+		expect(mail.html).toMatch(/>Sign in<\/a>/);
+		expect(mail.html).toContain('Your sign-in link. It works once and expires in 15 minutes.');
+		// The fallback is the link as plain text, not a second anchor.
+		expect(mail.html.match(/<a [^>]*href="https:\/\/league\.example\/login\/verify/g)).toHaveLength(1);
+		expect(mail.text).toBe(`Hi Luke,
+
+Here's your sign-in link. It works once and expires in 15 minutes.
+
+${url}
+
+Someone asked to sign in to The League with this address. If it wasn't you, ignore this email and nothing changes.
+`);
+	});
+
+	it('writes the invite as drawn', async () => {
+		const mail = generateMagicLinkEmail(url, 'a@b.c', {
+			purpose: 'invite',
+			displayName: 'Luke S',
+			origin: 'https://league.example'
+		});
+		expect(mail.html).toContain('>You&#39;re in</div>');
+		expect(mail.html).toContain('>Welcome to The League</h1>');
+		expect(mail.html).toMatch(/>Sign in to The League<\/a>/);
+		expect(mail.html).toContain('href="https://league.example/login"');
+		expect(mail.html).toContain('>league.example/login</a>');
+		expect(mail.text).toContain(
+			"The commissioner added you to the league's site. Sign in with the button below. There's no password to set up."
+		);
+		expect(mail.text).toContain('get a new one any time at https://league.example/login.');
+		expect(mail.text).toContain(url);
+	});
 });
