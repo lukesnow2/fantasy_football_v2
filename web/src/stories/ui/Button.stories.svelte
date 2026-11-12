@@ -85,3 +85,29 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Large, bold (Post a bet)">
+	{#snippet template()}
+		<div style="display: flex; gap: 10px">
+			<Button size="lg">Post a bet</Button>
+			<Button size="lg" padX={26} type="submit">Post it</Button>
+		</div>
+	{/snippet}
+</Story>
+
+<Story name="Small, on a bet">
+	{#snippet template()}
+		<div style="display: grid; gap: 12px; max-width: 360px">
+			<div style="display: flex; gap: 8px">
+				<Button size="sm">Take it</Button>
+				<Button size="sm" variant="secondary">Pass</Button>
+				<Button size="sm" variant="text" tone="pennant" style="margin-left: auto">Pull it</Button>
+			</div>
+			<div><Button size="sm" variant="outline">This one's over</Button></div>
+			<div style="display: flex; gap: 8px">
+				<Button size="sm" tone="pennant">Record the ruling</Button>
+				<Button size="sm" variant="text">Cancel</Button>
+			</div>
+		</div>
+	{/snippet}
+</Story>

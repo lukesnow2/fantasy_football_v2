@@ -23,6 +23,18 @@
 	 *   WP8 adds "field", a field-tint card with a field-line border (the
 	 *   season draft's Best value), and "panel", a box inside a card with a
 	 *   line-soft border and 10px corners (Best drafters)
+	 *   WP9 (the Bet Board) adds "highlight", a card with a 2px field border
+	 *   (the open bet form); "inset", a box inside a card with a 1px line border
+	 *   and 10px corners (a bet), and "inset-pennant", the same with a
+	 *   pennant-line border on pennant-wash (a bet awaiting a ruling); "dashed",
+	 *   the 1.5px dashed line-strong box with centered 15px ink-2 text that an
+	 *   empty stage shows; and "tile", card fill with no border and 10px corners
+	 *   (a ledger tile)
+	 * - `dot`: a 10px dot of that color token 10px left of the title, centered
+	 *   on it (the Bet Board's stage heads)
+	 * - `stack`: lays the card out as a flex column with this many px between
+	 *   its header and each child, so a child can push itself down with
+	 *   `margin-top: auto` (the Bet Board's stage cards, 12)
 	 * - `label`: an accessible name for a card with no title ("Selected pick")
 	 * - `element`: bindable, the card's <section>, for a page that scrolls to it
 	 * - `headAlign`, `headSpacing`: the header row's alignment and gap, when a
@@ -50,7 +62,22 @@
 		flush?: boolean;
 		padding?: string;
 		headGap?: number;
-		tone?: 'default' | 'borderless' | 'pennant' | 'clubhouse' | 'field' | 'panel';
+		tone?:
+			| 'default'
+			| 'borderless'
+			| 'pennant'
+			| 'clubhouse'
+			| 'field'
+			| 'panel'
+			| 'highlight'
+			| 'inset'
+			| 'inset-pennant'
+			| 'dashed'
+			| 'tile';
+		/** A dot of this color token beside the title. */
+		dot?: 'sage' | 'field' | 'pennant' | 'ink' | 'muted';
+		/** Px between the header and each child, as a flex column. */
+		stack?: number;
 		/** An accessible name for a card with no title. */
 		label?: string;
 		/** The card's <section>, bindable. */
@@ -77,6 +104,8 @@
 		padding = '22px 24px',
 		headGap = 12,
 		tone = 'default',
+		dot,
+		stack,
 		label,
 		element = $bindable(null),
 		headAlign = 'baseline',
@@ -99,6 +128,8 @@
 	bind:this={element}
 	class="card {tone} {className}"
 	class:flush
+	class:stack={stack != null}
+	style:--card-stack={stack == null ? undefined : `${stack}px`}
 	style:--card-pad={padding}
 	style:--card-pad-phone={phonePadding}
 	style:--card-title={`${titleSize}px`}
@@ -117,7 +148,14 @@
 			class:stack-phone={phoneHeadStack}
 			class:center-phone={phoneHeadAlign === 'center'}
 		>
-			{#if title}
+			{#if title && dot}
+				<div class="title-row">
+					<span class="dot" aria-hidden="true" style:background="var(--color-{dot})"></span>
+					<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
+						{title}
+					</svelte:element>
+				</div>
+			{:else if title}
 				<svelte:element this={`h${level}`} id="card-{headingId}" class="title">
 					{title}
 				</svelte:element>
@@ -160,6 +198,66 @@
 	.card.panel {
 		border-color: var(--color-line-soft);
 		border-radius: 10px;
+	}
+
+	.card.highlight {
+		border: 2px solid var(--color-field);
+	}
+
+	.card.inset {
+		border-radius: 10px;
+	}
+
+	.card.inset-pennant {
+		border-color: var(--color-pennant-line);
+		border-radius: 10px;
+		background: var(--color-pennant-wash);
+	}
+
+	.card.dashed {
+		border: 1.5px dashed var(--color-line-strong);
+		border-radius: 10px;
+		background: transparent;
+		text-align: center;
+		font-size: 15px;
+		color: var(--color-ink-2);
+	}
+
+	/* A flex box, so a link inside it fills the tile when a grid row
+	   stretches it to a neighbor's height. */
+	.card.tile {
+		display: flex;
+		border: 0;
+		border-radius: 10px;
+	}
+
+	.card.tile > :global(*) {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.card.stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--card-stack);
+	}
+
+	.card.stack > .head {
+		margin-bottom: 0;
+	}
+
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+	}
+
+	.dot {
+		flex: none;
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
 	}
 
 	.card.clubhouse {

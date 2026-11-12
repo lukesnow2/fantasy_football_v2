@@ -11,6 +11,21 @@
 	 *   640px) with 0 12px 0 8px of padding, 8px between its parts, 13px weight
 	 *   600 ink. Pass `aria-pressed`: on is card fill with a line-strong border,
 	 *   off is ground fill with a line border at 0.55 opacity
+	 * - outline: card fill, a 1px ink border, ink text, weight 700 (the Bet
+	 *   Board's "This one's over")
+	 * - text: no box, ink-2 text with the button's height and padding (the Bet
+	 *   Board's "Cancel"); with `tone="pennant"` it's pennant-dark ("Pull it")
+	 *
+	 * `tone="pennant"` turns primary into a pennant fill with white text ("Record
+	 * the ruling") and text into pennant-dark.
+	 *
+	 * Sizes beyond the default (WP9 adds the last two):
+	 * - `large`: 48px with 0 22px of padding at 16px, content-box (Home's band)
+	 * - `lg`: 48px with 0 22px of padding at 16px weight 700 ("Post a bet");
+	 *   `padX` sets another side padding in px ("Post it", 26)
+	 * - `sm`: 40px at 14px (44px below 640px, the phone tap target). Primary and
+	 *   outline are 0 16px at weight 700, secondary 0 14px at 600, text 0 12px at
+	 *   600, and the pennant text button is 13px ("Take it", "Pass", "Pull it")
 	 *
 	 * Primary and secondary are 44px tall with 0 18px of padding, an 8px radius
 	 * and 15px weight 600 text. Pass `href` to render an <a>; everything else
@@ -29,12 +44,18 @@
 		| 'band-primary'
 		| 'band-outline'
 		| 'band-white'
-		| 'chip';
-	type Size = 'default' | 'large' | 'tap';
+		| 'chip'
+		| 'outline'
+		| 'text';
+	type Size = 'default' | 'large' | 'tap' | 'lg' | 'sm';
+	type Tone = 'default' | 'pennant';
 
 	type Props = {
 		variant?: Variant;
 		size?: Size;
+		tone?: Tone;
+		/** Side padding in px, for a board that draws another (lg's "Post it"). */
+		padX?: number;
 		href?: string;
 		children: Snippet;
 	} & Omit<HTMLButtonAttributes, 'children'> &
@@ -43,6 +64,8 @@
 	let {
 		variant = 'primary',
 		size = 'default',
+		tone = 'default',
+		padX,
 		href,
 		children,
 		type = 'button',
@@ -59,14 +82,16 @@
 		role={disabled ? 'link' : undefined}
 		aria-disabled={disabled || undefined}
 		onclick={disabled ? undefined : (rest as HTMLAnchorAttributes).onclick}
-		class="btn {variant} size-{size} {className}">{@render children()}</a
+		style:--btn-pad-x={padX == null ? undefined : `${padX}px`}
+		class="btn {variant} size-{size} tone-{tone} {className}">{@render children()}</a
 	>
 {:else}
 	<button
 		{...rest as HTMLButtonAttributes}
 		{type}
 		{disabled}
-		class="btn {variant} size-{size} {className}">{@render children()}</button
+		style:--btn-pad-x={padX == null ? undefined : `${padX}px`}
+		class="btn {variant} size-{size} tone-{tone} {className}">{@render children()}</button
 	>
 {/if}
 
@@ -209,6 +234,76 @@
 	@media (max-width: 639.98px) {
 		.size-large {
 			box-sizing: border-box;
+		}
+	}
+
+	.outline {
+		border: 1px solid var(--color-ink);
+		background: var(--color-card);
+		color: var(--color-ink);
+		font-weight: 700;
+	}
+
+	.outline:hover {
+		color: var(--color-ink);
+	}
+
+	.text {
+		background: transparent;
+		color: var(--color-ink-2);
+	}
+
+	.text:hover {
+		color: var(--color-ink);
+	}
+
+	.primary.tone-pennant {
+		background: var(--color-pennant);
+	}
+
+	.text.tone-pennant {
+		color: var(--color-pennant-dark);
+	}
+
+	.text.tone-pennant:hover {
+		color: var(--color-ink-brown);
+	}
+
+	/* <button>s draw border-box on the boards, so these heights include the
+	   border. */
+	.size-lg {
+		min-height: 48px;
+		padding: 0 var(--btn-pad-x, 22px);
+		font-size: 16px;
+		font-weight: 700;
+	}
+
+	.size-sm {
+		min-height: 40px;
+		padding: 0 var(--btn-pad-x, 16px);
+		font-size: 14px;
+	}
+
+	.size-sm.primary,
+	.size-sm.outline {
+		font-weight: 700;
+	}
+
+	.size-sm.secondary {
+		padding: 0 var(--btn-pad-x, 14px);
+	}
+
+	.size-sm.text {
+		padding: 0 var(--btn-pad-x, 12px);
+	}
+
+	.size-sm.text.tone-pennant {
+		font-size: 13px;
+	}
+
+	@media (max-width: 639.98px) {
+		.size-sm {
+			min-height: 44px;
 		}
 	}
 
