@@ -586,6 +586,14 @@
 		pointer-events: none;
 	}
 
+	/* The Thread card's replies scroll in a box with 8px of top padding, so a
+	   reply's toolbar rides 4px above its row, over the name line, where the
+	   scroller can't clip it and the text stays clear. */
+	.row.reply > .body > .actions {
+		top: -4px;
+		right: 0;
+	}
+
 	.row:hover > .body > .actions,
 	.row:focus-within > .body > .actions {
 		opacity: 1;

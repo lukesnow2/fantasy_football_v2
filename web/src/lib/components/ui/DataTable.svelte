@@ -353,6 +353,16 @@
 		background: var(--color-field-tint);
 	}
 
+	@media (max-width: 639.98px) {
+		.sticky-first-phone tr.highlighted td:first-child {
+			background: var(--color-pennant-wash);
+		}
+
+		.sticky-first-phone tr.selected td:first-child {
+			background: var(--color-field-tint);
+		}
+	}
+
 	tr.divider td {
 		padding: 8px 0;
 		border-bottom: 0;

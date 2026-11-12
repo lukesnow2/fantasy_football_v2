@@ -20,7 +20,10 @@ export function readerTimeZone(serverZone: string): { readonly current: string }
 		const own = browserTimeZone();
 		if (!own) return;
 		zone = own;
-		if (own !== serverZone) {
+		// Saved only when it isn't already: a route whose server never reads
+		// the cookie (League History) would otherwise rewrite it every visit.
+		const saved = `${TIME_ZONE_COOKIE}=${encodeURIComponent(own)}`;
+		if (own !== serverZone && !document.cookie.split('; ').includes(saved)) {
 			document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(own)}; path=/; max-age=31536000; samesite=lax`;
 		}
 	});
