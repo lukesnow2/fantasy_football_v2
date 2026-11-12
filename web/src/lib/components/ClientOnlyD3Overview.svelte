@@ -16,20 +16,21 @@
 	});
 </script>
 
-{#if browser && mounted}
-	{#await import('$lib/components/D3Overview.svelte')}
-		<div class="placeholder" aria-busy="true">
-			<div class="block"></div>
-			<p>Loading the chart</p>
-		</div>
-	{:then { default: D3Overview }}
-		<D3Overview data={actualData} bind:selectedEra />
-	{/await}
-{:else}
+{#snippet placeholder()}
 	<div class="placeholder" aria-busy="true">
 		<div class="block"></div>
 		<p>Loading the chart</p>
 	</div>
+{/snippet}
+
+{#if browser && mounted}
+	{#await import('$lib/components/D3Overview.svelte')}
+		{@render placeholder()}
+	{:then { default: D3Overview }}
+		<D3Overview data={actualData} bind:selectedEra />
+	{/await}
+{:else}
+	{@render placeholder()}
 {/if}
 
 <style>

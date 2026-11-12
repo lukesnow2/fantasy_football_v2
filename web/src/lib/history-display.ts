@@ -6,6 +6,11 @@
  */
 
 import { splitEras } from '$lib/league-trends';
+import { formatCount, formatRecord } from '$lib/home';
+import { oneDecimal } from '$lib/trade-center';
+import { joinNames } from '$lib/utils/power-rankings';
+
+export { oneDecimal };
 
 /* ---------- Shared ---------- */
 
@@ -17,15 +22,6 @@ const num = (v: unknown): number => {
 	return Number.isFinite(n) ? n : 0;
 };
 
-/** One decimal place ("23.6"). */
-export function oneDecimal(v: unknown): string {
-	return num(v).toFixed(1);
-}
-
-/** A whole number with thousands separators ("3,018"). */
-export function thousands(v: unknown): string {
-	return Math.round(num(v)).toLocaleString('en-US');
-}
 
 /**
  * A manager's URL handle, the same rule as the server's slugifyManagerName
@@ -82,7 +78,8 @@ export function historyKicker(first: number | null | undefined, last: number | n
 }
 
 export function historyIntro(seasons: number | null | undefined): string {
-	return `What ${seasons ?? 'its'} seasons say about scoring and luck in this league, and how the format changed along the way.`;
+	const count = seasons ? `${seasons} seasons` : 'the seasons';
+	return `What ${count} say about scoring and luck in this league, and how the format changed along the way.`;
 }
 
 /* ---------- S10.2 The era control and findings ---------- */
@@ -219,25 +216,19 @@ export function computeEras(o: {
 		out.push({
 			name: `${era.name.replace(/\s*era$/i, '')} era`,
 			span: `${slice[0].year} to ${slice[slice.length - 1].year}`,
-			titles: leaders.length ? `${joinAnd(leaders)} (${most})` : null,
+			titles: leaders.length ? `${joinNames(leaders)} (${most})` : null,
 			leaders,
 			leaderTitles: most,
 			rows: [
 				{ label: 'Seasons', value: String(slice.length) },
 				{ label: 'Avg weekly score', value: (slice.reduce((s, x) => s + x.score, 0) / slice.length).toFixed(1) },
-				{ label: 'Trades', value: thousands(slice.reduce((s, x) => s + x.trades, 0)) },
-				{ label: 'Transactions', value: thousands(slice.reduce((s, x) => s + x.transactions, 0)) },
+				{ label: 'Trades', value: formatCount(slice.reduce((s, x) => s + x.trades, 0)) },
+				{ label: 'Transactions', value: formatCount(slice.reduce((s, x) => s + x.transactions, 0)) },
 				{ label: 'Different champions', value: String(titles.size) }
 			]
 		});
 	}
 	return out;
-}
-
-/** "A", "A and B", "A, B and C". */
-export function joinAnd(names: string[]): string {
-	if (names.length <= 1) return names[0] ?? '';
-	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 /* ---------- S10.5 to S10.7 Head to head ---------- */
@@ -360,7 +351,7 @@ export function winShare(aWins: number, bWins: number): { a: number; b: number }
 
 /** "21-19", plus "-1" when there are ties. */
 export function faceRecord(r: Pick<Rivalry, 'aWins' | 'bWins' | 'ties'>): string {
-	return r.ties > 0 ? `${r.aWins}-${r.bWins}-${r.ties}` : `${r.aWins}-${r.bWins}`;
+	return formatRecord(r.aWins, r.bWins, r.ties);
 }
 
 /** Who leads the series, or null when it's tied. */
@@ -373,7 +364,8 @@ export function seriesLeader(r: Pick<Rivalry, 'a' | 'b' | 'aWins' | 'bWins'>): s
 export function luckier(row: H2HRow): { name: string; luck: string } | null {
 	const a = num(row.managerALuckFactor);
 	const b = num(row.managerBLuckFactor);
-	if (a.toFixed(2) === b.toFixed(2)) return null;
+	// Equal to the hundredth, the precision it's shown at ("-0.00" is 0.00).
+	if (Math.round(a * 100) === Math.round(b * 100)) return null;
 	const [name, v] = a > b ? [row.managerAName, a] : [row.managerBName, b];
 	return { name, luck: signedTwo(v) };
 }

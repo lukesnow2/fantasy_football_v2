@@ -6,6 +6,7 @@ import {
 	filterRivalries,
 	findings,
 	findRivalry,
+	historyIntro,
 	historyTab,
 	luckier,
 	managerSlug,
@@ -40,6 +41,15 @@ describe('tabs and the URL (S10.1)', () => {
 		expect(historyTab(new URLSearchParams('tab=head-to-head'))).toBe('head-to-head');
 		expect(historyTab(new URLSearchParams('tab=records'))).toBe('records');
 		expect(historyTab(new URLSearchParams('tab=nope'))).toBe('overview');
+	});
+
+	it('writes the intro with the season count, or without one', () => {
+		expect(historyIntro(22)).toBe(
+			'What 22 seasons say about scoring and luck in this league, and how the format changed along the way.'
+		);
+		expect(historyIntro(null)).toBe(
+			'What the seasons say about scoring and luck in this league, and how the format changed along the way.'
+		);
 	});
 
 	it('slugs a name the way the server does', () => {
@@ -181,6 +191,7 @@ describe('head to head (S10.5 to S10.7)', () => {
 		expect(luckier(row)).toEqual({ name: 'Luke S', luck: '+2.23' });
 		expect(luckier({ ...row, managerALuckFactor: '-0.4600', managerBLuckFactor: '-1.1' })).toEqual({ name: 'Luke S', luck: '-0.46' });
 		expect(luckier({ ...row, managerALuckFactor: '0.00', managerBLuckFactor: '0.0000' })).toBeNull();
+		expect(luckier({ ...row, managerALuckFactor: '-0.0010', managerBLuckFactor: '0.0010' })).toBeNull();
 	});
 
 	it('filters the table only after a name is picked (D10)', () => {

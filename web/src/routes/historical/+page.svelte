@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { page } from '$app/state';
 	import { afterNavigate, replaceState } from '$app/navigation';
@@ -132,9 +132,8 @@
 		else if (id === 'records') loadRecordBookData();
 	}
 
-	onMount(() => openTab(tab));
-
-	// A real navigation (a profile's rivalry link) lands on what its URL names.
+	// The first load and any real navigation (a profile's rivalry link) land
+	// on what the URL names; SvelteKit runs this after the first mount too.
 	afterNavigate(() => {
 		tab = historyTab(page.url.searchParams);
 		openTab(tab);
@@ -466,32 +465,32 @@
 						avatar={records.highestScoreManager}
 						label="Highest score"
 						value={oneDecimal(records.highestScoreValue)}
-						holder={records.highestScoreManager}
-						holderHref={profileHref(records.highestScoreManager)}
+						holder={records.highestScoreManager ?? undefined}
+						holderHref={records.highestScoreManager ? profileHref(records.highestScoreManager) : undefined}
 					/>
 					<StatTile
 						layout="record"
 						avatar={records.biggestWinManager}
 						label="Biggest blowout"
 						value={oneDecimal(records.biggestWinValue)}
-						holder={records.biggestWinManager}
-						holderHref={profileHref(records.biggestWinManager)}
+						holder={records.biggestWinManager ?? undefined}
+						holderHref={records.biggestWinManager ? profileHref(records.biggestWinManager) : undefined}
 					/>
 					<StatTile
 						layout="record"
 						avatar={records.longestStreakManager}
 						label="Hot streak"
 						value={String(records.longestStreakValue)}
-						holder={records.longestStreakManager}
-						holderHref={profileHref(records.longestStreakManager)}
+						holder={records.longestStreakManager ?? undefined}
+						holderHref={records.longestStreakManager ? profileHref(records.longestStreakManager) : undefined}
 					/>
 					<StatTile
 						layout="record"
 						avatar={records.worstStreakManager}
 						label="Cold streak"
 						value={String(Math.abs(Number(records.worstStreakValue)))}
-						holder={records.worstStreakManager}
-						holderHref={profileHref(records.worstStreakManager)}
+						holder={records.worstStreakManager ?? undefined}
+						holderHref={records.worstStreakManager ? profileHref(records.worstStreakManager) : undefined}
 					/>
 				</StatStrip>
 			</div>
