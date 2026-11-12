@@ -217,7 +217,9 @@
 		border-radius: 10px;
 	}
 
+	/* Border-box, as Chromium draws a search input. */
 	.size-lg .input {
+		box-sizing: border-box;
 		padding: 0 16px;
 	}
 

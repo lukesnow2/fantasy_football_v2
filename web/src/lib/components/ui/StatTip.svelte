@@ -25,6 +25,11 @@
 	 * `endOffset` and `topOffset` for Power Rankings' Luck header (its right
 	 * edge 40px past the label's, its top 26px below the label's top), `spanOf`
 	 * for its phone table (the card stretched across that element).
+	 *
+	 * `chip` draws the label as a chip (the Data Dictionary's tip, WP11 S11.8):
+	 * card fill, a 1px field-line border, 6px corners, 2px 8px of padding,
+	 * weight 700. Below 640px its tap area grows to 44px tall without moving the
+	 * line around it.
 	 */
 	import { onMount, tick, type Snippet } from 'svelte';
 	import { placeCard } from './parts';
@@ -60,6 +65,8 @@
 		 * `inline-small` 14px and a 16px line for 12px text.
 		 */
 		phoneTap?: 'inline' | 'inline-small';
+		/** Draw the label as a chip. */
+		chip?: boolean;
 	}
 
 	let {
@@ -73,7 +80,8 @@
 		topOffset,
 		spanOf,
 		phoneTarget = false,
-		phoneTap
+		phoneTap,
+		chip = false
 	}: Props = $props();
 
 	const id = $props.id();
@@ -246,6 +254,7 @@
 			class:phone-target={phoneTarget}
 			class:tap-inline={phoneTap === 'inline'}
 			class:tap-inline-small={phoneTap === 'inline-small'}
+			class:chip
 			aria-describedby={definition ? cardId : undefined}
 			aria-expanded={showing}
 			{onclick}
@@ -308,6 +317,33 @@
 			padding: 14px 0;
 			margin: -14px 0;
 			line-height: 16px;
+		}
+	}
+
+	.trigger.chip {
+		position: relative;
+		padding: 2px 8px;
+		border: 1px solid var(--color-field-line);
+		border-radius: var(--radius-tag);
+		background: var(--color-card);
+		font-weight: 700;
+		line-height: normal;
+		color: var(--color-ink);
+	}
+
+	/* The desktop board draws the chip as an inline span, which leaves the
+	   line's height alone; a button's padding and border would add 3px. */
+	@media (min-width: 640px) {
+		.trigger.chip {
+			margin: -3px 0;
+		}
+	}
+
+	@media (max-width: 639.98px) {
+		.trigger.chip::before {
+			content: '';
+			position: absolute;
+			inset: -9px 0;
 		}
 	}
 
