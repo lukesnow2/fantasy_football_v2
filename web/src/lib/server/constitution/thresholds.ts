@@ -73,8 +73,8 @@ export const CATEGORY_LABELS: Record<ProposalCategory, string> = {
 	league_size: 'League size change',
 	manager_removal: 'Remove a manager',
 	commissioner_impeachment: 'Impeach the commissioner',
-	collusion_pick_penalty: 'Collusion — draft pick penalty',
-	collusion_expulsion: 'Collusion — expulsion',
+	collusion_pick_penalty: 'Collusion, draft pick penalty',
+	collusion_expulsion: 'Collusion, expulsion',
 	general: 'Other constitutional change'
 };
 

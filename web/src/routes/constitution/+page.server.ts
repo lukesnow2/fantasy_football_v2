@@ -2,7 +2,13 @@ import { fail } from '@sveltejs/kit';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '$lib/server/db';
-import { dimManager, ruleAmendment, ruleProposal, ruleVote } from '$lib/server/db/schema';
+import {
+	constitutionVersion,
+	dimManager,
+	ruleAmendment,
+	ruleProposal,
+	ruleVote
+} from '$lib/server/db/schema';
 import { requireManagerKey } from '$lib/server/auth-manager';
 import { countEligibleVoters, listActiveMembers } from '$lib/server/members';
 import { settleDueProposals, settleProposal, tallyVotes } from '$lib/server/constitution/evaluate';
@@ -137,8 +143,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.from(ruleAmendment)
 		.orderBy(desc(ruleAmendment.amendmentYear), desc(ruleAmendment.amendmentKey));
 
+	// Every version, newest first, for the Versions card (WP11 S11.3). A
+	// version passed but not yet in force is listed too, with its date ahead.
+	const versions = await db
+		.select({
+			versionNo: constitutionVersion.versionNo,
+			effectiveAt: constitutionVersion.effectiveAt,
+			note: constitutionVersion.note,
+			amendmentKey: constitutionVersion.amendmentKey
+		})
+		.from(constitutionVersion)
+		.orderBy(desc(constitutionVersion.versionNo));
+
 	return {
 		version,
+		versions,
 		sections,
 		proposals: enriched,
 		// Mapped to a clean shape here rather than papered over in the template:
@@ -312,7 +331,7 @@ export const actions: Actions = {
 			if (proposal.status !== 'active') {
 				return {
 					ok: false as const,
-					error: `Voting is closed — this proposal is ${proposal.status}.`,
+					error: `Voting is closed. This proposal is ${proposal.status}.`,
 					status: 409
 				};
 			}
