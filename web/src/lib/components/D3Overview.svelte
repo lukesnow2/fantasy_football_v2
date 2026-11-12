@@ -1869,6 +1869,7 @@
 	$: dataRows = tableRows.map((r) => ({
 		season: r.seasonYear,
 		live: isLive(r.seasonYear),
+		champion: r.champion?.manager ?? null,
 		...Object.fromEntries(tableColumns.map((c, i) => [`c${i}`, c.value(r)]))
 	}));
 
@@ -2097,7 +2098,13 @@
 
 		{#if showTable && tableRows.length}
 			<div class="table">
-				<DataTable columns={dataColumns} rows={dataRows} maxHeight="320px" label="{currentMetric.name} by season">
+				<DataTable
+					columns={dataColumns}
+					rows={dataRows}
+					maxHeight="320px"
+					label="{currentMetric.name} by season"
+					selected={(row) => !!highlightManager && row.champion === highlightManager}
+				>
 					{#snippet cell(row, column)}
 						{#if column.key === 'season'}{row.season}{#if row.live}{' '}<span class="in-progress">(in progress)</span>{/if}{:else}{row[column.key]}{/if}
 					{/snippet}

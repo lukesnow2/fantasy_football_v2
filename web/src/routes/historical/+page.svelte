@@ -120,6 +120,8 @@
 	let pairB = $state<string | null>(null);
 	/** A reader changed a name, so the table filters to the pair (D10). */
 	let picked = $state(false);
+	/** The URL named both managers, so the tab's link keeps them. */
+	let fromUrl = $state(false);
 
 	let tab = $state<HistoryTab>(historyTab(page.url.searchParams));
 
@@ -140,7 +142,7 @@
 	});
 
 	function hrefFor(id: HistoryTab): string {
-		if (id === 'head-to-head' && picked && pairA && pairB) return rivalryHref(pairA, pairB);
+		if (id === 'head-to-head' && (picked || fromUrl) && pairA && pairB) return rivalryHref(pairA, pairB);
 		return HISTORY_TABS.find((t) => t.id === id)!.href;
 	}
 
@@ -179,6 +181,7 @@
 		const b = resolveManager(params.get('b'), names);
 		const pair = defaultPair(h2hData?.headToHead ?? [], a, b);
 		if (pair) [pairA, pairB] = pair;
+		fromUrl = !!(a && b && a !== b);
 	}
 
 	function setPair(a: string, b: string) {
