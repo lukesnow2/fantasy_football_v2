@@ -137,6 +137,8 @@
 	afterNavigate(() => {
 		tab = historyTab(page.url.searchParams);
 		openTab(tab);
+		// The URL's pair replaces any earlier pick, so the table stops filtering (D10).
+		picked = false;
 		if (h2hData) setPairFromUrl();
 	});
 

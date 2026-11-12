@@ -47,6 +47,9 @@ describe('tabs and the URL (S10.1)', () => {
 		expect(historyIntro(22)).toBe(
 			'What 22 seasons say about scoring and luck in this league, and how the format changed along the way.'
 		);
+		expect(historyIntro(1)).toBe(
+			'What 1 season says about scoring and luck in this league, and how the format changed along the way.'
+		);
 		expect(historyIntro(null)).toBe(
 			'What the seasons say about scoring and luck in this league, and how the format changed along the way.'
 		);
@@ -192,6 +195,8 @@ describe('head to head (S10.5 to S10.7)', () => {
 		expect(luckier({ ...row, managerALuckFactor: '-0.4600', managerBLuckFactor: '-1.1' })).toEqual({ name: 'Luke S', luck: '-0.46' });
 		expect(luckier({ ...row, managerALuckFactor: '0.00', managerBLuckFactor: '0.0000' })).toBeNull();
 		expect(luckier({ ...row, managerALuckFactor: '-0.0010', managerBLuckFactor: '0.0010' })).toBeNull();
+		// Shown as -0.13 and -0.12, so not even, though Math.round would call it so.
+		expect(luckier({ ...row, managerALuckFactor: '-0.1250', managerBLuckFactor: '-0.1200' })).toEqual({ name: 'Trevor', luck: '-0.12' });
 	});
 
 	it('filters the table only after a name is picked (D10)', () => {

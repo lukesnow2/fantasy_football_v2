@@ -78,8 +78,8 @@ export function historyKicker(first: number | null | undefined, last: number | n
 }
 
 export function historyIntro(seasons: number | null | undefined): string {
-	const count = seasons ? `${seasons} seasons` : 'the seasons';
-	return `What ${count} say about scoring and luck in this league, and how the format changed along the way.`;
+	const count = seasons ? `${plural(seasons, 'season')} ${seasons === 1 ? 'says' : 'say'}` : 'the seasons say';
+	return `What ${count} about scoring and luck in this league, and how the format changed along the way.`;
 }
 
 /* ---------- S10.2 The era control and findings ---------- */
@@ -364,8 +364,8 @@ export function seriesLeader(r: Pick<Rivalry, 'a' | 'b' | 'aWins' | 'bWins'>): s
 export function luckier(row: H2HRow): { name: string; luck: string } | null {
 	const a = num(row.managerALuckFactor);
 	const b = num(row.managerBLuckFactor);
-	// Equal to the hundredth, the precision it's shown at ("-0.00" is 0.00).
-	if (Math.round(a * 100) === Math.round(b * 100)) return null;
+	// Even when they read the same as shown (signedTwo makes "-0.00" 0.00).
+	if (signedTwo(a) === signedTwo(b)) return null;
 	const [name, v] = a > b ? [row.managerAName, a] : [row.managerBName, b];
 	return { name, luck: signedTwo(v) };
 }

@@ -17,7 +17,11 @@ export const GET: RequestHandler = async () => {
 			ORDER BY record_name, season_year DESC
 		`;
 
-		const recordBookResult = await db.execute(sql.raw(recordBookQuery));
+		// The ledger read never throws, so it runs alongside the records.
+		const [recordBookResult, lastUpdated] = await Promise.all([
+			db.execute(sql.raw(recordBookQuery)),
+			lastPipelineLoad()
+		]);
 		const records = Array.from(recordBookResult);
 
 		// Categorize records for better organization
@@ -70,7 +74,7 @@ export const GET: RequestHandler = async () => {
 			categories: Object.keys(recordsByCategory),
 			totalRecords: formattedRecords.length,
 			// The pipeline's last load, not this request: null when there's none.
-			lastUpdated: await lastPipelineLoad()
+			lastUpdated
 		});
 
 	} catch (error) {
