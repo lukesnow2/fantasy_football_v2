@@ -1583,7 +1583,11 @@
 				.call(styleAxis).selectAll('.tick line').attr('stroke-opacity', 0.35);
 			p.append('g').attr('transform', `translate(0,${panelH})`)
 				.call(d3.axisBottom(x).tickValues([years[0], years[Math.floor(years.length / 2)], years[years.length - 1]]).tickFormat(d3.format('d')).tickSize(0).tickPadding(8))
-				.call(styleAxis);
+				.call(styleAxis)
+				// The end years sit inside the panel, so one panel's last year
+				// doesn't run into the next panel's first across the gap.
+				.selectAll('.tick text')
+				.attr('text-anchor', (_: unknown, j: number, all: ArrayLike<unknown>) => (j === 0 ? 'start' : j === all.length - 1 ? 'end' : 'middle'));
 			// Title with its line key.
 			p.append('line').attr('x1', 0).attr('x2', 12).attr('y1', -15).attr('y2', -15).attr('stroke', s.color).attr('stroke-width', 2).attr('stroke-linecap', 'round');
 			p.append('text').attr('x', 18).attr('y', -11).attr('fill', TEXT_SECONDARY).style('font-size', '12px').style('font-weight', '600').text(s.label);
