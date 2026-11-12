@@ -96,7 +96,7 @@
 	   Record Book token (WP12 S12.3). */
 	.picker {
 		position: fixed;
-		z-index: 50;
+		z-index: 110; /* above the thread sheet (100) */
 		overflow: hidden;
 		border: 1px solid var(--color-line);
 		border-radius: var(--radius-card);

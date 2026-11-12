@@ -73,7 +73,7 @@
 <style>
 	.menu {
 		position: fixed;
-		z-index: 50;
+		z-index: 110; /* above the thread sheet (100) */
 		box-sizing: border-box;
 		width: 260px;
 		padding: 6px;

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { MediaQuery } from 'svelte/reactivity';
-	import { clickOutside } from '$lib/actions/clickOutside';
+	import { touchScreen as touch } from '$lib/chat/touch';
 	import Avatar from '../ui/Avatar.svelte';
 	import Button from '../ui/Button.svelte';
 	import ChatAvatar from './ChatAvatar.svelte';
@@ -82,7 +81,6 @@
 		return `${trimmed}<p>${mark.trim()}</p>`;
 	}
 
-	const touch = new MediaQuery('hover: none');
 	const showActions = $derived(canWrite && !isDeleted && !isPending);
 
 	let editing = $state(false);
@@ -137,6 +135,19 @@
 	}
 
 	let actionsEl = $state<HTMLDivElement | null>(null);
+	let rowEl = $state<HTMLDivElement | null>(null);
+
+	// A tap anywhere else closes an open touch toolbar. Listening only while
+	// it's open keeps one listener on the page, not one per row.
+	$effect(() => {
+		if (!actionsOpen || !rowEl) return;
+		const row = rowEl;
+		const onPointerDown = (event: PointerEvent) => {
+			if (!row.contains(event.target as Node)) actionsOpen = false;
+		};
+		document.addEventListener('pointerdown', onPointerDown, true);
+		return () => document.removeEventListener('pointerdown', onPointerDown, true);
+	});
 </script>
 
 <!-- The click handler is only the touch-screen way to open the toolbar; with a
@@ -151,8 +162,8 @@
 	class:thread-open={threadExpanded}
 	class:actionable={showActions && !editing}
 	class:actions-open={actionsOpen}
+	bind:this={rowEl}
 	onclick={onRowTap}
-	use:clickOutside={{ onOutside: () => (actionsOpen = false) }}
 >
 	{#if compact}
 		<!-- Reserve the avatar gutter so text stays aligned, and reveal the
@@ -563,18 +574,22 @@
 	}
 
 	/* Floats 16px above the row's top edge, 10px from its right, while the row
-	   is hovered or holds focus. */
+	   is hovered or holds focus. Hidden by opacity, not display, so its buttons
+	   stay in the tab order and tabbing into them is what reveals it. Above
+	   the sticky day divider (4), so the first row's toolbar isn't covered. */
 	.actions {
 		position: absolute;
 		top: -16px;
 		right: 10px;
-		z-index: 3;
-		display: none;
+		z-index: 5;
+		opacity: 0;
+		pointer-events: none;
 	}
 
 	.row:hover > .body > .actions,
 	.row:focus-within > .body > .actions {
-		display: block;
+		opacity: 1;
+		pointer-events: auto;
 	}
 
 	/* On a touch screen a tap opens it inside the row instead, 8px under the
@@ -591,6 +606,8 @@
 
 		.row.actions-open > .body > .actions {
 			display: flex;
+			opacity: 1;
+			pointer-events: auto;
 		}
 
 		.row.actionable:hover:not(.actions-open):not(.thread-open):not(.mention),

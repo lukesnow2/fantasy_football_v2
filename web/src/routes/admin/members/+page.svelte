@@ -23,13 +23,17 @@
 	// The role select saves on change. If the action refuses (the last
 	// commissioner can't step down), the select goes back to the stored role
 	// and the strip says why.
-	function saveRole(stored: string): SubmitFunction {
+	// The stored role is looked up when the result comes back, not captured
+	// when the form mounts: enhance keeps the first callback for good, and an
+	// earlier change may have moved the role since.
+	function saveRole(memberId: string): SubmitFunction {
 		return ({ formElement }) =>
 			async ({ result, update }) => {
 				await update({ reset: false });
 				if (result.type !== 'success') {
+					const stored = data.members.find((m) => m.id === memberId)?.role;
 					const select = formElement.querySelector('select');
-					if (select) select.value = stored;
+					if (select && stored) select.value = stored;
 				}
 			};
 	}
@@ -173,7 +177,7 @@
 						<Button type="submit" variant="icon" size="row" aria-label="Save email">✓</Button>
 					</form>
 				{:else if column.key === 'role'}
-					<form method="POST" action="?/setRole" use:enhance={saveRole(member.role)}>
+					<form method="POST" action="?/setRole" use:enhance={saveRole(member.id)}>
 						<input type="hidden" name="memberId" value={member.id} />
 						<select
 							name="role"

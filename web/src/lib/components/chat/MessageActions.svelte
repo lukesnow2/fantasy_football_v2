@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { autoUpdate, computePosition, flip, offset, shift } from '@floating-ui/dom';
-	import { MediaQuery } from 'svelte/reactivity';
 	import { clickOutside } from '$lib/actions/clickOutside';
+	import { touchScreen as touch } from '$lib/chat/touch';
 	import { MAX_RECENT_EMOJI, QUICK_EMOJI, RECENT_EMOJI_STORAGE_KEY } from '$lib/chat/constants';
 	import type { EmojiType } from '$lib/chat/types';
 
@@ -21,8 +21,6 @@
 	let confirmingDelete = $state(false);
 	let menuTrigger = $state<HTMLButtonElement | null>(null);
 	let menu = $state<HTMLDivElement | null>(null);
-
-	const touch = new MediaQuery('hover: none');
 
 	// The board's labels for the league's three defaults; any other emoji is
 	// named by itself.
@@ -240,7 +238,7 @@
 
 	.menu {
 		position: fixed;
-		z-index: 50;
+		z-index: 110; /* above the thread sheet (100) */
 		box-sizing: border-box;
 		width: 170px;
 		padding: 4px;

@@ -8,18 +8,25 @@
 
 	const prefs = $derived(data.manager?.notificationPreferences);
 
-	// The switches' own state, seeded from what's saved. A change hides the
-	// last "Saved." until the next save, so it never vouches for an unsaved
-	// switch.
-	let onProposal = $state(false);
-	let onVotes = $state(false);
-	let onTrades = $state(false);
+	type PrefName = 'emailOnNewProposal' | 'emailOnVoteResults' | 'emailOnTradeOffers';
+
+	function saved(): Record<PrefName, boolean> {
+		return {
+			emailOnNewProposal: !!prefs?.emailOnNewProposal,
+			emailOnVoteResults: !!prefs?.emailOnVoteResults,
+			emailOnTradeOffers: !!prefs?.emailOnTradeOffers
+		};
+	}
+
+	// The switches' own state, seeded from what's saved so the server renders
+	// them right too, and reseeded when a save reloads the data. A change hides
+	// the last "Saved." until the next save, so it never vouches for an
+	// unsaved switch.
+	let checks = $state(saved());
 	let changed = $state(false);
 
 	$effect.pre(() => {
-		onProposal = !!prefs?.emailOnNewProposal;
-		onVotes = !!prefs?.emailOnVoteResults;
-		onTrades = !!prefs?.emailOnTradeOffers;
+		checks = saved();
 	});
 
 	const profileHref = $derived(
@@ -90,13 +97,12 @@
 								<span class="pref-name">{row.label}</span>
 								<span class="pref-detail">{row.detail}</span>
 							</span>
-							{#if row.name === 'emailOnNewProposal'}
-								<Switch name={row.name} label={row.label} bind:checked={onProposal} onchange={() => (changed = true)} />
-							{:else if row.name === 'emailOnVoteResults'}
-								<Switch name={row.name} label={row.label} bind:checked={onVotes} onchange={() => (changed = true)} />
-							{:else}
-								<Switch name={row.name} label={row.label} bind:checked={onTrades} onchange={() => (changed = true)} />
-							{/if}
+							<Switch
+								name={row.name}
+								label={row.label}
+								bind:checked={checks[row.name]}
+								onchange={() => (changed = true)}
+							/>
 						</label>
 					{/each}
 
