@@ -19,6 +19,8 @@
 		 * (the card gives it both).
 		 */
 		size?: 'default' | 'small';
+		/** The textarea's accessible name: "Message", or "Reply in thread" in a thread. */
+		label?: string;
 	}
 
 	let {
@@ -29,7 +31,8 @@
 		autofocus = false,
 		onSend,
 		onEditLast,
-		size = 'default'
+		size = 'default',
+		label = 'Message'
 	}: Props = $props();
 
 	let value = $state('');
@@ -216,7 +219,7 @@
 			{placeholder}
 			{disabled}
 			rows="1"
-			aria-label="Message"
+			aria-label={label}
 			oninput={() => {
 				autosize();
 				refreshMentionState();

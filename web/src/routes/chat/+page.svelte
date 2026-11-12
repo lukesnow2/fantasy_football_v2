@@ -32,16 +32,27 @@
      /login before this ever renders. The panel's signed-out state exists for the
      preview embedded on the public /this-season page. -->
 <div class="chat-page">
-	<PageHeader {kicker} title="Chat" titleSuffix="#general" size={48} tight phoneActionBesideTitle>
+	<!-- The pill is passed only when there is one, so with none the title
+	     keeps the whole row on a phone. It isn't a live region: the strip
+	     above the composer already announces a dropped connection. -->
+	{#snippet statusPill()}
+		{#if pill}
+			<span class="status {pill.tone}">
+				<span class="dot" aria-hidden="true"></span>{pill.label}
+			</span>
+		{/if}
+	{/snippet}
+	<PageHeader
+		{kicker}
+		title="Chat"
+		titleSuffix="#general"
+		size={48}
+		tight
+		phoneActionBesideTitle
+		action={pill ? statusPill : undefined}
+	>
 		Trash talk, trade offers and grievances. Reply in a thread to keep side arguments out of the
 		main feed.
-		{#snippet action()}
-			{#if pill}
-				<span class="status {pill.tone}" role="status">
-					<span class="dot" aria-hidden="true"></span>{pill.label}
-				</span>
-			{/if}
-		{/snippet}
 	</PageHeader>
 
 	<!-- The page is one screen under the band: the header at its own height

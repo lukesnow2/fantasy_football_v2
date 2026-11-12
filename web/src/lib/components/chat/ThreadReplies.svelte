@@ -94,7 +94,7 @@
 
 	{#if canWrite}
 		<div class="reply-box">
-			<Composer {roster} size="small" placeholder="Reply in thread" autofocus onSend={onSendReply} />
+			<Composer {roster} size="small" label="Reply in thread" placeholder="Reply in thread" autofocus onSend={onSendReply} />
 		</div>
 	{/if}
 </Card>
