@@ -3,9 +3,20 @@ import {
 	RESEND_API_KEY,
 	SENDGRID_API_KEY,
 	EMAIL_FROM_NAME,
-	requireEmailFrom
+	requireEmailFrom,
+	requireOrigin
 } from './env';
 import { escapeHtml } from './html';
+import {
+	emailButton,
+	emailFootnoteLink,
+	emailGreeting,
+	emailGreetingHtml,
+	emailHost,
+	emailLayout,
+	emailLinkFallback,
+	emailParagraph
+} from './email-layout';
 
 export interface EmailOptions {
 	to: string;
@@ -406,83 +417,71 @@ export { ConsoleEmailService, ResendEmailService, SendGridEmailService };
 // Templates
 // ---------------------------------------------------------------------------
 
-function layout(heading: string, bodyHtml: string): string {
-	return `
-		<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; background-color: #0f172a;">
-			<div style="background-color: #1e293b; padding: 32px; border-radius: 12px; border: 1px solid #334155;">
-				<h1 style="color: #f8fafc; margin: 0 0 4px 0; font-size: 20px;">🏆 The League</h1>
-				<p style="color: #94a3b8; margin: 0 0 24px 0; font-size: 14px;">${heading}</p>
-				${bodyHtml}
-			</div>
-		</div>
-	`;
-}
-
-function button(url: string, label: string): string {
-	// Escaped even though today's URL cannot break out: the token is
-	// encodeURIComponent'd and ORIGIN is operator-set, but that invariant lives
-	// two modules away and is one refactor from being false.
-	//
-	// Turning `&` into `&amp;` inside an href is CORRECT — attribute values are
-	// entity-decoded before the URL is resolved — so a future multi-parameter
-	// link still works. Nobody should "fix" this back.
-	const href = escapeHtml(url);
-
-	return `
-		<div style="text-align: center; margin: 28px 0;">
-			<a href="${href}" style="background-color: #f59e0b; color: #0f172a; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">${label}</a>
-		</div>
-		<p style="color: #94a3b8; font-size: 13px; margin-bottom: 8px;">If the button doesn't work, paste this into your browser:</p>
-		<p style="color: #cbd5e1; font-size: 13px; word-break: break-all; background-color: #0f172a; padding: 10px; border-radius: 6px; margin: 0;">${href}</p>
-	`;
-}
+const SIGN_IN_LINE = "Here's your sign-in link. It works once and expires in 15 minutes.";
+const SIGN_IN_FOOTNOTE =
+	"Someone asked to sign in to The League with this address. If it wasn't you, ignore this email and nothing changes.";
+const INVITE_LINE =
+	"The commissioner added you to the league's site. Sign in with the button below. There's no password to set up.";
 
 export function generateMagicLinkEmail(
 	url: string,
 	to: string,
-	opts: { purpose: 'login' | 'invite'; displayName?: string | null }
+	opts: { purpose: 'login' | 'invite'; displayName?: string | null; origin?: string }
 ): EmailOptions {
-	// Two greetings, not one. The HTML body must be escaped or a display name is
-	// an injection point; the text/plain body must NOT be, or a manager called
-	// O'Brien reads "Hi O&#39;Brien," in their mail client. Sharing one value
-	// here fixes the injection and introduces that bug in the same edit.
-	const greetingHtml = opts.displayName ? `Hi ${escapeHtml(opts.displayName)},` : 'Hi,';
-	const greetingText = opts.displayName ? `Hi ${opts.displayName},` : 'Hi,';
+	const greeting = emailGreeting(opts.displayName);
+	const origin = opts.origin ?? requireOrigin();
+	const host = emailHost(origin);
 	const isInvite = opts.purpose === 'invite';
 
-	const intro = isInvite
-		? `You've been added to The League's site. Use the link below to sign in for the first time — there's no password to set up.`
-		: `Here's your sign-in link.`;
+	if (isInvite) {
+		const html = emailLayout({
+			preheader: "The commissioner added you to the league's site. Sign in with one tap.",
+			kicker: "You're in",
+			title: 'Welcome to The League',
+			bodyHtml:
+				emailGreetingHtml(greeting.html) +
+				emailParagraph(escapeHtml(INVITE_LINE)) +
+				emailButton(url, 'Sign in to The League') +
+				emailLinkFallback(url),
+			footnoteHtml: `This link works once and expires in 15 minutes. After that, get a new one any time at ${emailFootnoteLink(`${origin}/login`, `${host}/login`, { mono: true })}.`,
+			origin
+		});
 
-	const html = layout(
-		isInvite ? "You're in" : 'Sign in',
-		`
-			<p style="color: #e2e8f0; margin-bottom: 16px;">${greetingHtml}</p>
-			<p style="color: #e2e8f0; margin-bottom: 8px;">${intro}</p>
-			${button(url, isInvite ? 'Sign in to The League' : 'Sign in')}
-			<p style="color: #94a3b8; font-size: 13px; margin-top: 24px;">
-				This link expires in 15 minutes and can only be used once.
-				If you didn't request it, you can ignore this email.
-			</p>
-		`
-	);
+		// Raw links, deliberately. This is the copy-and-paste fallback; an
+		// entity-encoded link here would be pasted broken.
+		const text = `${greeting.text}
 
-	// Raw url, deliberately. This is the copy-and-paste fallback; an entity-encoded
-	// link here would be pasted broken.
-	const text = `${greetingText}
-
-${intro}
+${INVITE_LINE}
 
 ${url}
 
-This link expires in 15 minutes and can only be used once.
-If you didn't request it, you can ignore this email.
+This link works once and expires in 15 minutes. After that, get a new one any time at ${origin}/login.
 `;
 
-	return {
-		to,
-		subject: isInvite ? "You're invited to The League" : 'Your sign-in link for The League',
-		html,
-		text
-	};
+		return { to, subject: "You're invited to The League", html, text };
+	}
+
+	const html = emailLayout({
+		preheader: 'Your sign-in link. It works once and expires in 15 minutes.',
+		kicker: 'Members only',
+		title: 'Sign in to The League',
+		bodyHtml:
+			emailGreetingHtml(greeting.html) +
+			emailParagraph(escapeHtml(SIGN_IN_LINE)) +
+			emailButton(url, 'Sign in') +
+			emailLinkFallback(url),
+		footnoteHtml: escapeHtml(SIGN_IN_FOOTNOTE),
+		origin
+	});
+
+	const text = `${greeting.text}
+
+${SIGN_IN_LINE}
+
+${url}
+
+${SIGN_IN_FOOTNOTE}
+`;
+
+	return { to, subject: 'Your sign-in link for The League', html, text };
 }
