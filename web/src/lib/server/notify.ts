@@ -14,6 +14,7 @@ import {
 	emailGreetingHtml,
 	emailLayout,
 	emailParagraph,
+	emailSpaced,
 	type KickerTone
 } from '$lib/server/email-layout';
 import { getCurrentVersion, loadVersionTree } from '$lib/server/constitution/versions';
@@ -33,9 +34,13 @@ import { LEAGUE_TIME_ZONE } from '$lib/utils/time-zone';
  *    into a 500 for the manager who cast it.
  */
 
-interface Recipient {
+/** One email's addressee, as the builders need it. */
+export interface EmailRecipient {
 	email: string;
 	displayName: string | null;
+}
+
+interface Recipient extends EmailRecipient {
 	preferences: NotificationPreferences;
 }
 
@@ -101,12 +106,6 @@ const C = EMAIL_COLORS;
 const F = EMAIL_FONTS;
 
 type Settled = Exclude<Outcome, { state: 'open' }>;
-
-/** One email's addressee, as the builders need it. */
-export interface EmailRecipient {
-	email: string;
-	displayName: string | null;
-}
 
 export interface NewProposalEmailData {
 	title: string;
@@ -191,11 +190,10 @@ function wordingBox(halves: ReturnType<typeof wordingHalves>): string {
 }
 
 function whyBlock(rationale: string, marginTop: number): string {
-	return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top: ${marginTop}px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-left: 14px; border-left: 3px solid ${C.fieldLine};">${label('Why', C.muted)}<div style="margin-top: 4px; font-family: ${F.sans}; font-size: 15px; line-height: 1.55; color: ${C.ink2}; white-space: pre-line;">${escapeHtml(rationale)}</div></td></tr></table></td></tr></table>`;
-}
-
-function spaced(html: string, top: number): string {
-	return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top: ${top}px;">${html}</td></tr></table>`;
+	return emailSpaced(
+		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-left: 14px; border-left: 3px solid ${C.fieldLine};">${label('Why', C.muted)}<div style="margin-top: 4px; font-family: ${F.sans}; font-size: 15px; line-height: 1.55; color: ${C.ink2}; white-space: pre-line;">${escapeHtml(rationale)}</div></td></tr></table>`,
+		marginTop
+	);
 }
 
 const settingsLink = (origin: string) => emailFootnoteLink(`${origin}/settings`, 'email settings');
@@ -229,7 +227,7 @@ export function newProposalEmail(
 			emailParagraph(escapeHtml("A rule change is open for voting. Here's what it changes."), 18) +
 			wordingBox(halves) +
 			(rationale ? whyBlock(rationale, halves.length ? 18 : 0) : '') +
-			spaced(
+			emailSpaced(
 				emailFacts([
 					{ value: votes, label: 'Yes votes to pass' },
 					{ value: closes, label: 'Voting closes' }
@@ -353,10 +351,20 @@ ${origin}/constitution
 	return { to: to.email, subject: `${copy.subjectPrefix}: ${p.title}`, html, text };
 }
 
-/** The current constitution's sections, the way the Constitution page loads them. */
-async function currentSections() {
-	const version = await getCurrentVersion(db);
-	return version ? await loadVersionTree(db, version.versionKey) : [];
+/**
+ * Where a proposal points in the current constitution, loaded the way the
+ * Constitution page loads it. Empty when it can't be read: the clause is a
+ * label on the email, and failing to find it must not stop the email.
+ */
+async function currentClauseRef(proposal: Parameters<typeof clauseRef>[0]): Promise<string> {
+	try {
+		const version = await getCurrentVersion(db);
+		const sections = version ? await loadVersionTree(db, version.versionKey) : [];
+		return clauseRef(proposal, sections);
+	} catch (error) {
+		console.error('[notify] Could not read the clause for a proposal email:', error);
+		return '';
+	}
 }
 
 export async function notifyNewProposal(proposalKey: number): Promise<void> {
@@ -390,7 +398,7 @@ export async function notifyNewProposal(proposalKey: number): Promise<void> {
 		if (list.length === 0) return;
 
 		const origin = requireOrigin();
-		const clause = clauseRef(proposal, await currentSections());
+		const clause = await currentClauseRef(proposal);
 		const data: NewProposalEmailData = { ...proposal, clause };
 
 		await fanOut(list, (to) => newProposalEmail(data, to, origin));
@@ -425,7 +433,7 @@ export async function notifyProposalSettled(
 		if (list.length === 0) return;
 
 		const origin = requireOrigin();
-		const clause = clauseRef(proposal, await currentSections());
+		const clause = await currentClauseRef(proposal);
 		const data: VoteResultEmailData = {
 			title: proposal.title,
 			effectiveSeason: proposal.effectiveSeason,

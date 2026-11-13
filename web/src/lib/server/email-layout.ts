@@ -42,6 +42,10 @@ export const EMAIL_FONTS = {
 const C = EMAIL_COLORS;
 const F = EMAIL_FONTS;
 
+/** The centered column's width and the card's padding, shared by the layout and the facts table. */
+const COLUMN_WIDTH = 520;
+const CARD_PADDING = 36;
+
 const FONT_LINK =
 	'https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap';
 
@@ -95,6 +99,14 @@ export function emailLinkFallback(url: string): string {
 }
 
 /**
+ * `html` with space above it. A padded cell, not a margin: Outlook drops
+ * margins on tables.
+ */
+export function emailSpaced(html: string, top: number): string {
+	return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top: ${top}px;">${html}</td></tr></table>`;
+}
+
+/**
  * The field button: a full-width table whose cell carries the fill, which is
  * what keeps it a green block in Outlook, around a 50px block link.
  */
@@ -107,15 +119,14 @@ export function emailButton(url: string, label: string): string {
 	// entity-decoded before the URL is resolved, so a multi-parameter link
 	// still works. Nobody should "fix" this back.
 	const href = escapeHtml(url);
-	return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="padding-top: 24px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: separate;">
+	return emailSpaced(
+		`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse: separate;">
 <tr><td class="tl-btn" align="center" bgcolor="${C.field}" style="background: ${C.field}; border-radius: 10px;">
-<a class="tl-btn" href="${href}" style="display: block; height: 50px; line-height: 50px; text-align: center; font-family: ${F.sans}; font-size: 16px; font-weight: 700; color: ${C.card}; text-decoration: none; border-radius: 10px;">${escapeHtml(label)}</a>
+<a class="tl-btn" href="${href}" style="display: block; height: 50px; line-height: 50px; mso-line-height-rule: exactly; text-align: center; font-family: ${F.sans}; font-size: 16px; font-weight: 700; color: ${C.card}; text-decoration: none; border-radius: 10px;">${escapeHtml(label)}</a>
 </td></tr>
-</table>
-</td></tr>
-</table>`;
+</table>`,
+		24
+	);
 }
 
 export type KickerTone = 'field' | 'pennant';
@@ -181,10 +192,10 @@ export function emailLayout(opts: EmailLayoutOptions): string {
 <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: ${C.clubhouse}; opacity: 0;">${escapeHtml(opts.preheader)}${preheaderPad}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.clubhouse}" style="background: ${C.clubhouse};">
 <tr><td class="tl-ground" align="center" style="padding: 32px 24px 28px;">
-<!--[if mso]><table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; margin: 0 auto;">
+<!--[if mso]><table role="presentation" width="${COLUMN_WIDTH}" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: ${COLUMN_WIDTH}px; margin: 0 auto;">
 <tr><td style="padding: 0 4px 20px; font-family: ${F.sans}; text-align: left;"><span style="font-family: ${F.slab}; font-weight: 700; font-size: 24px; color: ${C.card};">The League</span><span style="margin-left: 10px; font-family: ${F.sans}; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: ${C.onClubhouse2};">Est. 2005</span></td></tr>
-<tr><td class="tl-card" bgcolor="${C.card}" style="background: ${C.card}; border-radius: 16px; padding: 36px; text-align: left; font-family: ${F.sans}; color: ${C.ink};">
+<tr><td class="tl-card" bgcolor="${C.card}" style="background: ${C.card}; border-radius: 16px; padding: ${CARD_PADDING}px; text-align: left; font-family: ${F.sans}; color: ${C.ink};">
 <div style="font-family: ${F.sans}; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: ${kickerColor};">${escapeHtml(opts.kicker)}</div>
 <h1 class="tl-title-${titleSize}" style="margin: ${titleMargin}; font-family: ${F.slab}; font-weight: 700; font-size: ${titleSize}px; line-height: ${titleLeading}; color: ${C.ink};">${escapeHtml(opts.title)}</h1>
 ${metaHtml}${opts.bodyHtml}
@@ -203,7 +214,7 @@ ${metaHtml}${opts.bodyHtml}
  * The width inside the facts table at desktop: the 520px column, less the
  * card's 36px padding each side and the table's 1px border each side.
  */
-const FACTS_INNER_WIDTH = 520 - 2 * 36 - 2;
+const FACTS_INNER_WIDTH = COLUMN_WIDTH - 2 * CARD_PADDING - 2;
 const FACTS_CELL_PADDING = 2 * 14;
 
 /**
