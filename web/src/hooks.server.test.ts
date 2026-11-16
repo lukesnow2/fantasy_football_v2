@@ -19,6 +19,7 @@ describe('requiresAuth', () => {
 	it('keeps the public archive readable', () => {
 		expect(requiresAuth('/', 'GET')).toBe(false);
 		expect(requiresAuth('/hall-of-fame', 'GET')).toBe(false);
+		expect(requiresAuth('/league-table', 'GET')).toBe(false);
 		expect(requiresAuth('/historical', 'GET')).toBe(false);
 		expect(requiresAuth('/constitution', 'GET')).toBe(false);
 		expect(requiresAuth('/api/standings', 'GET')).toBe(false);

@@ -70,6 +70,7 @@ describe('the nav copy', () => {
 				[
 					['Power Rankings', "Who's actually good right now", '/power-rankings'],
 					['Hall of Fame', 'The all-time leaderboard', '/hall-of-fame'],
+					['League Table', 'Every manager, every metric', '/league-table'],
 					['League History', 'Twenty-two seasons of analysis', '/historical']
 				]
 			],
