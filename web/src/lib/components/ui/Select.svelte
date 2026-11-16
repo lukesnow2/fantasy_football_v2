@@ -9,6 +9,10 @@
 	 * filling the rest, in 16px so iOS Safari doesn't zoom when it opens.
 	 *
 	 *   <Select label="Season" bind:value={season} onchange={load} options={[...]} />
+	 *
+	 * `stacked` is the phone picker the Managers and League Table phone boards
+	 * draw: the label above in 13px weight 600 ink, 6px over a full-width
+	 * select 48px tall with 10px corners and 16px text.
 	 */
 	import type { HTMLSelectAttributes } from 'svelte/elements';
 
@@ -21,12 +25,21 @@
 		label: string;
 		options: Option[];
 		value?: string;
+		/** The label above a full-width 48px select (the phone pickers). */
+		stacked?: boolean;
 	} & Omit<HTMLSelectAttributes, 'value' | 'children'>;
 
-	let { label, options, value = $bindable(''), class: className = '', ...rest }: Props = $props();
+	let {
+		label,
+		options,
+		value = $bindable(''),
+		stacked = false,
+		class: className = '',
+		...rest
+	}: Props = $props();
 </script>
 
-<label class="select {className}">
+<label class="select {className}" class:stacked>
 	{label}
 	<select bind:value {...rest}>
 		{#each options as option (option.value)}
@@ -58,6 +71,21 @@
 		font-size: 15px;
 		font-weight: 600;
 		color: var(--color-ink);
+	}
+
+	.stacked {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--color-ink);
+	}
+
+	.stacked select {
+		min-height: 48px;
+		border-radius: 10px;
+		font-size: 16px;
 	}
 
 	select:focus-visible {

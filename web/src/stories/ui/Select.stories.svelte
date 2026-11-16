@@ -30,3 +30,19 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Stacked, the phone picker (League Table)" parameters={{ viewport: { defaultViewport: 'mobile1' } }}>
+	{#snippet template()}
+		<div style="width: 358px">
+			<Select
+				label="Columns"
+				stacked
+				options={[
+					{ value: 'overview', label: 'Overview' },
+					{ value: 'winning', label: 'Winning' }
+				]}
+				value="overview"
+			/>
+		</div>
+	{/snippet}
+</Story>
