@@ -61,12 +61,12 @@ INSERT INTO metric_definitions (
 
 -- FAAB Efficiency Rating
 ('faab_efficiency_rating', 'FAAB Efficiency Rating', 'efficiency',
-'Fantasy points generated per FAAB dollar spent on waivers',
-'Measures how effectively a manager converts waiver budget into fantasy points. Higher values indicate better waiver wire management and player evaluation skills.',
-'Total Fantasy Points Scored ÷ Total FAAB Spent',
-'Manager scored 1,200 points with $75 FAAB spent: 1,200 ÷ 75 = 16.0 points per dollar',
-'Values above 15.0 are excellent, 12.0+ is very good, 10.0+ is average. Infinite value indicates no FAAB spent (all free agents).',
-'decimal', 'points_per_dollar', '0-∞', 12.0000, 15.0000, 'decimal_1', 3),
+'Starter points produced by FAAB pickups, per FAAB dollar spent',
+'For every waiver claim a manager paid for, the fantasy points that player scored while in that manager''s starting lineup, from the week of the claim until the same team claimed him again. Divided by the dollars spent. Bench weeks earn nothing: the question is what the money put in the lineup.',
+'Σ Starter Points from Paid Claims ÷ Σ FAAB Dollars Spent',
+'$40 on a back who started 6 weeks for 72 points and $10 on a receiver who never started: (72 + 0) ÷ (40 + 10) = 1.44 points per dollar',
+'Higher is better. Across this league (FAAB since 2022) it runs 0.21 to 3.13 with most managers near 1.5-2.1: above 2.5 is sharp bidding, below 1.0 is money left on the bench or the waiver wire.',
+'decimal', 'points_per_dollar', '0.00-3.50', 2.0000, 2.5000, 'decimal_2', 3),
 
 -- Season Consistency Score
 ('season_consistency_score', 'Season Consistency Score', 'consistency',
