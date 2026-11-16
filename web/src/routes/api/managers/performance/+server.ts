@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { summarizeLuck, type SeasonLuck } from '$lib/manager-luck';
 import { getSeasonOdds } from '$lib/server/playoff-odds-service';
+import { longestStreaks, streaksByManager, type GameResult, type Streaks } from './streaks';
 
 /**
  * Postgres `numeric` arrives over the wire as a string, so every average, rate
@@ -195,6 +196,71 @@ async function loadLuckBySeason(
 	return { byManager, latestSeason: num(latest?.seasonYear) };
 }
 
+interface CareerExtras {
+	pointsAgainst: number | null;
+	finishedPointsPerSeason: number | null;
+	streaks: Streaks | null;
+}
+
+/**
+ * Three career fields for every manager at once (WP14 S14.6), for the League
+ * Table: points against over every game, points per finished season (points
+ * in finished seasons ÷ finished seasons, so the live season can't drag the
+ * average down) and the longest win and losing streaks, read with the same
+ * game order as the single-manager path below.
+ */
+async function loadCareerExtras(): Promise<Map<string, CareerExtras>> {
+	const [totalsResult, gamesResult] = await Promise.all([
+		db.execute(sql`
+			WITH league_state AS (${leagueState})
+			SELECT
+				dm.manager_name AS manager_name,
+				SUM(tp.points_against) AS points_against,
+				SUM(tp.points_for) FILTER (WHERE ls.finished)
+					/ NULLIF(COUNT(DISTINCT tp.season_year) FILTER (WHERE ls.finished), 0)
+					AS finished_points_per_season
+			FROM edw.fact_team_performance tp
+			JOIN edw.dim_manager dm ON dm.manager_key = tp.manager_key
+			LEFT JOIN league_state ls ON ls.league_key = tp.league_key
+			WHERE dm.manager_name IS NOT NULL
+			GROUP BY dm.manager_name
+		`),
+		db.execute(sql`
+			SELECT
+				dm.manager_name AS manager_name,
+				CASE WHEN fm.winner_manager_key = side.manager_key THEN 'W'
+					 WHEN fm.winner_manager_key IS NULL THEN 'T'
+					 ELSE 'L' END AS result
+			FROM edw.fact_matchup fm
+			CROSS JOIN LATERAL (VALUES
+				(fm.manager1_key, fm.team1_key),
+				(fm.manager2_key, fm.team2_key)
+			) AS side(manager_key, team_key)
+			JOIN edw.dim_week dw ON fm.week_key = dw.week_key
+			JOIN edw.dim_manager dm ON dm.manager_key = side.manager_key
+			WHERE dm.manager_name IS NOT NULL
+			-- Team within season, as on the single-manager path.
+			ORDER BY dm.manager_name, fm.season_year, side.team_key, dw.week_number
+		`)
+	]);
+	const streaks = streaksByManager(
+		(Array.from(gamesResult) as any[]).map((g) => ({
+			managerName: String(g.managerName),
+			result: g.result as GameResult
+		}))
+	);
+	const extras = new Map<string, CareerExtras>();
+	for (const r of Array.from(totalsResult) as any[]) {
+		const name = String(r.managerName);
+		extras.set(name, {
+			pointsAgainst: num(r.pointsAgainst),
+			finishedPointsPerSeason: num(r.finishedPointsPerSeason),
+			streaks: streaks.get(name) ?? null
+		});
+	}
+	return extras;
+}
+
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const manager = url.searchParams.get('manager');
@@ -248,6 +314,16 @@ export const GET: RequestHandler = async ({ url }) => {
 		} catch (luckError) {
 			console.error('[managers/performance] luck query failed:', luckError);
 		}
+		// All-managers rows only (the League Table); optional like luck, so a
+		// failure leaves the three fields null rather than failing the page.
+		let extras = new Map<string, CareerExtras>();
+		if (!manager) {
+			try {
+				extras = await loadCareerExtras();
+			} catch (extrasError) {
+				console.error('[managers/performance] career extras query failed:', extrasError);
+			}
+		}
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
@@ -285,6 +361,13 @@ export const GET: RequestHandler = async ({ url }) => {
 			seasonConsistencyScore: num(mgr.season_consistency_score ?? mgr.seasonConsistencyScore),
 			bestSeasonRecord: mgr.best_season_record || mgr.bestSeasonRecord,
 			worstSeasonRecord: mgr.worst_season_record || mgr.worstSeasonRecord,
+			...(manager
+				? {}
+				: (extras.get(mgr.manager_name || mgr.managerName) ?? {
+						pointsAgainst: null,
+						finishedPointsPerSeason: null,
+						streaks: null
+					})),
 			// Tier classification based on performance
 			tierClassification:
 				(mgr.manager_name || mgr.managerName) === 'Bobby'
@@ -527,29 +610,9 @@ export const GET: RequestHandler = async ({ url }) => {
 						CASE WHEN fm.manager1_key = dm.manager_key THEN fm.team1_key ELSE fm.team2_key END,
 						dw.week_number
 				`);
-				let longestWin = 0,
-					longestLoss = 0,
-					curWin = 0,
-					curLoss = 0;
-				for (const g of Array.from(gamesResult) as any[]) {
-					if (g.result === 'W') {
-						curWin++;
-						curLoss = 0;
-						if (curWin > longestWin) longestWin = curWin;
-					} else if (g.result === 'L') {
-						curLoss++;
-						curWin = 0;
-						if (curLoss > longestLoss) longestLoss = curLoss;
-					} else {
-						curWin = 0;
-						curLoss = 0;
-					}
-				}
-				data.streaks = {
-					longestWinStreak: longestWin,
-					longestLossStreak: longestLoss,
-					totalGames: gamesResult.length
-				};
+				data.streaks = longestStreaks(
+					(Array.from(gamesResult) as any[]).map((g) => g.result as GameResult)
+				);
 			} catch {
 				data.streaks = null;
 			}
