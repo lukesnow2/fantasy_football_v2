@@ -151,6 +151,11 @@
 	const grade = $derived(complete && trend ? seasonGrade(trend) : null);
 	const lines = $derived(grade && trend ? gradeLines(grade, trend.regularSeasonWeeks) : []);
 	const skill = $derived(grade ? skillLine(grade) : null);
+	// The odds by week failed or have nothing to grade: the seeds take the
+	// card, under their own name.
+	const noGrade = $derived(
+		complete && (historyState === 'failed' || (historyState === 'ready' && !grade))
+	);
 
 	const POST_TABS = [
 		{ value: 'titleOdds' as const, label: 'Title' },
@@ -180,7 +185,13 @@
 {/snippet}
 
 <Card
-	title={complete ? 'How the odds did' : postseason ? 'Title Odds' : 'Playoff Odds'}
+	title={noGrade
+		? 'Playoff Field'
+		: complete
+			? 'How the odds did'
+			: postseason
+				? 'Title Odds'
+				: 'Playoff Odds'}
 	headSpacing="8px"
 	headGap={12}
 >
@@ -224,7 +235,7 @@
 			<div class="full-link">
 				<Button variant="link" size="tap" href="/playoff-odds">Full odds →</Button>
 			</div>
-		{:else if historyState === 'failed' || historyState === 'ready'}
+		{:else if noGrade}
 			<!-- No week-by-week odds to grade: the seeds, as before. -->
 			{@render seedList(data)}
 		{:else}

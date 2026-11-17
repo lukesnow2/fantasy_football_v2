@@ -6,6 +6,12 @@
 
 import { formatOdds } from '$lib/home';
 
+/**
+ * The first season with odds: the backtest's first (2008). The page's season
+ * picker and both odds routes start here.
+ */
+export const FIRST_ODDS_SEASON = 2008;
+
 export interface OddsHistoryPoint {
 	week: number;
 	playoffOdds: number;

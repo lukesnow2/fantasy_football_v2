@@ -20,6 +20,7 @@
 		type OddsTeam
 	} from '$lib/this-season';
 	import {
+		FIRST_ODDS_SEASON,
 		gradeLines,
 		rebuiltNote,
 		seasonGrade,
@@ -35,8 +36,6 @@
 	 * Season shows the same odds in a card; this is the whole of them, for any
 	 * season since 2008.
 	 */
-
-	const FIRST_SEASON = 2008;
 
 	let loading = $state(true);
 	let error = $state('');
@@ -94,7 +93,9 @@
 	const phone = $derived(phoneQuery.current);
 
 	const seasons = $derived(
-		latest == null ? [] : Array.from({ length: latest - FIRST_SEASON + 1 }, (_, i) => latest! - i)
+		latest == null
+			? []
+			: Array.from({ length: latest - FIRST_ODDS_SEASON + 1 }, (_, i) => latest! - i)
 	);
 
 	const ready = $derived(odds?.available ? odds : null);
