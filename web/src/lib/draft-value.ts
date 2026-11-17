@@ -264,8 +264,8 @@ export function topSteals<T extends PickValue & Positioned>(picks: T[], n: numbe
  * Busts: picks the board tags as busts (pickVerdict: counted on, and scored
  * under half their expectation), ranked by how far they fell short of players
  * at their position taken around the same round (valueZ). A season with fewer
- * than `n` busts lists fewer: 2012 has two, and its next-worst pick was a
- * letdown the board doesn't call a bust. Never a kicker or defense.
+ * than `n` busts lists fewer rather than fill a row with a pick the board
+ * calls a letdown. Never a kicker or defense.
  */
 export function topBusts<T extends PickValue & Positioned & { seasonPoints: number }>(
 	picks: T[],

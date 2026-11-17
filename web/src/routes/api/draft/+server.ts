@@ -218,7 +218,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				return { draftedRank: r?.drafted ?? null, scoredRank: r?.scored ?? null };
 			};
 
-			// Best value and biggest busts, three of each per season, judged against
+			// Best value and biggest busts, up to three of each per season, judged against
 			// what each pick's position and round were expected to score. This used to
 			// rank raw season points, so the "busts" were always last-round kickers and
 			// defenses that were cut - picks nobody counted on.
@@ -293,19 +293,15 @@ export const GET: RequestHandler = async ({ url }) => {
 				m.total += p.valueOverExpected;
 				byManager.set(p.managerName, m);
 			}
+			// All seasons: records, which wait for a season to finish. One season:
+			// that season's lists, finished or not.
+			const lists =
+				season === 'all'
+					? draftRecords(shown, completedSeasons, 10)
+					: { steals: topSteals(shown, 10), busts: topBusts(shown, 10) };
 			data.draftValue = {
-				...(() => {
-					// All seasons: records, which wait for a season to finish. One
-					// season: that season's lists, finished or not.
-					const lists =
-						season === 'all'
-							? draftRecords(shown, completedSeasons, 10)
-							: { steals: topSteals(shown, 10), busts: topBusts(shown, 10) };
-					return {
-						bestValue: lists.steals.map(mapValue),
-						biggestBusts: lists.busts.map(mapValue)
-					};
-				})(),
+				bestValue: lists.steals.map(mapValue),
+				biggestBusts: lists.busts.map(mapValue),
 				byManager: [...byManager.entries()]
 					.filter(([, m]) => m.picks >= 20)
 					.map(([managerName, m]) => ({

@@ -2,7 +2,8 @@
 	/**
 	 * A season's best and worst picks as two mini cards beside the Selected pick
 	 * (WP8 S8.7): "Best value" on field tint and "Biggest busts" on pennant
-	 * tint, three rows each from the API's bestWorstPicks. Each row is a button
+	 * tint, up to three rows each from the API's bestWorstPicks (fewer when a
+	 * season has fewer picks the board tags as busts). Each row is a button
 	 * that hands its pick to `onpick`, so the page can show it up close.
 	 *
 	 * The picks are judged by $lib/draft-value on the server: ranked by how far

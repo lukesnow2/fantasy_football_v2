@@ -217,6 +217,14 @@ describe('valueDraftPicks', () => {
 			[...history, ...season(2025, { '2025-RB-1': 286 * 0.4, '2025-WR-1': 286 * 0.6 })],
 			done
 		).filter((p) => p.seasonYear === 2025);
+		const ratio = (name: string) => {
+			const p = v.find((x) => x.name === name)!;
+			return p.seasonPoints / p.expectedPoints;
+		};
+		// The premise: one counted-on pick under half its slot, one just over.
+		expect(ratio('2025-RB-1')).toBeLessThan(0.5);
+		expect(ratio('2025-WR-1')).toBeGreaterThan(0.5);
+		expect(ratio('2025-WR-1')).toBeLessThan(0.85);
 		const busts = topBusts(v, 3);
 		expect(busts.map((p) => p.name)).toEqual(['2025-RB-1']);
 		for (const p of busts) {
