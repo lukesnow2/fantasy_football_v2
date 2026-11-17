@@ -181,6 +181,15 @@
 			: null
 	);
 
+	// Hover is for a mouse only: a tap fires an enter with no leave, which
+	// would pin a highlight over whatever the reader picks next.
+	const hoverIn = (ev: PointerEvent, teamKey: number) => {
+		if (ev.pointerType === 'mouse') hovered = teamKey;
+	};
+	const hoverOut = (ev: PointerEvent) => {
+		if (ev.pointerType === 'mouse') hovered = null;
+	};
+
 	// A line that stopped says when: in or out, and the week it was settled.
 	const legendValue = (s: { last: number; stopped: boolean; endWeek: number }) =>
 		s.stopped && (s.last === 0 || s.last === 1)
@@ -281,8 +290,8 @@
 					style:top={pctY(e.y)}
 					style:opacity={focus != null && focus !== e.teamKey ? 0.35 : 1}
 					style:z-index={focus === e.teamKey ? 2 : 1}
-					onmouseenter={() => (hovered = e.teamKey)}
-					onmouseleave={() => (hovered = null)}
+					onpointerenter={(ev) => hoverIn(ev, e.teamKey)}
+					onpointerleave={hoverOut}
 				>
 					<Avatar name={e.name} size={26} ring={2.5} ringColor={e.color} />
 				</span>
@@ -298,8 +307,8 @@
 				class:on={focus === s.teamKey}
 				aria-pressed={focus === s.teamKey}
 				onclick={() => (picked = focus === s.teamKey ? null : s.teamKey)}
-				onmouseenter={() => (hovered = s.teamKey)}
-				onmouseleave={() => (hovered = null)}
+				onpointerenter={(ev) => hoverIn(ev, s.teamKey)}
+				onpointerleave={hoverOut}
 			>
 				<span class="dot" style:background={s.color}></span>
 				<span class="name">{s.name}</span>
