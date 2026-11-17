@@ -88,6 +88,21 @@ test('a link opens the same view', async ({ page }) => {
 	await expect(page.getByRole('heading', { level: 2, name: 'Overview' })).toBeVisible();
 });
 
+test('a Hall of Fame that fails to load reads "None", not "Under 3 seasons"', async ({ page }) => {
+	await page.route(/\/api\/hall-of-fame/, (r) => r.fulfill({ status: 500, body: '' }));
+	await page.goto('/league-table?group=legacy');
+	await expect(page.getByRole('heading', { level: 2, name: 'Legacy' })).toBeVisible();
+	await expect(table(page).getByText('Under 3 seasons')).toHaveCount(0);
+	const trevor = table(page).locator('tbody tr', { hasText: 'Trevor' });
+	await expect(trevor.getByText('None')).toHaveCount(2);
+});
+
+test('the header ⓘ and the sort button have different names', async ({ page }) => {
+	await page.goto('/league-table');
+	await expect(table(page).getByRole('button', { name: 'Luck', exact: true })).toHaveCount(1);
+	await expect(table(page).getByRole('button', { name: 'About Luck' })).toHaveCount(1);
+});
+
 test('the Rankings menu links to it', async ({ page }) => {
 	await page.goto('/hall-of-fame');
 	await page.getByRole('button', { name: /Rankings/ }).click();
