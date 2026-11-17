@@ -103,21 +103,21 @@ INSERT INTO metric_definitions (
 'decimal', 'score', '0-100', 65.0000, 80.0000, 'decimal_1', 7),
 
 -- Head-to-Head Analysis
-('pythagorean_wins', 'Pythagorean Wins', 'head_to_head',
-'Expected wins based on points scored vs points allowed',
-'Estimates how many games a team "should have" won based purely on point differential, using the Pythagorean theorem of fantasy football.',
-'(Points For)² ÷ ((Points For)² + (Points Against)²) × Games Played',
-'Team with 1200 PF, 1100 PA, 14 games: (1200²÷(1200²+1100²))×14 = 8.2 expected wins',
-'Compares to actual wins to measure luck. If actual > expected, the team was lucky. If actual < expected, they were unlucky.',
+('pythagorean_wins', 'Expected (rivalries)', 'head_to_head',
+'In a rivalry, the wins each side''s points should have earned.',
+'Uses the points each manager scored in their games against each other. In a rivalry both scores are real output, so points for and against both count, which isn''t true across a whole season.',
+'Games × PF² ÷ (PF² + PA²)',
+'10 meetings, 1,300 points to 1,250: about 5.2 expected wins',
+'Compare it with the rivalry record. The difference is the Luckier column.',
 'decimal', 'games', '0-17', null, null, 'decimal_1', 8),
 
-('luck_factor', 'Luck Factor', 'head_to_head',
-'Difference between actual wins and expected wins (Pythagorean)',
-'Measures whether a team''s record was better or worse than their point differential suggests. Positive values indicate good luck, negative values indicate bad luck.',
-'Actual Wins - Pythagorean Wins',
-'Team with 10 actual wins and 8.2 expected wins: 10 - 8.2 = +1.8 (lucky)',
-'±2.0 games is typical variance, ±3.0+ is significant luck/unluck. Over multiple seasons, this should average to zero.',
-'decimal', 'games', '-5 to +5', null, null, 'decimal_1', 9),
+('luck_factor', 'Luck', 'team_performance',
+'Wins minus expected wins. Above zero means the schedule and close games broke your way.',
+'Regular-season wins, a tie as half, minus expected wins. Expected wins only look at your own scores, so what''s left in the gap is who you drew and how the close games went. The league''s luck adds up to zero every season.',
+'Wins + half of ties − expected wins',
+'9 wins against 7.4 expected: 9 − 7.4 = +1.6 wins',
+'A season''s luck usually lands within 2.3 wins either way and doesn''t carry into the next season, so a big number one year says nothing about the next.',
+'decimal', 'games', '-4.4 to +3.8', null, null, 'decimal_1', 9),
 
 -- Trade Analysis
 ('production_differential', 'Production Differential', 'trade_analysis',
@@ -179,13 +179,54 @@ INSERT INTO metric_definitions (
 '80%+ is very likely, 60-80% is likely, 40-60% is uncertain, 20-40% is unlikely, below 20% is very unlikely.',
 'percentage', 'percentage', '0-100%', 0.6000, 0.8000, 'percentage_1', 16),
 
-('power_score', 'Power Score', 'team_performance',
-'Composite team strength rating based on multiple performance factors',
-'Combines record, point differential, strength of schedule, and recent form into a single team rating.',
-'Weighted combination of Win%, Points, Schedule Strength, and Recent Form',
-'Team with 70% wins, high points, tough schedule: 85.5 power score',
-'90+ is elite, 80-90 is very strong, 70-80 is good, 60-70 is average, below 60 is struggling.',
-'decimal', 'score', '0-100', 70.0000, 85.0000, 'decimal_1', 17),
+('power_score', 'Power score', 'team_performance',
+'A 0 to 1 rating of how good a team is right now, built from its record, its season scoring and its last three weeks.',
+'45% win %, 35% points per game as a share of the league''s best, and 20% the average of the last three weeks as a share of the best. It blends what a team has done with how it''s scoring, so it mostly follows the standings and lifts a team whose points say it''s better than its record.',
+'0.45 × win % + 0.35 × (pts/g ÷ top pts/g) + 0.20 × (last 3 weeks'' average ÷ top last-3 average)',
+'A 6-2 team (0.750) scoring 132 a game against a top of 140, and 128 over the last three weeks against a top of 145: 0.45 × 0.750 + 0.35 × 0.943 + 0.20 × 0.883 = 0.84',
+'Higher is better, and 1.00 would mean leading in all three. Read it next to the record and Luck: a team ranked above its record has been scoring well and losing close or unlucky games.',
+'decimal', 'score', '0.47-0.90 from week 5 on', 0.7500, 0.8500, 'decimal_3', 17),
+
+-- Luck, schedule and scoring against the field (WP15, migration 019)
+('all_play_wins', 'Expected wins', 'team_performance',
+'The wins your scores would have earned if you''d played every team every week.',
+'Each week, the share of the other teams you outscored, with a tie counting half. Added up over the season, it''s the record your scoring earned no matter who you drew, scaled to the games you actually played.',
+'Sum over games of (teams outscored + half the teams tied) ÷ (teams − 1)',
+'You beat 7 of the 9 other scores in week 1, worth 0.78, and 3 of 9 in week 2, worth 0.33: 0.78 + 0.33 = 1.11 expected wins from 2 games.',
+'Read it next to actual wins. The gap between the two is luck, and across the league the two add up to the same total every season.',
+'decimal', 'games', '0-14', null, null, 'decimal_1', 32),
+
+('points_vs_league', 'Pts vs league', 'team_performance',
+'Points per game above the other teams'' average that same week.',
+'Each game, your score minus the average of every other team''s score that week, then averaged over your games. Comparing within the week takes out bye weeks, rule changes and high- or low-scoring years, so managers from different eras compare fairly.',
+'Average over games of (your score − the other teams'' average that week)',
+'You score 130 in a week the other nine average 122, so that game is +8. Average that over every game you''ve played.',
+'Zero is an average team. Over a career, +3 a game is a strong scorer. A single season tells you much less, since it barely carries into the next one, so read a season''s number as a result and not a rating.',
+'decimal', 'points_per_game', '-5 to +6 career; -17 to +17 a season', 3.0000, 5.0000, 'decimal_1', 33),
+
+('schedule_vs_league', 'Schedule', 'team_performance',
+'How much your opponents scored against you, per game, compared with the other teams that week.',
+'Each game, your opponent''s score minus the average of every other team''s score that week, averaged over your games. There''s no defense in fantasy, so this is pure draw: above zero means your opponents happened to have big weeks against you.',
+'Average over games of (your opponent''s score − the other teams'' average that week)',
+'Your opponent scores 140 in a week the other nine average 122, so that game is +18. Average that over every game you''ve played.',
+'Positive is a tough draw and negative an easy one. A season usually lands within 10 points a game either way, and it doesn''t carry into the next season.',
+'decimal', 'points_per_game', '-6 to +4 career; -10 to +10 a season', null, null, 'decimal_1', 34),
+
+('career_luck', 'Career luck', 'manager_performance',
+'Career wins minus expected wins. Above zero means the schedule and close games broke your way.',
+'Every season''s luck added up: regular-season wins, a tie as half, minus the expected wins your scores earned against the whole league each week. The season in progress counts as it''s played, like the career record.',
+'Sum over every season of (wins + half of ties − expected wins)',
+'125.5 regular-season wins against 113.1 expected: 125.5 − 113.1 = +12.4 wins',
+'Luck doesn''t carry from one season to the next, but it does pile up. Over a long career, 6 wins either way is ordinary and past 10 is a lot of breaks.',
+'decimal', 'games', '-13 to +13', null, null, 'decimal_1', 30),
+
+('rivalry_luck', 'Luckier', 'head_to_head',
+'Which side of a rivalry has won more games than its points earned.',
+'Each side''s wins in the rivalry minus its expected wins from the points scored in those games. The column shows the luckier side.',
+'Rivalry wins + half of ties − rivalry expected wins',
+'7 wins against 5.2 expected: +1.8 for that side',
+'Close games decide it. A rivalry with lots of one-score games can run 2 wins lucky without either side playing better.',
+'decimal', 'games', '-3 to +3', null, null, 'decimal_1', 35),
 
 -- League Analysis
 ('waiver_activity_index', 'Waiver Activity Index', 'league_analysis',
@@ -348,7 +389,7 @@ INSERT INTO field_definitions (field_id, field_name, api_endpoint, metric_id, fi
 -- Head-to-Head API Fields
 INSERT INTO field_definitions (field_id, field_name, api_endpoint, metric_id, field_description) VALUES  
 ('h2h_pyth_wins', 'pythagorean_wins', '/api/head-to-head', 'pythagorean_wins', 'Expected wins based on scoring'),
-('h2h_luck_factor', 'luck_factor', '/api/head-to-head', 'luck_factor', 'Actual vs expected win difference'),
+('h2h_luck_factor', 'luck_factor', '/api/head-to-head', 'rivalry_luck', 'Rivalry wins minus rivalry expected wins'),
 ('h2h_biggest_win', 'biggest_win_margin', '/api/head-to-head', 'biggest_win_margin', 'Largest victory margin'),
 ('h2h_most_lopsided', 'most_lopsided_game', '/api/head-to-head', 'most_lopsided_game', 'Biggest point differential');
 
@@ -373,7 +414,8 @@ FROM (VALUES
 ('competitiveness_index', 'close_games_score', 'component_of', 'Close games frequency is 25% of Competitiveness Index', 8),
 
 -- Luck and Pythagorean relationship
-('luck_factor', 'pythagorean_wins', 'derived_from', 'Luck factor calculated as actual wins minus Pythagorean wins', 10),
+('luck_factor', 'all_play_wins', 'derived_from', 'Luck is wins minus all-play (expected) wins', 10),
+('rivalry_luck', 'pythagorean_wins', 'derived_from', 'Rivalry luck is rivalry wins minus rivalry expected wins', 10),
 
 -- Performance consistency relationships
 ('season_consistency_score', 'career_win_percentage', 'related_to', 'Consistency affects overall win rate sustainability', 7),
@@ -385,7 +427,6 @@ FROM (VALUES
 
 -- Team performance relationships
 ('power_score', 'playoff_probability', 'related_to', 'Stronger teams have higher playoff probability', 8),
-('power_score', 'strength_of_schedule', 'related_to', 'Power score accounts for schedule difficulty', 7),
 
 -- Efficiency relationships
 ('faab_efficiency_rating', 'waiver_activity_index', 'related_to', 'FAAB efficiency relates to league waiver activity', 6)

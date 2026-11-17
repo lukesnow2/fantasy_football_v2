@@ -25,20 +25,10 @@ COMMENT ON COLUMN meta_data.metric_definitions.limitations IS
 -- CORRECTIONS: stored text that contradicts the pipeline or the data
 -- ============================================================================
 
--- power_score is produced by edw_etl_processor.py as
---   win_pct*0.4 + (points/league-week max)*0.3 + (form/league-week max)*0.2 + (1-SOS)*0.1
--- which is bounded by 0-1, not 0-100. Observed across 2,407 team-weeks:
--- min 0.198, max 1.000, mean 0.649. The published 0-100 range and its 70/85
--- thresholds would file every real team under "struggling".
-UPDATE meta_data.metric_definitions SET
-    calculation_formula = '(Win% × 0.4) + (Points ÷ Best Points That Week × 0.3) + (Recent Form ÷ Best Form That Week × 0.2) + ((1 − Strength of Schedule) × 0.1)',
-    example_calculation = 'Team at 70% wins, 90% of the week''s top score, 80% of the top recent form, 0.55 SOS: (0.70×0.4) + (0.90×0.3) + (0.80×0.2) + (0.45×0.1) = 0.755',
-    interpretation_guide = 'Runs 0 to 1 and is relative to the rest of the league that week. Observed league history: 0.65 is average, 0.75+ is a strong week, above 0.85 is dominant, below 0.45 is struggling.',
-    typical_range = '0.000-1.000',
-    good_value_threshold = 0.7500,
-    excellent_value_threshold = 0.8500,
-    display_format = 'decimal_3'
-WHERE metric_id = 'power_score';
+-- power_score, pythagorean_wins and luck_factor were rewritten by migration
+-- 019 (WP15, 2026-11); populate_metric_definitions.sql carries that copy, so
+-- their old corrections are gone from here. Their limitations, and those of
+-- the rows 019 added, are at the end of the LIMITATIONS section.
 
 -- strength_of_schedule is AVG(opponent win percentage), not an average of
 -- opponent power scores, and it is not recency weighted. Observed: 0.000-1.000,
@@ -89,23 +79,6 @@ UPDATE meta_data.metric_definitions SET
     display_format = 'decimal_2'
 WHERE metric_id = 'faab_efficiency_rating';
 
--- pythagorean_wins used a fixed exponent of 2. Fitted to this league's
--- completed regular seasons the exponent is 6.26 (6.54 for 2005-15, 5.91 for
--- 2016-25), cutting the miss against actual wins from 1.69 to 1.07 a season.
--- At 2, luck correlated +0.77 with a team's share of points scored (good
--- teams always read lucky); at the fitted exponent the correlation is 0.00.
-UPDATE meta_data.metric_definitions SET
-    detailed_description = 'Estimates how many regular-season games a team "should have" won from points scored and allowed alone. The exponent is fitted to this league''s own completed seasons rather than borrowed from another sport.',
-    calculation_formula = 'Points For^x ÷ (Points For^x + Points Against^x) × Games Played, with x fitted to league history (6.26 through 2025)',
-    example_calculation = 'Team with 1,700 PF, 1,600 PA, 14 games, x = 6.26: (1700^6.26 ÷ (1700^6.26 + 1600^6.26)) × 14 = 8.3 expected wins',
-    interpretation_guide = 'Compare with regular-season wins. A record more than about a game and a half from this, either way, is unusual in a single season; over a career it should come close to even.'
-WHERE metric_id = 'pythagorean_wins';
-
-UPDATE meta_data.metric_definitions SET
-    calculation_formula = 'Regular-Season Wins (ties as half) − Pythagorean Wins',
-    interpretation_guide = 'Positive is lucky, negative unlucky. One season''s standard deviation in this league is about 1.1 wins, so ±1.5 is a notable year and ±2.5 is rare. It does not persist: first-half luck predicts nothing about the second half (r = −0.04), and one season''s luck nothing about the next (r = −0.09).'
-WHERE metric_id = 'luck_factor';
-
 -- ============================================================================
 -- LIMITATIONS
 -- ============================================================================
@@ -139,14 +112,6 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'point_spread_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'The exponent is one number for the whole league across twenty years, refitted only when a season finishes. It describes a season well (it is fitted to describe) but predicts badly: from the first seven weeks, Pythagorean win percentage at 6.26 forecasts the rest of the season worse than a plain .500 guess, because early-season scoring is noisy. It assumes points scored and allowed are independent, which head-to-head scheduling breaks.'
-WHERE metric_id = 'pythagorean_wins';
-
-UPDATE meta_data.metric_definitions SET limitations =
-'Measures only the gap between a record and its points; schedule luck (whom you drew in your best and worst weeks) and points luck (opponents having big weeks) are mixed together. Over a fourteen game season the spread is about one win, so a single season''s value is weak evidence; a career total is more telling.'
-WHERE metric_id = 'luck_factor';
-
-UPDATE meta_data.metric_definitions SET limitations =
 'Counts only fantasy points produced after the trade. It ignores what each manager would otherwise have started, positional scarcity, and whether the player was even in the lineup, so points from a traded player who sat on a bench still count. Draft picks and FAAB included in a deal are not valued at all.'
 WHERE metric_id = 'production_differential';
 
@@ -175,10 +140,6 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'playoff_probability';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Points and recent form are normalised against the best team in that same league week, so the score describes standing relative to the field at that moment and cannot be compared across weeks or seasons. Where strength of schedule is missing it defaults to 0.5, which quietly pushes the schedule term to neutral rather than flagging the gap.'
-WHERE metric_id = 'power_score';
-
-UPDATE meta_data.metric_definitions SET limitations =
 'Depends on transaction records, which are sparse or entirely absent for the earliest seasons. A low value in an old season may mean the data was never captured rather than that the league was quiet.'
 WHERE metric_id = 'waiver_activity_index';
 
@@ -193,6 +154,40 @@ WHERE metric_id = 'biggest_win_margin';
 UPDATE meta_data.metric_definitions SET limitations =
 'A single game extreme across the whole history, so it is driven by outliers and by how many times two managers happen to have played. It says nothing about the typical margin between them.'
 WHERE metric_id = 'most_lopsided_game';
+
+-- WP15 (migration 019): luck against all-play wins, the rebuilt power score,
+-- and the new field and rivalry rows.
+UPDATE meta_data.metric_definitions SET limitations =
+'It mixes two kinds of luck, who you drew and how close games broke; the Schedule column shows the first on its own. Until 2026-11 this was wins minus Pythagorean wins, which counted points against as earned and missed most schedule luck.'
+WHERE metric_id = 'luck_factor';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Rivalries are a handful of games, so it moves a lot on one result. It uses an exponent of 2, flatter than the 6.26 that fits whole seasons here, so the better scorer in a rivalry tends to read as lucky.'
+WHERE metric_id = 'pythagorean_wins';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'The weights are a choice, not fitted, and the scoring terms are relative to the week''s best team, so a score isn''t comparable across seasons. It follows the standings closely (rank match 0.95). Before 2026-11 its points term read only that week''s score and it added a schedule term that was really the team''s own record again.'
+WHERE metric_id = 'power_score';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. Regular season only.'
+WHERE metric_id = 'all_play_wins';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'One season''s number carries into the next at only r = 0.10, because rosters reset every year. It compares a team with the league it played in, so it can''t say whether one era''s league was stronger than another''s.'
+WHERE metric_id = 'points_vs_league';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'It says how many points you faced, not whether you lost: a big opponent week against your bigger week costs nothing. Luck shows the effect on wins.'
+WHERE metric_id = 'schedule_vs_league';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'A sum, so it grows with the number of seasons played: compare managers with similar careers. Until 2026-11 it was built on Pythagorean wins and missed most schedule luck.'
+WHERE metric_id = 'career_luck';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Rivalries are short, so a single close game moves it a lot.'
+WHERE metric_id = 'rivalry_luck';
 
 -- ============================================================================
 -- REBUILD THE VIEW WITH THE NEW COLUMN

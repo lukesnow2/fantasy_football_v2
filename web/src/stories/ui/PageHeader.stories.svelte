@@ -118,8 +118,8 @@
 			title="Power Rankings"
 			phoneActionGap={14}
 		>
-			Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as
-			much.
+			Ranked on record, season scoring and the last three weeks, so a lucky start doesn't count
+			for as much.
 			{#snippet action()}<Button variant="secondary" href="#">Season 2026</Button>{/snippet}
 		</PageHeader>
 	{/snippet}

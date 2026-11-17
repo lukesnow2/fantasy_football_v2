@@ -38,7 +38,7 @@ test('the table has the nine headers in order', async ({ page }) => {
 		'W-L',
 		'Power score',
 		'Pts rk',
-		'Pyth W',
+		'Exp W',
 		'Luck',
 		'Playoffs'
 	];

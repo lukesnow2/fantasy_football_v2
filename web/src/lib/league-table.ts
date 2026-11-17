@@ -409,7 +409,7 @@ const COLUMN_LIST: LeagueColumn[] = [
 	numeric('pa', 'Points against', 96, 'pointsAgainst', 0, int, { better: 'low' }),
 	numeric('diff', 'Point diff', 84, 'pointDiff', 0, (v) => signed(v, 0), { tone: 'signed' }),
 	numeric('wins', 'Wins', 72, 'regWins', 1, one),
-	numeric('xwins', 'Expected wins', 104, 'expectedWins', 1, one, { metricId: 'pythagorean_wins' }),
+	numeric('xwins', 'Expected wins', 104, 'expectedWins', 1, one, { metricId: 'all_play_wins' }),
 	numeric('faab', 'FAAB efficiency', 120, 'faab', 2, (v) => `${v.toFixed(2)} pts/$`, {
 		metricId: 'faab_efficiency_rating',
 		blank: 'No bids'

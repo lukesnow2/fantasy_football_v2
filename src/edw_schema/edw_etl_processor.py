@@ -5919,6 +5919,48 @@ class EdwEtlProcessor:
                 JOIN edw.dim_week dw ON fm.week_key = dw.week_key
                 WHERE dw.week_type = 'regular'
             ),
+            weekly_field AS (
+                -- Each team-week against the rest of that week's field (WP15).
+                -- There's no defense in fantasy, so points for is the only
+                -- skill signal and points against is the schedule: a team's
+                -- score is independent of its opponent's (p = 0.79 against
+                -- random re-pairings, 2005-2026). All-play share: the other
+                -- teams it outscored, a tie as half. Points vs league and
+                -- schedule: its score, and its opponent's, less the average of
+                -- every team but itself, so a strong team doesn't lower its
+                -- own bar and the schedule number is pure draw.
+                SELECT
+                    a.league_key,
+                    a.week_key,
+                    a.team_key,
+                    a.matchup_week,
+                    AVG(CASE WHEN o.team_points < a.team_points THEN 1.0
+                             WHEN o.team_points = a.team_points THEN 0.5
+                             ELSE 0.0 END) as all_play_share,
+                    a.team_points - AVG(o.team_points) as points_vs_league,
+                    a.opponent_points - AVG(o.team_points) as schedule_vs_league
+                FROM actual_matchups a
+                JOIN actual_matchups o ON o.league_key = a.league_key
+                    AND o.week_key = a.week_key
+                    AND o.team_key <> a.team_key
+                GROUP BY a.league_key, a.week_key, a.team_key, a.matchup_week,
+                         a.team_points, a.opponent_points
+            ),
+            field_to_date AS (
+                -- Season to date (a league is one season): all-play wins add
+                -- up; the other two average. Every team plays every regular
+                -- week, so a running window over its own games is enough.
+                SELECT
+                    team_key,
+                    league_key,
+                    week_key,
+                    SUM(all_play_share) OVER season_so_far as all_play_wins,
+                    AVG(points_vs_league) OVER season_so_far as points_vs_league,
+                    AVG(schedule_vs_league) OVER season_so_far as schedule_vs_league
+                FROM weekly_field
+                WINDOW season_so_far AS (PARTITION BY league_key, team_key
+                                         ORDER BY matchup_week)
+            ),
             opponent_records AS (
                 -- Calculate win percentages for strength of schedule
                 SELECT 
@@ -6152,8 +6194,13 @@ class EdwEtlProcessor:
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
                     COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
-                    COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(COALESCE(cr.games_played, 1), 0)) as recent_form_score,
+                    -- No game in the last three weeks: fall back to the season
+                    -- average (points_for is only this week's points).
+                    COALESCE(rp.recent_form_score, ftp.weekly_points) as recent_form_score,
                     tsap.pythagorean_wins,
+                    ftd.all_play_wins,
+                    ftd.points_vs_league,
+                    ftd.schedule_vs_league,
                     -- Previous rank for rank change calculation
                     LAG(ftp.season_rank) OVER (PARTITION BY ftp.team_key, ftp.league_key ORDER BY dw.week_number) as prev_rank,
                     ls.playoff_spots,
@@ -6184,10 +6231,13 @@ class EdwEtlProcessor:
                 LEFT JOIN team_sos_and_pyth tsap ON ftp.team_key = tsap.team_key 
                     AND ftp.league_key = tsap.league_key 
                     AND ftp.week_key = tsap.week_key
-                LEFT JOIN recent_performance rp ON ftp.team_key = rp.team_key 
-                    AND ftp.league_key = rp.league_key 
+                LEFT JOIN recent_performance rp ON ftp.team_key = rp.team_key
+                    AND ftp.league_key = rp.league_key
                     AND ftp.week_key = rp.week_key
-                LEFT JOIN playoff_cutoff_teams pct ON ftp.league_key = pct.league_key 
+                LEFT JOIN field_to_date ftd ON ftp.team_key = ftd.team_key
+                    AND ftp.league_key = ftd.league_key
+                    AND ftp.week_key = ftd.week_key
+                LEFT JOIN playoff_cutoff_teams pct ON ftp.league_key = pct.league_key
                     AND ftp.week_key = pct.week_key
                 -- Every team in the league-week, whoever manages it: ranks and
                 -- odds are league-relative, so dropping a team (a hidden or
@@ -6198,13 +6248,24 @@ class EdwEtlProcessor:
             power_calculations AS (
                 SELECT 
                     ws.*,
-                    -- Improved power score calculation (weighted: 40% record, 30% points, 20% recent form, 10% SOS)
-                    (ws.win_percentage * 0.4 + 
-                     (ws.points_for / NULLIF(MAX(ws.points_for) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.3 +
-                     (ws.recent_form_score / NULLIF(MAX(ws.recent_form_score) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.2 +
-                     (1.0 - COALESCE(ws.strength_of_schedule, 0.5)) * 0.1) as power_score,
-                    -- Luck factor (actual cumulative wins vs expected wins based on matchups)
-                    ws.wins + 0.5 * ws.ties - ws.pythagorean_wins as luck_factor,
+                    -- Power score (WP15 D4, "R"): 45% record, 35% season
+                    -- scoring, 20% the last three weeks, each scoring term
+                    -- against the week's best. It used to read points_for,
+                    -- which is THIS week's points, not the season's, and add
+                    -- 10% (1 - opponents' win %): opponents' records count
+                    -- their game against you, so that term was your own record
+                    -- again (r = -0.76), and a fair version picks winners at a
+                    -- coin flip (50.8%). Backtest from week 5, 2005-2025:
+                    -- picks next week's winner 57.5% (was 56.4%) and moves
+                    -- 0.84 places a week (was 1.52).
+                    (ws.win_percentage * 0.45 +
+                     (ws.season_avg_points / NULLIF(MAX(ws.season_avg_points) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.35 +
+                     (ws.recent_form_score / NULLIF(MAX(ws.recent_form_score) OVER (PARTITION BY ws.league_key, ws.week_key), 0)) * 0.20) as power_score,
+                    -- Luck: wins (a tie as half) minus all-play wins. It was
+                    -- wins minus Pythagorean wins, which credits points
+                    -- against as earned and so hid schedule luck (WP15 D1).
+                    -- The league's luck now sums to zero every week.
+                    ws.wins + 0.5 * ws.ties - ws.all_play_wins as luck_factor,
                     -- Rank change from previous week
                     COALESCE(ws.prev_rank - ws.season_rank, 0) as rank_change,
                     -- Improved playoff probability based on rank, games back, and realistic scenarios
@@ -6303,8 +6364,12 @@ class EdwEtlProcessor:
                 ROUND(rp.biggest_win_margin, 2) as biggest_win_margin,
                 ROUND(rp.biggest_loss_margin, 2) as biggest_loss_margin,
                 ROUND(rp.pythagorean_wins, 2) as pythagorean_wins,
-                ROUND(rp.luck_factor, 2) as luck_factor,
-                ROUND(rp.calculated_playoff_odds, 4) as playoff_odds
+                ROUND(rp.luck_factor, 4) as luck_factor,
+                ROUND(rp.calculated_playoff_odds, 4) as playoff_odds,
+                -- 4 places, like luck_factor, so wins minus this is the luck.
+                ROUND(rp.all_play_wins, 4) as all_play_wins,
+                ROUND(rp.points_vs_league, 2) as points_vs_league,
+                ROUND(rp.schedule_vs_league, 2) as schedule_vs_league
             FROM ranked_power rp
             ORDER BY rp.league_key, rp.week_key, rp.power_rank
             """
@@ -6335,7 +6400,10 @@ class EdwEtlProcessor:
                     'biggest_loss_margin': row[16],
                     'pythagorean_wins': row[17],
                     'luck_factor': row[18],
-                    'playoff_odds': row[19]
+                    'playoff_odds': row[19],
+                    'all_play_wins': row[20],
+                    'points_vs_league': row[21],
+                    'schedule_vs_league': row[22]
                 })
         
         logger.info(f"🏪 Generated {len(marts)} weekly power ranking records with FIXED pythagorean wins and playoff odds")

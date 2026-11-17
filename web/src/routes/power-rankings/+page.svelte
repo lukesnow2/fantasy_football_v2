@@ -137,7 +137,7 @@
 		{ key: 'record', label: 'W-L', numeric: true, width: '56px' },
 		{ key: 'power', label: 'Power score', width: '200px' },
 		{ key: 'points', label: 'Pts rk', numeric: true, width: '64px' },
-		{ key: 'pyth', label: 'Pyth W', numeric: true, width: '64px' },
+		{ key: 'pyth', label: 'Exp W', numeric: true, width: '64px' },
 		{ key: 'luck', label: 'Luck', numeric: true, width: '64px' },
 		{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '72px' }
 	];
@@ -243,7 +243,8 @@
 </svelte:head>
 
 <PageHeader {kicker} title="Power Rankings" pending={firstLoad} phoneActionGap={14}>
-	Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as much.
+	Ranked on record, season scoring and the last three weeks, so a lucky start doesn't count for as
+	much.
 	{#snippet action()}
 		{#if seasons.length > 0}
 			<div class="controls">
@@ -342,7 +343,7 @@
 							{#if column.key === 'power'}
 								<StatTip metricId="power_score" label="Power score" />
 							{:else if column.key === 'pyth'}
-								<StatTip metricId="pythagorean_wins" label="Pyth W" />
+								<StatTip metricId="all_play_wins" label="Exp W" />
 							{:else if column.key === 'luck'}
 								<span class="luck-head">
 									<StatTip
