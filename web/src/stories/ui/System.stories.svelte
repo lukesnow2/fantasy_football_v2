@@ -187,8 +187,8 @@
 					<p style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--color-muted)">
 						The card has the same parts every time: name, the category pill, a one-line definition,
 						Calculation, How to read it, and a link to the full entry. The copy comes from the Data
-						Dictionary, so the two never disagree. It opens on hover or tap, closes with Escape, and
-						the label is a real button with aria-describedby.
+						Dictionary, so the two never disagree. The label is a real button named "About" and the
+						label; a click or tap opens the card, and the ×, Escape or a click outside closes it.
 					</p>
 				</div>
 				<StatTipCard definition={LUCK_FACTOR} />

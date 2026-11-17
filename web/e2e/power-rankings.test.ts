@@ -77,14 +77,16 @@ test('Try again retries the week that failed, not the one still loaded', async (
 });
 
 test('Escape closes the Luck StatTip after a click opens it', async ({ page }) => {
-	const luck = page.getByRole('columnheader').getByRole('button', { name: /Luck/ });
+	const luck = page.getByRole('columnheader').getByRole('button', { name: 'About Luck' });
 	await expect(luck).toHaveAttribute('aria-expanded', 'false');
 	await luck.click();
 	await expect(luck).toHaveAttribute('aria-expanded', 'true');
-	await expect(page.getByRole('tooltip').filter({ visible: true })).toBeVisible();
+	const card = page.getByRole('group', { name: /Luck/ });
+	await expect(card).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(luck).toHaveAttribute('aria-expanded', 'false');
-	await expect(page.getByRole('tooltip').filter({ visible: true })).toHaveCount(0);
+	await expect(card).toBeHidden();
+	await expect(luck).toBeFocused();
 });
 
 test('hovering a legend button dims the other lines', async ({ page }) => {

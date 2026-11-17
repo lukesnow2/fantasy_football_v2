@@ -1,19 +1,24 @@
 <script lang="ts">
 	/**
-	 * The one stat tooltip (System board, "Stat tooltips"; Power Rankings draws
+	 * The one metric card (System board, "Stat tooltips"; Power Rankings draws
 	 * it open beside Luck). The label is followed by a green ⓘ, and the two
-	 * together are a real button with aria-describedby pointing at the card.
+	 * together are a disclosure button: a real <button> named "About {label}",
+	 * with aria-expanded and aria-controls pointing at the card.
 	 *
-	 * The card is dark: clubhouse fill, 12px corners, 16px 18px of padding. It
-	 * shows the metric's name and category pill, its one-line definition, the
-	 * Calculation and How to read it blocks when the definition has them, and a
-	 * link to the entry in the Data Dictionary. The copy comes from
-	 * /api/meta-data through metricDefinitionsStore, the same data the Data
-	 * Dictionary reads, so the two never disagree.
+	 * The card holds a name, a category pill, Calculation and How to read it
+	 * blocks and a link, so it isn't a tooltip (W3C APG, Carbon's toggletip,
+	 * Sarah Higley): it's the disclosure's panel. A click, tap, Enter or Space
+	 * opens it and focus stays on the button; the next Tab moves into the card
+	 * (its close control, then the Data Dictionary link). It never opens on
+	 * hover and never times out. It closes with the button again, its × close
+	 * control, Escape (which puts focus back on the button), a click outside, or
+	 * focus moving somewhere else on the page.
 	 *
-	 * It opens on hover and on tap, stays open when clicked, and closes with
-	 * Escape or a click outside. It's placed in the viewport, so it stays on
-	 * screen at 390 wide and isn't clipped by a scrolling table.
+	 * The card is dark: clubhouse fill, 12px corners, 16px 18px of padding. Its
+	 * copy comes from /api/meta-data through metricDefinitionsStore, the same
+	 * data the Data Dictionary reads, so the two never disagree. It's placed in
+	 * the viewport, so it stays on screen at 390 wide and isn't clipped by a
+	 * scrolling table.
 	 *
 	 * A metric with no definition shows its label with no ⓘ and logs one console
 	 * warning. It never shows an empty card.
@@ -31,7 +36,7 @@
 	 * weight 700. Below 640px its tap area grows to 44px tall without moving the
 	 * line around it.
 	 */
-	import { onMount, tick, type Snippet } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import { placeCard } from './parts';
 	import StatTipCard from './StatTipCard.svelte';
 	import { cachedDefinition, loadDefinition, type StatTipDefinition } from './stat-tip-data';
@@ -92,6 +97,10 @@
 
 	const id = $props.id();
 	const cardId = `stattip-${id}`;
+	// The button's name is "About" and the label ("About Playoff odds"), read
+	// from the label as drawn so a label with markup is named the same way.
+	const aboutId = `${cardId}-about`;
+	const labelId = `${cardId}-label`;
 
 	// A definition already in the store (the Data Dictionary seeds every one)
 	// renders with the first paint; anything else loads once mounted, and again
@@ -100,16 +109,13 @@
 	let definition: StatTipDefinition | null = $state(cached);
 	let status: 'loading' | 'ready' | 'missing' = $state(cached ? 'ready' : 'loading');
 
-	/** Opened by the pointer resting on it, rather than by a click. */
-	let hovering = $state(false);
 	let root: HTMLSpanElement | undefined = $state();
 	let trigger: HTMLButtonElement | undefined = $state();
 	let card: HTMLSpanElement | undefined = $state();
 	let position: { top: number; left: number; width?: number } | null = $state(null);
-	let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// 'ready' always comes with a definition.
-	const showing = $derived((open || hovering) && status === 'ready');
+	const showing = $derived(open && status === 'ready');
 
 	$effect(() => {
 		const id = metricId;
@@ -131,8 +137,6 @@
 			cancelled = true;
 		};
 	});
-
-	onMount(() => () => clearTimeout(closeTimer));
 
 	function measure() {
 		if (!trigger || !card) return null;
@@ -186,14 +190,14 @@
 		};
 	});
 
-	// Escape and a click outside close it.
+	// Escape and a click outside close it. Escape always hands focus back to
+	// the button: while the card is open focus is on it, inside the card, or
+	// (Safari doesn't focus a clicked button) on the page body.
 	$effect(() => {
 		if (!showing) return;
 		const onKey = (event: KeyboardEvent) => {
 			if (event.key !== 'Escape') return;
-			const hadFocus = root?.contains(document.activeElement);
-			close();
-			if (hadFocus) trigger?.focus();
+			closeAndReturn();
 		};
 		const onPointer = (event: PointerEvent) => {
 			if (root && !root.contains(event.target as Node)) close();
@@ -207,28 +211,17 @@
 	});
 
 	function close() {
-		clearTimeout(closeTimer);
 		open = false;
-		hovering = false;
 	}
 
-	// A click, tap or Enter toggles the pinned state. A card the pointer opened
-	// isn't pinned yet, so the first click pins it rather than closing it.
+	function closeAndReturn() {
+		close();
+		trigger?.focus();
+	}
+
+	// A click, tap, Enter or Space opens or closes it.
 	function onclick() {
-		if (open) close();
-		else open = true;
-	}
-
-	function onpointerenter(event: PointerEvent) {
-		if (event.pointerType !== 'mouse') return;
-		clearTimeout(closeTimer);
-		hovering = true;
-	}
-
-	function onpointerleave(event: PointerEvent) {
-		if (event.pointerType !== 'mouse') return;
-		// A short grace period lets the pointer cross the gap into the card.
-		closeTimer = setTimeout(() => (hovering = false), 150);
+		open = !open;
 	}
 
 	function onfocusout(event: FocusEvent) {
@@ -245,15 +238,8 @@
 {#if status === 'missing'}
 	<span class:sr-only={iconOnly}>{@render labelText()}</span>
 {:else}
-	<span
-		class="stattip"
-		bind:this={root}
-		{onpointerenter}
-		{onpointerleave}
-		{onfocusout}
-		role="presentation"
-	>
-		<button
+	<span class="stattip" bind:this={root} {onfocusout} role="presentation">
+		<span id={aboutId} hidden>About</span><button
 			bind:this={trigger}
 			type="button"
 			class="trigger"
@@ -261,11 +247,12 @@
 			class:tap-inline={phoneTap === 'inline'}
 			class:tap-inline-small={phoneTap === 'inline-small'}
 			class:chip
-			aria-describedby={definition ? cardId : undefined}
+			aria-labelledby="{aboutId} {labelId}"
 			aria-expanded={showing}
+			aria-controls={definition ? cardId : undefined}
 			{onclick}
 		>
-			<span class:sr-only={iconOnly}>{@render labelText()}</span>{#if icon}{' '}<span
+			<span id={labelId} class:sr-only={iconOnly}>{@render labelText()}</span>{#if icon}{' '}<span
 					class="i"
 					class:header-icon={headerIcon}
 					aria-hidden="true">ⓘ</span
@@ -281,6 +268,7 @@
 				top={position?.top ?? null}
 				left={position?.left ?? null}
 				width={position?.width ?? null}
+				onclose={closeAndReturn}
 			/>
 		{/if}
 	</span>
@@ -295,7 +283,7 @@
 		padding: 0;
 		border: 0;
 		background: transparent;
-		cursor: help;
+		cursor: pointer;
 		font: inherit;
 		color: inherit;
 		letter-spacing: inherit;
