@@ -162,7 +162,7 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'luck_factor';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Rivalries are a handful of games, so it moves a lot on one result. The exponent is fitted to whole seasons, not to head-to-head series.'
+'Rivalries are a handful of games, so it moves a lot on one result. It uses an exponent of 2, flatter than the 6.26 that fits whole seasons here, so the better scorer in a rivalry tends to read as lucky.'
 WHERE metric_id = 'pythagorean_wins';
 
 UPDATE meta_data.metric_definitions SET limitations =

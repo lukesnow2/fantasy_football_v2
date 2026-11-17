@@ -106,8 +106,8 @@ INSERT INTO metric_definitions (
 ('pythagorean_wins', 'Expected (rivalries)', 'head_to_head',
 'In a rivalry, the wins each side''s points should have earned.',
 'Uses the points each manager scored in their games against each other. In a rivalry both scores are real output, so points for and against both count, which isn''t true across a whole season.',
-'Games × PF^x ÷ (PF^x + PA^x), with x fitted to this league (6.26)',
-'10 meetings, 1,300 points to 1,250: about 5.6 expected wins',
+'Games × PF² ÷ (PF² + PA²)',
+'10 meetings, 1,300 points to 1,250: about 5.2 expected wins',
 'Compare it with the rivalry record. The difference is the Luckier column.',
 'decimal', 'games', '0-17', null, null, 'decimal_1', 8),
 
@@ -224,7 +224,7 @@ INSERT INTO metric_definitions (
 'Which side of a rivalry has won more games than its points earned.',
 'Each side''s wins in the rivalry minus its expected wins from the points scored in those games. The column shows the luckier side.',
 'Rivalry wins + half of ties − rivalry expected wins',
-'7 wins against 5.6 expected: +1.4 for that side',
+'7 wins against 5.2 expected: +1.8 for that side',
 'Close games decide it. A rivalry with lots of one-score games can run 2 wins lucky without either side playing better.',
 'decimal', 'games', '-3 to +3', null, null, 'decimal_1', 35),
 
