@@ -288,6 +288,30 @@ describe('sorting and ranks', () => {
 		expect(COLUMNS.ppct.display(h).text).toBe('25.0%');
 	});
 
+	it('has no playoff win rate without bracket games, whatever the mart stored', () => {
+		// 0-0 in the bracket: the mart's old fallback rate was 0, which printed 0.0%.
+		const [none] = buildRows(
+			[{ managerName: 'N', playoffWins: 0, playoffLosses: 0, playoffWinPercentage: 0 }],
+			undefined,
+			[]
+		);
+		expect(none.playoffWinPct).toBeNull();
+		expect(COLUMNS.ppct.display(none)).toMatchObject({ text: 'None', blank: true });
+		expect(COLUMNS.ppct.sortKey(none)).toBeNull();
+		// A 0-3 record is a real 0.0%.
+		const [swept] = buildRows(
+			[{ managerName: 'S', playoffWins: 0, playoffLosses: 3, playoffWinPercentage: 0 }],
+			undefined,
+			[]
+		);
+		expect(COLUMNS.ppct.display(swept).text).toBe('0.0%');
+	});
+
+	it('has no swing with one finished season', () => {
+		const [one] = buildRows([{ managerName: 'O', seasonConsistencyScore: null }], undefined, []);
+		expect(COLUMNS.swing.display(one)).toMatchObject({ text: 'None', blank: true });
+	});
+
 	it('sorts the draft letter by the score behind it', () => {
 		const list = sortRows(rows, COLUMNS.grade, 'desc');
 		expect(list[0].name).toBe(sortRows(rows, COLUMNS.dval, 'desc')[0].name);

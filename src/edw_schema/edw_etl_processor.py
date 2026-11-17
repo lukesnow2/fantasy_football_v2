@@ -4183,9 +4183,12 @@ class EdwEtlProcessor:
             """,
             
             'vw_trade_analysis': """
-                -- CALIBRATED COMPREHENSIVE TRADE ANALYSIS VIEW (v2.0)
-                -- Fixes: Production scaling (0.15), Opportunity cost implementation, Refined thresholds (8-point)
-                -- Components: Production (40%), Playoff Impact (30%), Opportunity Cost (20%), Context (10%)
+                -- TRADE ANALYSIS VIEW (v3, migration 021)
+                -- Each side gets four 0-100 component scores, weighted
+                -- Production 40%, Playoffs 30%, Opportunity cost 20%, Timing 10%.
+                -- The final scores are those weighted averages, and the winner
+                -- is read from the final scores as shown: 8 or more apart, or
+                -- it's an Even Trade.
                 CREATE VIEW edw.vw_trade_analysis AS
                 WITH trade_groups AS (
                     -- Create synthetic trade group IDs by grouping reciprocal trades
@@ -4288,13 +4291,13 @@ class EdwEtlProcessor:
                     GROUP BY ts.synthetic_trade_group_id
                 ),
                 playoff_impact AS (
-                    -- Analyze playoff implications (30% weight)
+                    -- Playoff implications (30% weight). Both joins are held to
+                    -- the trade's season: a title in another season of the same
+                    -- league is not this trade's title.
                     SELECT 
                         ts.synthetic_trade_group_id,
-                        -- Check if teams made playoffs
                         MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_a_made_playoffs,
                         MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_b_made_playoffs,
-                         -- Check championship outcomes  
                         MAX(CASE WHEN fm.winner_team_key = ts.team_a_key THEN 1 ELSE 0 END) as team_a_champion,
                         MAX(CASE WHEN fm.winner_team_key = ts.team_b_key THEN 1 ELSE 0 END) as team_b_champion
                     FROM trade_synthesis ts
@@ -4302,32 +4305,89 @@ class EdwEtlProcessor:
                         ftp.league_key = ts.league_key 
                         AND ftp.season_year = ts.season_year
                         AND ftp.team_key IN (ts.team_a_key, ts.team_b_key))
-					LEFT JOIN edw.fact_matchup fm ON (
-						fm.league_key = ts.league_key
-						AND fm.season_year = fm.season_year
-						AND fm.winner_team_key IN (ts.team_a_key, ts.team_b_key)
-						AND is_championship = TRUE
+                    LEFT JOIN edw.fact_matchup fm ON (
+                        fm.league_key = ts.league_key
+                        AND fm.season_year = ts.season_year
+                        AND fm.winner_team_key IN (ts.team_a_key, ts.team_b_key)
+                        AND fm.is_championship = TRUE
                     )
                     GROUP BY ts.synthetic_trade_group_id
                 ),
                 contextual_factors AS (
-                    -- Trade timing context (10% weight)
+                    -- Trade timing (10% weight): late-season trades count for more.
                     SELECT 
                         ts.synthetic_trade_group_id,
-                        ts.transaction_week,
-                        -- Late season trades are more impactful
                         CASE 
                             WHEN ts.transaction_week >= 10 THEN 1.5
                             WHEN ts.transaction_week >= 6 THEN 1.2  
                             ELSE 1.0 
                         END as timing_multiplier,
-                        -- Current season status for dynamic evaluation
+                        -- A season's trades are settled once its title game has a
+                        -- winner, not on New Year's Day: the calendar year turned
+                        -- every trade Complete in January, and the season still
+                        -- being played Complete once its bracket ran into the next year.
                         CASE 
-                            WHEN ts.season_year < EXTRACT(YEAR FROM CURRENT_DATE) THEN 'Complete'
-                            WHEN ts.season_year = EXTRACT(YEAR FROM CURRENT_DATE) THEN 'In Progress'
-                            ELSE 'Future'
+                            WHEN EXISTS (
+                                SELECT 1 FROM edw.fact_matchup fm
+                                WHERE fm.league_key = ts.league_key
+                                  AND fm.season_year = ts.season_year
+                                  AND fm.is_championship = TRUE
+                                  AND fm.winner_team_key IS NOT NULL)
+                            THEN 'Complete'
+                            ELSE 'In Progress'
                         END as evaluation_status
                     FROM trade_synthesis ts
+                ),
+                components AS (
+                    -- The component scores for each side, each held to 0-100 (the
+                    -- scores the page shows). Production and opportunity cost are
+                    -- mirror images: B's is 100 minus A's.
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        LEAST(100, GREATEST(0, 50 + (fp.team_a_production - fp.team_b_production) * 0.15)) as a_production,
+                        LEAST(100, GREATEST(0, 50 - (fp.team_a_production - fp.team_b_production) * 0.15)) as b_production,
+                        CASE 
+                            WHEN pi.team_a_champion = 1 THEN 85
+                            WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
+                            WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
+                            ELSE 50
+                        END as a_playoff,
+                        CASE 
+                            WHEN pi.team_b_champion = 1 THEN 85
+                            WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
+                            WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
+                            ELSE 50
+                        END as b_playoff,
+                        LEAST(100, GREATEST(0, 50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2)) as a_opportunity,
+                        LEAST(100, GREATEST(0, 50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2)) as b_opportunity,
+                        cf.timing_multiplier
+                    FROM trade_synthesis ts
+                    LEFT JOIN fantasy_production fp ON ts.synthetic_trade_group_id = fp.synthetic_trade_group_id
+                    LEFT JOIN opportunity_cost oc ON ts.synthetic_trade_group_id = oc.synthetic_trade_group_id
+                    LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
+                    LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
+                ),
+                timed AS (
+                    -- Timing widens the gap: the side ahead on the other three
+                    -- components gets 50 + (multiplier - 1) x 50 (75 at week 10+,
+                    -- 60 at weeks 6-9), the side behind the mirror image, and an
+                    -- even trade 50 each. Adding the same amount to both sides,
+                    -- as before, could never move the verdict.
+                    SELECT 
+                        c.*,
+                        50 + SIGN((c.a_production - c.b_production) * 0.40
+                                + (c.a_playoff - c.b_playoff) * 0.30
+                                + (c.a_opportunity - c.b_opportunity) * 0.20)
+                           * (c.timing_multiplier - 1) * 50 as a_context
+                    FROM components c
+                ),
+                scored AS (
+                    SELECT 
+                        t.*,
+                        100 - t.a_context as b_context,
+                        ROUND(t.a_production * 0.40 + t.a_playoff * 0.30 + t.a_opportunity * 0.20 + t.a_context * 0.10, 1) as a_final,
+                        ROUND(t.b_production * 0.40 + t.b_playoff * 0.30 + t.b_opportunity * 0.20 + (100 - t.a_context) * 0.10, 1) as b_final
+                    FROM timed t
                 )
                 SELECT 
                     dl.league_name,
@@ -4348,7 +4408,7 @@ class EdwEtlProcessor:
                     ROUND(fp.team_b_production, 1) as team_b_production,
                     ROUND(fp.team_a_production - fp.team_b_production, 1) as production_differential,
                     
-                    -- Opportunity cost metrics (NEW)
+                    -- Opportunity cost metrics
                     ROUND(COALESCE(oc.team_a_gave_avg_value, 0), 1) as team_a_pre_trade_avg,
                     ROUND(COALESCE(oc.team_b_gave_avg_value, 0), 1) as team_b_pre_trade_avg,
                     ROUND(COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0), 1) as opportunity_differential,
@@ -4359,97 +4419,20 @@ class EdwEtlProcessor:
                     pi.team_a_champion,
                     pi.team_b_champion,
                     
-                    -- Component Scores (0-100 scale) - CALIBRATED
-                    ROUND(LEAST(100, GREATEST(0, 
-                        50 + (fp.team_a_production - fp.team_b_production) * 0.15  -- Reduced from 0.3
-                    )), 1) as team_a_production_score,
+                    -- Side A's component scores (0-100)
+                    ROUND(sc.a_production, 1) as team_a_production_score,
+                    ROUND(sc.a_playoff, 1) as team_a_playoff_score,
+                    ROUND(sc.a_opportunity, 1) as team_a_opportunity_score,
+                    ROUND(sc.a_context, 1) as team_a_context_score,
                     
-                    ROUND(CASE 
-                        WHEN pi.team_a_champion = 1 THEN 85  -- Reduced from 90
-                        WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70  -- Reduced from 75
-                        WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30  -- Increased from 25
-                        ELSE 50
-                    END, 1) as team_a_playoff_score,
+                    -- Final weighted scores (0-100)
+                    sc.a_final as team_a_final_score,
+                    sc.b_final as team_b_final_score,
                     
-                    -- IMPLEMENTED Opportunity Cost Score (20% weight)
-                    ROUND(LEAST(100, GREATEST(0,
-                        50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2
-                    )), 1) as team_a_opportunity_score,
-                    
-                    ROUND(50 + (cf.timing_multiplier - 1) * 25, 1) as team_a_context_score,
-                    
-                    -- Final Weighted Score (0-100) - REFINED FORMULA
-                    ROUND(
-                        LEAST(100, GREATEST(0, 
-                            (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_a_champion = 1 THEN 85
-                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                        )), 1
-                    ) as team_a_final_score,
-                    
-                    ROUND(
-                        LEAST(100, GREATEST(0, 
-                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_b_champion = 1 THEN 85
-                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                        )), 1
-                    ) as team_b_final_score,
-                    
-                    -- Winner determination - REFINED THRESHOLDS
+                    -- The winner, from the final scores as shown
                     CASE 
-                        WHEN ABS((50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_a_champion = 1 THEN 85
-                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10 -
-                            
-                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 -
-                            CASE 
-                                WHEN pi.team_b_champion = 1 THEN 85
-                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 -
-                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 -
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10) >= 8 
-                        THEN 
-                            CASE WHEN (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                                CASE 
-                                    WHEN pi.team_a_champion = 1 THEN 85
-                                    WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                    WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                    ELSE 50
-                                END * 0.30 +
-                                (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10 > 
-                                (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                                CASE 
-                                    WHEN pi.team_b_champion = 1 THEN 85
-                                    WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                    WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                    ELSE 50
-                                END * 0.30 +
-                                (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
-                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                            THEN dma.manager_name 
-                            ELSE dmb.manager_name 
-                            END
+                        WHEN ABS(sc.a_final - sc.b_final) >= 8 
+                        THEN CASE WHEN sc.a_final > sc.b_final THEN dma.manager_name ELSE dmb.manager_name END
                         ELSE 'Even Trade'
                     END as trade_winner,
                     
@@ -4486,6 +4469,7 @@ class EdwEtlProcessor:
                 LEFT JOIN opportunity_cost oc ON ts.synthetic_trade_group_id = oc.synthetic_trade_group_id
                 LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
                 LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
+                LEFT JOIN scored sc ON ts.synthetic_trade_group_id = sc.synthetic_trade_group_id
                 ORDER BY dl.league_name, ts.transaction_date DESC
             """,
             
@@ -5551,10 +5535,11 @@ class EdwEtlProcessor:
                 ma.championships_won,
                 ma.championship_appearances,
                 ma.playoff_appearances,
+                -- NULL, not 0, for a manager with no bracket games: no
+                -- games is no rate, and 0 read as "lost every one".
                 CASE 
                     WHEN (ma.total_playoff_wins + ma.total_playoff_losses) > 0 
                     THEN ROUND(ma.total_playoff_wins::decimal / (ma.total_playoff_wins + ma.total_playoff_losses), 4)
-                    ELSE 0
                 END as playoff_win_percentage,
                 COALESCE(ds.avg_draft_position, 0) as avg_draft_grade,
                 ma.best_draft_year,
@@ -5571,7 +5556,10 @@ class EdwEtlProcessor:
                     WHEN fs.faab_spent > 0
                     THEN ROUND(fs.faab_starter_points / fs.faab_spent, 4)
                 END as faab_efficiency_rating,
-                COALESCE(ROUND(ma.win_consistency, 4), 0) as season_consistency_score,
+                -- NULL until a manager has two finished seasons: one season
+                -- has no year-to-year spread (STDDEV of one value is NULL),
+                -- and 0 read as "perfectly steady".
+                ROUND(ma.win_consistency, 4) as season_consistency_score,
                 ma.best_season_record,
                 ma.worst_season_record
             FROM manager_aggregates ma
