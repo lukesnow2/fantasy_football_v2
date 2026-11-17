@@ -428,6 +428,28 @@ describe('oddsDetail', () => {
 		expect(rows[1].value).toBe('20.5-6.5');
 		expect(rows[2].value).toBe('+1.1 wins');
 	});
+
+	const titleRow = (t: Parameters<typeof oddsDetail>[0], settled?: boolean) =>
+		oddsDetail(t, settled).find((r) => r.term === 'Bye · #1 seed · Title')?.value;
+
+	it('prints the bye and #1 seed as settled once the standings are final', () => {
+		const t = team({ managerName: 'A', byeOdds: 1, topSeedOdds: 0, titleOdds: 0.31 });
+		// A certain 100% in the simulation still reads as >99% until it's settled.
+		expect(titleRow(t)).toBe('>99% · <1% · 31%');
+		expect(titleRow(t, true)).toBe('100% · 0% · 31%');
+	});
+
+	it('prints a team knocked out of the bracket at 0% for the title', () => {
+		const t = team({
+			managerName: 'A',
+			byeOdds: 0,
+			topSeedOdds: 0,
+			titleOdds: 0,
+			knockedOut: true
+		});
+		expect(titleRow(t, true)).toBe('0% · 0% · 0%');
+		expect(titleRow({ ...t, knockedOut: false }, true)).toBe('0% · 0% · <1%');
+	});
 });
 
 describe('oddsMethod', () => {
