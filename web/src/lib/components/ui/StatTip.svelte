@@ -67,6 +67,11 @@
 		phoneTap?: 'inline' | 'inline-small';
 		/** Draw the label as a chip. */
 		chip?: boolean;
+		/**
+		 * The ⓘ at weight 600 and never uppercased (an uppercase ⓘ is Ⓘ), as
+		 * the League Table's sortable headers draw it.
+		 */
+		headerIcon?: boolean;
 	}
 
 	let {
@@ -81,7 +86,8 @@
 		spanOf,
 		phoneTarget = false,
 		phoneTap,
-		chip = false
+		chip = false,
+		headerIcon = false
 	}: Props = $props();
 
 	const id = $props.id();
@@ -261,10 +267,10 @@
 		>
 			<span class:sr-only={iconOnly}>{@render labelText()}</span>{#if icon}{' '}<span
 					class="i"
+					class:header-icon={headerIcon}
 					aria-hidden="true">ⓘ</span
 				>{/if}
-		</button
-		><!-- No space after the button: mid-sentence, it would sit before the
+		</button><!-- No space after the button: mid-sentence, it would sit before the
 		     punctuation that follows the label. -->{#if definition}
 			<StatTipCard
 				bind:element={card}
@@ -356,5 +362,10 @@
 
 	.i {
 		color: var(--color-field);
+	}
+
+	.i.header-icon {
+		font-weight: 600;
+		text-transform: none;
 	}
 </style>

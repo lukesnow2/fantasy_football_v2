@@ -217,3 +217,23 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Phone header inset (League Table)" parameters={{ viewport: { defaultViewport: 'mobile1' } }}>
+	{#snippet template()}
+		<div style="width: 358px">
+			<Card
+				title="Overview"
+				padding="22px 24px 10px"
+				phonePadding="16px 0 6px"
+				headGap={4}
+				phoneHeadGap={8}
+				headSpacing="6px 16px"
+				phoneHeadStack
+				phoneHeadInset={16}
+			>
+				{#snippet action()}<span style="font-size: 13px; color: var(--color-muted)">11 managers · sorted by titles, highest first</span>{/snippet}
+				<p style="margin: 0; padding: 0 16px">The table scrolls to the card's edges.</p>
+			</Card>
+		</div>
+	{/snippet}
+</Story>

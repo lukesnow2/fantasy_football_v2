@@ -72,6 +72,10 @@
 	 * The Commissioner page (WP12) adds `size="flag"`, 1px 6px at 12px with no
 	 * letter spacing, for "Deactivated" (on `missed`).
 	 *
+	 * The League Table (WP14) adds `size="name"`, 2px 7px at 12px with no
+	 * letter spacing, for a tag after a manager's name ("You" on `playoffs`,
+	 * "League alum" on `pending`).
+	 *
 	 * The Constitution (WP11) adds `passed`, field-tint with field text, and
 	 * two sizes with 3px 9px of padding and no letter spacing: `status` (a
 	 * proposal's status and category) and `pill`, a 999px pill ("1 proposed").
@@ -96,7 +100,8 @@
 			| 'note'
 			| 'status'
 			| 'pill'
-			| 'flag';
+			| 'flag'
+			| 'name';
 		caps?: boolean;
 		wrapOnPhone?: boolean;
 		center?: boolean;
@@ -198,6 +203,13 @@
 	/* A flag after a name (the Commissioner page's "Deactivated", WP12). */
 	.size-flag {
 		padding: 1px 6px;
+		font-size: 12px;
+		letter-spacing: normal;
+	}
+
+	.size-name {
+		flex: none;
+		padding: 2px 7px;
 		font-size: 12px;
 		letter-spacing: normal;
 	}

@@ -69,6 +69,9 @@
 	 *   `phoneHeadStackGap` px
 	 * - `phoneHeadAlign`: "center" when the action is a 44px link the title
 	 *   centers against
+	 * - `phoneHeadInset`: px of padding on the header row's sides, for a card
+	 *   whose phone padding is 0 on the sides so a table can scroll to its
+	 *   edges (the League Table's phone card, 16)
 	 */
 	import type { Snippet } from 'svelte';
 
@@ -112,6 +115,8 @@
 		phoneHeadStack?: boolean;
 		phoneHeadStackGap?: number;
 		phoneHeadAlign?: 'baseline' | 'center';
+		/** Px of side padding on the header row below 640px. */
+		phoneHeadInset?: number;
 		/** A 2px ink rule under the header row. */
 		headRule?: boolean;
 		/** Px between the header row and its rule. */
@@ -151,6 +156,7 @@
 		phoneHeadGap,
 		phoneHeadStack = false,
 		phoneHeadStackGap = 4,
+		phoneHeadInset,
 		phoneHeadAlign = 'baseline',
 		headRule = false,
 		headRuleGap = 10,
@@ -191,6 +197,7 @@
 	style:--card-rule-gap-phone={`${phoneHeadRuleGap ?? headRuleGap}px`}
 	style:--card-head-spacing-phone={phoneHeadSpacing}
 	style:--card-title-lh-phone={phoneTitleLineHeight}
+	style:--card-head-inset-phone={phoneHeadInset != null ? `${phoneHeadInset}px` : undefined}
 	aria-labelledby={title ? `card-${headingId}` : undefined}
 	aria-label={title ? undefined : label}
 >
@@ -199,6 +206,7 @@
 			class="head"
 			class:stack-phone={phoneHeadStack}
 			class:center-phone={phoneHeadAlign === 'center'}
+			class:inset-phone={phoneHeadInset != null}
 			class:rule={headRule}
 		>
 			{#if title && icon}
@@ -430,6 +438,11 @@
 
 		.head.center-phone {
 			align-items: center;
+		}
+
+		.head.inset-phone {
+			padding-left: var(--card-head-inset-phone);
+			padding-right: var(--card-head-inset-phone);
 		}
 
 		.title {

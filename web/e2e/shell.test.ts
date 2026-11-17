@@ -21,6 +21,8 @@ test.describe('at 1280', () => {
 
 		await page.keyboard.press('ArrowDown');
 		await page.keyboard.press('ArrowDown');
+		await expect(menu.getByRole('menuitem', { name: /League Table/ })).toBeFocused();
+		await page.keyboard.press('ArrowDown');
 		await expect(menu.getByRole('menuitem', { name: /League History/ })).toBeFocused();
 
 		await page.keyboard.press('Escape');

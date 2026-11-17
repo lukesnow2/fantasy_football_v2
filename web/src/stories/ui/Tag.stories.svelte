@@ -164,3 +164,12 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="After a name (League Table)">
+	{#snippet template()}
+		<div style="display: flex; gap: 8px; flex-wrap: wrap">
+			<Tag variant="playoffs" size="name">You</Tag>
+			<Tag variant="pending" size="name">League alum</Tag>
+		</div>
+	{/snippet}
+</Story>

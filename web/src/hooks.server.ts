@@ -62,6 +62,7 @@ const PUBLIC_PREFIXES = [
 	'/this-season',
 	'/historical',
 	'/hall-of-fame',
+	'/league-table',
 	'/managers',
 	'/power-rankings',
 	'/trades',

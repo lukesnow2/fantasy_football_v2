@@ -114,3 +114,12 @@
 		color: var(--color-ink-2);
 	}
 </style>
+
+<Story name="Header ⓘ beside a sort button (League Table)">
+	{#snippet template()}
+		<span
+			style="font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-ink-2)"
+			>Luck <StatTip metricId="luck_factor" label="Luck" iconOnly headerIcon /></span
+		>
+	{/snippet}
+</Story>

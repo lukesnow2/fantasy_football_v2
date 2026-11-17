@@ -19,6 +19,8 @@
 		 * ("Grade ⓘ" in Draft Central's 60px column puts the ⓘ on a second line).
 		 */
 		wrapHeader?: boolean;
+		/** Px of space before this column instead of the table's columnGap (the League Table's Manager: 8). */
+		gap?: number;
 	}
 </script>
 
@@ -36,6 +38,13 @@
 	 * Hall of Fame's tier rows: a name, a count and the tier's numbers on the
 	 * right); the snippet brings its own padding. `maxHeight` scrolls the rows
 	 * under a header that stays put (League History's chart table).
+	 *
+	 * The League Table (WP14) adds `caption` (a visually hidden caption),
+	 * `ariaSort` (each header's aria-sort), `mine` (the signed-in member's row:
+	 * field-wash with a 3px field edge on its first cell, which moves its text
+	 * 6px in), a column's own `gap`, and `stickyLead="phone"`: below 640px the
+	 * first two columns stay put, the second `leadWidth` px in, with a 1px
+	 * line-soft edge on its right.
 	 *
 	 *   <DataTable {columns} {rows} divider={(_, i) => (i === 6 ? 'Playoff line' : null)}>
 	 *     {#snippet cell(row, column)}...{/snippet}
@@ -106,6 +115,28 @@
 		 * (League History's chart table: 320px).
 		 */
 		maxHeight?: string;
+		/** A visually hidden caption. */
+		caption?: string;
+		/** A header's aria-sort, for a table sorted by its headers. */
+		ariaSort?: (column: Column) => 'ascending' | 'descending' | 'none' | undefined;
+		/** The signed-in member's own row. */
+		mine?: (row: Row, index: number) => boolean;
+		/** Below 640px, keep the first two columns in place. */
+		stickyLead?: 'phone';
+		/** Px: the first column's width, where the second sticky column starts. */
+		leadWidth?: number;
+		/**
+		 * False when a parent scrolls the table (the League Table's phone region,
+		 * whose padding has to scroll with the rows); the table then doesn't
+		 * scroll itself.
+		 */
+		scroll?: boolean;
+		/**
+		 * Px of room on each side of the scroller for content that runs past a
+		 * cell, so it isn't clipped (a last-column leader chip: 8). The table
+		 * doesn't move.
+		 */
+		bleed?: number;
 	}
 
 	let {
@@ -131,17 +162,33 @@
 		stickyRule = true,
 		edgeInset,
 		headerAlign,
-		maxHeight
+		maxHeight,
+		caption,
+		ariaSort,
+		mine,
+		stickyLead,
+		leadWidth = 0,
+		scroll = true,
+		bleed
 	}: Props = $props();
 </script>
 
-<div class="scroll" class:capped={maxHeight != null} style:max-height={maxHeight}>
+<div
+	class="scroll"
+	class:capped={maxHeight != null}
+	class:no-scroll={!scroll}
+	class:bleed={bleed != null}
+	style:--bleed={bleed != null ? `${bleed}px` : undefined}
+	style:max-height={maxHeight}
+>
 	<table
 		class:sticky-first={stickyFirst === true}
 		class:sticky-first-phone={stickyFirst === 'phone'}
 		style:--sticky-pad={stickyPad != null ? `${stickyPad}px` : undefined}
 		class:no-sticky-rule={!stickyRule}
 		class:inset={edgeInset != null}
+		class:sticky-lead-phone={stickyLead === 'phone'}
+		style:--lead-left={stickyLead ? `${leadWidth}px` : undefined}
 		style:--edge-inset={edgeInset != null ? `${edgeInset}px` : undefined}
 		aria-label={label}
 		style:min-width={minWidth}
@@ -149,6 +196,7 @@
 		style:--row-pad="{rowPadding}px"
 		style:--col-gap="{columnGap}px"
 	>
+		{#if caption}<caption class="sr-only">{caption}</caption>{/if}
 		<thead>
 			<tr>
 				{#each columns as column (column.key)}
@@ -161,7 +209,9 @@
 						style:vertical-align={headerAlign}
 						style:width={column.width}
 						style:height={headerHeight != null ? `${headerHeight}px` : undefined}
+						style:padding-left={column.gap != null ? `${column.gap}px` : undefined}
 						aria-label={column.ariaLabel}
+						aria-sort={ariaSort?.(column)}
 					>
 						<span
 							class:sr-only={hideHeader}
@@ -197,9 +247,16 @@
 						</td>
 					</tr>
 				{/if}
-				<tr class:highlighted={highlighted?.(row, index)} class:selected={selected?.(row, index)}>
+				<tr
+					class:highlighted={highlighted?.(row, index)}
+					class:selected={selected?.(row, index)}
+					class:mine={mine?.(row, index)}
+				>
 					{#each columns as column (column.key)}
-						<td class:num={column.numeric}>
+						<td
+							class:num={column.numeric}
+							style:padding-left={column.gap != null ? `${column.gap}px` : undefined}
+						>
 							{#if cell}{@render cell(
 									row,
 									column,
@@ -219,6 +276,15 @@
 	.scroll {
 		position: relative;
 		overflow-x: auto;
+	}
+
+	.scroll.no-scroll {
+		overflow: visible;
+	}
+
+	.scroll.bleed {
+		margin: 0 calc(-1 * var(--bleed));
+		padding: 0 var(--bleed);
 	}
 
 	table {
@@ -360,6 +426,40 @@
 
 		.sticky-first-phone tr.selected td:first-child {
 			background: var(--color-field-tint);
+		}
+	}
+
+	tr.mine td {
+		background: var(--color-field-wash);
+	}
+
+	/* 6px in from the edge, and from any edgeInset. */
+	tr.mine td:first-child {
+		padding-left: calc(var(--edge-inset, 0px) + 6px);
+		box-shadow: inset 3px 0 0 var(--color-field);
+	}
+
+	@media (max-width: 639.98px) {
+		.sticky-lead-phone th:nth-child(-n + 2),
+		.sticky-lead-phone td:nth-child(-n + 2) {
+			position: sticky;
+			z-index: 1;
+			background: var(--color-card);
+		}
+
+		.sticky-lead-phone th:first-child,
+		.sticky-lead-phone td:first-child {
+			left: 0;
+		}
+
+		.sticky-lead-phone th:nth-child(2),
+		.sticky-lead-phone td:nth-child(2) {
+			left: var(--lead-left);
+			box-shadow: 1px 0 0 var(--color-line-soft);
+		}
+
+		.sticky-lead-phone tr.mine td:nth-child(-n + 2) {
+			background: var(--color-field-wash);
 		}
 	}
 

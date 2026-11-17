@@ -281,3 +281,32 @@
 		</div>
 	{/snippet}
 </Story>
+
+<Story name="Sorted, with the signed-in row (League Table)">
+	{#snippet template()}
+		<div style="max-width: 560px">
+			<DataTable
+				caption="League table, Overview, sorted by Titles"
+				rowPadding={11}
+				columnGap={12}
+				ariaSort={(column) =>
+					column.key === 'titles' ? 'descending' : column.key === 'rank' ? undefined : 'none'}
+				mine={(row) => row.name === 'Luke S'}
+				stickyLead="phone"
+				leadWidth={32}
+				bleed={8}
+				columns={[
+					{ key: 'rank', label: '#', width: '44px' },
+					{ key: 'name', label: 'Manager', width: '200px', gap: 8 },
+					{ key: 'titles', label: 'Titles ▼', numeric: true, width: '70px' },
+					{ key: 'pct', label: 'Win %', numeric: true, width: '72px' }
+				]}
+				rows={[
+					{ rank: 1, name: 'Trevor', titles: 7, pct: '.564' },
+					{ rank: 2, name: 'Gabe the Younger', titles: 3, pct: '.625' },
+					{ rank: 5, name: 'Luke S', titles: 2, pct: '.434' }
+				]}
+			/>
+		</div>
+	{/snippet}
+</Story>
