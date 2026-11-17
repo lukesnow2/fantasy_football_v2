@@ -26,8 +26,10 @@ ALTER TABLE edw.mart_weekly_power_rankings
     ADD COLUMN IF NOT EXISTS schedule_vs_league DECIMAL(8,2);
 
 -- Four places, like luck_factor, so wins minus expected wins is the luck on
--- every row. A no-op where the column was added that way; widens it where an
--- earlier draft of this migration added it at two.
+-- every row. A no-op where the column was added that way. An earlier draft of
+-- this migration added it at two places, and the pipeline won't re-run a
+-- migration it has recorded, so a database that recorded that draft (only
+-- dev, which was widened by hand) needs this run by hand.
 ALTER TABLE edw.mart_weekly_power_rankings
     ALTER COLUMN all_play_wins TYPE DECIMAL(8,4);
 

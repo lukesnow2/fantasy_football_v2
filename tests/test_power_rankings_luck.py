@@ -33,6 +33,7 @@ GAMES = {
     4: [(1, 95.0, 2, 140.0), (3, 125.0, 4, 105.0)],
 }
 TEAMS = [1, 2, 3, 4]
+QUIET_WEEK = 7
 
 
 def week_key(week):
@@ -116,6 +117,16 @@ def engine():
                     {'l': LEAGUE, 's': SEASON, 'k': week_key(week), 't': t,
                      'wp': w / g, 'pf': s[t][0], 'pa': s[t][1],
                      'rank': order.index(t) + 1, 'avg': pts / g})
+        # A ranked week with no games in it or the two before it, so the
+        # last-three-weeks form has nothing to average and falls back.
+        conn.execute(text("INSERT INTO edw.dim_week VALUES (:k, :s, :w, 'regular')"),
+                     {'k': week_key(QUIET_WEEK), 's': SEASON, 'w': QUIET_WEEK})
+        for t in TEAMS:
+            w, pts, g = totals[t]
+            conn.execute(text("""INSERT INTO edw.fact_team_performance VALUES
+                (:l, :s, :k, :t, :wp, 0, 0, 1, :avg, null)"""),
+                {'l': LEAGUE, 's': SEASON, 'k': week_key(QUIET_WEEK), 't': t,
+                 'wp': w / g, 'avg': pts / g})
         conn.execute(text("CREATE SCHEMA meta_data"))
     with open('src/edw_schema/meta_data_schema.sql') as f:
         with eng.begin() as conn:
@@ -186,6 +197,14 @@ def test_power_score_reads_season_scoring_with_no_schedule_term(rows):
                     + 0.20 * form[team] / max(form.values()))
             assert float(rows[(team, week)]['power_score']) == pytest.approx(want, abs=0.0005)
     assert max(abs(a - f) for a, f in zip(avg.values(), form.values())) > 3  # they do part
+
+
+def test_form_with_no_recent_games_falls_back_to_the_season_average(rows):
+    # Week 7's points_for is 0 (no game); the fallback is the season average,
+    # not that week's points over games played.
+    for team in TEAMS:
+        avg = sum(scores(w)[team][0] for w in GAMES) / len(GAMES)
+        assert float(rows[(team, QUIET_WEEK)]['recent_form_score']) == pytest.approx(avg, abs=0.01)
 
 
 def test_migration_adds_the_columns_and_dictionary_rows_twice_over(engine):
