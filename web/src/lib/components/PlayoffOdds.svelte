@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { compareSeeding } from '$lib/playoff-odds';
 	import { formatOdds, formatRecord } from '$lib/home';
+	import { gradeLines, seasonGrade, skillLine, type OddsHistory } from '$lib/odds-history';
 	import {
 		oddsDetail,
 		oddsMethod,
@@ -9,13 +10,17 @@
 		type OddsResponse,
 		type OddsTeam
 	} from '$lib/this-season';
+	import Button from './ui/Button.svelte';
 	import Card from './ui/Card.svelte';
 	import Segmented from './ui/Segmented.svelte';
 	import Tag from './ui/Tag.svelte';
 
 	/**
-	 * Simulated playoff odds for the This Season page (WP4 S4.4), and the
-	 * Playoff Field once the postseason starts (S4.9). The model lives in
+	 * Simulated playoff odds for the This Season page (WP4 S4.4). Through the
+	 * playoffs it opens on the title odds, which follow the real bracket, with
+	 * the seeds (S4.9) one tap away. Once the title game is played it grades
+	 * the season's odds against what happened. The odds week by week live on
+	 * the Playoff Odds page, which every phase links to. The model lives in
 	 * $lib/playoff-odds; this only presents it.
 	 */
 
@@ -42,7 +47,10 @@
 	let fetched = $state<OddsResponse | null>(null);
 	let loading = $state(true);
 	let failed = $state(false);
-	let metric = $state<Metric>('playoffOdds');
+	/** Undefined until a reader picks: the regular season opens on the playoff odds, the playoffs on the title. */
+	let pickedMetric = $state<Metric | undefined>(undefined);
+	/** The playoffs' second view: the seeds, as the regular season left them. */
+	let postView = $state<'titleOdds' | 'seeds'>('titleOdds');
 	/** The open row. Undefined until a reader picks one: then the top row is open. */
 	let chosen = $state<number | null | undefined>(undefined);
 	let showMethod = $state(false);
@@ -74,15 +82,21 @@
 		};
 	});
 
+	const postseason = $derived(data?.available === true && data.phase === 'postseason');
+	const complete = $derived(data?.available === true && data.complete === true);
+	const metric = $derived<Metric>(pickedMetric ?? (postseason ? 'titleOdds' : 'playoffOdds'));
+
 	const sortBy = (m: Metric) =>
 		[...(data?.teams ?? [])].sort((a, b) => b[m] - a[m] || b.projectedWins - a.projectedWins);
 
 	const sorted = $derived(sortBy(metric));
 
 	// The board's state starts with the top row of the Playoffs sort open, and
-	// switching the metric keeps the same team open.
+	// switching the metric keeps the same team open. The playoffs open the title
+	// favorite.
 	const open = $derived.by(() => {
 		if (chosen !== undefined) return chosen;
+		if (postseason) return sortBy('titleOdds')[0]?.teamKey ?? null;
 		return (metric === 'playoffOdds' ? sorted : sortBy('playoffOdds'))[0]?.teamKey ?? null;
 	});
 
@@ -99,25 +113,97 @@
 		return Math.abs(d) < 2 ? null : d;
 	}
 
+	// Through the playoffs only the field is still playing for the title.
+	const fieldKeys = $derived(
+		new Set(seeds.slice(0, data?.available ? data.playoffTeams : 0).map((t) => t.teamKey))
+	);
+	const titleRows = $derived(sortBy('titleOdds').filter((t) => fieldKeys.has(t.teamKey)));
+	const rows = $derived(postseason ? titleRows : sorted);
+
 	const record = (t: TeamOdds) => formatRecord(t.wins, t.losses, t.ties);
-	const postseason = $derived(data?.available === true && data.phase === 'postseason');
+
+	/* ---------- The grade ---------- */
+
+	let history = $state<OddsHistory | null>(null);
+	let historyState = $state<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+
+	// The grade needs the odds week by week, so they load once the season is over.
+	$effect(() => {
+		if (!data?.available || !complete || historyState !== 'idle') return;
+		historyState = 'loading';
+		const season = data.season;
+		fetch(`/api/playoff-odds/history?season=${season}`)
+			.then((res) => {
+				if (!res.ok) throw new Error(String(res.status));
+				return res.json();
+			})
+			.then((body: OddsHistory) => {
+				history = body;
+				historyState = 'ready';
+			})
+			.catch((err) => {
+				console.error('Playoff odds history failed to load:', err);
+				historyState = 'failed';
+			});
+	});
+
+	const trend = $derived(history?.available ? history : null);
+	const grade = $derived(complete && trend ? seasonGrade(trend) : null);
+	const lines = $derived(grade && trend ? gradeLines(grade, trend.regularSeasonWeeks) : []);
+	const skill = $derived(grade ? skillLine(grade) : null);
+	// The odds by week failed or have nothing to grade: the seeds take the
+	// card, under their own name.
+	const noGrade = $derived(
+		complete && (historyState === 'failed' || (historyState === 'ready' && !grade))
+	);
+
+	const POST_TABS = [
+		{ value: 'titleOdds' as const, label: 'Title' },
+		{ value: 'seeds' as const, label: 'Seeds' }
+	];
+
 	const method = $derived(
 		data?.available ? oddsMethod(data.sims, data.playoffTeams, data.byes) : null
 	);
 </script>
 
+{#snippet seedList(field: { playoffTeams: number; byes: number })}
+	<p class="field-note">Seeded by wins, then points for.</p>
+	<ol class="field">
+		{#each seeds as t, i (t.teamKey)}
+			{#if i === field.playoffTeams}
+				<li class="field-cut" aria-hidden="true"></li>
+			{/if}
+			<li class="seed-row" class:out={i >= field.playoffTeams}>
+				<span class="seed">{i + 1}</span>
+				<span class="seed-name">{t.managerName ?? 'Unknown manager'}</span>
+				{#if i < field.byes}<Tag variant="bye" size="small">Bye</Tag>{/if}
+				<span class="seed-record">{record(t)}</span>
+			</li>
+		{/each}
+	</ol>
+{/snippet}
+
 <Card
-	title={postseason ? 'Playoff Field' : 'Playoff Odds'}
+	title={noGrade
+		? 'Playoff Field'
+		: complete
+			? 'How the odds did'
+			: postseason
+				? 'Title Odds'
+				: 'Playoff Odds'}
 	headSpacing="8px"
-	headGap={postseason ? 0 : 12}
+	headGap={12}
 >
 	{#snippet action()}
 		{#if data?.available}
 			<!-- The season is always named: through the offseason the newest season
-			     in the warehouse is last year's, and its field shouldn't pass for this year's. -->
+			     in the warehouse is last year's, and its odds shouldn't pass for this year's. -->
 			<span class="meta">
 				{#if data.phase === 'regular'}
 					{data.season} · wk {data.throughWeek} · {thousands(data.sims)} sims
+				{:else if postseason && !complete && data.bracketWeek}
+					{data.season} · through wk {data.bracketWeek}
 				{:else}
 					{data.season} season
 				{/if}
@@ -135,24 +221,43 @@
 		<p class="note">Playoff odds couldn't be loaded right now.</p>
 	{:else if !data.available}
 		<p class="note">{data.reason}</p>
-	{:else if data.phase === 'postseason'}
-		<p class="field-note">Seeded by wins, then points for.</p>
-		<ol class="field">
-			{#each seeds as t, i (t.teamKey)}
-				{#if i === data.playoffTeams}
-					<li class="field-cut" aria-hidden="true"></li>
-				{/if}
-				<li class="seed-row" class:out={i >= data.playoffTeams}>
-					<span class="seed">{i + 1}</span>
-					<span class="seed-name">{t.managerName ?? 'Unknown manager'}</span>
-					{#if i < data.byes}<Tag variant="bye" size="small">Bye</Tag>{/if}
-					<span class="seed-record">{record(t)}</span>
-				</li>
-			{/each}
-		</ol>
+	{:else if complete}
+		{#if historyState === 'ready' && grade}
+			<ul class="grade">
+				{#each lines as line (line.id)}
+					<li>
+						<span class="grade-value">{line.value}</span>
+						<span class="grade-note">{line.note}</span>
+					</li>
+				{/each}
+			</ul>
+			{#if skill}<p class="foot">{skill}</p>{/if}
+			<div class="full-link">
+				<Button variant="link" size="tap" href="/playoff-odds">Full odds →</Button>
+			</div>
+		{:else if noGrade}
+			<!-- No week-by-week odds to grade: the seeds, as before. -->
+			{@render seedList(data)}
+		{:else}
+			<div class="loading" aria-busy="true">
+				{#each [0, 1, 2, 3] as row (row)}
+					<div class="bar-row"></div>
+				{/each}
+			</div>
+		{/if}
 	{:else}
 		<!-- A segmented toggle, not ARIA tabs: there's one list that re-sorts, no panels. -->
-		<Segmented label="Odds of" size="toggle" options={TABS} bind:value={metric} />
+		{#if postseason}
+			<Segmented label="Show" size="toggle" options={POST_TABS} bind:value={postView} />
+		{:else}
+			<Segmented
+				label="Odds of"
+				size="toggle"
+				options={TABS}
+				value={metric}
+				onchange={(v) => (pickedMetric = v)}
+			/>
+		{/if}
 
 		{#if data.throughWeek === 0}
 			<p class="note week-zero">
@@ -160,78 +265,89 @@
 			</p>
 		{/if}
 
-		<ul class="list">
-			{#each sorted as t, i (t.teamKey)}
-				{@const p = t[metric]}
-				{@const locked = t.eliminated || (metric === 'playoffOdds' && t.clinched)}
-				{@const d = delta(t)}
-				{@const isOpen = open === t.teamKey}
-				<li>
-					<button
-						type="button"
-						class="team"
-						aria-expanded={isOpen}
-						onclick={() => (chosen = isOpen ? null : t.teamKey)}
-					>
-						<span class="line">
-							<span class="name"
-								>{t.managerName ?? 'Unknown manager'}
-								<span class="record">{record(t)}</span></span
-							>
-							{#if d != null}
-								<span class="delta" class:down={d < 0} title="Change since last week"
-									><span aria-hidden="true">{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span><span
-										class="sr-only">{d > 0 ? 'Up' : 'Down'} {Math.abs(d)} since last week</span
-									></span
+		{#if postseason && postView === 'seeds'}
+			<div class="seeds">{@render seedList(data)}</div>
+		{:else}
+			{#if postseason}
+				<p class="field-note">
+					The playoff field's chances to win it all, with every played game counted.
+				</p>
+			{/if}
+			<ul class="list">
+				{#each rows as t, i (t.teamKey)}
+					{@const p = t[metric]}
+					{@const locked = t.eliminated || t.knockedOut || (metric === 'playoffOdds' && t.clinched)}
+					{@const d = delta(t)}
+					{@const isOpen = open === t.teamKey}
+					<li>
+						<button
+							type="button"
+							class="team"
+							aria-expanded={isOpen}
+							onclick={() => (chosen = isOpen ? null : t.teamKey)}
+						>
+							<span class="line">
+								<span class="name"
+									>{t.managerName ?? 'Unknown manager'}
+									<span class="record">{record(t)}</span></span
 								>
-							{/if}
-							{#if metric === 'playoffOdds' && t.clinched}
-								<Tag variant="clinched" size="row">Clinched</Tag>
-							{:else if metric === 'playoffOdds' && t.eliminated}
-								<Tag variant="eliminated" size="row">Eliminated</Tag>
-							{:else}
-								<span class="pct">{formatOdds(p, locked)}</span>
-							{/if}
-							<svg
-								class="chevron"
-								class:turned={isOpen}
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
-							>
-						</span>
-						<span class="track" aria-hidden="true">
-							<span
-								class="fill"
-								style:width="{Math.max(p * 100, p > 0 ? 1.5 : 0)}%"
-								style:background={oddsTone(p * 100)}
-							></span>
-						</span>
-					</button>
+								{#if d != null}
+									<span class="delta" class:down={d < 0} title="Change since last week"
+										><span aria-hidden="true">{d > 0 ? '▲' : '▼'}{Math.abs(d)}</span><span
+											class="sr-only">{d > 0 ? 'Up' : 'Down'} {Math.abs(d)} since last week</span
+										></span
+									>
+								{/if}
+								{#if metric === 'playoffOdds' && t.clinched}
+									<Tag variant="clinched" size="row">Clinched</Tag>
+								{:else if metric === 'playoffOdds' && t.eliminated}
+									<Tag variant="eliminated" size="row">Eliminated</Tag>
+								{:else if metric === 'titleOdds' && t.knockedOut}
+									<Tag variant="eliminated" size="row">Out</Tag>
+								{:else}
+									<span class="pct">{formatOdds(p, locked)}</span>
+								{/if}
+								<svg
+									class="chevron"
+									class:turned={isOpen}
+									width="12"
+									height="12"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+								>
+							</span>
+							<span class="track" aria-hidden="true">
+								<span
+									class="fill"
+									style:width="{Math.max(p * 100, p > 0 ? 1.5 : 0)}%"
+									style:background={oddsTone(p * 100)}
+								></span>
+							</span>
+						</button>
 
-					{#if isOpen}
-						<dl class="detail">
-							{#each oddsDetail(t) as row (row.term)}
-								<div class="pair">
-									<dt>{row.term}</dt>
-									<dd>{row.value}</dd>
-								</div>
-							{/each}
-						</dl>
-					{/if}
-				</li>
-				{#if metric === 'playoffOdds' && i === data.playoffTeams - 1}
-					<li class="cut" aria-hidden="true">
-						<span class="dash"></span>Projected cut<span class="dash"></span>
+						{#if isOpen}
+							<dl class="detail">
+								{#each oddsDetail(t, postseason && data.throughWeek >= data.regularSeasonWeeks) as row (row.term)}
+									<div class="pair">
+										<dt>{row.term}</dt>
+										<dd>{row.value}</dd>
+									</div>
+								{/each}
+							</dl>
+						{/if}
 					</li>
-				{/if}
-			{/each}
-		</ul>
+					{#if metric === 'playoffOdds' && i === data.playoffTeams - 1}
+						<li class="cut" aria-hidden="true">
+							<span class="dash"></span>Projected cut<span class="dash"></span>
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		{/if}
 
 		<button
 			type="button"
@@ -247,6 +363,9 @@
 				<p>{method[1]}</p>
 			</div>
 		{/if}
+		<div class="full-link">
+			<Button variant="link" size="tap" href="/playoff-odds">Full odds →</Button>
+		</div>
 	{/if}
 </Card>
 
@@ -406,6 +525,51 @@
 	.dash {
 		flex: 1;
 		border-top: 1.5px dashed var(--color-field);
+	}
+
+	.foot {
+		margin: 10px 0 0;
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--color-muted);
+	}
+
+	/* The grade */
+	.grade {
+		display: grid;
+		gap: 0;
+	}
+
+	.grade li {
+		display: grid;
+		gap: 2px;
+		padding: 10px 0;
+		border-bottom: 1px solid var(--color-line-soft);
+	}
+
+	.grade li:first-child {
+		padding-top: 2px;
+	}
+
+	.grade-value {
+		font-family: var(--font-slab);
+		font-size: 17px;
+		font-weight: 700;
+		color: var(--color-ink);
+	}
+
+	.grade-note {
+		font-size: 13px;
+		line-height: 1.45;
+		color: var(--color-ink-2);
+	}
+
+	.seeds {
+		margin-top: 8px;
+	}
+
+	.full-link {
+		margin-top: 4px;
 	}
 
 	.how {

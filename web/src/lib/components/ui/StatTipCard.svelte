@@ -82,7 +82,7 @@
 		<span class="text">{definition.interpretationGuide}</span>
 	{/if}
 	<a class="more" href={dictionaryHref(definition.metricId)}
-		>Full definition in the Data Dictionary →</a
+		>Full definition, worked example and limits →</a
 	>
 </span>
 

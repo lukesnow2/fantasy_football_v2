@@ -261,6 +261,21 @@ export function pickMeta(p: {
 		.join(' · ');
 }
 
+/**
+ * "Drafted QB12, scored QB1": a pick's place among the season's drafted
+ * players at its position, by draft order and by points. Null without ranks.
+ */
+export function rankMove(p: {
+	primaryPosition?: string | null;
+	position?: string | null;
+	draftedRank?: number | null;
+	scoredRank?: number | null;
+}): string | null {
+	const pos = p.primaryPosition ?? p.position;
+	if (!pos || p.draftedRank == null || p.scoredRank == null) return null;
+	return `Drafted ${pos}${p.draftedRank}, scored ${pos}${p.scoredRank}`;
+}
+
 /* ---------- The board's columns ---------- */
 
 export interface BoardLayout<T extends BoardPick> {

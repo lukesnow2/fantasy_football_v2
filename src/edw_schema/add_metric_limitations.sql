@@ -30,16 +30,16 @@ COMMENT ON COLUMN meta_data.metric_definitions.limitations IS
 -- their old corrections are gone from here. Their limitations, and those of
 -- the rows 019 added, are at the end of the LIMITATIONS section.
 
--- strength_of_schedule is AVG(opponent win percentage), not an average of
--- opponent power scores, and it is not recency weighted. Observed: 0.000-1.000,
--- mean 0.502. The published "40-90" range and "80+ is very tough" never occur.
+-- strength_of_schedule is the average record of the teams played, each
+-- opponent's record taken over its games against everyone else (migration
+-- 020). The fields here match 020, so re-running this file keeps that copy.
 UPDATE meta_data.metric_definitions SET
-    detailed_description = 'The average win percentage of every opponent a team has faced. A value above 0.500 means the team drew opponents who were better than a coin flip against the rest of the league.',
-    calculation_formula = 'Average of (Opponent Win Percentage) across all games played',
-    example_calculation = 'Opponents finished 0.60, 0.45, 0.55 and 0.52: (0.60+0.45+0.55+0.52) ÷ 4 = 0.530',
-    interpretation_guide = 'Centred on 0.500 by construction. 0.550+ is a hard schedule, 0.450-0.550 is ordinary, below 0.450 is soft.',
+    detailed_description = 'For each game a team has played, the opponent''s record so far in its other games, with a tie as half a win and every game against this team left out. Those records are averaged over the team''s games, so an opponent met twice counts twice. Leaving out the games against the team keeps its own results from moving the number: a win doesn''t make the schedule look easier and a loss doesn''t make it look harder. It''s season to date, regular season only, and it''s stored with the weekly power rankings but isn''t shown on any page.',
+    calculation_formula = 'Average over games of (opponent''s win % in its games against everyone else)',
+    example_calculation = 'Three weeks in, a team has played A, B and C. Leaving out their games against this team, A is 2-0, a 1.000 record, and B and C are each 1-1, or .500. 1.000 + .500 + .500 = 2.000, and 2.000 ÷ 3 = .667, a tougher schedule than average.',
+    interpretation_guide = '0.500 is an average schedule and higher is tougher. The team''s own games are left out of its opponents'' records, so beating them doesn''t make the schedule look easier. It measures opponents'' records, not how much they scored against you.',
     unit_of_measure = 'win_percentage',
-    typical_range = '0.000-1.000',
+    typical_range = '0.439 to 0.568 at season''s end',
     display_format = 'decimal_3'
 WHERE metric_id = 'strength_of_schedule';
 
@@ -48,18 +48,18 @@ WHERE metric_id = 'strength_of_schedule';
 -- UI now detects the direction. Observed across 11 managers: 0.112-0.191, so
 -- the stored "0-5% is extremely consistent" band is unreachable in this league.
 UPDATE meta_data.metric_definitions SET
-    interpretation_guide = 'Lower is better. Observed league history spans 0.112 to 0.191, so read it relatively: below 0.130 is steady year to year, 0.130-0.170 is typical, above 0.170 is boom-or-bust.',
-    good_value_threshold = 0.1400,
-    excellent_value_threshold = 0.1200,
-    typical_range = '0.000-0.500'
+    interpretation_guide = 'Lower means steadier, the opposite of most columns; careers here run ±.112 to ±.194 of win rate. ±.150 means a typical season lands about two wins above or below their average over 15 games. It''s steadiness, not quality: always going 5-10 scores as well as always going 10-5.',
+    good_value_threshold = NULL,
+    excellent_value_threshold = NULL,
+    typical_range = '±.112 to ±.194 (career)'
 WHERE metric_id = 'season_consistency_score';
 
 -- competitiveness_index: observed 39.0-65.9 across 21 seasons, so the stored
 -- "excellent" threshold of 70 has never once been reached.
 UPDATE meta_data.metric_definitions SET
-    interpretation_guide = 'Higher is more competitive. Across this league''s 21 seasons the index has run 39.0 to 65.9 with a mean of 56.3, so 60+ is a genuinely tight year and below 50 is a season somebody ran away with.',
-    good_value_threshold = 55.0000,
-    excellent_value_threshold = 60.0000
+    interpretation_guide = 'Higher means a more evenly matched season. Finished seasons here have run 39.0 to 65.9, and the middle one is 56.5. It''s a 0 to 100 score, not a percent, and a strong part can hide a weak one.',
+    good_value_threshold = NULL,
+    excellent_value_threshold = NULL
 WHERE metric_id = 'competitiveness_index';
 
 -- faab_efficiency_rating was career points ÷ FAAB spent, and read 0 for
@@ -68,14 +68,14 @@ WHERE metric_id = 'competitiveness_index';
 -- Yahoo: for every team-season 2022-2026, bids + remaining balance = $100.
 -- Observed across the 10 managers who have bid: 0.21-3.13.
 UPDATE meta_data.metric_definitions SET
-    short_description = 'Starter points produced by FAAB pickups, per FAAB dollar spent',
-    detailed_description = 'For every waiver claim a manager paid for, the fantasy points that player scored while in that manager''s starting lineup, from the week of the claim until the same team claimed him again. Divided by the dollars spent. Bench weeks earn nothing: the question is what the money put in the lineup.',
-    calculation_formula = 'Σ Starter Points from Paid Claims ÷ Σ FAAB Dollars Spent',
-    example_calculation = '$40 on a back who started 6 weeks for 72 points and $10 on a receiver who never started: (72 + 0) ÷ (40 + 10) = 1.44 points per dollar',
-    interpretation_guide = 'Higher is better. Across this league (FAAB since 2022) it runs 0.21 to 3.13 with most managers near 1.5-2.1: above 2.5 is sharp bidding, below 1.0 is money left on the bench or the waiver wire.',
-    typical_range = '0.00-3.50',
-    good_value_threshold = 2.0000,
-    excellent_value_threshold = 2.5000,
+    short_description = 'Starter points a manager''s paid waiver claims produced for each FAAB dollar spent.',
+    detailed_description = 'For every waiver claim a manager paid FAAB for, the fantasy points that player scored in the manager''s starting lineup from the claim''s week until the same team paid for that player again. Those points are added up over every paid claim and divided by every dollar spent. Bench weeks earn nothing, since the question is what the money put in the lineup. $0 claims are left out, and the season in progress counts. The league has used FAAB since 2022.',
+    calculation_formula = 'Starter points from paid claims ÷ FAAB dollars spent',
+    example_calculation = '$40 on a running back who started 6 weeks for 72 points, and $10 on a receiver who never started: (72 + 0) ÷ (40 + 10) = 1.44 pts/$',
+    interpretation_guide = 'Higher is better. Most careers here run 1.5 to 2.6 points per dollar, so $50 at 2.0 put about 100 points in lineups. It credits every starting point to the claim, not just the gain over who''d have started.',
+    typical_range = '0.2 to 3.4',
+    good_value_threshold = 2.5,
+    excellent_value_threshold = 3.0,
     display_format = 'decimal_2'
 WHERE metric_id = 'faab_efficiency_rating';
 
@@ -88,105 +88,105 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'hall_of_fame_index';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Ties count as half a win here, but the manager analytics path computes the same field without that adjustment, so the two can disagree for managers who have tied. Every game across twenty seasons is weighted equally despite changes in league size, roster rules and scoring settings.'
+'Looks back over a whole career and counts the season in progress, so it moves every week during a season. Playoff, title and consolation games all count, so a deep playoff run raises it and a consolation game counts the same as a regular-season one. Every game weighs the same across eras, league sizes and scoring rules.'
 WHERE metric_id = 'career_win_percentage';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Credits the whole of a player''s starting production to the claim, with no allowance for who would otherwise have started, so it rewards claims that filled an empty slot as much as genuine upgrades. A player dropped and later re-added for free still credits the original paid claim. $0 claims are excluded because a rate per zero dollars is undefined, so a manager who wins players for nothing gets no credit here. Only 2022 onward: the league did not use FAAB before then.'
+'Credits all of a player''s starting points to the claim, with no allowance for who would have started otherwise, so filling an empty slot scores the same as a real upgrade. A player dropped and later re-added for free still credits the original paid claim. $0 claims are left out, so winning players for nothing earns no credit here. Covers 2022 on, when the league started using FAAB, and counts the season in progress.'
 WHERE metric_id = 'faab_efficiency_rating';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Lower is better, which is the opposite direction to most metrics on this page. It is the standard deviation of weekly win percentage across a career rather than of season final records, so a manager with few seasons has an unstable value. It measures steadiness, not quality: a reliably poor manager scores as well as a reliably good one.'
+'It only counts finished seasons, so the season in progress doesn''t move it until its title game is played. Win rates include playoff and consolation games, which a playoff team plays more of. It needs several seasons to mean much: with one finished season there''s no spread to measure and it shows as ±.000. A manager who ran two teams in one season gets two win rates for that year. It looks back over a career and says nothing about next season.'
 WHERE metric_id = 'season_consistency_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'The four components are weighted equally by choice, not because the data says they matter equally. Two of them floor at zero, so leagues past that point cannot be told apart. The playoff race component counts teams within one game of the last playoff spot and scales at ten points per team, which assumes a ten team league.'
+'The four parts are weighted equally by choice, not because the data says they matter equally. The playoff race part always measures from sixth place, whatever the playoff field was that year, and the top six teams always count, so with six or more teams it can''t drop below 60. Records and season points include playoff and consolation games, and teams don''t all play the same number of those. Win parity and point spread stop at zero, though no season here has come close. It includes the season in progress, which moves every week and reads low early on, when a few games spread records wide. It describes a season after the fact and isn''t a forecast.'
 WHERE metric_id = 'competitiveness_index';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'The ×300 scale factor is arbitrary, picked to put ordinary leagues in a readable range. The floor at zero means any league with a win percentage spread beyond roughly a third cannot be distinguished from a worse one. It says nothing about whether the same team wins every year, only about how one season''s wins were spread.'
+'The × 300 scale is arbitrary, picked to land ordinary seasons in a readable range. It stops at zero once the spread passes about .333 of win rate, though no season here has gotten near that. Win rates include playoff and consolation games. It includes the season in progress, where a few games spread records wide, so it reads low early on. It only looks at one season, so it can''t tell whether the same team tops the standings every year.'
 WHERE metric_id = 'win_parity_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Uses only the highest and lowest scoring teams, so one outlier sets the score and the shape of the middle is invisible. Like win parity it floors at zero once the spread exceeds the league average.'
+'Only the highest and lowest scoring teams count, so one outlier sets the number and the middle of the table is invisible. Season totals include playoff and consolation games, and teams don''t all play the same number of those, which can widen the gap. It stops at zero once the gap passes the average total, though no season here has come close. It includes the season in progress, scored on the games played so far.'
 WHERE metric_id = 'point_spread_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Counts only fantasy points produced after the trade. It ignores what each manager would otherwise have started, positional scarcity, and whether the player was even in the lineup, so points from a traded player who sat on a bench still count. Draft picks and FAAB included in a deal are not valued at all.'
+'Counts points only through the end of the season the trade was made in. Counts weeks a player sat on a bench and weeks after the player moved on to a third team, but not weeks the player went unrostered. The trade''s own week counts in full, even games played before the deal. Draft picks and FAAB in a deal aren''t valued. Trades in the season in progress count on points so far.'
 WHERE metric_id = 'production_differential';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Built on production differential, so it inherits its blind spots. The threshold for declaring a winner is a fixed point margin, which means trades near that line flip verdict on small scoring changes rather than on anything meaningful.'
+'The playoff and title parts judge the whole team''s season, of which the trade is one piece. Timing adds the same to both sides, so it never decides a winner. Draft picks and FAAB in a deal count for nothing, and points only run to the end of that season. The 8-point line is fixed, so trades near it can flip on small scoring changes. Trades in the season in progress are judged on points so far.'
 WHERE metric_id = 'trade_winner';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Expected points for a draft slot come from this league''s own history, so the baseline moves whenever scoring settings change and the score is not comparable to public draft value figures. A player who is drafted and immediately injured scores near zero no matter how sound the pick was at the time.'
+'Divides by pick number, not by what that pick usually scores, so a 10th-round flier and a first-rounder with the same points differ about tenfold. The average pick covers every season the player was drafted, including later ones, so a season can be judged by a draft that came after it. Not position adjusted. Points count only weeks the player was on a roster in this league. Players never drafted read 0.'
 WHERE metric_id = 'draft_value_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Divides by weeks actually played, so a player who missed most of a season can post an excellent rate off a handful of games. It is not position adjusted, which makes a quarterback and a kicker incomparable on this number alone.'
+'Divides by a fixed 15, 16 or 17 weeks, not the weeks the player was rostered or started, and those lengths are set by year rather than read from each season''s schedule. The season in progress is divided by 17 too, so its values read low until it ends. Points count only weeks the player was on a roster in this league. Not position adjusted.'
 WHERE metric_id = 'points_per_week';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'The replacement baseline is derived from this league''s own waiver pool, so the values are not comparable to public VORP or PAR figures and shift with league size and roster requirements.'
+'One offensive baseline covers four positions, so quarterbacks rate high and tight ends low. Divides by 17 even in 15- and 16-week seasons. The list holds only players rostered in this league, not the free-agent pool. It''s a weekly number, not a season total.'
 WHERE metric_id = 'points_above_replacement';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Lower is better, which is the opposite direction to most metrics on this page. Weeks with zero points are dropped from the standard deviation, so a player who missed games looks steadier than he was. It is not scale free either: high scoring positions have larger deviations by construction, which is why the thresholds are position dependent.'
+'Weeks at zero or below are dropped, so a player who missed games or posted a real zero looks steadier than they were. It isn''t scale free: a player who averages 20 points will swing more than one who averages 6, so it can''t rank a quarterback against a kicker. A player with a single scoring week gets 0, which reads as perfectly steady. It covers one season at a time and looks back only.'
 WHERE metric_id = 'consistency_rating';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Not a simulation and not fitted. It is a hand-set ladder of rank, games back and week number. Backtested on 2005-2025 (2007 excluded, its bracket labels are unreliable) it beats simple baselines (Brier 0.159, against 0.213 for "in a playoff spot today") but is badly calibrated in the middle: teams given 40-50% made it 26% of the time, 70-80% made it 55%, 80-90% made it 73%. Odds across a league add to about 7.1 playoff spots in week 1 when there are 6, and do not settle to 0% or 100% by the final regular week.'
+'It looks forward from the games played so far this season, and it only sees points. Injuries, bye weeks, trades and next week''s lineups don''t count until they show up in a team''s scores, so a team that just lost its best player looks as strong as it did last week. Early in the season the odds lean on the league average, because two or three games can''t tell a good team from a lucky one. The middle of the scale has run a little high: teams given 50 to 70% made it 159 times in 295, or 54%. It beats a simpler model that uses only record and schedule, but not by much (Brier score 0.145 against 0.148, lower is better). All of these checks replay 2008 to 2025 from week 3 on, with at least two weeks left.'
 WHERE metric_id = 'playoff_probability';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Depends on transaction records, which are sparse or entirely absent for the earliest seasons. A low value in an old season may mean the data was never captured rather than that the league was quiet.'
+'Nothing computes it. An old view definition in the schema file refers to the column, but the warehouse doesn''t have it.'
 WHERE metric_id = 'waiver_activity_index';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Averaging opponents'' win percentages is circular: beating your opponents lowers their win percentage and therefore lowers your own strength of schedule. Weeks with no matched opponent default to 0.500, so a team with missing games drifts toward average rather than showing a gap.'
+'Early on it rests on a game or two per opponent, and in week 1 no opponent has another game yet, so it reads .500. Each week''s number uses opponents'' records through that week, not as they were the day you played them. It sees wins, not points: Schedule, which compares what your opponents scored against you with the league''s average that week, says more about who you drew.'
 WHERE metric_id = 'strength_of_schedule';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Only victories count. A manager''s largest margin in a loss records as zero rather than as a negative, so this cannot be read as a general blowout tendency. One extreme game defines the value for an entire career.'
+'One game sets it, so it says nothing about how often anyone wins big. It leaves out games against short-stint managers (fewer than five seasons) and Yahoo''s hidden accounts, so the Record Book, which counts every game, can show a bigger number. It counts playoff and consolation games and the season in progress, so a game played this week can take the record. When two games tie for the largest margin, the tile names only one winner.'
 WHERE metric_id = 'biggest_win_margin';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'A single game extreme across the whole history, so it is driven by outliers and by how many times two managers happen to have played. It says nothing about the typical margin between them.'
+'One game sets it, so pairs who''ve played more often (anywhere from 7 to 41 games here) have had more chances at a big one. It counts playoff and consolation games and the season in progress, so it can grow this week. Only pairs with at least five games together are listed, and games involving managers with fewer than five seasons aren''t counted at all.'
 WHERE metric_id = 'most_lopsided_game';
 
 -- WP15 (migration 019): luck against all-play wins, the rebuilt power score,
 -- and the new field and rivalry rows.
 UPDATE meta_data.metric_definitions SET limitations =
-'It mixes two kinds of luck, who you drew and how close games broke; the Schedule column shows the first on its own. Until 2026-11 this was wins minus Pythagorean wins, which counted points against as earned and missed most schedule luck.'
+'It mixes two kinds of luck: who a team drew and how the close games broke. Regular season only. Early in a season one game can move it by most of a win. A team''s luck in one season says nothing about the next: across back-to-back seasons for the same manager the two are slightly opposed (correlation −0.21). Before November 2026 it was wins minus a formula on points for and against (Pythagorean wins), which counted points against as earned and missed most schedule luck.'
 WHERE metric_id = 'luck_factor';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Rivalries are a handful of games, so it moves a lot on one result. It uses an exponent of 2, flatter than the 6.26 that fits whole seasons here, so the better scorer in a rivalry tends to read as lucky.'
+'Rivalries here run 7 to 41 games, so one result moves it a lot. It squares the points, which is flatter than the power of 6.26 that fits whole seasons in this league, so the side that outscores the other usually reads as lucky. It looks back over every meeting and isn''t a prediction of the next one.'
 WHERE metric_id = 'pythagorean_wins';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'The weights are a choice, not fitted, and the scoring terms are relative to the week''s best team, so a score isn''t comparable across seasons. It follows the standings closely (rank match 0.95). Before 2026-11 its points term read only that week''s score and it added a schedule term that was really the team''s own record again.'
+'It looks back: it''s a rating of games played, not a forecast, though from week 5 on the higher score has won the next week''s game 57% of the time (the better record, 56%). The weights are a choice, not fitted. The scoring terms are relative to that week''s best team, so a score isn''t comparable across seasons. From week 5 on its order matches the standings closely (rank correlation 0.97). In the first few weeks one game swings the win % term a lot. Before November 2026 its points term read only that week''s score and it added a schedule term that was really the team''s own record again.'
 WHERE metric_id = 'power_score';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. Regular season only.'
+'Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. It looks back and counts the regular season only, the season in progress as it''s played. A season''s total depends on its length (13 or 14 weeks here), and a career''s on how many seasons were played, so compare like with like.'
 WHERE metric_id = 'all_play_wins';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'One season''s number carries into the next at only r = 0.10, because rosters reset every year. It compares a team with the league it played in, so it can''t say whether one era''s league was stronger than another''s.'
+'It looks back and covers one season to date. One season''s number barely predicts the next (correlation 0.10 for the same manager, back to back), because rosters reset every year. It compares a team with the league it played in, so it can''t say whether one era''s league was stronger than another''s. In the 8-team seasons (2005 and 2007) each other team is a bigger share of the average, so the extremes run wider.'
 WHERE metric_id = 'points_vs_league';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'It says how many points you faced, not whether you lost: a big opponent week against your bigger week costs nothing. Luck shows the effect on wins.'
+'It says how many points a team faced, not whether it lost: a big opponent week against a bigger week of its own costs nothing. Luck shows the effect on wins, and the two line up (correlation −0.67 at season''s end). The ''other teams'' average includes the opponent itself, which pulls the number slightly toward zero. It looks back and covers one season to date.'
 WHERE metric_id = 'schedule_vs_league';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'A sum, so it grows with the number of seasons played: compare managers with similar careers. Until 2026-11 it was built on Pythagorean wins and missed most schedule luck.'
+'A sum, so it grows with the number of seasons played: compare managers with similar careers. It includes the season in progress, so it moves every week during the season. Chance alone spreads one season''s luck by about 1.4 wins, so a 16-season career by about 6. Before November 2026 it was built on a formula from points for and against (Pythagorean wins) and missed most schedule luck.'
 WHERE metric_id = 'career_luck';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'Rivalries are short, so a single close game moves it a lot.'
+'Rivalries here run 7 to 41 games, so a single close game moves it a lot. Expected wins square the points, flatter than the 6.26 power that fits whole seasons here, so the side with more points in the series tends to show as luckier (a side''s share of the points and its luck correlate at 0.59). It looks back over every meeting and doesn''t predict the next.'
 WHERE metric_id = 'rivalry_luck';
 
 -- ============================================================================

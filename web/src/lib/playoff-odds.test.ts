@@ -254,6 +254,58 @@ describe('bracket', () => {
 	});
 });
 
+describe('bracket results', () => {
+	// A finished regular season, so the seeds are settled.
+	const games = season(14, (t, w) => 90 + t * 3 + ((t * w) % 7) * 4);
+	const base = { teamKeys: TEAMS, games, regularSeasonWeeks: 14, playoffTeams: 6, sims: 2000 };
+	const seeds = [...simulatePlayoffOdds(base).teams].sort(compareSeeding).map((t) => t.teamKey);
+	const [s1, s2, s3, s4, s5, s6] = seeds;
+	const round1 = [
+		{ week: 15, teamA: s3, teamB: s6, winner: s6 },
+		{ week: 15, teamA: s4, teamB: s5, winner: s4 }
+	];
+
+	it('knocks out first-round losers and keeps the odds summing to one', () => {
+		const res = simulatePlayoffOdds({ ...base, bracketResults: round1 });
+		const by = new Map(res.teams.map((t) => [t.teamKey, t]));
+		expect(by.get(s3)!.titleOdds).toBe(0);
+		expect(by.get(s5)!.titleOdds).toBe(0);
+		expect(by.get(s3)!.knockedOut).toBe(true);
+		expect(by.get(s6)!.knockedOut).toBe(false);
+		expect(by.get(s6)!.titleOdds).toBeGreaterThan(0);
+		expect(res.teams.reduce((t, x) => t + x.titleOdds, 0)).toBeCloseTo(1, 6);
+	});
+
+	it('gives the champion 100% once the title game is in', () => {
+		const res = simulatePlayoffOdds({
+			...base,
+			bracketResults: [
+				...round1,
+				{ week: 16, teamA: s1, teamB: s4, winner: s4 },
+				{ week: 16, teamA: s2, teamB: s6, winner: s2 },
+				{ week: 17, teamA: s4, teamB: s2, winner: s4 }
+			]
+		});
+		const by = new Map(res.teams.map((t) => [t.teamKey, t]));
+		expect(by.get(s4)!.titleOdds).toBe(1);
+		expect(by.get(s2)!.knockedOut).toBe(true);
+	});
+
+	it('ignores placement games between teams already out', () => {
+		// Yahoo keeps the 5th-place game (round-one losers) in the championship
+		// bracket. It mustn't decide a simulated game between those two teams.
+		const withPlacement = simulatePlayoffOdds({
+			...base,
+			bracketResults: [...round1, { week: 16, teamA: s3, teamB: s5, winner: s3 }]
+		});
+		expect(withPlacement).toEqual(simulatePlayoffOdds({ ...base, bracketResults: round1 }));
+	});
+
+	it('leaves the odds alone without results', () => {
+		expect(simulatePlayoffOdds({ ...base, bracketResults: [] })).toEqual(simulatePlayoffOdds(base));
+	});
+});
+
 describe('compareSeeding', () => {
 	it('orders by wins with ties as half, then points for', () => {
 		const t = (wins: number, ties: number, pointsFor: number) => ({ wins, ties, pointsFor });

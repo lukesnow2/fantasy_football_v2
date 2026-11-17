@@ -9,7 +9,7 @@
 	 * you whether a number meant anything.
 	 *
 	 * /data-dictionary#{metricId} opens that entry, which is where every
-	 * StatTip's "Full definition in the Data Dictionary →" lands.
+	 * StatTip's "Full definition, worked example and limits →" lands.
 	 */
 	import { onMount, tick } from 'svelte';
 	import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';

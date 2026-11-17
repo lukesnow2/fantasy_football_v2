@@ -157,7 +157,7 @@ describe('StatTip', () => {
 		await userEvent.tab();
 		expect(document.activeElement).toBe(page.getByRole('button', { name: 'Close' }).element());
 		await userEvent.tab();
-		const link = page.getByRole('link', { name: 'Full definition in the Data Dictionary →' });
+		const link = page.getByRole('link', { name: 'Full definition, worked example and limits →' });
 		expect(document.activeElement).toBe(link.element());
 		await expect.element(link).toHaveAttribute('href', '/data-dictionary#luck_factor');
 		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
@@ -213,7 +213,7 @@ describe('StatTip', () => {
 			.element(page.getByRole('group', { name: 'Pythagorean Wins' }))
 			.toHaveTextContent('Pythagorean Wins');
 		await expect
-			.element(page.getByRole('link', { name: 'Full definition in the Data Dictionary →' }))
+			.element(page.getByRole('link', { name: 'Full definition, worked example and limits →' }))
 			.toHaveAttribute('href', '/data-dictionary#pythagorean_wins');
 	});
 

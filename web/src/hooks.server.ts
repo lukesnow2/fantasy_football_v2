@@ -65,6 +65,7 @@ const PUBLIC_PREFIXES = [
 	'/league-table',
 	'/managers',
 	'/power-rankings',
+	'/playoff-odds',
 	'/trades',
 	'/draft',
 	'/data-dictionary',
@@ -95,9 +96,7 @@ const PRIVATE_API_PREFIXES = ['/api/rule-votes', '/api/rule-proposals', '/api/ch
 
 function isPublicPath(pathname: string): boolean {
 	if (pathname === '/') return true;
-	return PUBLIC_PREFIXES.some(
-		(prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-	);
+	return PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {

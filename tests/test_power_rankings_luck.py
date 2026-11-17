@@ -180,6 +180,42 @@ def test_points_vs_league_and_schedule_leave_the_team_out(rows):
         assert float(rows[(team, 3)]['schedule_vs_league']) == pytest.approx(sched, abs=0.005)
 
 
+def expected_schedule(team, through):
+    """Strength of schedule the long way: the average, over the team's games,
+    of each opponent's record through `through` in its games against everyone
+    else, a tie as half. None when no opponent has another game yet."""
+    records = []
+    for week in range(1, through + 1):
+        opponent = next(b if a == team else a for a, _, b, _ in GAMES[week]
+                        if team in (a, b))
+        wins = games = 0.0
+        for w in range(1, through + 1):
+            mine, theirs = scores(w)[opponent]
+            met = next(b if a == opponent else a for a, _, b, _ in GAMES[w]
+                       if opponent in (a, b))
+            if met == team:
+                continue
+            wins += 1.0 if mine > theirs else 0.5 if mine == theirs else 0.0
+            games += 1
+        if games:
+            records.append(wins / games)
+    return sum(records) / len(records) if records else None
+
+
+def test_strength_of_schedule_leaves_out_games_against_the_team(rows):
+    for week in GAMES:
+        for team in TEAMS:
+            want = expected_schedule(team, week)
+            got = float(rows[(team, week)]['strength_of_schedule'])
+            # Week 1: every opponent's only game was against this team, so
+            # there's nothing to go on and it reads an average schedule.
+            assert got == pytest.approx(0.5 if want is None else want, abs=0.0001)
+    # Week 2, team 1 (beat 2, lost to 3). Team 2 is 1-0 apart from team 1 and
+    # team 3 is 0-0-1 apart from team 1: (1.0 + 0.5) / 2. With the games
+    # against team 1 left in, the win over 2 would have pulled it down.
+    assert float(rows[(1, 2)]['strength_of_schedule']) == pytest.approx(0.75)
+
+
 def test_power_score_reads_season_scoring_with_no_schedule_term(rows):
     # 45% record, 35% season points per game, 20% the last three weeks, each
     # scoring term over the week's best. Week 2 is where the old build went

@@ -50,6 +50,11 @@ export interface OddsResponse {
 	throughWeek: number;
 	regularSeasonWeeks: number;
 	phase: 'regular' | 'postseason';
+	/** The last playoff week the title odds count, once the bracket has started. */
+	bracketWeek?: number | null;
+	/** The title game has been played. */
+	complete?: boolean;
+	champion?: number | null;
 	sims: number;
 	playoffTeams: number;
 	byes: number;
@@ -341,8 +346,11 @@ const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 /** "+1.1" or "-0.2", one decimal. */
 const signed = (x: number) => `${x >= 0 ? '+' : '-'}${Math.abs(x).toFixed(1)}`;
 
-/** The open row's details, in the board's order. */
-export function oddsDetail(team: OddsTeam): { term: string; value: string }[] {
+/**
+ * The open row's details, in the board's order. `settled`: the regular season
+ * is over, so the bye and #1 seed odds are certain.
+ */
+export function oddsDetail(team: OddsTeam, settled = false): { term: string; value: string }[] {
 	// Ties count half in projectedWins, so the rest of the schedule's games,
 	// played and left, are the projected losses.
 	const games = team.wins + team.losses + team.ties + team.remainingGames;
@@ -368,9 +376,13 @@ export function oddsDetail(team: OddsTeam): { term: string; value: string }[] {
 		},
 		{
 			term: 'Bye · #1 seed · Title',
-			value: [team.byeOdds, team.topSeedOdds, team.titleOdds]
-				.map((p) => formatOdds(p, team.eliminated))
-				.join(' · ')
+			// Once the standings are final the bye and #1 seed are settled, and a
+			// team knocked out of the bracket is out of the title.
+			value: [
+				formatOdds(team.byeOdds, team.eliminated || settled),
+				formatOdds(team.topSeedOdds, team.eliminated || settled),
+				formatOdds(team.titleOdds, team.eliminated || team.knockedOut)
+			].join(' · ')
 		}
 	);
 	return rows;
@@ -378,7 +390,7 @@ export function oddsDetail(team: OddsTeam): { term: string; value: string }[] {
 
 /** The two paragraphs under "How these odds work", with the response's numbers. */
 export function oddsMethod(sims: number, playoffTeams: number, byes: number): [string, string] {
-	const first = `Each team gets a projected score, pulled toward the league average early in the year. The rest of the season is played ${thousands(sims)} times with that score drifting week to week, and seeds go by wins, then points for.`;
+	const first = `The rest of the season is played out ${thousands(sims)} times, with every team scoring around its weekly average so far. Early in the year that average is pulled toward the league's, since a few games don't say much. Standings sort by wins, then points for.`;
 	const format =
 		playoffTeams === 6 && byes === 2
 			? 'Six make it and the top two get byes: 3 plays 6, 4 plays 5.'
@@ -389,7 +401,7 @@ export function oddsMethod(sims: number, playoffTeams: number, byes: number): [s
 					: `The top ${playoffTeams} make it.`;
 	return [
 		first,
-		`${format} Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.`
+		`${format} Back-tested on 2008 to 2025, teams given 85 to 95% made it 203 times in 226.`
 	];
 }
 

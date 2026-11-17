@@ -70,6 +70,7 @@ function team(over: Partial<OddsTeam> & { managerName: string }): OddsTeam {
 		titleOdds: 0,
 		clinched: false,
 		eliminated: false,
+		knockedOut: false,
 		previousOdds: null,
 		...over
 	};
@@ -427,13 +428,35 @@ describe('oddsDetail', () => {
 		expect(rows[1].value).toBe('20.5-6.5');
 		expect(rows[2].value).toBe('+1.1 wins');
 	});
+
+	const titleRow = (t: Parameters<typeof oddsDetail>[0], settled?: boolean) =>
+		oddsDetail(t, settled).find((r) => r.term === 'Bye · #1 seed · Title')?.value;
+
+	it('prints the bye and #1 seed as settled once the standings are final', () => {
+		const t = team({ managerName: 'A', byeOdds: 1, topSeedOdds: 0, titleOdds: 0.31 });
+		// A certain 100% in the simulation still reads as >99% until it's settled.
+		expect(titleRow(t)).toBe('>99% · <1% · 31%');
+		expect(titleRow(t, true)).toBe('100% · 0% · 31%');
+	});
+
+	it('prints a team knocked out of the bracket at 0% for the title', () => {
+		const t = team({
+			managerName: 'A',
+			byeOdds: 0,
+			topSeedOdds: 0,
+			titleOdds: 0,
+			knockedOut: true
+		});
+		expect(titleRow(t, true)).toBe('0% · 0% · 0%');
+		expect(titleRow({ ...t, knockedOut: false }, true)).toBe('0% · 0% · <1%');
+	});
 });
 
 describe('oddsMethod', () => {
 	it("prints the board's two paragraphs for six teams and two byes", () => {
 		expect(oddsMethod(10000, 6, 2)).toEqual([
-			'Each team gets a projected score, pulled toward the league average early in the year. The rest of the season is played 10,000 times with that score drifting week to week, and seeds go by wins, then points for.',
-			'Six make it and the top two get byes: 3 plays 6, 4 plays 5. Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.'
+			"The rest of the season is played out 10,000 times, with every team scoring around its weekly average so far. Early in the year that average is pulled toward the league's, since a few games don't say much. Standings sort by wins, then points for.",
+			'Six make it and the top two get byes: 3 plays 6, 4 plays 5. Back-tested on 2008 to 2025, teams given 85 to 95% made it 203 times in 226.'
 		]);
 	});
 

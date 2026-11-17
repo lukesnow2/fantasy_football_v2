@@ -4183,9 +4183,12 @@ class EdwEtlProcessor:
             """,
             
             'vw_trade_analysis': """
-                -- CALIBRATED COMPREHENSIVE TRADE ANALYSIS VIEW (v2.0)
-                -- Fixes: Production scaling (0.15), Opportunity cost implementation, Refined thresholds (8-point)
-                -- Components: Production (40%), Playoff Impact (30%), Opportunity Cost (20%), Context (10%)
+                -- TRADE ANALYSIS VIEW (v3, migration 022)
+                -- Each side gets four 0-100 component scores, weighted
+                -- Production 40%, Playoffs 30%, Opportunity cost 20%, Timing 10%.
+                -- The final scores are those weighted averages, and the winner
+                -- is read from the final scores as shown: 8 or more apart, or
+                -- it's an Even Trade.
                 CREATE VIEW edw.vw_trade_analysis AS
                 WITH trade_groups AS (
                     -- Create synthetic trade group IDs by grouping reciprocal trades
@@ -4288,13 +4291,13 @@ class EdwEtlProcessor:
                     GROUP BY ts.synthetic_trade_group_id
                 ),
                 playoff_impact AS (
-                    -- Analyze playoff implications (30% weight)
+                    -- Playoff implications (30% weight). Both joins are held to
+                    -- the trade's season: a title in another season of the same
+                    -- league is not this trade's title.
                     SELECT 
                         ts.synthetic_trade_group_id,
-                        -- Check if teams made playoffs
                         MAX(CASE WHEN ftp.team_key = ts.team_a_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_a_made_playoffs,
                         MAX(CASE WHEN ftp.team_key = ts.team_b_key AND ftp.is_playoff_team THEN 1 ELSE 0 END) as team_b_made_playoffs,
-                         -- Check championship outcomes  
                         MAX(CASE WHEN fm.winner_team_key = ts.team_a_key THEN 1 ELSE 0 END) as team_a_champion,
                         MAX(CASE WHEN fm.winner_team_key = ts.team_b_key THEN 1 ELSE 0 END) as team_b_champion
                     FROM trade_synthesis ts
@@ -4302,32 +4305,88 @@ class EdwEtlProcessor:
                         ftp.league_key = ts.league_key 
                         AND ftp.season_year = ts.season_year
                         AND ftp.team_key IN (ts.team_a_key, ts.team_b_key))
-					LEFT JOIN edw.fact_matchup fm ON (
-						fm.league_key = ts.league_key
-						AND fm.season_year = fm.season_year
-						AND fm.winner_team_key IN (ts.team_a_key, ts.team_b_key)
-						AND is_championship = TRUE
+                    LEFT JOIN edw.fact_matchup fm ON (
+                        fm.league_key = ts.league_key
+                        AND fm.season_year = ts.season_year
+                        AND fm.winner_team_key IN (ts.team_a_key, ts.team_b_key)
+                        AND fm.is_championship = TRUE
                     )
                     GROUP BY ts.synthetic_trade_group_id
                 ),
                 contextual_factors AS (
-                    -- Trade timing context (10% weight)
+                    -- Trade timing (10% weight): late-season trades count for more.
                     SELECT 
                         ts.synthetic_trade_group_id,
-                        ts.transaction_week,
-                        -- Late season trades are more impactful
                         CASE 
                             WHEN ts.transaction_week >= 10 THEN 1.5
                             WHEN ts.transaction_week >= 6 THEN 1.2  
                             ELSE 1.0 
                         END as timing_multiplier,
-                        -- Current season status for dynamic evaluation
+                        -- A season's trades are settled once its title game has a
+                        -- winner, not on New Year's Day: the calendar year turned
+                        -- every trade Complete in January, and the season still
+                        -- being played Complete once its bracket ran into the next year.
                         CASE 
-                            WHEN ts.season_year < EXTRACT(YEAR FROM CURRENT_DATE) THEN 'Complete'
-                            WHEN ts.season_year = EXTRACT(YEAR FROM CURRENT_DATE) THEN 'In Progress'
-                            ELSE 'Future'
+                            WHEN EXISTS (
+                                SELECT 1 FROM edw.fact_matchup fm
+                                WHERE fm.league_key = ts.league_key
+                                  AND fm.season_year = ts.season_year
+                                  AND fm.is_championship = TRUE
+                                  AND fm.winner_team_key IS NOT NULL)
+                            THEN 'Complete'
+                            ELSE 'In Progress'
                         END as evaluation_status
                     FROM trade_synthesis ts
+                ),
+                components AS (
+                    -- The component scores for each side, each held to 0-100 (the
+                    -- scores the page shows). Production and opportunity cost are
+                    -- mirror images: B's is 100 minus A's.
+                    SELECT 
+                        ts.synthetic_trade_group_id,
+                        LEAST(100, GREATEST(0, 50 + (fp.team_a_production - fp.team_b_production) * 0.15)) as a_production,
+                        LEAST(100, GREATEST(0, 50 - (fp.team_a_production - fp.team_b_production) * 0.15)) as b_production,
+                        CASE 
+                            WHEN pi.team_a_champion = 1 THEN 85
+                            WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
+                            WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
+                            ELSE 50
+                        END as a_playoff,
+                        CASE 
+                            WHEN pi.team_b_champion = 1 THEN 85
+                            WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
+                            WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
+                            ELSE 50
+                        END as b_playoff,
+                        LEAST(100, GREATEST(0, 50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2)) as a_opportunity,
+                        LEAST(100, GREATEST(0, 50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2)) as b_opportunity,
+                        cf.timing_multiplier
+                    FROM trade_synthesis ts
+                    LEFT JOIN fantasy_production fp ON ts.synthetic_trade_group_id = fp.synthetic_trade_group_id
+                    LEFT JOIN opportunity_cost oc ON ts.synthetic_trade_group_id = oc.synthetic_trade_group_id
+                    LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
+                    LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
+                ),
+                timed AS (
+                    -- Timing widens the gap: the side ahead on the other three
+                    -- components gets 50 + (multiplier - 1) x 50 (75 at week 10+,
+                    -- 60 at weeks 6-9), the side behind 100 minus that, and an
+                    -- even trade 50 each. Adding the same amount to both sides,
+                    -- as before, could never move the verdict.
+                    SELECT 
+                        c.*,
+                        50 + SIGN((c.a_production - c.b_production) * 0.40
+                                + (c.a_playoff - c.b_playoff) * 0.30
+                                + (c.a_opportunity - c.b_opportunity) * 0.20)
+                           * (c.timing_multiplier - 1) * 50 as a_context
+                    FROM components c
+                ),
+                scored AS (
+                    SELECT 
+                        t.*,
+                        ROUND(t.a_production * 0.40 + t.a_playoff * 0.30 + t.a_opportunity * 0.20 + t.a_context * 0.10, 1) as a_final,
+                        ROUND(t.b_production * 0.40 + t.b_playoff * 0.30 + t.b_opportunity * 0.20 + (100 - t.a_context) * 0.10, 1) as b_final
+                    FROM timed t
                 )
                 SELECT 
                     dl.league_name,
@@ -4348,7 +4407,7 @@ class EdwEtlProcessor:
                     ROUND(fp.team_b_production, 1) as team_b_production,
                     ROUND(fp.team_a_production - fp.team_b_production, 1) as production_differential,
                     
-                    -- Opportunity cost metrics (NEW)
+                    -- Opportunity cost metrics
                     ROUND(COALESCE(oc.team_a_gave_avg_value, 0), 1) as team_a_pre_trade_avg,
                     ROUND(COALESCE(oc.team_b_gave_avg_value, 0), 1) as team_b_pre_trade_avg,
                     ROUND(COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0), 1) as opportunity_differential,
@@ -4359,97 +4418,20 @@ class EdwEtlProcessor:
                     pi.team_a_champion,
                     pi.team_b_champion,
                     
-                    -- Component Scores (0-100 scale) - CALIBRATED
-                    ROUND(LEAST(100, GREATEST(0, 
-                        50 + (fp.team_a_production - fp.team_b_production) * 0.15  -- Reduced from 0.3
-                    )), 1) as team_a_production_score,
+                    -- Side A's component scores (0-100)
+                    ROUND(sc.a_production, 1) as team_a_production_score,
+                    ROUND(sc.a_playoff, 1) as team_a_playoff_score,
+                    ROUND(sc.a_opportunity, 1) as team_a_opportunity_score,
+                    ROUND(sc.a_context, 1) as team_a_context_score,
                     
-                    ROUND(CASE 
-                        WHEN pi.team_a_champion = 1 THEN 85  -- Reduced from 90
-                        WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70  -- Reduced from 75
-                        WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30  -- Increased from 25
-                        ELSE 50
-                    END, 1) as team_a_playoff_score,
+                    -- Final weighted scores (0-100)
+                    sc.a_final as team_a_final_score,
+                    sc.b_final as team_b_final_score,
                     
-                    -- IMPLEMENTED Opportunity Cost Score (20% weight)
-                    ROUND(LEAST(100, GREATEST(0,
-                        50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2
-                    )), 1) as team_a_opportunity_score,
-                    
-                    ROUND(50 + (cf.timing_multiplier - 1) * 25, 1) as team_a_context_score,
-                    
-                    -- Final Weighted Score (0-100) - REFINED FORMULA
-                    ROUND(
-                        LEAST(100, GREATEST(0, 
-                            (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_a_champion = 1 THEN 85
-                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                        )), 1
-                    ) as team_a_final_score,
-                    
-                    ROUND(
-                        LEAST(100, GREATEST(0, 
-                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_b_champion = 1 THEN 85
-                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                        )), 1
-                    ) as team_b_final_score,
-                    
-                    -- Winner determination - REFINED THRESHOLDS
+                    -- The winner, from the final scores as shown
                     CASE 
-                        WHEN ABS((50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                            CASE 
-                                WHEN pi.team_a_champion = 1 THEN 85
-                                WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 +
-                            (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10 -
-                            
-                            (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 -
-                            CASE 
-                                WHEN pi.team_b_champion = 1 THEN 85
-                                WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                ELSE 50
-                            END * 0.30 -
-                            (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 -
-                            (50 + (cf.timing_multiplier - 1) * 25) * 0.10) >= 8 
-                        THEN 
-                            CASE WHEN (50 + (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                                CASE 
-                                    WHEN pi.team_a_champion = 1 THEN 85
-                                    WHEN pi.team_a_made_playoffs = 1 AND pi.team_b_made_playoffs = 0 THEN 70
-                                    WHEN pi.team_a_made_playoffs = 0 AND pi.team_b_made_playoffs = 1 THEN 30
-                                    ELSE 50
-                                END * 0.30 +
-                                (50 + (COALESCE(oc.team_b_gave_avg_value, 0) - COALESCE(oc.team_a_gave_avg_value, 0)) * 2) * 0.20 +
-                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10 > 
-                                (50 - (fp.team_a_production - fp.team_b_production) * 0.15) * 0.40 +
-                                CASE 
-                                    WHEN pi.team_b_champion = 1 THEN 85
-                                    WHEN pi.team_b_made_playoffs = 1 AND pi.team_a_made_playoffs = 0 THEN 70
-                                    WHEN pi.team_b_made_playoffs = 0 AND pi.team_a_made_playoffs = 1 THEN 30
-                                    ELSE 50
-                                END * 0.30 +
-                                (50 + (COALESCE(oc.team_a_gave_avg_value, 0) - COALESCE(oc.team_b_gave_avg_value, 0)) * 2) * 0.20 +
-                                (50 + (cf.timing_multiplier - 1) * 25) * 0.10
-                            THEN dma.manager_name 
-                            ELSE dmb.manager_name 
-                            END
+                        WHEN ABS(sc.a_final - sc.b_final) >= 8 
+                        THEN CASE WHEN sc.a_final > sc.b_final THEN dma.manager_name ELSE dmb.manager_name END
                         ELSE 'Even Trade'
                     END as trade_winner,
                     
@@ -4486,6 +4468,7 @@ class EdwEtlProcessor:
                 LEFT JOIN opportunity_cost oc ON ts.synthetic_trade_group_id = oc.synthetic_trade_group_id
                 LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_group_id
                 LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
+                LEFT JOIN scored sc ON ts.synthetic_trade_group_id = sc.synthetic_trade_group_id
                 ORDER BY dl.league_name, ts.transaction_date DESC
             """,
             
@@ -4544,7 +4527,8 @@ class EdwEtlProcessor:
                         SUM(championship_games) as championship_appearances,
                         CASE
                             WHEN SUM(wins + losses + ties) > 0
-                            THEN ROUND(SUM(wins)::decimal / SUM(wins + losses + ties), 4)
+                            -- A tie is half a win, as in the manager career mart.
+                            THEN ROUND((SUM(wins) + 0.5 * SUM(ties))::decimal / SUM(wins + losses + ties), 4)
                             ELSE 0
                         END as career_win_percentage
                     FROM career_team_seasons
@@ -5497,7 +5481,7 @@ class EdwEtlProcessor:
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
                     STDDEV(CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
-                                THEN ms.season_wins::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
+                                THEN (ms.season_wins + 0.5 * ms.season_ties)::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
                     (SELECT fd.season_year 
                      FROM edw.fact_draft fd 
                      JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
@@ -5514,13 +5498,13 @@ class EdwEtlProcessor:
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
                        AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
-                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
+                     ORDER BY ((ms2.season_wins + 0.5 * ms2.season_ties)::decimal / NULLIF(ms2.games_played, 0)) DESC 
                      LIMIT 1) as best_season_record,
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
                        AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
-                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
+                     ORDER BY ((ms2.season_wins + 0.5 * ms2.season_ties)::decimal / NULLIF(ms2.games_played, 0)) ASC 
                      LIMIT 1) as worst_season_record
                 FROM manager_stats ms
                 LEFT JOIN playoff_stats ps ON ms.manager_name = ps.manager_name
@@ -5538,7 +5522,9 @@ class EdwEtlProcessor:
                 ma.total_ties,
                 CASE 
                     WHEN (ma.total_wins + ma.total_losses + ma.total_ties) > 0 
-                    THEN ROUND(ma.total_wins::decimal / (ma.total_wins + ma.total_losses + ma.total_ties), 4)
+                    -- A tie is half a win, as on Yahoo, the League Table and
+                    -- the Hall of Fame, so every page shows the same rate.
+                    THEN ROUND((ma.total_wins + 0.5 * ma.total_ties)::decimal / (ma.total_wins + ma.total_losses + ma.total_ties), 4)
                     ELSE 0
                 END as career_win_percentage,
                 ROUND(ma.total_points_scored, 2) as total_points_scored,
@@ -5551,10 +5537,11 @@ class EdwEtlProcessor:
                 ma.championships_won,
                 ma.championship_appearances,
                 ma.playoff_appearances,
+                -- NULL, not 0, for a manager with no bracket games: no
+                -- games is no rate, and 0 read as "lost every one".
                 CASE 
                     WHEN (ma.total_playoff_wins + ma.total_playoff_losses) > 0 
                     THEN ROUND(ma.total_playoff_wins::decimal / (ma.total_playoff_wins + ma.total_playoff_losses), 4)
-                    ELSE 0
                 END as playoff_win_percentage,
                 COALESCE(ds.avg_draft_position, 0) as avg_draft_grade,
                 ma.best_draft_year,
@@ -5571,7 +5558,10 @@ class EdwEtlProcessor:
                     WHEN fs.faab_spent > 0
                     THEN ROUND(fs.faab_starter_points / fs.faab_spent, 4)
                 END as faab_efficiency_rating,
-                COALESCE(ROUND(ma.win_consistency, 4), 0) as season_consistency_score,
+                -- NULL until a manager has two finished seasons: one season
+                -- has no year-to-year spread (STDDEV of one value is NULL),
+                -- and 0 read as "perfectly steady".
+                ROUND(ma.win_consistency, 4) as season_consistency_score,
                 ma.best_season_record,
                 ma.worst_season_record
             FROM manager_aggregates ma
@@ -5883,6 +5873,20 @@ class EdwEtlProcessor:
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
                 WHERE dw.week_type = 'regular'
             ),
+            team_weeks AS (
+                -- Every team in each ranked week of its season: the rows the
+                -- season-to-date columns below are worked out for.
+                SELECT DISTINCT
+                    ftp.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    aw.season_year,
+                    aw.week_number
+                FROM all_weeks aw
+                JOIN edw.fact_team_performance ftp
+                  ON ftp.league_key = aw.league_key
+                 AND ftp.season_year = aw.season_year
+            ),
             actual_matchups AS (
                 -- Get actual head-to-head matchups to calculate correct SOS and pythagorean wins
                 SELECT 
@@ -5961,23 +5965,43 @@ class EdwEtlProcessor:
                 WINDOW season_so_far AS (PARTITION BY league_key, team_key
                                          ORDER BY matchup_week)
             ),
-            opponent_records AS (
-                -- Calculate win percentages for strength of schedule
-                SELECT 
-                    ftp.team_key,
-                    ftp.league_key,
-                    ftp.week_key,
-                    ftp.win_percentage as opponent_win_pct
-                FROM edw.fact_team_performance ftp
+            schedule_strength AS (
+                -- Strength of schedule through each week: the average record of
+                -- the teams played so far, each opponent's record taken over its
+                -- games against everyone else through that week, a tie as half a
+                -- win. Leaving out the games against this team keeps a win from
+                -- lowering the number and a loss from raising it (with them in,
+                -- it ran -0.75 against the team's own record). An opponent with
+                -- no other games yet adds nothing; a team with none at all falls
+                -- back to .500 below.
+                SELECT team_key, league_key, week_key,
+                       AVG(opponent_win_pct) AS strength_of_schedule
+                FROM (
+                    SELECT
+                        tw.team_key,
+                        tw.league_key,
+                        tw.week_key,
+                        am.week_key AS game_week_key,
+                        AVG(og.team_won + 0.5 * og.team_tied) AS opponent_win_pct
+                    FROM team_weeks tw
+                    JOIN actual_matchups am ON am.team_key = tw.team_key
+                        AND am.league_key = tw.league_key
+                        AND am.matchup_week <= tw.week_number
+                    JOIN actual_matchups og ON og.team_key = am.opponent_key
+                        AND og.league_key = am.league_key
+                        AND og.matchup_week <= tw.week_number
+                        AND og.opponent_key <> tw.team_key
+                    GROUP BY tw.team_key, tw.league_key, tw.week_key, am.week_key
+                ) per_game
+                GROUP BY team_key, league_key, week_key
             ),
             team_sos_and_pyth AS (
-                -- Calculate cumulative strength of schedule and actual pythagorean wins
+                -- Cumulative Pythagorean wins (strength of schedule is above)
                 SELECT 
                     aw.team_key,
                     aw.league_key,
                     aw.week_key,
                     aw.season_year,
-                    AVG(opr.opponent_win_pct) as strength_of_schedule,
                     -- Calculate actual pythagorean wins based on point scoring
                     SUM(am.team_points) as total_points_for,
                     SUM(am.opponent_points) as total_points_against,
@@ -5993,25 +6017,11 @@ class EdwEtlProcessor:
                             (POWER(SUM(am.team_points), :pyth_exp) /
                              (POWER(SUM(am.team_points), :pyth_exp) + POWER(SUM(am.opponent_points), :pyth_exp))) * COUNT(*)
                     END as pythagorean_wins
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
                     AND am.matchup_week <= aw.week_number  -- Cumulative through this week
-                JOIN opponent_records opr ON am.opponent_key = opr.team_key 
-                    AND am.league_key = opr.league_key 
-                    AND am.week_key = opr.week_key
                 GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
             ),
             recent_performance AS (
@@ -6021,18 +6031,7 @@ class EdwEtlProcessor:
                     aw.league_key,
                     aw.week_key,
                     AVG(am.team_points) as recent_form_score
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6117,18 +6116,7 @@ class EdwEtlProcessor:
                     -- There are ties (4 games through 2025); a tie was a loss here.
                     SUM(am.team_tied) as cumulative_ties,
                     COUNT(*) as games_played
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6193,7 +6181,7 @@ class EdwEtlProcessor:
                     ftp.playoff_probability,
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
-                    COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
+                    COALESCE(ss.strength_of_schedule, 0.5) as strength_of_schedule,
                     -- No game in the last three weeks: fall back to the season
                     -- average (points_for is only this week's points).
                     COALESCE(rp.recent_form_score, ftp.weekly_points) as recent_form_score,
@@ -6231,6 +6219,9 @@ class EdwEtlProcessor:
                 LEFT JOIN team_sos_and_pyth tsap ON ftp.team_key = tsap.team_key 
                     AND ftp.league_key = tsap.league_key 
                     AND ftp.week_key = tsap.week_key
+                LEFT JOIN schedule_strength ss ON ftp.team_key = ss.team_key
+                    AND ftp.league_key = ss.league_key
+                    AND ftp.week_key = ss.week_key
                 LEFT JOIN recent_performance rp ON ftp.team_key = rp.team_key
                     AND ftp.league_key = rp.league_key
                     AND ftp.week_key = rp.week_key
@@ -6310,18 +6301,7 @@ class EdwEtlProcessor:
                     aw.week_key,
                     MAX(CASE WHEN am.team_won = 1 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_win_margin,
                     MAX(CASE WHEN am.team_won = 0 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_loss_margin
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6738,7 +6718,7 @@ class EdwEtlProcessor:
                 manager_a_ties,
                 CASE 
                     WHEN (manager_a_wins + manager_a_losses + manager_a_ties) > 0 
-                    THEN ROUND(manager_a_wins::decimal / (manager_a_wins + manager_a_losses + manager_a_ties), 4)
+                    THEN ROUND((manager_a_wins + 0.5 * manager_a_ties)::decimal / (manager_a_wins + manager_a_losses + manager_a_ties), 4)
                     ELSE 0
                 END as manager_a_win_percentage,
                 manager_a_total_points,
@@ -6750,8 +6730,10 @@ class EdwEtlProcessor:
                 manager_a_highest_score,
                 manager_a_lowest_score,
                 manager_a_pythagorean_wins,
-                -- Luck factor = actual wins - expected wins
-                ROUND(manager_a_wins - manager_a_pythagorean_wins, 4) as manager_a_luck_factor,
+                -- Luck = actual wins - expected wins. A tie is half a win for
+                -- each side, so the two sides' actual wins add up to the games
+                -- played, as their expected wins do, and the two lucks cancel.
+                ROUND(manager_a_wins + 0.5 * manager_a_ties - manager_a_pythagorean_wins, 4) as manager_a_luck_factor,
                 manager_a_biggest_win_margin,
                 manager_a_current_streak,
                 manager_b_wins,
@@ -6759,7 +6741,7 @@ class EdwEtlProcessor:
                 manager_a_ties as manager_b_ties,
                 CASE 
                     WHEN (manager_b_wins + manager_b_losses + manager_a_ties) > 0 
-                    THEN ROUND(manager_b_wins::decimal / (manager_b_wins + manager_b_losses + manager_a_ties), 4)
+                    THEN ROUND((manager_b_wins + 0.5 * manager_a_ties)::decimal / (manager_b_wins + manager_b_losses + manager_a_ties), 4)
                     ELSE 0
                 END as manager_b_win_percentage,
                 manager_b_total_points,
@@ -6771,8 +6753,8 @@ class EdwEtlProcessor:
                 manager_b_highest_score,
                 manager_b_lowest_score,
                 manager_b_pythagorean_wins,
-                -- Luck factor = actual wins - expected wins
-                ROUND(manager_b_wins - manager_b_pythagorean_wins, 4) as manager_b_luck_factor,
+                -- Luck = actual wins - expected wins, a tie as half (see A).
+                ROUND(manager_b_wins + 0.5 * manager_a_ties - manager_b_pythagorean_wins, 4) as manager_b_luck_factor,
                 manager_b_biggest_win_margin,
                 manager_b_current_streak,
                 CASE 

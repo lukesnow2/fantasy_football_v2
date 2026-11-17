@@ -3,6 +3,8 @@ import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import {
 	careerGrade,
+	draftRecords,
+	positionRanks,
 	seasonDraftScores,
 	seasonGrade,
 	spreadOf,
@@ -209,7 +211,15 @@ export const GET: RequestHandler = async ({ url }) => {
 				avgDraftCost: manager.avgDraftCost || manager.avg_draft_cost
 			}));
 
-			// Best value and biggest busts, three of each per season, judged against
+			// "Drafted QB12, scored QB1": where the pick sat among the season's
+			// drafted players at its position (every manager's), taken and by points.
+			const ranks = positionRanks(valued);
+			const rankFields = (p: (typeof shown)[number]) => {
+				const r = ranks.get(`${p.seasonYear}:${p.overallPick}`);
+				return { draftedRank: r?.drafted ?? null, scoredRank: r?.scored ?? null };
+			};
+
+			// Best value and biggest busts, up to three of each per season, judged against
 			// what each pick's position and round were expected to score. This used to
 			// rank raw season points, so the "busts" were always last-round kickers and
 			// defenses that were cut - picks nobody counted on.
@@ -223,6 +233,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				managerName: p.managerName,
 				playerName: p.playerName,
 				primaryPosition: p.position,
+				...rankFields(p),
 				pickType
 			});
 			const shownSeasons = [...new Set(shown.map((p) => p.seasonYear))].sort((a, b) => b - a);
@@ -273,7 +284,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				managerName: p.managerName,
 				seasonPoints: round1(p.seasonPoints),
 				expectedPoints: round1(p.expectedPoints),
-				valueOverExpected: round1(p.valueOverExpected)
+				valueOverExpected: round1(p.valueOverExpected),
+				...rankFields(p)
 			});
 			const byManager = new Map<string, { picks: number; total: number }>();
 			for (const p of shown) {
@@ -282,9 +294,15 @@ export const GET: RequestHandler = async ({ url }) => {
 				m.total += p.valueOverExpected;
 				byManager.set(p.managerName, m);
 			}
+			// All seasons: records, which wait for a season to finish. One season:
+			// that season's lists, finished or not.
+			const lists =
+				season === 'all'
+					? draftRecords(shown, completedSeasons, 10)
+					: { steals: topSteals(shown, 10), busts: topBusts(shown, 10) };
 			data.draftValue = {
-				bestValue: topSteals(shown, 10).map(mapValue),
-				biggestBusts: topBusts(shown, 10).map(mapValue),
+				bestValue: lists.steals.map(mapValue),
+				biggestBusts: lists.busts.map(mapValue),
 				byManager: [...byManager.entries()]
 					.filter(([, m]) => m.picks >= 20)
 					.map(([managerName, m]) => ({
@@ -295,7 +313,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					}))
 					.sort((a, b) => b.avgValue - a.avgValue),
 				methodology:
-					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks from rounds 1-8 expected to beat an average pick, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
+					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Steals and busts are ranked by how far a pick stood out from players at its position taken around the same round, so QBs, whose results swing widest, don't fill the lists just for scoring more. Busts are only picks from rounds 1-8 expected to beat an average pick that scored under half their expectation, the same rule as the board's bust tag, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
 			};
 
 			// Manager draft grades ($lib/draft-value): a draft's points over
