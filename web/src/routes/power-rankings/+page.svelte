@@ -413,7 +413,7 @@
 				<!-- The 10,000 is SIMS in $lib/server/playoff-odds-service.ts. -->
 				<p class="footnote">
 					{#if isFinalWeek}Week {week} is the last ranked week of {season}.{' '}{/if}Power rankings
-					cover the regular season only. Luck is actual wins minus Pythagorean wins. Playoff odds
+					cover the regular season only. Luck is actual wins minus the wins a team's scores would have earned playing every team every week. Playoff odds
 					come from the same 10,000-sim model as This Season.
 				</p>
 			</Card>

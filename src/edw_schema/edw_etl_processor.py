@@ -5497,7 +5497,7 @@ class EdwEtlProcessor:
                     SUM(ms.playoff_wins) as total_playoff_wins,
                     SUM(ms.playoff_losses) as total_playoff_losses,
                     STDDEV(CASE WHEN ms.season_year IN (SELECT season_year FROM completed_seasons)
-                                THEN ms.season_wins::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
+                                THEN (ms.season_wins + 0.5 * ms.season_ties)::decimal / NULLIF(ms.games_played, 0) END) as win_consistency,
                     (SELECT fd.season_year 
                      FROM edw.fact_draft fd 
                      JOIN edw.dim_manager dm_sub ON fd.manager_key = dm_sub.manager_key
@@ -5514,13 +5514,13 @@ class EdwEtlProcessor:
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
                        AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
-                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) DESC 
+                     ORDER BY ((ms2.season_wins + 0.5 * ms2.season_ties)::decimal / NULLIF(ms2.games_played, 0)) DESC 
                      LIMIT 1) as best_season_record,
                     (SELECT CONCAT(ms2.season_wins, '-', ms2.season_losses, '-', ms2.season_ties) 
                      FROM manager_stats ms2 
                      WHERE ms2.manager_name = ms.manager_name 
                        AND ms2.season_year IN (SELECT season_year FROM completed_seasons)
-                     ORDER BY (ms2.season_wins::decimal / NULLIF(ms2.games_played, 0)) ASC 
+                     ORDER BY ((ms2.season_wins + 0.5 * ms2.season_ties)::decimal / NULLIF(ms2.games_played, 0)) ASC 
                      LIMIT 1) as worst_season_record
                 FROM manager_stats ms
                 LEFT JOIN playoff_stats ps ON ms.manager_name = ps.manager_name
@@ -5538,7 +5538,9 @@ class EdwEtlProcessor:
                 ma.total_ties,
                 CASE 
                     WHEN (ma.total_wins + ma.total_losses + ma.total_ties) > 0 
-                    THEN ROUND(ma.total_wins::decimal / (ma.total_wins + ma.total_losses + ma.total_ties), 4)
+                    -- A tie is half a win, as on Yahoo, the League Table and
+                    -- the Hall of Fame, so every page shows the same rate.
+                    THEN ROUND((ma.total_wins + 0.5 * ma.total_ties)::decimal / (ma.total_wins + ma.total_losses + ma.total_ties), 4)
                     ELSE 0
                 END as career_win_percentage,
                 ROUND(ma.total_points_scored, 2) as total_points_scored,
@@ -5961,23 +5963,54 @@ class EdwEtlProcessor:
                 WINDOW season_so_far AS (PARTITION BY league_key, team_key
                                          ORDER BY matchup_week)
             ),
-            opponent_records AS (
-                -- Calculate win percentages for strength of schedule
-                SELECT 
-                    ftp.team_key,
-                    ftp.league_key,
-                    ftp.week_key,
-                    ftp.win_percentage as opponent_win_pct
-                FROM edw.fact_team_performance ftp
+            schedule_strength AS (
+                -- Strength of schedule through each week: the average record of
+                -- the teams played so far, each opponent's record taken over its
+                -- games against everyone else through that week, a tie as half a
+                -- win. Leaving out the games against this team keeps a win from
+                -- lowering the number and a loss from raising it (with them in,
+                -- it ran -0.75 against the team's own record). An opponent with
+                -- no other games yet adds nothing; a team with none at all falls
+                -- back to .500 below.
+                SELECT team_key, league_key, week_key,
+                       AVG(opponent_win_pct) AS strength_of_schedule
+                FROM (
+                    SELECT
+                        tw.team_key,
+                        tw.league_key,
+                        tw.week_key,
+                        am.week_key AS game_week_key,
+                        AVG(og.team_won + 0.5 * og.team_tied) AS opponent_win_pct
+                    FROM (
+                        SELECT DISTINCT
+                            ftp.team_key,
+                            aw.league_key,
+                            aw.week_key,
+                            aw.season_year,
+                            aw.week_number
+                        FROM all_weeks aw
+                        JOIN edw.fact_team_performance ftp
+                          ON ftp.league_key = aw.league_key
+                         AND ftp.season_year = aw.season_year
+                    ) tw
+                    JOIN actual_matchups am ON am.team_key = tw.team_key
+                        AND am.league_key = tw.league_key
+                        AND am.matchup_week <= tw.week_number
+                    JOIN actual_matchups og ON og.team_key = am.opponent_key
+                        AND og.league_key = am.league_key
+                        AND og.matchup_week <= tw.week_number
+                        AND og.opponent_key <> tw.team_key
+                    GROUP BY tw.team_key, tw.league_key, tw.week_key, am.week_key
+                ) per_game
+                GROUP BY team_key, league_key, week_key
             ),
             team_sos_and_pyth AS (
-                -- Calculate cumulative strength of schedule and actual pythagorean wins
+                -- Cumulative Pythagorean wins (strength of schedule is above)
                 SELECT 
                     aw.team_key,
                     aw.league_key,
                     aw.week_key,
                     aw.season_year,
-                    AVG(opr.opponent_win_pct) as strength_of_schedule,
                     -- Calculate actual pythagorean wins based on point scoring
                     SUM(am.team_points) as total_points_for,
                     SUM(am.opponent_points) as total_points_against,
@@ -6009,9 +6042,6 @@ class EdwEtlProcessor:
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
                     AND am.matchup_week <= aw.week_number  -- Cumulative through this week
-                JOIN opponent_records opr ON am.opponent_key = opr.team_key 
-                    AND am.league_key = opr.league_key 
-                    AND am.week_key = opr.week_key
                 GROUP BY aw.team_key, aw.league_key, aw.week_key, aw.season_year
             ),
             recent_performance AS (
@@ -6193,7 +6223,7 @@ class EdwEtlProcessor:
                     ftp.playoff_probability,
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
-                    COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
+                    COALESCE(ss.strength_of_schedule, 0.5) as strength_of_schedule,
                     -- No game in the last three weeks: fall back to the season
                     -- average (points_for is only this week's points).
                     COALESCE(rp.recent_form_score, ftp.weekly_points) as recent_form_score,
@@ -6231,6 +6261,9 @@ class EdwEtlProcessor:
                 LEFT JOIN team_sos_and_pyth tsap ON ftp.team_key = tsap.team_key 
                     AND ftp.league_key = tsap.league_key 
                     AND ftp.week_key = tsap.week_key
+                LEFT JOIN schedule_strength ss ON ftp.team_key = ss.team_key
+                    AND ftp.league_key = ss.league_key
+                    AND ftp.week_key = ss.week_key
                 LEFT JOIN recent_performance rp ON ftp.team_key = rp.team_key
                     AND ftp.league_key = rp.league_key
                     AND ftp.week_key = rp.week_key
@@ -6738,7 +6771,7 @@ class EdwEtlProcessor:
                 manager_a_ties,
                 CASE 
                     WHEN (manager_a_wins + manager_a_losses + manager_a_ties) > 0 
-                    THEN ROUND(manager_a_wins::decimal / (manager_a_wins + manager_a_losses + manager_a_ties), 4)
+                    THEN ROUND((manager_a_wins + 0.5 * manager_a_ties)::decimal / (manager_a_wins + manager_a_losses + manager_a_ties), 4)
                     ELSE 0
                 END as manager_a_win_percentage,
                 manager_a_total_points,
@@ -6750,8 +6783,10 @@ class EdwEtlProcessor:
                 manager_a_highest_score,
                 manager_a_lowest_score,
                 manager_a_pythagorean_wins,
-                -- Luck factor = actual wins - expected wins
-                ROUND(manager_a_wins - manager_a_pythagorean_wins, 4) as manager_a_luck_factor,
+                -- Luck = actual wins - expected wins. A tie is half a win for
+                -- each side, so the two sides' actual wins add up to the games
+                -- played, as their expected wins do, and the two lucks cancel.
+                ROUND(manager_a_wins + 0.5 * manager_a_ties - manager_a_pythagorean_wins, 4) as manager_a_luck_factor,
                 manager_a_biggest_win_margin,
                 manager_a_current_streak,
                 manager_b_wins,
@@ -6759,7 +6794,7 @@ class EdwEtlProcessor:
                 manager_a_ties as manager_b_ties,
                 CASE 
                     WHEN (manager_b_wins + manager_b_losses + manager_a_ties) > 0 
-                    THEN ROUND(manager_b_wins::decimal / (manager_b_wins + manager_b_losses + manager_a_ties), 4)
+                    THEN ROUND((manager_b_wins + 0.5 * manager_a_ties)::decimal / (manager_b_wins + manager_b_losses + manager_a_ties), 4)
                     ELSE 0
                 END as manager_b_win_percentage,
                 manager_b_total_points,
@@ -6771,8 +6806,8 @@ class EdwEtlProcessor:
                 manager_b_highest_score,
                 manager_b_lowest_score,
                 manager_b_pythagorean_wins,
-                -- Luck factor = actual wins - expected wins
-                ROUND(manager_b_wins - manager_b_pythagorean_wins, 4) as manager_b_luck_factor,
+                -- Luck = actual wins - expected wins, a tie as half (see A).
+                ROUND(manager_b_wins + 0.5 * manager_a_ties - manager_b_pythagorean_wins, 4) as manager_b_luck_factor,
                 manager_b_biggest_win_margin,
                 manager_b_current_streak,
                 CASE 

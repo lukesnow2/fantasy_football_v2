@@ -378,7 +378,7 @@ export function oddsDetail(team: OddsTeam): { term: string; value: string }[] {
 
 /** The two paragraphs under "How these odds work", with the response's numbers. */
 export function oddsMethod(sims: number, playoffTeams: number, byes: number): [string, string] {
-	const first = `Each team gets a projected score, pulled toward the league average early in the year. The rest of the season is played ${thousands(sims)} times with that score drifting week to week, and seeds go by wins, then points for.`;
+	const first = `The rest of the season is played out ${thousands(sims)} times, with every team scoring around its weekly average so far. Early in the year that average is pulled toward the league's, since a few games don't say much. Standings sort by wins, then points for.`;
 	const format =
 		playoffTeams === 6 && byes === 2
 			? 'Six make it and the top two get byes: 3 plays 6, 4 plays 5.'

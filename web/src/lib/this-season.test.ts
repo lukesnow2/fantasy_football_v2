@@ -432,7 +432,7 @@ describe('oddsDetail', () => {
 describe('oddsMethod', () => {
 	it("prints the board's two paragraphs for six teams and two byes", () => {
 		expect(oddsMethod(10000, 6, 2)).toEqual([
-			'Each team gets a projected score, pulled toward the league average early in the year. The rest of the season is played 10,000 times with that score drifting week to week, and seeds go by wins, then points for.',
+			"The rest of the season is played out 10,000 times, with every team scoring around its weekly average so far. Early in the year that average is pulled toward the league's, since a few games don't say much. Standings sort by wins, then points for.",
 			'Six make it and the top two get byes: 3 plays 6, 4 plays 5. Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.'
 		]);
 	});
