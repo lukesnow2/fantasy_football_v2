@@ -389,7 +389,7 @@ export function oddsMethod(sims: number, playoffTeams: number, byes: number): [s
 					: `The top ${playoffTeams} make it.`;
 	return [
 		first,
-		`${format} Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.`
+		`${format} Back-tested on 2008 to 2025, teams given 85 to 95% made it 203 times in 226.`
 	];
 }
 

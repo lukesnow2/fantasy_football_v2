@@ -25,9 +25,9 @@
 -- hall_of_fame_index is left out: its formula is changing in separate work
 -- (migration 016), and its card should change with it.
 --
--- populate_metric_definitions.sql and add_metric_limitations.sql are the
--- baseline a rebuild starts from; every rebuild then applies the migrations,
--- so this file is where the current copy lives.
+-- add_metric_limitations.sql carries the same values for every field it sets,
+-- so re-running it (the RUNBOOK calls that safe) doesn't put the old copy back
+-- on a database that has already recorded this migration.
 --
 -- Idempotent: safe to re-run.
 

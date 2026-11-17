@@ -433,7 +433,7 @@ describe('oddsMethod', () => {
 	it("prints the board's two paragraphs for six teams and two byes", () => {
 		expect(oddsMethod(10000, 6, 2)).toEqual([
 			"The rest of the season is played out 10,000 times, with every team scoring around its weekly average so far. Early in the year that average is pulled toward the league's, since a few games don't say much. Standings sort by wins, then points for.",
-			'Six make it and the top two get byes: 3 plays 6, 4 plays 5. Back-tested on 2008 to 2025, teams given 85 to 95% made it 90% of the time.'
+			'Six make it and the top two get byes: 3 plays 6, 4 plays 5. Back-tested on 2008 to 2025, teams given 85 to 95% made it 203 times in 226.'
 		]);
 	});
 
