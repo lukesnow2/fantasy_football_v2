@@ -154,9 +154,14 @@ export function buildRows(
 			playoffLosses,
 			// From the record when there is one, so the rate and the record
 			// agree to the last digit (the mart stores the rate to 4 places).
+			// A 0-0 record is no rate, whatever the mart stored: it used to
+			// store 0, which printed 0.0%. The mart's rate is only for a
+			// manager whose record didn't come back.
 			playoffWinPct:
-				playoffWins != null && playoffLosses != null && playoffGames > 0
-					? playoffWins / playoffGames
+				playoffWins != null && playoffLosses != null
+					? playoffGames > 0
+						? playoffWins / playoffGames
+						: null
 					: n(p.playoffWinPercentage),
 			ppg: n(p.avgPointsPerGame),
 			ppSeason: n(p.finishedPointsPerSeason),

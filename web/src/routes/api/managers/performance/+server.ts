@@ -442,7 +442,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			mgr.championshipRank = championshipRank(mgr);
 			mgr.winPctRank = winPctRank(mgr);
 			mgr.scoringRank = scoringRank(mgr);
-			mgr.playoffRank = playoffRank(mgr);
+			// No bracket games is no playoff win rate, so no rank: ranking it
+			// as 0% put "Tied 12th" under a rate that reads None.
+			mgr.playoffRank = mgr.playoffWinPercentage == null ? null : playoffRank(mgr);
 		});
 
 		// Ranked against the whole league above; now narrow to the one asked for.
