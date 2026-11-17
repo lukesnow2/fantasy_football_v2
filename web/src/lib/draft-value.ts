@@ -250,25 +250,40 @@ type Positioned = { position?: string | null };
 /**
  * Steals: the picks that stood out most from players at their position taken
  * around the same round (valueZ, not raw points, so QBs don't crowd the list
- * just for scoring more). Never a kicker or defense.
+ * just for scoring more). Only picks that beat their slot; never a kicker or
+ * defense.
  */
 export function topSteals<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
 	return picks
-		.filter((p) => getsVerdict(p.position))
+		.filter((p) => p.valueZ > 0 && getsVerdict(p.position))
 		.sort((a, b) => b.valueZ - a.valueZ)
 		.slice(0, n);
 }
 
 /**
  * Busts: picks the draft counted on (highExpectation) that fell furthest short
- * of players at their position taken around the same round (valueZ). Never a
- * kicker or defense.
+ * of players at their position taken around the same round (valueZ). Only
+ * picks that missed their slot; never a kicker or defense.
  */
 export function topBusts<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
 	return picks
-		.filter((p) => p.highExpectation && getsVerdict(p.position))
+		.filter((p) => p.highExpectation && p.valueZ < 0 && getsVerdict(p.position))
 		.sort((a, b) => a.valueZ - b.valueZ)
 		.slice(0, n);
+}
+
+/**
+ * The all-time steals and busts. Records wait for a season to finish: ranked
+ * within position, a few weeks of points read like a whole season, so the
+ * season still being played is left out.
+ */
+export function draftRecords<T extends PickValue & Positioned & { seasonYear: number }>(
+	picks: T[],
+	completedSeasons: Set<number>,
+	n: number
+): { steals: T[]; busts: T[] } {
+	const finished = picks.filter((p) => completedSeasons.has(p.seasonYear));
+	return { steals: topSteals(finished, n), busts: topBusts(finished, n) };
 }
 
 /**

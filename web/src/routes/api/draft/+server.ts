@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import {
 	careerGrade,
+	draftRecords,
 	positionRanks,
 	seasonDraftScores,
 	seasonGrade,
@@ -285,8 +286,6 @@ export const GET: RequestHandler = async ({ url }) => {
 				valueOverExpected: round1(p.valueOverExpected),
 				...rankFields(p)
 			});
-			const finishedShown =
-				season === 'all' ? shown.filter((p) => completedSeasons.has(p.seasonYear)) : shown;
 			const byManager = new Map<string, { picks: number; total: number }>();
 			for (const p of shown) {
 				const m = byManager.get(p.managerName) ?? { picks: 0, total: 0 };
@@ -295,10 +294,18 @@ export const GET: RequestHandler = async ({ url }) => {
 				byManager.set(p.managerName, m);
 			}
 			data.draftValue = {
-				// Records wait for a season to finish: a few weeks of points read
-				// like a whole season once ranked within position.
-				bestValue: topSteals(finishedShown, 10).map(mapValue),
-				biggestBusts: topBusts(finishedShown, 10).map(mapValue),
+				...(() => {
+					// All seasons: records, which wait for a season to finish. One
+					// season: that season's lists, finished or not.
+					const lists =
+						season === 'all'
+							? draftRecords(shown, completedSeasons, 10)
+							: { steals: topSteals(shown, 10), busts: topBusts(shown, 10) };
+					return {
+						bestValue: lists.steals.map(mapValue),
+						biggestBusts: lists.busts.map(mapValue)
+					};
+				})(),
 				byManager: [...byManager.entries()]
 					.filter(([, m]) => m.picks >= 20)
 					.map(([managerName, m]) => ({

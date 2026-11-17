@@ -3,6 +3,7 @@ import {
 	isHit,
 	pickGrade,
 	careerGrade,
+	draftRecords,
 	pickVerdict,
 	positionRanks,
 	seasonDraftScores,
@@ -183,6 +184,39 @@ describe('valueDraftPicks', () => {
 		expect(q.valueOverExpected).toBeGreaterThan(w.valueOverExpected);
 		expect(w.valueZ).toBeGreaterThan(q.valueZ);
 		expect(topSteals([q, w], 1)[0].name).toBe('late-wr');
+	});
+
+	it('measures a pick against its own position spread, not the gap between position averages', () => {
+		// QBs and WRs each land 10 either side of their own average (300 and
+		// 100). The round's raw spread is ~100 because of the gap between them;
+		// a WR at 160 is far out among WRs and must read that way.
+		const two: Pick[] = [2022, 2023, 2024, 2025].flatMap((year) =>
+			[1, 2, 3].flatMap((round) =>
+				[0, 1, 2, 3].flatMap((i) => [
+					{ seasonYear: year, roundNumber: round, position: 'QB', seasonPoints: i % 2 ? 310 : 290, name: `${year}-qb-${round}-${i}` },
+					{ seasonYear: year, roundNumber: round, position: 'WR', seasonPoints: i % 2 ? 110 : 90, name: `${year}-wr-${round}-${i}` }
+				])
+			)
+		);
+		const hit: Pick = { seasonYear: 2025, roundNumber: 2, position: 'WR', seasonPoints: 160, name: 'wr-hit' };
+		const v = valueDraftPicks([...two, hit], done);
+		expect(v.find((p) => p.name === 'wr-hit')!.valueZ).toBeGreaterThan(2);
+	});
+
+	it('steal and bust lists hold only picks that beat or missed their slot', () => {
+		const v = valueDraftPicks([...history, ...season(2025, { '2025-RB-1': 60 })], done).filter(
+			(p) => p.seasonYear === 2025
+		);
+		expect(topSteals(v, 200).every((p) => p.valueZ > 0)).toBe(true);
+		expect(topBusts(v, 200).every((p) => p.valueZ < 0)).toBe(true);
+	});
+
+	it('all-time records leave out the season still being played', () => {
+		const live = season(2026, { '2026-WR-13': 330, '2026-RB-1': 0 });
+		const v = valueDraftPicks([...history, ...season(2025), ...live], done);
+		const { steals, busts } = draftRecords(v, new Set([...done, 2025]), 50);
+		expect([...steals, ...busts].some((p) => p.seasonYear === 2026)).toBe(false);
+		expect(topSteals(v, 1)[0].name).toBe('2026-WR-13');
 	});
 
 	it('a late-round pick is never a bust, even a QB the league expects a lot from', () => {
