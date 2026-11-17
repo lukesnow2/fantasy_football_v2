@@ -200,17 +200,21 @@ interface CareerExtras {
 	pointsAgainst: number | null;
 	finishedPointsPerSeason: number | null;
 	streaks: Streaks | null;
+	playoffWins: number | null;
+	playoffLosses: number | null;
 }
 
 /**
  * Three career fields for every manager at once (WP14 S14.6), for the League
  * Table: points against over every game, points per finished season (points
  * in finished seasons ÷ finished seasons, so the live season can't drag the
- * average down) and the longest win and losing streaks, read with the same
- * game order as the single-manager path below.
+ * average down), the longest win and losing streaks, read with the same
+ * game order as the single-manager path below, and every playoff and title
+ * game won and lost, counted as the mart counts them for its playoff win
+ * percentage (so the two always agree).
  */
 async function loadCareerExtras(): Promise<Map<string, CareerExtras>> {
-	const [totalsResult, gamesResult] = await Promise.all([
+	const [totalsResult, gamesResult, playoffResult] = await Promise.all([
 		db.execute(sql`
 			WITH league_state AS (${leagueState})
 			SELECT
@@ -241,8 +245,28 @@ async function loadCareerExtras(): Promise<Map<string, CareerExtras>> {
 			WHERE dm.manager_name IS NOT NULL
 			-- Team within season, as on the single-manager path.
 			ORDER BY dm.manager_name, fm.season_year, side.team_key, dw.week_number
+		`),
+		db.execute(sql`
+			SELECT
+				dt.manager_name AS manager_name,
+				COUNT(*) FILTER (WHERE fm.winner_team_key = side.team_key) AS playoff_wins,
+				COUNT(*) FILTER (
+					WHERE fm.winner_team_key <> side.team_key AND NOT fm.is_tie
+				) AS playoff_losses
+			FROM edw.fact_matchup fm
+			CROSS JOIN LATERAL (VALUES (fm.team1_key), (fm.team2_key)) AS side(team_key)
+			JOIN edw.dim_team dt ON dt.team_key = side.team_key
+			WHERE fm.matchup_type IN ('playoffs', 'championship')
+			  AND dt.manager_name IS NOT NULL
+			GROUP BY dt.manager_name
 		`)
 	]);
+	const playoffs = new Map(
+		(Array.from(playoffResult) as any[]).map((r) => [
+			String(r.managerName),
+			{ wins: num(r.playoffWins), losses: num(r.playoffLosses) }
+		])
+	);
 	const streaks = streaksByManager(
 		(Array.from(gamesResult) as any[]).map((g) => ({
 			managerName: String(g.managerName),
@@ -255,7 +279,10 @@ async function loadCareerExtras(): Promise<Map<string, CareerExtras>> {
 		extras.set(name, {
 			pointsAgainst: num(r.pointsAgainst),
 			finishedPointsPerSeason: num(r.finishedPointsPerSeason),
-			streaks: streaks.get(name) ?? null
+			streaks: streaks.get(name) ?? null,
+			// No bracket games yet is a 0-0 record, not a missing one.
+			playoffWins: playoffs.get(name)?.wins ?? 0,
+			playoffLosses: playoffs.get(name)?.losses ?? 0
 		});
 	}
 	return extras;
@@ -366,7 +393,9 @@ export const GET: RequestHandler = async ({ url }) => {
 				: (extras.get(mgr.manager_name || mgr.managerName) ?? {
 						pointsAgainst: null,
 						finishedPointsPerSeason: null,
-						streaks: null
+						streaks: null,
+						playoffWins: null,
+						playoffLosses: null
 					})),
 			// Tier classification based on performance
 			tierClassification:
