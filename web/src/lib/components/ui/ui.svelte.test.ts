@@ -104,6 +104,45 @@ describe('StatTip', () => {
 		expect(document.activeElement).toBe(button.element());
 	});
 
+	it('leaves focus alone when Escape is pressed with focus elsewhere', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const elsewhere = document.body.appendChild(document.createElement('input'));
+		onTestFinished(() => elsewhere.remove());
+		elsewhere.focus();
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck', open: true });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		await userEvent.keyboard('{Escape}');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(document.activeElement).toBe(elsewhere);
+	});
+
+	it('closes when focus lands outside it, even if the button never had focus', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const elsewhere = document.body.appendChild(document.createElement('button'));
+		onTestFinished(() => elsewhere.remove());
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck', open: true });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		elsewhere.focus();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it('keeps its Escape from closing a layer around it', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const { container } = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const outer = vi.fn();
+		container.addEventListener('keydown', outer);
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await userEvent.keyboard('{Escape}');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(outer).not.toHaveBeenCalled();
+		// Closed, its Escape passes through again.
+		await userEvent.keyboard('{Escape}');
+		expect(outer).toHaveBeenCalledTimes(1);
+	});
+
 	it('opens from the keyboard and reaches the close control and link with Tab', async () => {
 		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
 		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });

@@ -190,23 +190,36 @@
 		};
 	});
 
-	// Escape and a click outside close it. Escape always hands focus back to
-	// the button: while the card is open focus is on it, inside the card, or
-	// (Safari doesn't focus a clicked button) on the page body.
+	// Escape, a click outside and focus landing outside close it. Escape is
+	// the card's alone (caught first, and not passed on), so a card inside a
+	// Dialog or menu closes without closing that too. It hands focus back to the
+	// button when focus was in the StatTip or nowhere (Safari doesn't focus a
+	// clicked button), and leaves it alone anywhere else.
 	$effect(() => {
 		if (!showing) return;
 		const onKey = (event: KeyboardEvent) => {
-			if (event.key !== 'Escape') return;
-			closeAndReturn();
+			if (event.key !== 'Escape' || event.defaultPrevented) return;
+			event.stopPropagation();
+			const active = document.activeElement;
+			const focusWasHere = !active || active === document.body || root?.contains(active);
+			close();
+			if (focusWasHere) trigger?.focus();
 		};
 		const onPointer = (event: PointerEvent) => {
 			if (root && !root.contains(event.target as Node)) close();
 		};
-		document.addEventListener('keydown', onKey);
+		// focusin on the document, not focusout on the root: a click that didn't
+		// focus the button means focus can leave without ever having been here.
+		const onFocus = (event: FocusEvent) => {
+			if (root && !root.contains(event.target as Node)) close();
+		};
+		document.addEventListener('keydown', onKey, true);
 		document.addEventListener('pointerdown', onPointer);
+		document.addEventListener('focusin', onFocus);
 		return () => {
-			document.removeEventListener('keydown', onKey);
+			document.removeEventListener('keydown', onKey, true);
 			document.removeEventListener('pointerdown', onPointer);
+			document.removeEventListener('focusin', onFocus);
 		};
 	});
 
@@ -223,12 +236,6 @@
 	function onclick() {
 		open = !open;
 	}
-
-	function onfocusout(event: FocusEvent) {
-		const next = event.relatedTarget as Node | null;
-		if (next && root?.contains(next)) return;
-		if (next) close();
-	}
 </script>
 
 {#snippet labelText()}
@@ -238,7 +245,7 @@
 {#if status === 'missing'}
 	<span class:sr-only={iconOnly}>{@render labelText()}</span>
 {:else}
-	<span class="stattip" bind:this={root} {onfocusout} role="presentation">
+	<span class="stattip" bind:this={root}>
 		<span id={aboutId} hidden>About</span><button
 			bind:this={trigger}
 			type="button"
