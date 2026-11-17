@@ -80,6 +80,19 @@ export interface OddsOptions {
 	sims?: number;
 	seed?: number;
 	params?: Partial<ModelParams>;
+	/**
+	 * Championship-bracket games already decided, once the playoffs are on.
+	 * A simulated bracket game between two teams that really met takes the
+	 * real winner, and a team that lost one can't win the title. Consolation
+	 * games don't belong here. Without it the whole bracket is simulated.
+	 */
+	bracketResults?: BracketResult[];
+}
+
+export interface BracketResult {
+	teamA: number;
+	teamB: number;
+	winner: number;
 }
 
 export interface TeamOdds {
@@ -106,6 +119,8 @@ export interface TeamOdds {
 	/** Mathematically certain, not just 100% in simulation. */
 	clinched: boolean;
 	eliminated: boolean;
+	/** Lost a championship-bracket game that's been played. */
+	knockedOut: boolean;
 }
 
 export interface OddsResult {
@@ -571,6 +586,19 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 		}
 	};
 
+	// Real bracket results, by the pair that played.
+	const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
+	const realWinner = new Map<string, number>();
+	const knockedOut = new Set<number>();
+	for (const g of opts.bracketResults ?? []) {
+		const a = idx.get(g.teamA);
+		const b = idx.get(g.teamB);
+		const w = idx.get(g.winner);
+		if (a == null || b == null || w == null || (w !== a && w !== b)) continue;
+		realWinner.set(pairKey(a, b), w);
+		knockedOut.add(w === a ? b : a);
+	}
+
 	const made = new Float64Array(n);
 	const bye = new Float64Array(n);
 	const top = new Float64Array(n);
@@ -630,6 +658,14 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 
 		if (playoffTeams >= 2) {
 			const game = (a: number, b: number) => {
+				// A game already played keeps its result, and a team already out
+				// stays out (it can only meet one here if the simulated seeds
+				// differ from the real ones). Neither draws a score, so a season
+				// with no playoff games yet sees the same randomness as before.
+				const real = realWinner.get(pairKey(a, b));
+				if (real != null) return real;
+				const outA = knockedOut.has(a);
+				if (outA !== knockedOut.has(b)) return outA ? b : a;
 				play(a, b);
 				return sa >= sb ? a : b;
 			};
@@ -677,9 +713,10 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 			playoffOdds: lock.clinched ? 1 : lock.eliminated ? 0 : made[i] / sims,
 			byeOdds: lock.eliminated ? 0 : bye[i] / sims,
 			topSeedOdds: lock.eliminated ? 0 : top[i] / sims,
-			titleOdds: lock.eliminated ? 0 : title[i] / sims,
+			titleOdds: lock.eliminated || knockedOut.has(i) ? 0 : title[i] / sims,
 			clinched: lock.clinched,
-			eliminated: lock.eliminated
+			eliminated: lock.eliminated,
+			knockedOut: knockedOut.has(i)
 		};
 	});
 	teams.sort((a, b) => b.playoffOdds - a.playoffOdds || b.projectedWins - a.projectedWins);

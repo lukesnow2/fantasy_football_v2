@@ -132,7 +132,9 @@ async function main() {
 	const version = modelVersion({ sims: SIMS, seed: oddsSeed, params: PARAMS });
 	const sha = gitSha();
 
-	const latestRun = await getSeasonOddsWithFingerprint(season);
+	// Without the bracket: a snapshot is the forecast as the regular season
+	// left it, even when the pipeline first runs after a playoff week.
+	const latestRun = await getSeasonOddsWithFingerprint(season, undefined, { bracket: false });
 	const latest = latestRun.odds;
 	if (!latest.available) {
 		console.log(`${season}: no forecast to save (${latest.reason})`);

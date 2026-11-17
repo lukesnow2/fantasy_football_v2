@@ -194,6 +194,7 @@
 		[...(power?.rankings ?? [])].sort((a, b) => a.powerRank - b.powerRank)
 	);
 	const powerByManager = $derived(new Map(powerRows.map((p) => [p.managerName, p])));
+	const tierByManager = $derived(new Map(rows.map((r) => [r.managerName, r.playoffTier])));
 	const oddsByManager = $derived(new Map((oddsReady?.teams ?? []).map((t) => [t.managerName, t])));
 
 	const showNotes = $derived(mode === 'live' && phase === 'regular' && throughWeek >= 1);
@@ -255,6 +256,49 @@
 <svelte:head>
 	<title>This Season · The League</title>
 </svelte:head>
+
+{#snippet powerCard(final: boolean)}
+	<!-- After the final it's the last ranking of the season, with where each
+	     team finished beside it. -->
+	<Card
+		title={final ? 'Final Power Rankings' : 'Power Rankings'}
+		headGap={6}
+		phonePadding="16px 16px 6px"
+		phoneHeadGap={2}
+	>
+		{#snippet action()}
+			{#if power?.week}<span class="meta wk">Wk {power.week}</span>{/if}
+		{/snippet}
+		{#if powerRows.length === 0}
+			<p class="muted-line">Power rankings aren't available for this season yet.</p>
+		{:else}
+			{#if final}
+				<p class="power-note">Where the rankings had everyone when the regular season ended.</p>
+			{/if}
+			<ul class="power">
+				{#each powerRows as p (p.managerName)}
+					{@const tag = final ? finishTag(tierByManager.get(p.managerName)) : null}
+					<li>
+						<span class="power-rank">{p.powerRank}</span>
+						{#if p.managerHasProfile}
+							<a class="power-name" href={profileHref(p.managerName)}>{p.managerName}</a>
+						{:else}
+							<span class="power-name">{p.managerName}</span>
+						{/if}
+						{#if tag}
+							<Tag variant={tag.variant} size="row">{tag.text}</Tag>
+						{:else if !final && p.rankChange !== null}<span class="small-move"
+								><Movement change={p.rankChange} /></span
+							>{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		<div class="full-link">
+			<Button variant="link" size="tap" href="/power-rankings">Full rankings →</Button>
+		</div>
+	</Card>
+{/snippet}
 
 {#snippet yahoo()}
 	<Button variant="secondary" href={YAHOO_LEAGUE_URL} target="_blank" rel="noopener noreferrer"
@@ -409,8 +453,9 @@
 				{/if}
 			</Card>
 		</div>
-		<div class="field">
+		<div class="column field">
 			<PlayoffOdds data={odds} />
+			{@render powerCard(true)}
 		</div>
 	</div>
 {:else}
@@ -564,33 +609,7 @@
 			{/if}
 
 			<!-- S4.7 Power Rankings -->
-			<Card title="Power Rankings" headGap={6} phonePadding="16px 16px 6px" phoneHeadGap={2}>
-				{#snippet action()}
-					{#if power?.week}<span class="meta wk">Wk {power.week}</span>{/if}
-				{/snippet}
-				{#if powerRows.length === 0}
-					<p class="muted-line">Power rankings aren't available for this season yet.</p>
-				{:else}
-					<ul class="power">
-						{#each powerRows as p (p.managerName)}
-							<li>
-								<span class="power-rank">{p.powerRank}</span>
-								{#if p.managerHasProfile}
-									<a class="power-name" href={profileHref(p.managerName)}>{p.managerName}</a>
-								{:else}
-									<span class="power-name">{p.managerName}</span>
-								{/if}
-								{#if p.rankChange !== null}<span class="small-move"
-										><Movement change={p.rankChange} /></span
-									>{/if}
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				<div class="full-link">
-					<Button variant="link" size="tap" href="/power-rankings">Full rankings →</Button>
-				</div>
-			</Card>
+			{@render powerCard(false)}
 
 			<!-- S4.7 League chat -->
 			<ChatPreview />
@@ -781,6 +800,12 @@
 	}
 
 	/* ---------- Power Rankings (S4.7) ---------- */
+	.power-note {
+		margin: 0 0 6px;
+		font-size: 13px;
+		color: var(--color-muted);
+	}
+
 	.power li {
 		display: flex;
 		align-items: center;

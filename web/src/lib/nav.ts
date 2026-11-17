@@ -43,6 +43,7 @@ export const navGroups: NavGroup[] = [
 		label: 'Rankings',
 		items: [
 			{ name: 'Power Rankings', href: '/power-rankings', blurb: "Who's actually good right now" },
+			{ name: 'Playoff Odds', href: '/playoff-odds', blurb: "Who's getting in, week by week" },
 			{ name: 'Hall of Fame', href: '/hall-of-fame', blurb: 'The all-time leaderboard' },
 			{ name: 'League Table', href: '/league-table', blurb: 'Every manager, every metric' },
 			{ name: 'League History', href: '/historical', blurb: 'Twenty-two seasons of analysis' }

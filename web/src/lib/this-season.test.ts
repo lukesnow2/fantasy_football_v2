@@ -70,6 +70,7 @@ function team(over: Partial<OddsTeam> & { managerName: string }): OddsTeam {
 		titleOdds: 0,
 		clinched: false,
 		eliminated: false,
+		knockedOut: false,
 		previousOdds: null,
 		...over
 	};
