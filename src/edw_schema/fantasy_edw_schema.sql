@@ -699,7 +699,7 @@ CREATE TABLE mart_weekly_power_rankings (
     playoff_odds DECIMAL(8,4),
 
     -- Against the rest of each week's field, season to date (WP15)
-    all_play_wins DECIMAL(8,2), -- Sum of the share of other teams outscored
+    all_play_wins DECIMAL(8,4), -- Sum of the share of other teams outscored
     points_vs_league DECIMAL(8,2), -- Pts/g above the other teams' average
     schedule_vs_league DECIMAL(8,2), -- Opponents' pts/g above that average
 

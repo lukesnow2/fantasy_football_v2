@@ -11,6 +11,7 @@ schedule term.
 These build a four-team league in a scratch database and run the real SQL.
 """
 import subprocess
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -146,8 +147,13 @@ def test_luck_is_wins_minus_all_play_and_sums_to_zero(rows):
         total = 0.0
         for team in TEAMS:
             all_play, wins, _, _ = expected(team, week)
-            luck = float(rows[(team, week)]['luck_factor'])
+            row = rows[(team, week)]
+            luck = float(row['luck_factor'])
             assert luck == pytest.approx(wins - all_play, abs=0.0001)
+            # Stored to the same places, so the row's own wins minus its
+            # expected wins is its luck exactly.
+            assert (Decimal(row['wins']) + Decimal(row['ties']) / 2
+                    - row['all_play_wins']) == row['luck_factor']
             total += luck
         assert total == pytest.approx(0.0, abs=0.0005)
 
@@ -218,6 +224,10 @@ def test_migration_adds_the_columns_and_dictionary_rows_twice_over(engine):
         cols = {r[0] for r in conn.execute(text("""SELECT column_name FROM information_schema.columns
             WHERE table_schema = 'edw' AND table_name = 'mart_weekly_power_rankings'"""))}
         assert {'all_play_wins', 'points_vs_league', 'schedule_vs_league'} <= cols
+        scale = conn.execute(text("""SELECT numeric_scale FROM information_schema.columns
+            WHERE table_schema = 'edw' AND table_name = 'mart_weekly_power_rankings'
+              AND column_name = 'all_play_wins'""")).scalar()
+        assert scale == 4
         defs = dict(conn.execute(text(
             "SELECT metric_id, calculation_formula FROM meta_data.metric_definitions")).fetchall())
         for metric in ('all_play_wins', 'points_vs_league', 'schedule_vs_league',

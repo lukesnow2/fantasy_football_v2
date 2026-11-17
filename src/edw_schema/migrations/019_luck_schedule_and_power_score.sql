@@ -21,9 +21,15 @@
 BEGIN;
 
 ALTER TABLE edw.mart_weekly_power_rankings
-    ADD COLUMN IF NOT EXISTS all_play_wins DECIMAL(8,2),
+    ADD COLUMN IF NOT EXISTS all_play_wins DECIMAL(8,4),
     ADD COLUMN IF NOT EXISTS points_vs_league DECIMAL(8,2),
     ADD COLUMN IF NOT EXISTS schedule_vs_league DECIMAL(8,2);
+
+-- Four places, like luck_factor, so wins minus expected wins is the luck on
+-- every row. A no-op where the column was added that way; widens it where an
+-- earlier draft of this migration added it at two.
+ALTER TABLE edw.mart_weekly_power_rankings
+    ALTER COLUMN all_play_wins TYPE DECIMAL(8,4);
 
 ALTER TABLE meta_data.metric_definitions
     ADD COLUMN IF NOT EXISTS limitations TEXT;

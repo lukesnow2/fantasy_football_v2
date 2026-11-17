@@ -6194,7 +6194,9 @@ class EdwEtlProcessor:
                     dw.week_number,
                     -- Use actual SOS and pythagorean wins from corrected calculations
                     COALESCE(tsap.strength_of_schedule, 0.5) as strength_of_schedule,
-                    COALESCE(rp.recent_form_score, ftp.points_for / NULLIF(COALESCE(cr.games_played, 1), 0)) as recent_form_score,
+                    -- No game in the last three weeks: fall back to the season
+                    -- average (points_for is only this week's points).
+                    COALESCE(rp.recent_form_score, ftp.weekly_points) as recent_form_score,
                     tsap.pythagorean_wins,
                     ftd.all_play_wins,
                     ftd.points_vs_league,
@@ -6364,7 +6366,8 @@ class EdwEtlProcessor:
                 ROUND(rp.pythagorean_wins, 2) as pythagorean_wins,
                 ROUND(rp.luck_factor, 4) as luck_factor,
                 ROUND(rp.calculated_playoff_odds, 4) as playoff_odds,
-                ROUND(rp.all_play_wins, 2) as all_play_wins,
+                -- 4 places, like luck_factor, so wins minus this is the luck.
+                ROUND(rp.all_play_wins, 4) as all_play_wins,
                 ROUND(rp.points_vs_league, 2) as points_vs_league,
                 ROUND(rp.schedule_vs_league, 2) as schedule_vs_league
             FROM ranked_power rp
