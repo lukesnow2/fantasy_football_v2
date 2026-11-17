@@ -211,6 +211,21 @@ describe('valueDraftPicks', () => {
 		expect(topBusts(v, 200).every((p) => p.valueZ < 0)).toBe(true);
 	});
 
+	it('bust lists hold only picks the board tags as busts, even if that leaves fewer rows', () => {
+		// Counted-on picks at 40% (a bust) and 60% (a letdown) of their slot.
+		const v = valueDraftPicks(
+			[...history, ...season(2025, { '2025-RB-1': 286 * 0.4, '2025-WR-1': 286 * 0.6 })],
+			done
+		).filter((p) => p.seasonYear === 2025);
+		const busts = topBusts(v, 3);
+		expect(busts.map((p) => p.name)).toEqual(['2025-RB-1']);
+		for (const p of busts) {
+			expect(pickVerdict(p.seasonPoints, p.expectedPoints, p.highExpectation, p.position)).toBe(
+				'bust'
+			);
+		}
+	});
+
 	it('all-time records leave out the season still being played', () => {
 		const live = season(2026, { '2026-WR-13': 330, '2026-RB-1': 0 });
 		const v = valueDraftPicks([...history, ...season(2025), ...live], done);

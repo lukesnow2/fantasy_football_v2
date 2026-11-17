@@ -261,13 +261,21 @@ export function topSteals<T extends PickValue & Positioned>(picks: T[], n: numbe
 }
 
 /**
- * Busts: picks the draft counted on (highExpectation) that fell furthest short
- * of players at their position taken around the same round (valueZ). Only
- * picks that missed their slot; never a kicker or defense.
+ * Busts: picks the board tags as busts (pickVerdict: counted on, and scored
+ * under half their expectation), ranked by how far they fell short of players
+ * at their position taken around the same round (valueZ). A season with fewer
+ * than `n` busts lists fewer: 2012 has two, and its next-worst pick was a
+ * letdown the board doesn't call a bust. Never a kicker or defense.
  */
-export function topBusts<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
+export function topBusts<T extends PickValue & Positioned & { seasonPoints: number }>(
+	picks: T[],
+	n: number
+): T[] {
 	return picks
-		.filter((p) => p.highExpectation && p.valueZ < 0 && getsVerdict(p.position))
+		.filter(
+			(p) =>
+				pickVerdict(p.seasonPoints, p.expectedPoints, p.highExpectation, p.position) === 'bust'
+		)
 		.sort((a, b) => a.valueZ - b.valueZ)
 		.slice(0, n);
 }
@@ -277,7 +285,9 @@ export function topBusts<T extends PickValue & Positioned>(picks: T[], n: number
  * within position, a few weeks of points read like a whole season, so the
  * season still being played is left out.
  */
-export function draftRecords<T extends PickValue & Positioned & { seasonYear: number }>(
+export function draftRecords<
+	T extends PickValue & Positioned & { seasonYear: number; seasonPoints: number }
+>(
 	picks: T[],
 	completedSeasons: Set<number>,
 	n: number
