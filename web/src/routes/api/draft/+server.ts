@@ -212,7 +212,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
 			// "Drafted QB12, scored QB1": where the pick sat among the season's
 			// drafted players at its position, taken and by points.
-			const rankMove = (p: (typeof shown)[number]) => {
+			const rankFields = (p: (typeof shown)[number]) => {
 				const r = ranks.get(`${p.seasonYear}:${p.overallPick}`);
 				return { draftedRank: r?.drafted ?? null, scoredRank: r?.scored ?? null };
 			};
@@ -231,7 +231,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				managerName: p.managerName,
 				playerName: p.playerName,
 				primaryPosition: p.position,
-				...rankMove(p),
+				...rankFields(p),
 				pickType
 			});
 			const shownSeasons = [...new Set(shown.map((p) => p.seasonYear))].sort((a, b) => b - a);
@@ -283,8 +283,10 @@ export const GET: RequestHandler = async ({ url }) => {
 				seasonPoints: round1(p.seasonPoints),
 				expectedPoints: round1(p.expectedPoints),
 				valueOverExpected: round1(p.valueOverExpected),
-				...rankMove(p)
+				...rankFields(p)
 			});
+			const finishedShown =
+				season === 'all' ? shown.filter((p) => completedSeasons.has(p.seasonYear)) : shown;
 			const byManager = new Map<string, { picks: number; total: number }>();
 			for (const p of shown) {
 				const m = byManager.get(p.managerName) ?? { picks: 0, total: 0 };
@@ -293,8 +295,10 @@ export const GET: RequestHandler = async ({ url }) => {
 				byManager.set(p.managerName, m);
 			}
 			data.draftValue = {
-				bestValue: topSteals(shown, 10).map(mapValue),
-				biggestBusts: topBusts(shown, 10).map(mapValue),
+				// Records wait for a season to finish: a few weeks of points read
+				// like a whole season once ranked within position.
+				bestValue: topSteals(finishedShown, 10).map(mapValue),
+				biggestBusts: topBusts(finishedShown, 10).map(mapValue),
 				byManager: [...byManager.entries()]
 					.filter(([, m]) => m.picks >= 20)
 					.map(([managerName, m]) => ({

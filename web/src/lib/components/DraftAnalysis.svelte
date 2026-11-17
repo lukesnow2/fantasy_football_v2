@@ -54,13 +54,14 @@
 		<Card tone={list.tone} padding="12px 12px 8px" phonePadding="12px 12px 8px" class="mini {list.key}">
 			<h2 class="mini-title">{list.title}</h2>
 			{#each list.rows as p (p.overallPick)}
+				{@const move = rankMove(p)}
 				<button type="button" class="row" onclick={() => onpick(p.overallPick)}>
 					<span class="row-top">
 						<span>{p.playerName}</span>
 						<span class="value">{signed(Number(p.valueOverExpected ?? 0), 1)}</span>
 					</span>
 					<span class="row-meta">{pickMeta(p)}</span>
-					{#if rankMove(p)}<span class="row-meta">{rankMove(p)}</span>{/if}
+					{#if move}<span class="row-meta">{move}</span>{/if}
 				</button>
 			{/each}
 		</Card>

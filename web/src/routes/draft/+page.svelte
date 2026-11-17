@@ -534,15 +534,15 @@
 	<!-- S8.6 Best value picks, biggest busts, best drafters -->
 	{#if draftValue}
 		<div class="lists">
-			{#each [{ title: 'Best value picks', sub: 'Ranked against players at the same position taken in the same rounds, so a late QB has to beat other late QBs. Points are over what the slot usually scores.', rows: draftValue.bestValue.slice(0, 8), tone: 'field' }, { title: 'Biggest busts', sub: 'Early picks, rounds 1 to 8, that came up furthest short.', rows: draftValue.biggestBusts.slice(0, 8), tone: 'pennant' }] as list (list.title)}
+			{#each [{ title: 'Best value picks', sub: 'Ranked against players at the same position taken in the same rounds, so a late QB has to beat other late QBs. Points are over what the slot usually scores.', rows: draftValue.bestValue.slice(0, 8), tone: 'field' }, { title: 'Biggest busts', sub: 'Early picks, rounds 1 to 8, that fell furthest short of players at the same position taken in the same rounds.', rows: draftValue.biggestBusts.slice(0, 8), tone: 'pennant' }] as list (list.title)}
 				<Card title={list.title} headGap={0}>
 					<p class="list-sub">{list.sub}</p>
 					{#each list.rows as p, i (i)}
+						{@const move = rankMove(p)}
 						<div class="value-row">
 							<span class="value-main">
 								<span class="value-player"
-									>{p.playerName}{#if rankMove(p)}<span class="value-move">{rankMove(p)}</span
-										>{/if}</span
+									>{p.playerName}{#if move}<span class="value-move">{move}</span>{/if}</span
 								>
 								<span class="value-meta">
 									<PositionChip position={p.position} tone="neutral" />

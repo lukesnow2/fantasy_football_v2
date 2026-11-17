@@ -94,12 +94,17 @@ export function valueDraftPicks<T extends DraftPickInput>(
 	const prior = options.prior ?? 10;
 
 	// The unit is the average pick in the first `common` rounds, the length of
-	// the shortest draft. The 2005-07 drafts ran 24-25 rounds; averaged over
-	// all of them, their unit came out 15-20% low and every pick from those
-	// seasons read that much bigger, enough to crowd the steals list.
+	// the shortest finished draft. The 2005-07 drafts ran 24-25 rounds;
+	// averaged over all of them, their unit came out 15-20% low and every pick
+	// from those seasons read that much bigger, enough to crowd the steals list.
+	// Finished seasons only, so a draft loaded partway (a live draft) can't
+	// shrink every season's unit; with none finished, every season counts.
 	const lastRound = new Map<number, number>();
-	for (const p of picks)
+	const anyDone = picks.some((p) => completedSeasons.has(p.seasonYear));
+	for (const p of picks) {
+		if (anyDone && !completedSeasons.has(p.seasonYear)) continue;
 		lastRound.set(p.seasonYear, Math.max(lastRound.get(p.seasonYear) ?? 0, p.roundNumber));
+	}
 	const common = lastRound.size ? Math.min(...lastRound.values()) : 0;
 	const seasonMean = new Map<number, number>();
 	{
@@ -135,16 +140,33 @@ export function valueDraftPicks<T extends DraftPickInput>(
 		}
 	}
 
+	// Each round's spread within positions (every position around its own
+	// mean, pooled). The round's raw spread would also count the gap between
+	// QB and WR averages, and inflate the spread of positions with few picks.
+	const within = new Map<number, number>();
+	{
+		const acc = new Map<number, { ss: number; n: number }>();
+		for (const [key, a] of posRound) {
+			const r = Number(key.slice(key.lastIndexOf('|') + 1));
+			const w = acc.get(r) ?? { ss: 0, n: 0 };
+			w.ss += a.n * variance(a);
+			w.n += a.n;
+			acc.set(r, w);
+		}
+		for (const [r, w] of acc) within.set(r, w.n ? w.ss / w.n : 0);
+	}
+
 	const fitted = [...round.keys()].filter((r) => round.get(r)!.n > 0).sort((a, b) => a - b);
 	// A round beyond any fitted one (a longer draft) takes the nearest.
-	const roundAcc = (r: number): Acc | null => {
+	const roundKey = (r: number): number | null => {
 		if (fitted.length === 0) return null;
-		const nearest = fitted.reduce((best, k) => (Math.abs(k - r) < Math.abs(best - r) ? k : best));
-		return round.get(round.get(r)?.n ? r : nearest)!;
+		if (round.get(r)?.n) return r;
+		return fitted.reduce((best, k) => (Math.abs(k - r) < Math.abs(best - r) ? k : best));
 	};
 
 	return picks.map((p) => {
-		const r = roundAcc(p.roundNumber);
+		const rk = roundKey(p.roundNumber);
+		const r = rk == null ? null : round.get(rk)!;
 		const base = r ? r.sum / r.n : 1;
 		const pos = posRound.get(`${p.position ?? '?'}|${p.roundNumber}`) ?? { sum: 0, sq: 0, n: 0 };
 		const expectedRelative = (pos.sum + prior * base) / (pos.n + prior);
@@ -152,7 +174,7 @@ export function valueDraftPicks<T extends DraftPickInput>(
 		const expectedPoints = expectedRelative * mean;
 		// The position's spread, pulled toward the round's like the expectation is.
 		const spread = Math.sqrt(
-			(pos.n * variance(pos) + prior * (r ? variance(r) : 0)) / (pos.n + prior)
+			(pos.n * variance(pos) + prior * (rk == null ? 0 : (within.get(rk) ?? 0))) / (pos.n + prior)
 		);
 		const gap = mean > 0 ? p.seasonPoints / mean - expectedRelative : 0;
 		return {
@@ -194,16 +216,18 @@ export function positionRanks(
 	for (const p of picks) {
 		if (!p.position) continue;
 		const k = `${p.seasonYear}|${p.position}`;
-		groups.set(k, [...(groups.get(k) ?? []), p]);
+		const g = groups.get(k);
+		if (g) g.push(p);
+		else groups.set(k, [p]);
 	}
 	const out = new Map<string, PositionRank>();
 	for (const g of groups.values()) {
-		const taken = [...g].sort((a, b) => a.overallPick - b.overallPick);
-		const scored = [...g].sort(
-			(a, b) => b.seasonPoints - a.seasonPoints || a.overallPick - b.overallPick
-		);
-		taken.forEach((p, i) =>
-			out.set(`${p.seasonYear}:${p.overallPick}`, { drafted: i + 1, scored: scored.indexOf(p) + 1 })
+		const scoredAt = new Map<(typeof picks)[number], number>();
+		[...g]
+			.sort((a, b) => b.seasonPoints - a.seasonPoints || a.overallPick - b.overallPick)
+			.forEach((p, i) => scoredAt.set(p, i + 1));
+		g.sort((a, b) => a.overallPick - b.overallPick).forEach((p, i) =>
+			out.set(`${p.seasonYear}:${p.overallPick}`, { drafted: i + 1, scored: scoredAt.get(p)! })
 		);
 	}
 	return out;

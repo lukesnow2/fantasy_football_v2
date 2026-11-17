@@ -115,6 +115,17 @@ describe('valueDraftPicks', () => {
 		}
 	});
 
+	it('a draft loaded partway does not shrink every season unit', () => {
+		// A live draft three rounds in: finished seasons keep their 15-round unit.
+		const live = season(2026).filter((p) => p.roundNumber <= 3);
+		const plain = valueDraftPicks([...history, ...season(2025)], done);
+		const withLive = valueDraftPicks([...history, ...season(2025), ...live], done);
+		const at = (v: typeof plain, name: string) => v.find((p) => p.name === name)!;
+		for (const name of ['2024-QB-3', '2024-WR-13', '2025-RB-1']) {
+			expect(at(withLive, name).seasonAverage).toBeCloseTo(at(plain, name).seasonAverage, 9);
+		}
+	});
+
 	it('judges a partial season on its own scale', () => {
 		// The same draft three weeks in (a third of the points) must read exactly
 		// like the full season, relative to expectation: small totals are not busts.
