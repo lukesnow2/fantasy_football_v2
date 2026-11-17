@@ -489,7 +489,7 @@
 					</div>
 					<div class="line tap-row">
 						<span class="line-label"
-							><StatTip metricId="draft_value_score" label="Draft grade" phoneTap="inline" /></span
+							><StatTip metricId="draft_grade" label="Draft grade" phoneTap="inline" /></span
 						>
 						<span class="line-value"
 							>{#if draftLoaded}{@render value(draft?.grade)}{/if}</span

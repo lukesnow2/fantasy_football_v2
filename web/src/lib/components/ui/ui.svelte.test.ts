@@ -81,7 +81,7 @@ describe('StatTip', () => {
 		await expect.element(card).toHaveTextContent('Luck Factor');
 		await expect.element(card).toHaveTextContent('Calculation');
 		await expect
-			.element(page.getByRole('link', { name: 'Full definition in the Data Dictionary →' }))
+			.element(page.getByRole('link', { name: 'Full definition, worked example and limits →' }))
 			.toHaveAttribute('href', '/data-dictionary#luck_factor');
 		const describedBy = button.element().getAttribute('aria-describedby');
 		expect(describedBy).toBe(card.element().id);
@@ -104,7 +104,7 @@ describe('StatTip', () => {
 		await page.getByRole('button', { name: /Pyth W/ }).click();
 		await expect.element(page.getByRole('tooltip')).toHaveTextContent('Pythagorean Wins');
 		await expect
-			.element(page.getByRole('link', { name: 'Full definition in the Data Dictionary →' }))
+			.element(page.getByRole('link', { name: 'Full definition, worked example and limits →' }))
 			.toHaveAttribute('href', '/data-dictionary#pythagorean_wins');
 	});
 
