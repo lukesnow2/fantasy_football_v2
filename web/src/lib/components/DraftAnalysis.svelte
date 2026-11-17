@@ -5,12 +5,14 @@
 	 * tint, three rows each from the API's bestWorstPicks. Each row is a button
 	 * that hands its pick to `onpick`, so the page can show it up close.
 	 *
-	 * The picks are judged by $lib/draft-value on the server: points over what
-	 * that round and position usually score, busts only from picks the draft
-	 * counted on, and never a kicker or defense.
+	 * The picks are judged by $lib/draft-value on the server: ranked by how far
+	 * they stood out from players at their position taken around the same
+	 * round, busts only from picks the draft counted on, and never a kicker or
+	 * defense. Each row shows its points over the slot and its rank move
+	 * ("Drafted QB12, scored QB1").
 	 */
 	import { Card } from '$lib/components/ui';
-	import { pickMeta, signed } from '$lib/draft-display';
+	import { pickMeta, rankMove, signed } from '$lib/draft-display';
 
 	interface SeasonPick {
 		overallPick: number;
@@ -19,6 +21,8 @@
 		playerName: string;
 		primaryPosition: string | null;
 		valueOverExpected: number | null;
+		draftedRank?: number | null;
+		scoredRank?: number | null;
 		pickType: 'best' | 'worst';
 	}
 
@@ -56,6 +60,7 @@
 						<span class="value">{signed(Number(p.valueOverExpected ?? 0), 1)}</span>
 					</span>
 					<span class="row-meta">{pickMeta(p)}</span>
+					{#if rankMove(p)}<span class="row-meta">{rankMove(p)}</span>{/if}
 				</button>
 			{/each}
 		</Card>

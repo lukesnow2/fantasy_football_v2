@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import { sql } from 'drizzle-orm';
 import {
 	careerGrade,
+	positionRanks,
 	seasonDraftScores,
 	seasonGrade,
 	spreadOf,
@@ -40,7 +41,7 @@ async function loadValuedPicks() {
 		included: r.includeInAnalysis === true
 	}));
 	const done = new Set((Array.from(doneRows) as any[]).map((r) => Number(r.seasonYear)));
-	return { valued: valueDraftPicks(picks, done), completedSeasons: done };
+	return { valued: valueDraftPicks(picks, done), completedSeasons: done, ranks: positionRanks(picks) };
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -89,7 +90,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY fd.season_year DESC, fd.overall_pick ASC
 		`;
 
-		const [draftResult, { valued, completedSeasons }] = await Promise.all([
+		const [draftResult, { valued, completedSeasons, ranks }] = await Promise.all([
 			db.execute(sql.raw(draftQuery)),
 			loadValuedPicks()
 		]);
@@ -209,6 +210,13 @@ export const GET: RequestHandler = async ({ url }) => {
 				avgDraftCost: manager.avgDraftCost || manager.avg_draft_cost
 			}));
 
+			// "Drafted QB12, scored QB1": where the pick sat among the season's
+			// drafted players at its position, taken and by points.
+			const rankMove = (p: (typeof shown)[number]) => {
+				const r = ranks.get(`${p.seasonYear}:${p.overallPick}`);
+				return { draftedRank: r?.drafted ?? null, scoredRank: r?.scored ?? null };
+			};
+
 			// Best value and biggest busts, three of each per season, judged against
 			// what each pick's position and round were expected to score. This used to
 			// rank raw season points, so the "busts" were always last-round kickers and
@@ -223,6 +231,7 @@ export const GET: RequestHandler = async ({ url }) => {
 				managerName: p.managerName,
 				playerName: p.playerName,
 				primaryPosition: p.position,
+				...rankMove(p),
 				pickType
 			});
 			const shownSeasons = [...new Set(shown.map((p) => p.seasonYear))].sort((a, b) => b - a);
@@ -273,7 +282,8 @@ export const GET: RequestHandler = async ({ url }) => {
 				managerName: p.managerName,
 				seasonPoints: round1(p.seasonPoints),
 				expectedPoints: round1(p.expectedPoints),
-				valueOverExpected: round1(p.valueOverExpected)
+				valueOverExpected: round1(p.valueOverExpected),
+				...rankMove(p)
 			});
 			const byManager = new Map<string, { picks: number; total: number }>();
 			for (const p of shown) {
@@ -295,7 +305,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					}))
 					.sort((a, b) => b.avgValue - a.avgValue),
 				methodology:
-					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Busts are only picks from rounds 1-8 expected to beat an average pick, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
+					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Steals and busts are ranked by how far a pick stood out from players at its position taken around the same round, so QBs, whose results swing widest, don't fill the lists just for scoring more. Busts are only picks from rounds 1-8 expected to beat an average pick, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
 			};
 
 			// Manager draft grades ($lib/draft-value): a draft's points over

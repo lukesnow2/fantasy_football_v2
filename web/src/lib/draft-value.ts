@@ -20,6 +20,18 @@
  * are judged on the same scale. A position with few picks near a round (a kicker
  * in round 5) is pulled toward that round's overall average.
  *
+ * Ranking steals and busts needs one more step. Positions don't just score
+ * differently, they swing differently: a late QB is either a backup who scores
+ * next to nothing or a starter who scores 350, so late QBs land about 0.9 of an
+ * average pick either side of their expectation, where WRs land about 0.5 either
+ * side. Ranked on raw points over expectation, a QB who hit beats an equally
+ * rare WR hit by nearly double, and QBs were 13% of skill picks but half the
+ * all-time top 50 steals. `valueZ` divides the gap by how widely picks at that
+ * position and round usually land, so a pick ranks by how much it stood out
+ * from the players taken like it (2019 Lamar Jackson, QB12 taken and QB1
+ * finished from round 13, still ranks near the top; a merely good late QB
+ * does not). The lists rank on valueZ; the points shown stay points.
+ *
  * `seasonPoints` counts only the weeks a player was on a roster in this league,
  * so a pick that was cut early has a small total. For an early pick that is
  * exactly a bust; for a late flier it is expected.
@@ -37,6 +49,12 @@ export interface PickValue {
 	expectedPoints: number;
 	/** seasonPoints - expectedPoints. Positive beat the slot, negative missed it. */
 	valueOverExpected: number;
+	/**
+	 * valueOverExpected in units of how widely picks at this position and round
+	 * usually land (their standard deviation): +2 stood out about as much as
+	 * the best pick in forty taken like it. What steal and bust lists rank on.
+	 */
+	valueZ: number;
 	/**
 	 * A pick the draft counted on: taken in the first MAX_BUST_ROUND rounds and
 	 * expected to out-score an average pick. Only these can be busts.
@@ -75,10 +93,19 @@ export function valueDraftPicks<T extends DraftPickInput>(
 	const window = options.roundWindow ?? 1;
 	const prior = options.prior ?? 10;
 
+	// The unit is the average pick in the first `common` rounds, the length of
+	// the shortest draft. The 2005-07 drafts ran 24-25 rounds; averaged over
+	// all of them, their unit came out 15-20% low and every pick from those
+	// seasons read that much bigger, enough to crowd the steals list.
+	const lastRound = new Map<number, number>();
+	for (const p of picks)
+		lastRound.set(p.seasonYear, Math.max(lastRound.get(p.seasonYear) ?? 0, p.roundNumber));
+	const common = lastRound.size ? Math.min(...lastRound.values()) : 0;
 	const seasonMean = new Map<number, number>();
 	{
 		const acc = new Map<number, { sum: number; n: number }>();
 		for (const p of picks) {
+			if (p.roundNumber > common) continue;
 			const a = acc.get(p.seasonYear) ?? { sum: 0, n: 0 };
 			a.sum += p.seasonPoints;
 			a.n += 1;
@@ -87,14 +114,17 @@ export function valueDraftPicks<T extends DraftPickInput>(
 		for (const [s, a] of acc) seasonMean.set(s, a.n ? a.sum / a.n : 0);
 	}
 
-	const round = new Map<number, { sum: number; n: number }>();
-	const posRound = new Map<string, { sum: number; n: number }>();
-	const add = (m: Map<any, { sum: number; n: number }>, k: any, v: number) => {
-		const a = m.get(k) ?? { sum: 0, n: 0 };
+	type Acc = { sum: number; sq: number; n: number };
+	const round = new Map<number, Acc>();
+	const posRound = new Map<string, Acc>();
+	const add = (m: Map<any, Acc>, k: any, v: number) => {
+		const a = m.get(k) ?? { sum: 0, sq: 0, n: 0 };
 		a.sum += v;
+		a.sq += v * v;
 		a.n += 1;
 		m.set(k, a);
 	};
+	const variance = (a: Acc) => (a.n ? Math.max(a.sq / a.n - (a.sum / a.n) ** 2, 0) : 0);
 	for (const p of picks) {
 		const mean = seasonMean.get(p.seasonYear) ?? 0;
 		if (!completedSeasons.has(p.seasonYear) || mean <= 0) continue;
@@ -106,28 +136,77 @@ export function valueDraftPicks<T extends DraftPickInput>(
 	}
 
 	const fitted = [...round.keys()].filter((r) => round.get(r)!.n > 0).sort((a, b) => a - b);
-	const roundAverage = (r: number): number => {
-		if (fitted.length === 0) return 1;
-		// A round beyond any fitted one (a longer draft) takes the nearest.
+	// A round beyond any fitted one (a longer draft) takes the nearest.
+	const roundAcc = (r: number): Acc | null => {
+		if (fitted.length === 0) return null;
 		const nearest = fitted.reduce((best, k) => (Math.abs(k - r) < Math.abs(best - r) ? k : best));
-		const a = round.get(round.get(r)?.n ? r : nearest)!;
-		return a.sum / a.n;
+		return round.get(round.get(r)?.n ? r : nearest)!;
 	};
 
 	return picks.map((p) => {
-		const base = roundAverage(p.roundNumber);
-		const pos = posRound.get(`${p.position ?? '?'}|${p.roundNumber}`) ?? { sum: 0, n: 0 };
+		const r = roundAcc(p.roundNumber);
+		const base = r ? r.sum / r.n : 1;
+		const pos = posRound.get(`${p.position ?? '?'}|${p.roundNumber}`) ?? { sum: 0, sq: 0, n: 0 };
 		const expectedRelative = (pos.sum + prior * base) / (pos.n + prior);
-		const expectedPoints = expectedRelative * (seasonMean.get(p.seasonYear) ?? 0);
+		const mean = seasonMean.get(p.seasonYear) ?? 0;
+		const expectedPoints = expectedRelative * mean;
+		// The position's spread, pulled toward the round's like the expectation is.
+		const spread = Math.sqrt(
+			(pos.n * variance(pos) + prior * (r ? variance(r) : 0)) / (pos.n + prior)
+		);
+		const gap = mean > 0 ? p.seasonPoints / mean - expectedRelative : 0;
 		return {
 			...p,
 			expectedPoints,
 			valueOverExpected: p.seasonPoints - expectedPoints,
+			valueZ: spread > 0 ? gap / spread : gap,
 			highExpectation: expectedRelative >= 1 && p.roundNumber <= MAX_BUST_ROUND,
 			expectedRelative,
 			seasonAverage: seasonMean.get(p.seasonYear) ?? 0
 		};
 	});
+}
+
+export interface PositionRank {
+	/** Order taken among the season's drafted players at the position (QB12 = 12th QB). */
+	drafted: number;
+	/** Order by points among those same players (QB1 = most points). */
+	scored: number;
+}
+
+/**
+ * Where each pick sat among the season's drafted players at its position:
+ * the order it was taken and the order it scored, keyed `season:overallPick`.
+ * This is the "relative to the other QBs taken" view: 2019 Lamar Jackson was
+ * drafted QB12 and scored QB1. Only drafted players count, and points are the
+ * weeks on a roster in this league, so "scored QB1" means first among the
+ * league's drafted QBs, not the NFL. Ties in points go to the earlier pick.
+ */
+export function positionRanks(
+	picks: {
+		seasonYear: number;
+		overallPick: number;
+		position: string | null;
+		seasonPoints: number;
+	}[]
+): Map<string, PositionRank> {
+	const groups = new Map<string, typeof picks>();
+	for (const p of picks) {
+		if (!p.position) continue;
+		const k = `${p.seasonYear}|${p.position}`;
+		groups.set(k, [...(groups.get(k) ?? []), p]);
+	}
+	const out = new Map<string, PositionRank>();
+	for (const g of groups.values()) {
+		const taken = [...g].sort((a, b) => a.overallPick - b.overallPick);
+		const scored = [...g].sort(
+			(a, b) => b.seasonPoints - a.seasonPoints || a.overallPick - b.overallPick
+		);
+		taken.forEach((p, i) =>
+			out.set(`${p.seasonYear}:${p.overallPick}`, { drafted: i + 1, scored: scored.indexOf(p) + 1 })
+		);
+	}
+	return out;
 }
 
 /**
@@ -144,22 +223,27 @@ export function getsVerdict(position: string | null | undefined): boolean {
 
 type Positioned = { position?: string | null };
 
-/** Steals: the picks that beat their expectation by the most. Never a kicker or defense. */
+/**
+ * Steals: the picks that stood out most from players at their position taken
+ * around the same round (valueZ, not raw points, so QBs don't crowd the list
+ * just for scoring more). Never a kicker or defense.
+ */
 export function topSteals<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
 	return picks
 		.filter((p) => getsVerdict(p.position))
-		.sort((a, b) => b.valueOverExpected - a.valueOverExpected)
+		.sort((a, b) => b.valueZ - a.valueZ)
 		.slice(0, n);
 }
 
 /**
- * Busts: picks the draft counted on (highExpectation) that missed by the most.
- * Never a kicker or defense.
+ * Busts: picks the draft counted on (highExpectation) that fell furthest short
+ * of players at their position taken around the same round (valueZ). Never a
+ * kicker or defense.
  */
 export function topBusts<T extends PickValue & Positioned>(picks: T[], n: number): T[] {
 	return picks
 		.filter((p) => p.highExpectation && getsVerdict(p.position))
-		.sort((a, b) => a.valueOverExpected - b.valueOverExpected)
+		.sort((a, b) => a.valueZ - b.valueZ)
 		.slice(0, n);
 }
 
