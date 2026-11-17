@@ -84,12 +84,16 @@ export interface OddsOptions {
 	 * Championship-bracket games already decided, once the playoffs are on.
 	 * A simulated bracket game between two teams that really met takes the
 	 * real winner, and a team that lost one can't win the title. Consolation
-	 * games don't belong here. Without it the whole bracket is simulated.
+	 * games don't belong here. A game between two teams already out (the
+	 * 3rd- and 5th-place games, which Yahoo keeps in the championship
+	 * bracket) decides nothing and is ignored. Without it the whole bracket
+	 * is simulated.
 	 */
 	bracketResults?: BracketResult[];
 }
 
 export interface BracketResult {
+	week: number;
 	teamA: number;
 	teamB: number;
 	winner: number;
@@ -589,15 +593,22 @@ export function simulatePlayoffOdds(opts: OddsOptions): OddsResult {
 	// Real bracket results, by the pair that played.
 	const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 	const realWinner = new Map<string, number>();
-	const knockedOut = new Set<number>();
-	for (const g of opts.bracketResults ?? []) {
+	/** The week each team lost a bracket game. */
+	const outSince = new Map<number, number>();
+	const played = [...(opts.bracketResults ?? [])].sort((x, y) => x.week - y.week);
+	for (const g of played) {
 		const a = idx.get(g.teamA);
 		const b = idx.get(g.teamB);
 		const w = idx.get(g.winner);
 		if (a == null || b == null || w == null || (w !== a && w !== b)) continue;
+		// Both already out: a placement game, not part of the title bracket.
+		const outBefore = (t: number) => (outSince.get(t) ?? Infinity) < g.week;
+		if (outBefore(a) || outBefore(b)) continue;
 		realWinner.set(pairKey(a, b), w);
-		knockedOut.add(w === a ? b : a);
+		const loser = w === a ? b : a;
+		if (!outSince.has(loser)) outSince.set(loser, g.week);
 	}
+	const knockedOut = new Set(outSince.keys());
 
 	const made = new Float64Array(n);
 	const bye = new Float64Array(n);

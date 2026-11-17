@@ -161,6 +161,13 @@ describe('gradeLines', () => {
 		]);
 	});
 
+	it('says none when no top team made it at halfway', () => {
+		const g = { ...seasonGrade(history())!, halfway: { week: 2, hits: 0, of: 2 } };
+		expect(gradeLines(g, 4).find((l) => l.id === 'halfway')?.note).toBe(
+			'After week 2, none of the two teams with the best odds made the playoffs.'
+		);
+	});
+
 	it('says when the field only settled in the last week', () => {
 		const g = { ...seasonGrade(history())!, fieldFrom: 4 };
 		expect(gradeLines(g, 4).find((l) => l.id === 'field')?.value).toBe('Field settled in wk 4');

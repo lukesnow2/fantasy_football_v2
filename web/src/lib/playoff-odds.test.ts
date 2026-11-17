@@ -261,8 +261,8 @@ describe('bracket results', () => {
 	const seeds = [...simulatePlayoffOdds(base).teams].sort(compareSeeding).map((t) => t.teamKey);
 	const [s1, s2, s3, s4, s5, s6] = seeds;
 	const round1 = [
-		{ teamA: s3, teamB: s6, winner: s6 },
-		{ teamA: s4, teamB: s5, winner: s4 }
+		{ week: 15, teamA: s3, teamB: s6, winner: s6 },
+		{ week: 15, teamA: s4, teamB: s5, winner: s4 }
 	];
 
 	it('knocks out first-round losers and keeps the odds summing to one', () => {
@@ -281,14 +281,24 @@ describe('bracket results', () => {
 			...base,
 			bracketResults: [
 				...round1,
-				{ teamA: s1, teamB: s4, winner: s4 },
-				{ teamA: s2, teamB: s6, winner: s2 },
-				{ teamA: s4, teamB: s2, winner: s4 }
+				{ week: 16, teamA: s1, teamB: s4, winner: s4 },
+				{ week: 16, teamA: s2, teamB: s6, winner: s2 },
+				{ week: 17, teamA: s4, teamB: s2, winner: s4 }
 			]
 		});
 		const by = new Map(res.teams.map((t) => [t.teamKey, t]));
 		expect(by.get(s4)!.titleOdds).toBe(1);
 		expect(by.get(s2)!.knockedOut).toBe(true);
+	});
+
+	it('ignores placement games between teams already out', () => {
+		// Yahoo keeps the 5th-place game (round-one losers) in the championship
+		// bracket. It mustn't decide a simulated game between those two teams.
+		const withPlacement = simulatePlayoffOdds({
+			...base,
+			bracketResults: [...round1, { week: 16, teamA: s3, teamB: s5, winner: s3 }]
+		});
+		expect(withPlacement).toEqual(simulatePlayoffOdds({ ...base, bracketResults: round1 }));
 	});
 
 	it('leaves the odds alone without results', () => {

@@ -194,7 +194,20 @@ export interface GradeLine {
 	note: string;
 }
 
-const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+// Counts in a sentence: 'none of the six', 'two of the six'.
+const WORDS = [
+	'none',
+	'one',
+	'two',
+	'three',
+	'four',
+	'five',
+	'six',
+	'seven',
+	'eight',
+	'nine',
+	'ten'
+];
 const word = (n: number) => WORDS[n] ?? String(n);
 const pct = (p: number) => formatOdds(p, false);
 

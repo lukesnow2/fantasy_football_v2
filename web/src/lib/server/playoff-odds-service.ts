@@ -162,6 +162,7 @@ export async function getSeasonOddsWithFingerprint(
 		? rows.filter((r) => r.po && !r.cons && r.w != null && r.sa != null && asOf(Number(r.week)))
 		: [];
 	const bracketResults: BracketResult[] = bracketRows.map((r) => ({
+		week: Number(r.week),
 		teamA: Number(r.a),
 		teamB: Number(r.b),
 		winner: Number(r.w)
@@ -207,7 +208,7 @@ export async function getSeasonOddsWithFingerprint(
 	const keys = teams.map((t) => t.teamKey);
 	const fingerprint = gamesFingerprint(games);
 	const bracketKey = bracketResults
-		.map((g) => `${g.teamA}-${g.teamB}-${g.winner}`)
+		.map((g) => `${g.week}-${g.teamA}-${g.teamB}-${g.winner}`)
 		.sort()
 		.join(',');
 	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}:${bracketKey}`;
