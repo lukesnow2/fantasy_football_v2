@@ -1,16 +1,34 @@
 <script lang="ts">
 	import { formatOdds } from '$lib/home';
-	import { chartWeeks, type OddsHistory, type OddsMetric } from '$lib/odds-history';
+	import {
+		chartWeeks,
+		decidedWeek,
+		dodge,
+		oddsAxis,
+		type OddsHistory,
+		type OddsMetric
+	} from '$lib/odds-history';
 	import { RANK_LINE_COLORS } from '$lib/utils/power-rankings';
 	import Avatar from './ui/Avatar.svelte';
 
 	/**
-	 * Every team's odds week by week, one line each: the playoff odds widget's
-	 * chart (PlayoffOdds.svelte) and, with `full`, the Playoff Odds page's.
-	 * Lines are colored by where they end, top first, like the power rankings
-	 * chart. Picking a team in the legend (or passing `highlight`) brings its
-	 * line forward. The full chart also ends each line in its manager's picture
-	 * and highlights on hover, as Rank through the season does.
+	 * Every team's odds week by week, one line each, on the Playoff Odds page.
+	 * Each line ends in its manager's picture. Picking or hovering a team in the
+	 * legend or on the chart (or passing `highlight`) brings its line forward,
+	 * as Rank through the season does.
+	 *
+	 * Odds crowd together in ways ranks can't, so three rules keep it legible:
+	 *  - A line stops the week its odds were settled for good (decidedWeek), so
+	 *    a season's end isn't ten lines piled at 0% and 100%, and where a line
+	 *    stops is when that team's fate was sealed.
+	 *  - Pictures never stack. Lines still open at the last
+	 *    week get theirs in a column right of the plot, spread apart (dodge)
+	 *    with a thin leader back to the line; lines that stopped earlier get
+	 *    theirs at the stop, spread the same way.
+	 *  - Title odds before the bracket use a shorter axis (oddsAxis), from 0.
+	 *
+	 * Colors follow the team, not its place, so switching between playoffs,
+	 * bye and title doesn't repaint anyone.
 	 */
 
 	interface Props {
@@ -18,43 +36,58 @@
 		metric: OddsMetric;
 		/** The team to bring forward until a reader picks one. */
 		highlight?: number | null;
-		/** The page-width chart, with pictures at the line ends. */
-		full?: boolean;
 	}
 
-	let { history, metric, highlight = null, full = false }: Props = $props();
+	let { history, metric, highlight = null }: Props = $props();
 
 	let picked = $state<number | null | undefined>(undefined);
 	let hovered = $state<number | null>(null);
 	const focus = $derived(hovered ?? (picked !== undefined ? picked : highlight));
 
-	// About the chart's drawn width, so the axis text stays near its set size.
-	const W = $derived(full ? 960 : 400);
-	const H = $derived(full ? 460 : 230);
-	const PAD = $derived(
-		full
-			? { top: 22, right: 44, bottom: 34, left: 52 }
-			: { top: 14, right: 10, bottom: 30, left: 46 }
-	);
+	// Room on the right for the column of pictures.
+	const W = 960;
+	const H = 460;
+	const PAD = { top: 22, right: 70, bottom: 34, left: 52 };
+	/** The chart's drawn width in px, to keep the pictures a picture apart. */
+	let drawn = $state(0);
 
 	const weeks = $derived(chartWeeks(history, metric));
+	const lastWeek = $derived(weeks[weeks.length - 1] ?? 0);
+	const axis = $derived(oddsAxis(history, metric));
 	const x = $derived.by(() => {
 		const first = weeks[0] ?? 1;
-		const span = Math.max(1, (weeks[weeks.length - 1] ?? 1) - first);
+		const span = Math.max(1, lastWeek - first);
 		return (w: number) => PAD.left + ((w - first) / span) * (W - PAD.left - PAD.right);
 	});
-	const y = $derived((p: number) => PAD.top + (1 - p) * (H - PAD.top - PAD.bottom));
+	const y = $derived(
+		(p: number) => PAD.top + (1 - Math.min(p, axis.max) / axis.max) * (H - PAD.top - PAD.bottom)
+	);
+
+	// One color per team for good: by team, in the order the teams come.
+	const colorOf = $derived(
+		new Map(
+			[...history.teams]
+				.sort((a, b) => a.teamKey - b.teamKey)
+				.map((t, i) => [t.teamKey, RANK_LINE_COLORS[i % RANK_LINE_COLORS.length]])
+		)
+	);
 
 	const series = $derived.by(() => {
 		const inWeeks = new Set(weeks);
-		const built = history.teams
+		return history.teams
 			.map((t) => {
-				const pts = t.points.filter((p) => inWeeks.has(p.week));
+				const decided = decidedWeek(history, t, metric);
+				const pts = t.points.filter(
+					(p) => inWeeks.has(p.week) && (decided == null || p.week <= decided)
+				);
 				const end = pts[pts.length - 1];
 				return {
 					teamKey: t.teamKey,
 					name: t.managerName ?? 'Unknown manager',
+					color: colorOf.get(t.teamKey) ?? RANK_LINE_COLORS[0],
 					last: end?.[metric] ?? 0,
+					endWeek: end?.week ?? 0,
+					stopped: end != null && end.week < lastWeek,
 					end: end ? { x: x(end.week), y: y(end[metric]) } : { x: 0, y: 0 },
 					path: pts
 						.map(
@@ -64,34 +97,57 @@
 				};
 			})
 			.filter((s) => s.path !== '')
-			.sort((a, b) => b.last - a.last);
-		return built.map((s, i) => ({ ...s, color: RANK_LINE_COLORS[i % RANK_LINE_COLORS.length] }));
+			.sort((a, b) => b.last - a.last || b.endWeek - a.endWeek);
 	});
 
-	// Pictures at the line ends. Odds share ends (every team out of it sits at
-	// 0%), so pictures that would sit on top of each other step left in a row.
+	// The pictures: grouped by the week their line stops, each
+	// group spread apart up and down so no two overlap.
 	const ends = $derived.by(() => {
-		const byY = [...series].sort((a, b) => a.end.y - b.end.y);
-		const out: { teamKey: number; name: string; color: string; x: number; y: number }[] = [];
-		let anchor = -Infinity;
-		let inRow = 0;
-		for (const s of byY) {
-			if (s.end.y - anchor < 26) inRow++;
-			else {
-				anchor = s.end.y;
-				inRow = 0;
-			}
-			out.push({
-				teamKey: s.teamKey,
-				name: s.name,
-				color: s.color,
-				x: s.end.x - inRow * 20,
-				y: s.end.y
-			});
+		const gap = (30 * W) / (drawn || W);
+		const lo = PAD.top;
+		const hi = H - PAD.bottom;
+		const railX = W - PAD.right + 34;
+		const groups = new Map<number, typeof series>();
+		for (const s of series) {
+			const group = groups.get(s.endWeek) ?? [];
+			group.push(s);
+			groups.set(s.endWeek, group);
 		}
-		// Later ones draw on top: the rows' first pictures last.
-		return out.reverse();
+		const out: {
+			teamKey: number;
+			name: string;
+			color: string;
+			from: { x: number; y: number };
+			x: number;
+			y: number;
+			rail: boolean;
+		}[] = [];
+		for (const [week, group] of groups) {
+			const rail = week === lastWeek;
+			const spread = dodge(
+				group.map((s) => s.end.y),
+				gap,
+				lo,
+				hi
+			);
+			group.forEach((s, i) =>
+				out.push({
+					teamKey: s.teamKey,
+					name: s.name,
+					color: s.color,
+					from: s.end,
+					x: rail ? railX : s.end.x,
+					y: spread[i],
+					rail
+				})
+			);
+		}
+		return out;
 	});
+	// A leader whenever the picture isn't sitting on its line's end.
+	const leaders = $derived(ends.filter((e) => e.rail || Math.abs(e.y - e.from.y) > 1));
+	// Axis text in viewBox units that come out near 12.5px whatever the width.
+	const axisFont = $derived((12.5 * W) / (drawn || W));
 	const pctX = (v: number) => `${(v / W) * 100}%`;
 	const pctY = (v: number) => `${(v / H) * 100}%`;
 
@@ -107,6 +163,18 @@
 			? (x(history.regularSeasonWeeks) + x(history.playoffWeeks[0])) / 2
 			: null
 	);
+	const pct = (p: number) => `${Math.round(p * 100)}%`;
+	const zoomNote = $derived(
+		axis.max < 1
+			? `The scale stops at ${pct(axis.max)}, since no team's title odds have gone past it.`
+			: null
+	);
+
+	// A line that stopped says when: in or out, and the week it was settled.
+	const legendValue = (s: { last: number; stopped: boolean; endWeek: number }) =>
+		s.stopped && (s.last === 0 || s.last === 1)
+			? `${s.last === 1 ? 'In' : 'Out'}, wk ${s.endWeek}`
+			: formatOdds(s.last, s.last === 0 || s.last === 1);
 
 	const LABELS: Record<OddsMetric, string> = {
 		playoffOdds: 'Playoff odds',
@@ -116,17 +184,20 @@
 	const label = $derived(
 		series.length === 0
 			? `${LABELS[metric]} by week: none yet.`
-			: `${LABELS[metric]} by week, weeks ${weeks[0]} to ${weeks[weeks.length - 1]}. At the end: ${series
-					.map((s) => `${s.name} ${formatOdds(s.last, s.last === 0 || s.last === 1)}`)
+			: `${LABELS[metric]} by week, weeks ${weeks[0]} to ${lastWeek}, on a scale of 0 to ${pct(axis.max)}. ${series
+					.map(
+						(s) =>
+							`${s.name} ${s.stopped ? `settled at ${pct(s.last)} in week ${s.endWeek}` : formatOdds(s.last, s.last === 0 || s.last === 1)}`
+					)
 					.join(', ')}.`
 	);
 </script>
 
-<div class="trend" class:full>
+<div class="trend">
 	<div class="chart-scroll">
-		<div class="chart" role="img" aria-label={label}>
+		<div class="chart" role="img" aria-label={label} bind:clientWidth={drawn}>
 			<svg viewBox="0 0 {W} {H}" aria-hidden="true">
-				{#each [0, 0.25, 0.5, 0.75, 1] as p (p)}
+				{#each axis.ticks as p (p)}
 					<line
 						x1={PAD.left}
 						x2={W - PAD.right}
@@ -135,7 +206,13 @@
 						style:stroke="var(--color-line-soft)"
 						stroke-width="1"
 					/>
-					<text class="axis" x={PAD.left - 8} y={y(p) + 5} text-anchor="end">{p * 100}%</text>
+					<text
+						style:font-size="{axisFont}px"
+						class="axis"
+						x={PAD.left - 8}
+						y={y(p) + 5}
+						text-anchor="end">{pct(p)}</text
+					>
 				{/each}
 				{#if playoffStart != null}
 					<line
@@ -148,12 +225,18 @@
 						stroke-dasharray="4 4"
 					/>
 					<!-- Left of the line: the bracket weeks are the chart's last few. -->
-					<text class="axis playoffs" x={playoffStart - 6} y={PAD.top + 12} text-anchor="end"
-						>Playoffs</text
+					<text
+						style:font-size="{axisFont}px"
+						class="axis playoffs"
+						x={playoffStart - 6}
+						y={PAD.top + 12}
+						text-anchor="end">Playoffs</text
 					>
 				{/if}
 				{#each ticks as w (w)}
-					<text class="axis" x={x(w)} y={H - 6} text-anchor="middle">{w}</text>
+					<text style:font-size="{axisFont}px" class="axis" x={x(w)} y={H - 6} text-anchor="middle"
+						>{w}</text
+					>
 				{/each}
 				{#each drawOrder as s (s.teamKey)}
 					<path
@@ -166,26 +249,36 @@
 						stroke-linecap="round"
 					/>
 				{/each}
-			</svg>
-			{#if full}
-				{#each ends as e (e.teamKey)}
-					<span
-						class="end"
-						role="presentation"
-						title={e.name}
-						style:left={pctX(e.x)}
-						style:top={pctY(e.y)}
-						style:opacity={focus != null && focus !== e.teamKey ? 0.35 : 1}
-						style:z-index={focus === e.teamKey ? 2 : 1}
-						onmouseenter={() => (hovered = e.teamKey)}
-						onmouseleave={() => (hovered = null)}
-					>
-						<Avatar name={e.name} size={26} ring={2.5} ringColor={e.color} />
-					</span>
+				{#each leaders as e (e.teamKey)}
+					<line
+						x1={e.from.x}
+						y1={e.from.y}
+						x2={e.x}
+						y2={e.y}
+						style:stroke={e.color}
+						stroke-width="1.25"
+						stroke-opacity={focus != null && focus !== e.teamKey ? 0.15 : 0.55}
+					/>
 				{/each}
-			{/if}
+			</svg>
+			{#each ends as e (e.teamKey)}
+				<span
+					class="end"
+					role="presentation"
+					title={e.name}
+					style:left={pctX(e.x)}
+					style:top={pctY(e.y)}
+					style:opacity={focus != null && focus !== e.teamKey ? 0.35 : 1}
+					style:z-index={focus === e.teamKey ? 2 : 1}
+					onmouseenter={() => (hovered = e.teamKey)}
+					onmouseleave={() => (hovered = null)}
+				>
+					<Avatar name={e.name} size={26} ring={2.5} ringColor={e.color} />
+				</span>
+			{/each}
 		</div>
 		<p class="axis-note">Week</p>
+		{#if zoomNote}<p class="zoom-note">{zoomNote}</p>{/if}
 	</div>
 	<div class="legend" role="group" aria-label="Pick a team to bring its line forward">
 		{#each series as s (s.teamKey)}
@@ -194,62 +287,36 @@
 				class:on={focus === s.teamKey}
 				aria-pressed={focus === s.teamKey}
 				onclick={() => (picked = focus === s.teamKey ? null : s.teamKey)}
-				onmouseenter={full ? () => (hovered = s.teamKey) : undefined}
-				onmouseleave={full ? () => (hovered = null) : undefined}
+				onmouseenter={() => (hovered = s.teamKey)}
+				onmouseleave={() => (hovered = null)}
 			>
 				<span class="dot" style:background={s.color}></span>
 				<span class="name">{s.name}</span>
-				<span class="value">{formatOdds(s.last, s.last === 0 || s.last === 1)}</span>
+				<span class="value">{legendValue(s)}</span>
 			</button>
 		{/each}
 	</div>
 </div>
 
 <style>
+	/* Legend beside the chart, which scrolls sideways on phones. */
 	.trend {
-		min-width: 0;
-	}
-
-	/* The page-width chart: legend beside it, scrolling sideways on phones. */
-	.trend.full {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 20px;
 		align-items: flex-start;
+		min-width: 0;
 	}
 
-	.full .chart-scroll {
+	.chart-scroll {
 		flex: 999 1 560px;
 		min-width: 0;
 		overflow-x: auto;
 	}
 
-	.full .chart {
+	.chart {
 		position: relative;
 		min-width: 560px;
-	}
-
-	.full .axis {
-		font-size: 13px;
-	}
-
-	.full .legend {
-		flex: 1 1 200px;
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		margin-top: 0;
-	}
-
-	.full .legend button {
-		min-height: 34px;
-		font-size: 14px;
-	}
-
-	.end {
-		position: absolute;
-		display: inline-flex;
-		transform: translate(-50%, -50%);
 	}
 
 	.chart svg {
@@ -258,15 +325,27 @@
 		height: auto;
 	}
 
+	.end {
+		position: absolute;
+		display: inline-flex;
+		transform: translate(-50%, -50%);
+	}
+
 	.axis {
 		font-family: var(--font-sans);
-		font-size: 15px;
 		font-weight: 600;
 		fill: var(--color-muted);
 	}
 
 	.axis.playoffs {
 		fill: var(--color-field);
+	}
+
+	.zoom-note {
+		margin: 6px 0 0;
+		font-size: 12px;
+		line-height: 1.4;
+		color: var(--color-muted);
 	}
 
 	.axis-note {
@@ -280,24 +359,24 @@
 	}
 
 	.legend {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
-		gap: 2px 8px;
-		margin-top: 8px;
+		flex: 1 1 200px;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 
 	.legend button {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		min-height: 32px;
+		min-height: 34px;
 		padding: 0 8px;
 		border: 0;
 		border-radius: var(--radius-control);
 		background: transparent;
 		cursor: pointer;
 		font-family: var(--font-sans);
-		font-size: 13px;
+		font-size: 14px;
 		font-weight: 600;
 		color: var(--color-ink);
 		text-align: left;
@@ -332,10 +411,6 @@
 	}
 
 	@media (max-width: 639.98px) {
-		.legend {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-
 		.legend button {
 			min-height: 40px;
 		}

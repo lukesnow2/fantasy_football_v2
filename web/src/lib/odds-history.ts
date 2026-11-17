@@ -11,6 +11,12 @@ export interface OddsHistoryPoint {
 	playoffOdds: number;
 	byeOdds: number;
 	titleOdds: number;
+	/** Certain to make the playoffs, not just 100% in the simulation. */
+	clinched: boolean;
+	/** Certain to miss them. */
+	eliminated: boolean;
+	/** Lost a championship-bracket game. */
+	knockedOut: boolean;
 }
 
 export interface OddsHistoryTeam {
@@ -236,4 +242,96 @@ export function rebuiltNote(h: Available): string | null {
 		return `Week ${rebuilt[0]} wasn't saved at the time, so it's rebuilt from that week's games.`;
 	const list = `${rebuilt.slice(0, -1).join(', ')} and ${rebuilt[rebuilt.length - 1]}`;
 	return `Weeks ${list} weren't saved at the time, so they're rebuilt from those weeks' games.`;
+}
+
+/* ---------- The chart's rules ---------- */
+
+/**
+ * The week a team's line stops: the first week from which its odds are
+ * settled for good, at a value that doesn't change again. Null while they're
+ * still open. Settled means certain, not a simulated 0% or 100%: clinched or
+ * eliminated, the regular season over (for the playoffs and the bye), knocked
+ * out of the bracket or the champion (for the title). After a season every
+ * line ends at 0% or 100%, so the end says nothing; where it stops does.
+ */
+export function decidedWeek(
+	h: Available,
+	team: OddsHistoryTeam,
+	metric: OddsMetric
+): number | null {
+	const R = h.regularSeasonWeeks;
+	const inView = new Set(chartWeeks(h, metric));
+	const points = team.points.filter((p) => inView.has(p.week));
+	const settled = (p: OddsHistoryPoint) => {
+		const v = p[metric];
+		const final = p.week >= R && (v === 0 || v === 1);
+		if (metric === 'playoffOdds')
+			return (p.clinched && v === 1) || (p.eliminated && v === 0) || final;
+		if (metric === 'byeOdds') return (p.eliminated && v === 0) || final;
+		return (
+			((p.eliminated || p.knockedOut) && v === 0) || (v === 1 && h.result.champion === team.teamKey)
+		);
+	};
+	let week: number | null = null;
+	for (let i = points.length - 1; i >= 0; i--) {
+		const p = points[i];
+		if (!settled(p)) break;
+		if (i < points.length - 1 && p[metric] !== points[i + 1][metric]) break;
+		week = p.week;
+	}
+	return week;
+}
+
+/**
+ * Spreads labels that want the same spot along one axis: each keeps its
+ * wanted position when it can, and a crowd is laid out `gap` apart, centered
+ * on where its members wanted to be and kept between `lo` and `hi`. Returns
+ * positions in the input's order.
+ */
+export function dodge(wanted: number[], gap: number, lo: number, hi: number): number[] {
+	type Cluster = { members: { want: number; i: number }[]; start: number };
+	const place = (c: Cluster) => {
+		const n = c.members.length;
+		const mean = c.members.reduce((s, m) => s + m.want, 0) / n;
+		const start = mean - ((n - 1) * gap) / 2;
+		c.start = Math.max(lo, Math.min(start, hi - (n - 1) * gap));
+	};
+	const clusters: Cluster[] = wanted
+		.map((want, i) => ({ want, i }))
+		.sort((a, b) => a.want - b.want)
+		.map((m) => ({ members: [m], start: m.want }));
+	clusters.forEach(place);
+	for (let k = 0; k < clusters.length - 1; ) {
+		const a = clusters[k];
+		const b = clusters[k + 1];
+		if (a.start + a.members.length * gap > b.start + 1e-9) {
+			a.members.push(...b.members);
+			clusters.splice(k + 1, 1);
+			place(a);
+			k = Math.max(0, k - 1);
+		} else k++;
+	}
+	const out = new Array<number>(wanted.length);
+	for (const c of clusters) c.members.forEach((m, j) => (out[m.i] = c.start + j * gap));
+	return out;
+}
+
+const CEILINGS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8];
+
+/**
+ * The y axis: 0 to 100%, except title odds before the bracket is on the
+ * chart, which never get near 100% (about 30% at most in a season) and would
+ * otherwise sit in the bottom quarter. Those stop at the round number above
+ * the highest value. Zero always stays at the bottom: 0% is "no chance".
+ */
+export function oddsAxis(h: Available, metric: OddsMetric): { max: number; ticks: number[] } {
+	const full = { max: 1, ticks: [0, 0.25, 0.5, 0.75, 1] };
+	if (metric !== 'titleOdds' || h.playoffWeeks.length > 0) return full;
+	const high = Math.max(0, ...h.teams.flatMap((t) => t.points.map((p) => p.titleOdds)));
+	const max = CEILINGS.find((c) => c >= high + 0.02);
+	if (max == null) return full;
+	const step = max <= 0.2 ? 0.05 : max <= 0.6 ? 0.1 : 0.2;
+	const ticks: number[] = [];
+	for (let t = 0; t <= max + 1e-9; t += step) ticks.push(Math.round(t * 100) / 100);
+	return { max, ticks };
 }

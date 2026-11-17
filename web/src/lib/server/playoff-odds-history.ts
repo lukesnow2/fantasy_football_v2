@@ -35,7 +35,8 @@ async function savedWeeks(season: number, upTo: number): Promise<Map<number, Row
 					ORDER BY through_week, captured_live DESC, captured_at DESC
 				)
 				SELECT p.through_week AS week, t.team_key, t.playoff_odds::float AS playoff,
-				       t.bye_odds::float AS bye, t.title_odds::float AS title
+				       t.bye_odds::float AS bye, t.title_odds::float AS title,
+				       t.clinched, t.eliminated
 				FROM pick p
 				JOIN model.playoff_odds_snapshot_teams t USING (snapshot_id)
 			`)
@@ -75,7 +76,11 @@ export async function getOddsHistory(season: number): Promise<OddsHistory> {
 					week,
 					playoffOdds: Number(r.playoff),
 					byeOdds: Number(r.bye),
-					titleOdds: Number(r.title)
+					titleOdds: Number(r.title),
+					clinched: r.clinched === true,
+					eliminated: r.eliminated === true,
+					// Saved forecasts are regular-season ones: nobody's out of a bracket yet.
+					knockedOut: false
 				});
 			}
 			continue;
@@ -88,7 +93,10 @@ export async function getOddsHistory(season: number): Promise<OddsHistory> {
 				week,
 				playoffOdds: t.playoffOdds,
 				byeOdds: t.byeOdds,
-				titleOdds: t.titleOdds
+				titleOdds: t.titleOdds,
+				clinched: t.clinched,
+				eliminated: t.eliminated,
+				knockedOut: t.knockedOut
 			});
 		}
 	}
@@ -105,7 +113,10 @@ export async function getOddsHistory(season: number): Promise<OddsHistory> {
 					week,
 					playoffOdds: t.playoffOdds,
 					byeOdds: t.byeOdds,
-					titleOdds: t.titleOdds
+					titleOdds: t.titleOdds,
+					clinched: t.clinched,
+					eliminated: t.eliminated,
+					knockedOut: t.knockedOut
 				});
 			}
 		}

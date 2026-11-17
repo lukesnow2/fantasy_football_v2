@@ -272,7 +272,7 @@
 					/>
 				{/snippet}
 				{#if trend && trend.weeks.length >= 2}
-					<OddsTrend history={trend} {metric} full highlight={ready.champion ?? null} />
+					<OddsTrend history={trend} {metric} highlight={ready.champion ?? null} />
 					{#if rebuilt}<p class="foot">{rebuilt}</p>{/if}
 				{:else}
 					<p class="muted-line">The chart starts once there are two weeks of odds.</p>

@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
 	chartWeeks,
 	gradeLines,
+	decidedWeek,
+	dodge,
+	oddsAxis,
 	ordinal,
 	rebuiltNote,
 	seasonGrade,
@@ -41,19 +44,33 @@ function history(over: Partial<Available> = {}): Available {
 			[0.4, 0.1, 0.25],
 			[0.1, 0.1, 0.15],
 			[0.1, 0, 0.1],
-			[0, 0, 0.1]
+			[0, 0, 0]
 		]
 	};
 	const after = { A: [0.5, 0], B: [0.5, 1], C: [0, 0], D: [0, 0] } as Record<string, number[]>;
 	const teams = Object.entries(odds).map(([name, weeks], i) => {
+		// Clinched and eliminated only once the standings are final, in week 4.
 		const points: OddsHistoryPoint[] = weeks.map(([playoffOdds, byeOdds, titleOdds], w) => ({
 			week: w + 1,
 			playoffOdds,
 			byeOdds,
-			titleOdds
+			titleOdds,
+			clinched: w === 3 && playoffOdds === 1,
+			eliminated: w === 3 && playoffOdds === 0,
+			knockedOut: false
 		}));
+		const inField = name === 'A' || name === 'B';
 		after[name].forEach((titleOdds, j) =>
-			points.push({ week: 5 + j, playoffOdds: 0, byeOdds: 0, titleOdds })
+			points.push({
+				week: 5 + j,
+				playoffOdds: inField ? 1 : 0,
+				byeOdds: name === 'A' ? 1 : 0,
+				titleOdds,
+				clinched: inField,
+				eliminated: !inField,
+				// A loses the title game in week 6.
+				knockedOut: name === 'A' && j === 1
+			})
 		);
 		return { teamKey: i + 1, teamName: `Team ${name}`, managerName: name, points };
 	});
@@ -195,5 +212,80 @@ describe('rebuiltNote', () => {
 		expect(rebuiltNote(history({ rebuiltWeeks: [1, 2, 3, 4] }))).toBe(
 			"These odds weren't saved at the time, so every week is rebuilt from that week's games with today's model."
 		);
+	});
+});
+
+describe('decidedWeek', () => {
+	const h = history();
+	const team = (name: string) => h.teams.find((t) => t.managerName === name)!;
+
+	it('stops the playoff lines when the standings are final', () => {
+		for (const name of ['A', 'B', 'C', 'D'])
+			expect(decidedWeek(h, team(name), 'playoffOdds')).toBe(4);
+	});
+
+	it('stops a title line when the team is out, or wins it', () => {
+		expect(decidedWeek(h, team('A'), 'titleOdds')).toBe(6);
+		expect(decidedWeek(h, team('B'), 'titleOdds')).toBe(6);
+		// C still had 10% in week 4; D was out of the field by then.
+		expect(decidedWeek(h, team('C'), 'titleOdds')).toBe(5);
+		expect(decidedWeek(h, team('D'), 'titleOdds')).toBe(4);
+	});
+
+	it("doesn't take a simulated 0% for a settled one", () => {
+		const live = history({
+			weeks: [1, 2, 3],
+			playoffWeeks: [],
+			teams: h.teams.map((t) => ({
+				...t,
+				points: t.points
+					.filter((p) => p.week <= 3)
+					.map((p) => (p.week === 3 ? { ...p, titleOdds: 0 } : p))
+			})),
+			result: { field: null, byes: null, champion: null }
+		});
+		expect(decidedWeek(live, live.teams[3], 'titleOdds')).toBeNull();
+	});
+});
+
+describe('dodge', () => {
+	it('leaves labels that fit where they want to be', () => {
+		expect(dodge([10, 50, 90], 20, 0, 100)).toEqual([10, 50, 90]);
+	});
+
+	it('spreads a crowd around where it wanted to be', () => {
+		expect(dodge([50, 50, 50], 20, 0, 100)).toEqual([30, 50, 70]);
+	});
+
+	it('keeps a crowd inside the bounds, in the order it came', () => {
+		expect(dodge([100, 99, 100], 20, 0, 100)).toEqual([80, 60, 100]);
+	});
+
+	it('merges crowds that run into each other', () => {
+		const out = dodge([0, 0, 30, 30], 20, 0, 200);
+		const sorted = [...out].sort((a, b) => a - b);
+		for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeCloseTo(20, 9);
+	});
+});
+
+describe('oddsAxis', () => {
+	it('keeps 0 to 100% for everything but the title', () => {
+		expect(oddsAxis(history(), 'playoffOdds').max).toBe(1);
+		// The bracket is on the chart, so the climb to 100% is too.
+		expect(oddsAxis(history(), 'titleOdds').max).toBe(1);
+	});
+
+	it('zooms the title before the playoffs, from zero', () => {
+		const h = history();
+		const before = history({
+			weeks: [1, 2, 3, 4],
+			playoffWeeks: [],
+			teams: h.teams.map((t) => ({ ...t, points: t.points.filter((p) => p.week <= 4) }))
+		});
+		// The highest title odds are 45%.
+		expect(oddsAxis(before, 'titleOdds')).toEqual({
+			max: 0.5,
+			ticks: [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+		});
 	});
 });

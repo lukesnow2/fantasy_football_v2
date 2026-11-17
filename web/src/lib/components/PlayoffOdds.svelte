@@ -1,13 +1,7 @@
 <script lang="ts">
 	import { compareSeeding } from '$lib/playoff-odds';
 	import { formatOdds, formatRecord } from '$lib/home';
-	import {
-		gradeLines,
-		rebuiltNote,
-		seasonGrade,
-		skillLine,
-		type OddsHistory
-	} from '$lib/odds-history';
+	import { gradeLines, seasonGrade, skillLine, type OddsHistory } from '$lib/odds-history';
 	import {
 		oddsDetail,
 		oddsMethod,
@@ -16,7 +10,6 @@
 		type OddsResponse,
 		type OddsTeam
 	} from '$lib/this-season';
-	import OddsTrend from './OddsTrend.svelte';
 	import Button from './ui/Button.svelte';
 	import Card from './ui/Card.svelte';
 	import Segmented from './ui/Segmented.svelte';
@@ -26,9 +19,9 @@
 	 * Simulated playoff odds for the This Season page (WP4 S4.4). Through the
 	 * playoffs it opens on the title odds, which follow the real bracket, with
 	 * the seeds (S4.9) one tap away. Once the title game is played it grades
-	 * the season's odds against what happened. Every phase can open the odds
-	 * week by week (OddsTrend). The model lives in $lib/playoff-odds; this only
-	 * presents it.
+	 * the season's odds against what happened. The odds week by week live on
+	 * the Playoff Odds page, which every phase links to. The model lives in
+	 * $lib/playoff-odds; this only presents it.
 	 */
 
 	type TeamOdds = OddsTeam;
@@ -58,8 +51,6 @@
 	let pickedMetric = $state<Metric | undefined>(undefined);
 	/** The playoffs' second view: the seeds, as the regular season left them. */
 	let postView = $state<'titleOdds' | 'seeds'>('titleOdds');
-	/** The final grade's chart. */
-	let gradeMetric = $state<Metric>('titleOdds');
 	/** The open row. Undefined until a reader picks one: then the top row is open. */
 	let chosen = $state<number | null | undefined>(undefined);
 	let showMethod = $state(false);
@@ -131,17 +122,14 @@
 
 	const record = (t: TeamOdds) => formatRecord(t.wins, t.losses, t.ties);
 
-	/* ---------- Week by week, and the grade ---------- */
+	/* ---------- The grade ---------- */
 
-	let showTrend = $state(false);
 	let history = $state<OddsHistory | null>(null);
 	let historyState = $state<'idle' | 'loading' | 'ready' | 'failed'>('idle');
 
-	// Loaded the first time the chart opens, or straight away once the season
-	// is over, where the grade needs it.
+	// The grade needs the odds week by week, so they load once the season is over.
 	$effect(() => {
-		if (!data?.available || historyState !== 'idle') return;
-		if (!showTrend && !complete) return;
+		if (!data?.available || !complete || historyState !== 'idle') return;
 		historyState = 'loading';
 		const season = data.season;
 		fetch(`/api/playoff-odds/history?season=${season}`)
@@ -163,7 +151,6 @@
 	const grade = $derived(complete && trend ? seasonGrade(trend) : null);
 	const lines = $derived(grade && trend ? gradeLines(grade, trend.regularSeasonWeeks) : []);
 	const skill = $derived(grade ? skillLine(grade) : null);
-	const rebuilt = $derived(trend ? rebuiltNote(trend) : null);
 
 	const POST_TABS = [
 		{ value: 'titleOdds' as const, label: 'Title' },
@@ -190,19 +177,6 @@
 			</li>
 		{/each}
 	</ol>
-{/snippet}
-
-{#snippet trendBlock(m: Metric, highlight: number | null)}
-	{#if historyState === 'loading' || historyState === 'idle'}
-		<div class="trend-loading" aria-busy="true"></div>
-	{:else if historyState === 'failed'}
-		<p class="note">The odds by week couldn't be loaded right now.</p>
-	{:else if !trend || trend.weeks.length < 2}
-		<p class="note">The chart starts once there are two weeks of odds.</p>
-	{:else}
-		<OddsTrend history={trend} metric={m} {highlight} />
-		{#if rebuilt}<p class="foot">{rebuilt}</p>{/if}
-	{/if}
 {/snippet}
 
 <Card
@@ -246,15 +220,6 @@
 					</li>
 				{/each}
 			</ul>
-			<div class="grade-chart">
-				<Segmented
-					label="Chart the odds of"
-					size="toggle"
-					options={TABS}
-					bind:value={gradeMetric}
-				/>
-				{@render trendBlock(gradeMetric, data.champion ?? null)}
-			</div>
 			{#if skill}<p class="foot">{skill}</p>{/if}
 			<div class="full-link">
 				<Button variant="link" size="tap" href="/playoff-odds">Full odds →</Button>
@@ -373,27 +338,14 @@
 			</ul>
 		{/if}
 
-		<div class="toggles">
-			<button
-				type="button"
-				class="how"
-				aria-expanded={showTrend}
-				onclick={() => (showTrend = !showTrend)}
-			>
-				Odds week by week {showTrend ? '▴' : '▾'}
-			</button>
-			<button
-				type="button"
-				class="how"
-				aria-expanded={showMethod}
-				onclick={() => (showMethod = !showMethod)}
-			>
-				How these odds work {showMethod ? '▴' : '▾'}
-			</button>
-		</div>
-		{#if showTrend}
-			<div class="trend">{@render trendBlock(metric, open)}</div>
-		{/if}
+		<button
+			type="button"
+			class="how"
+			aria-expanded={showMethod}
+			onclick={() => (showMethod = !showMethod)}
+		>
+			How these odds work {showMethod ? '▴' : '▾'}
+		</button>
 		{#if showMethod && method}
 			<div class="method">
 				<p>{method[0]}</p>
@@ -564,23 +516,6 @@
 		border-top: 1.5px dashed var(--color-field);
 	}
 
-	.toggles {
-		display: flex;
-		flex-wrap: wrap;
-		column-gap: 20px;
-		margin-top: 10px;
-	}
-
-	.trend {
-		margin-top: 4px;
-	}
-
-	.trend-loading {
-		height: 200px;
-		border-radius: 6px;
-		background: var(--color-line-soft);
-	}
-
 	.foot {
 		margin: 10px 0 0;
 		font-size: 13px;
@@ -618,12 +553,6 @@
 		color: var(--color-ink-2);
 	}
 
-	.grade-chart {
-		margin-top: 16px;
-		display: grid;
-		gap: 10px;
-	}
-
 	.seeds {
 		margin-top: 8px;
 	}
@@ -633,6 +562,7 @@
 	}
 
 	.how {
+		margin-top: 10px;
 		min-height: 40px;
 		padding: 0;
 		border: 0;
@@ -716,11 +646,8 @@
 			gap: 12px;
 		}
 
-		.toggles {
-			margin-top: 6px;
-		}
-
 		.how {
+			margin-top: 6px;
 			min-height: 44px;
 		}
 	}
