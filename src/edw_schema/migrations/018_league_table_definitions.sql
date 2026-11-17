@@ -1,9 +1,8 @@
 -- Dictionary entries for the League Table's StatTips (WP14 S14.5, D13).
 --
--- The table's "Luck", "Playoff win %" and "Avg draft grade" headers read
--- career_luck, playoff_win_percentage and avg_draft_grade. None had an entry,
--- so those labels showed with no ⓘ. career_luck's one-line definition is the
--- one Luke accepted in D13.6.
+-- The table's "Luck" and "Playoff win %" headers read career_luck and
+-- playoff_win_percentage. Neither had an entry, so those labels showed with
+-- no ⓘ. career_luck's one-line definition is the one Luke accepted in D13.6.
 --
 -- faab_efficiency_rating is brought up to date with how the mart computes it
 -- (D13.3): starter points from paid claims ÷ dollars spent, not total points
@@ -34,14 +33,6 @@ INSERT INTO meta_data.metric_definitions (
 '16 bracket wins and 8 losses: 16 ÷ 24 = 66.7%',
 'Brackets are short, so a few games move it a lot. Read it next to playoff trips: a high rate over two trips says less than a good one over ten.',
 'percentage', 'percent', '0% to 70%', null, null, 'percentage_1', 31),
-
-('avg_draft_grade', 'Avg draft grade', 'draft_analysis',
-'The average overall pick number of a manager''s draft picks, despite the name.',
-'The average of the overall pick number (1 is the first pick of the draft) over every pick a manager has made. Every manager picks once a round, so it lands near the middle of the draft for everyone. The longer drafts of the early seasons push it up for the managers who played them.',
-'Σ overall pick numbers ÷ picks made',
-'Picks 5, 16, 25 and 36: (5 + 16 + 25 + 36) ÷ 4 = 20.5',
-'It doesn''t measure drafting skill: most managers sit between 75.4 and 75.6. Draft grade and Draft value per season say how good a manager''s drafts were.',
-'decimal', 'pick number', '75 to 83', null, null, 'decimal_1', 32),
 
 ('faab_efficiency_rating', 'FAAB Efficiency Rating', 'efficiency',
 'Starter points produced by FAAB pickups, per FAAB dollar spent',

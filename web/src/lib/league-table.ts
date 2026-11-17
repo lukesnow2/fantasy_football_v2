@@ -41,7 +41,6 @@ export interface LeagueRow {
 	movesPerSeason: number | null;
 	draftGrade: string | null;
 	draftValue: number | null;
-	avgDraftGrade: number | null;
 	bestDraft: number | null;
 	worstDraft: number | null;
 	hofIndex: number | null;
@@ -74,7 +73,6 @@ export interface PerformanceRow {
 	faabEfficiencyRating?: number | null;
 	totalTransactions?: number | null;
 	avgTransactionsPerSeason?: number | null;
-	avgDraftGrade?: number | null;
 	seasonConsistencyScore?: number | null;
 	bestSeasonRecord?: string | null;
 	worstSeasonRecord?: string | null;
@@ -159,7 +157,6 @@ export function buildRows(
 			movesPerSeason: n(p.avgTransactionsPerSeason),
 			draftGrade: grade?.grade ?? null,
 			draftValue: n(grade?.averageScore),
-			avgDraftGrade: n(p.avgDraftGrade),
 			bestDraft: range.bestYear,
 			worstDraft: range.worstYear,
 			hofIndex: hof ? n(hof.hallOfFameIndex) : null,
@@ -391,7 +388,6 @@ const COLUMN_LIST: LeagueColumn[] = [
 		metricId: 'draft_value_per_season',
 		tone: 'signed'
 	}),
-	numeric('adg', 'Avg draft grade', 104, 'avgDraftGrade', 1, one, { metricId: 'avg_draft_grade' }),
 	{
 		key: 'bestdraft',
 		label: 'Best draft',
@@ -526,7 +522,7 @@ export const GROUPS: LeagueGroup[] = [
 		id: 'draft',
 		label: 'Draft',
 		description: 'How much each manager’s draft classes returned.',
-		columns: ['grade', 'dval', 'adg', 'bestdraft', 'worstdraft'],
+		columns: ['grade', 'dval', 'bestdraft', 'worstdraft'],
 		defaultSort: 'dval'
 	},
 	{

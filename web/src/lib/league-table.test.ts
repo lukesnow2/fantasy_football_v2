@@ -66,7 +66,6 @@ function row(over: Partial<LeagueRow>): LeagueRow {
 		movesPerSeason: null,
 		draftGrade: null,
 		draftValue: null,
-		avgDraftGrade: null,
 		bestDraft: null,
 		worstDraft: null,
 		hofIndex: null,
@@ -308,6 +307,8 @@ describe('state', () => {
 		});
 		// Years aren't sortable.
 		expect(parseState(new URLSearchParams('group=draft&sort=bestdraft')).sort).toBe('dval');
+		// Avg draft grade was the average pick number, not a grade, so it's gone (Luke, 11-16).
+		expect(parseState(new URLSearchParams('group=draft&sort=adg')).sort).toBe('dval');
 		expect(parseState(new URLSearchParams('dir=sideways')).dir).toBe('desc');
 		expect(parseState(new URLSearchParams('who=everyone')).who).toBe('all');
 	});
@@ -373,5 +374,8 @@ describe('copy and layout', () => {
 		expect(tableMinWidth(overview, true)).toBe(804);
 		const scoring = phoneColumns(groupById('scoring'), 'ppg');
 		expect(tableMinWidth(scoring, false)).toBe(806);
+		const draft = groupById('draft');
+		expect(draft.columns).toEqual(['grade', 'dval', 'bestdraft', 'worstdraft']);
+		expect(COLUMNS.adg).toBeUndefined();
 	});
 });
