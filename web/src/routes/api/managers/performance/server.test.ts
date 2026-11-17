@@ -62,6 +62,10 @@ const execute = vi.fn(async (query: unknown) => {
 			results.map((result) => ({ managerName, result }))
 		);
 	}
+	if (text.includes("WHERE fm.matchup_type IN ('playoffs', 'championship')")) {
+		// Bo has played no bracket game.
+		return [{ managerName: 'Ann', playoffWins: '5', playoffLosses: '2' }];
+	}
 	if (text.includes('SUM(tp.points_against) AS points_against')) {
 		return [
 			{ managerName: 'Ann', pointsAgainst: '2890.50', finishedPointsPerSeason: '1950.25' },
@@ -125,13 +129,20 @@ describe('GET /api/managers/performance', () => {
 			expect(row).toHaveProperty('pointsAgainst');
 			expect(row).toHaveProperty('finishedPointsPerSeason');
 			expect(row).toHaveProperty('streaks');
+			expect(row).toHaveProperty('playoffWins');
+			expect(row).toHaveProperty('playoffLosses');
 		}
 		const ann = data.performance.find((r: { managerName: string }) => r.managerName === 'Ann');
 		expect(ann.pointsAgainst).toBe(2890.5);
 		expect(ann.finishedPointsPerSeason).toBe(1950.25);
 		expect(ann.streaks).toEqual({ longestWinStreak: 3, longestLossStreak: 2, totalGames: 9 });
+		expect(ann.playoffWins).toBe(5);
+		expect(ann.playoffLosses).toBe(2);
 		const bo = data.performance.find((r: { managerName: string }) => r.managerName === 'Bo');
 		expect(bo.finishedPointsPerSeason).toBeNull();
+		// No bracket games is 0-0, not missing.
+		expect(bo.playoffWins).toBe(0);
+		expect(bo.playoffLosses).toBe(0);
 		expect(bo.streaks).toMatchObject({ longestWinStreak: 2, longestLossStreak: 3 });
 	});
 

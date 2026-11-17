@@ -27,6 +27,9 @@ export interface LeagueRow {
 	titleGameWins: number | null;
 	titleGameLosses: number | null;
 	trips: number | null;
+	/** Every playoff and title game, as the mart counts them. */
+	playoffWins: number | null;
+	playoffLosses: number | null;
 	playoffWinPct: number | null;
 	ppg: number | null;
 	ppSeason: number | null;
@@ -67,6 +70,8 @@ export interface PerformanceRow {
 	championshipAppearances?: number | null;
 	playoffAppearances?: number | null;
 	playoffWinPercentage?: number | null;
+	playoffWins?: number | null;
+	playoffLosses?: number | null;
 	avgPointsPerGame?: number | null;
 	totalPointsScored?: number | null;
 	careerRegularSeasonWins?: number | null;
@@ -128,6 +133,9 @@ export function buildRows(
 		const range = draftRange(draft.bySeason, draft.byManager, p.managerName);
 		const hof = hallOfFame?.find((h) => h.managerName === p.managerName);
 		const lastSeason = n(p.lastSeason);
+		const playoffWins = n(p.playoffWins);
+		const playoffLosses = n(p.playoffLosses);
+		const playoffGames = (playoffWins ?? 0) + (playoffLosses ?? 0);
 		return {
 			name: p.managerName,
 			firstSeason: n(p.firstSeason),
@@ -142,7 +150,14 @@ export function buildRows(
 			titleGameWins: titles,
 			titleGameLosses: titles != null && appearances != null ? appearances - titles : null,
 			trips: n(p.playoffAppearances),
-			playoffWinPct: n(p.playoffWinPercentage),
+			playoffWins,
+			playoffLosses,
+			// From the record when there is one, so the rate and the record
+			// agree to the last digit (the mart stores the rate to 4 places).
+			playoffWinPct:
+				playoffWins != null && playoffLosses != null && playoffGames > 0
+					? playoffWins / playoffGames
+					: n(p.playoffWinPercentage),
 			ppg: n(p.avgPointsPerGame),
 			ppSeason: n(p.finishedPointsPerSeason),
 			points,
@@ -327,6 +342,33 @@ function numeric(
 	};
 }
 
+/** A W-L column ("7-3"): most wins first, then fewer losses. */
+function winLoss(
+	key: string,
+	label: string,
+	width: number,
+	wins: NumField,
+	losses: NumField
+): LeagueColumn {
+	return {
+		key,
+		label,
+		width,
+		better: 'high',
+		leader: true,
+		sortKey: (row) => {
+			const w = row[wins];
+			const l = row[losses];
+			return w == null || l == null ? null : [w, -l];
+		},
+		display: (row) => {
+			const w = row[wins];
+			const l = row[losses];
+			return w == null || l == null ? blank() : plain(`${w}-${l}`);
+		}
+	};
+}
+
 const int = (v: number) => formatWhole(v);
 const one = (v: number) => fixedWithCommas(v, 1);
 
@@ -357,22 +399,8 @@ const COLUMN_LIST: LeagueColumn[] = [
 	},
 	numeric('winstreak', 'Longest win streak', 96, 'winStreak', 0, int),
 	numeric('lossstreak', 'Longest losing streak', 104, 'lossStreak', 0, int, { better: 'low' }),
-	{
-		key: 'titlegames',
-		label: 'Title games',
-		width: 82,
-		better: 'high',
-		leader: true,
-		// Wins, then fewer losses.
-		sortKey: (row) =>
-			row.titleGameWins == null || row.titleGameLosses == null
-				? null
-				: [row.titleGameWins, -row.titleGameLosses],
-		display: (row) =>
-			row.titleGameWins == null || row.titleGameLosses == null
-				? blank()
-				: plain(`${row.titleGameWins}-${row.titleGameLosses}`)
-	},
+	winLoss('titlegames', 'Title games', 82, 'titleGameWins', 'titleGameLosses'),
+	winLoss('precord', 'Playoff record', 96, 'playoffWins', 'playoffLosses'),
 	numeric('ppct', 'Playoff win %', 96, 'playoffWinPct', 3, (v) => `${(v * 100).toFixed(1)}%`, {
 		metricId: 'playoff_win_percentage'
 	}),
@@ -509,8 +537,8 @@ export const GROUPS: LeagueGroup[] = [
 	{
 		id: 'playoffs',
 		label: 'Playoffs',
-		description: 'Championships, title games and playoff trips, finished seasons only.',
-		columns: ['titles', 'titlegames', 'trips', 'ppct'],
+		description: 'Championships, title games, playoff trips and every playoff game.',
+		columns: ['titles', 'titlegames', 'trips', 'precord', 'ppct'],
 		defaultSort: 'ppct'
 	},
 	{

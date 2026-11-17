@@ -52,6 +52,8 @@ function row(over: Partial<LeagueRow>): LeagueRow {
 		titleGameWins: null,
 		titleGameLosses: null,
 		trips: null,
+		playoffWins: null,
+		playoffLosses: null,
 		playoffWinPct: null,
 		ppg: null,
 		ppSeason: null,
@@ -263,6 +265,27 @@ describe('sorting and ranks', () => {
 		];
 		expect(sortRows(list, COLUMNS.titlegames, 'desc').map((r) => r.name)).toEqual(['C', 'B', 'A']);
 		expect([...leaders(list, COLUMNS.titlegames)]).toEqual(['C']);
+	});
+
+	it('sorts Playoff record by wins, then fewer losses, and rates from the record', () => {
+		const list = [
+			row({ name: 'A', playoffWins: 9, playoffLosses: 13 }),
+			row({ name: 'B', playoffWins: 9, playoffLosses: 10 }),
+			row({ name: 'C', playoffWins: 30, playoffLosses: 15 })
+		];
+		expect(sortRows(list, COLUMNS.precord, 'desc').map((r) => r.name)).toEqual(['C', 'B', 'A']);
+		expect([...leaders(list, COLUMNS.precord)]).toEqual(['C']);
+		expect(COLUMNS.precord.display(list[2]).text).toBe('30-15');
+		// 12-10 is 54.5%; the mart's 0.5455 would print 54.6%.
+		const [g] = buildRows(
+			[{ managerName: 'G', playoffWins: 12, playoffLosses: 10, playoffWinPercentage: 0.5455 }],
+			undefined,
+			[]
+		);
+		expect(COLUMNS.ppct.display(g).text).toBe('54.5%');
+		// No record: the API's rate.
+		const [h] = buildRows([{ managerName: 'H', playoffWinPercentage: 0.25 }], undefined, []);
+		expect(COLUMNS.ppct.display(h).text).toBe('25.0%');
 	});
 
 	it('sorts the draft letter by the score behind it', () => {
