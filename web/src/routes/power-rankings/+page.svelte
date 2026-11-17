@@ -243,7 +243,8 @@
 </svelte:head>
 
 <PageHeader {kicker} title="Power Rankings" pending={firstLoad} phoneActionGap={14}>
-	Ranked on points, record, schedule and recent form, so a lucky start doesn't count for as much.
+	Ranked on record, season scoring and the last three weeks, so a lucky start doesn't count for as
+	much.
 	{#snippet action()}
 		{#if seasons.length > 0}
 			<div class="controls">

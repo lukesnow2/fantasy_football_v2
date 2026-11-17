@@ -24,10 +24,12 @@ MIGRATION = 'src/edw_schema/migrations/019_luck_schedule_and_power_score.sql'
 LEAGUE, SEASON = 1, 2024
 # week -> [(team, points, opponent, opponent points)], one row per game.
 # Ties in weeks 1 and 3, so all-play and wins both have to count halves.
+# Four weeks, so by week 4 the last three weeks and the season differ.
 GAMES = {
     1: [(1, 120.0, 2, 100.0), (3, 110.0, 4, 110.0)],
     2: [(1, 90.0, 3, 130.0), (2, 105.0, 4, 95.0)],
     3: [(1, 150.0, 4, 80.0), (2, 100.0, 3, 100.0)],
+    4: [(1, 95.0, 2, 140.0), (3, 125.0, 4, 105.0)],
 }
 TEAMS = [1, 2, 3, 4]
 
@@ -145,9 +147,9 @@ def test_luck_is_wins_minus_all_play_and_sums_to_zero(rows):
         for team in TEAMS:
             all_play, wins, _, _ = expected(team, week)
             luck = float(rows[(team, week)]['luck_factor'])
-            assert luck == pytest.approx(wins - all_play, abs=0.01)
+            assert luck == pytest.approx(wins - all_play, abs=0.0001)
             total += luck
-        assert total == pytest.approx(0.0, abs=0.02)
+        assert total == pytest.approx(0.0, abs=0.0005)
 
 
 def test_points_vs_league_and_schedule_leave_the_team_out(rows):
@@ -162,15 +164,22 @@ def test_points_vs_league_and_schedule_leave_the_team_out(rows):
 
 
 def test_power_score_reads_season_scoring_with_no_schedule_term(rows):
-    # Week 2 is where the old build went wrong: team 1 scored 90 that week
-    # but averages 105, and the old points term read the 90.
-    week = 2
-    avg = {t: sum(scores(w)[t][0] for w in range(1, week + 1)) / week for t in TEAMS}
-    best = max(avg.values())  # with two weeks, last-3 form is the same average
-    for team in TEAMS:
-        _, wins, _, _ = expected(team, week)
-        want = 0.45 * wins / week + 0.35 * avg[team] / best + 0.20 * avg[team] / best
-        assert float(rows[(team, week)]['power_score']) == pytest.approx(want, abs=0.0005)
+    # 45% record, 35% season points per game, 20% the last three weeks, each
+    # scoring term over the week's best. Week 2 is where the old build went
+    # wrong (team 1 scored 90 that week but averages 105, and the old points
+    # term read the 90); week 4 is where the season and the last three weeks
+    # part, so a wrong form window or swapped weights would show.
+    for week in (2, 4):
+        played = range(1, week + 1)
+        recent = range(max(1, week - 2), week + 1)
+        avg = {t: sum(scores(w)[t][0] for w in played) / len(played) for t in TEAMS}
+        form = {t: sum(scores(w)[t][0] for w in recent) / len(recent) for t in TEAMS}
+        for team in TEAMS:
+            _, wins, _, _ = expected(team, week)
+            want = (0.45 * wins / week + 0.35 * avg[team] / max(avg.values())
+                    + 0.20 * form[team] / max(form.values()))
+            assert float(rows[(team, week)]['power_score']) == pytest.approx(want, abs=0.0005)
+    assert max(abs(a - f) for a, f in zip(avg.values(), form.values())) > 3  # they do part
 
 
 def test_migration_adds_the_columns_and_dictionary_rows_twice_over(engine):

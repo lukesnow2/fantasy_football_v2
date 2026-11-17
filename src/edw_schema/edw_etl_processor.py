@@ -5947,29 +5947,19 @@ class EdwEtlProcessor:
                          a.team_points, a.opponent_points
             ),
             field_to_date AS (
-                -- Season to date: all-play wins add up; the other two average.
+                -- Season to date (a league is one season): all-play wins add
+                -- up; the other two average. Every team plays every regular
+                -- week, so a running window over its own games is enough.
                 SELECT
-                    aw.team_key,
-                    aw.league_key,
-                    aw.week_key,
-                    SUM(wf.all_play_share) as all_play_wins,
-                    AVG(wf.points_vs_league) as points_vs_league,
-                    AVG(wf.schedule_vs_league) as schedule_vs_league
-                FROM (
-                    SELECT DISTINCT
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key
-                      AND ftp.season_year = aw.season_year
-                ) aw
-                JOIN weekly_field wf ON wf.team_key = aw.team_key
-                    AND wf.league_key = aw.league_key
-                    AND wf.matchup_week <= aw.week_number
-                GROUP BY aw.team_key, aw.league_key, aw.week_key
+                    team_key,
+                    league_key,
+                    week_key,
+                    SUM(all_play_share) OVER season_so_far as all_play_wins,
+                    AVG(points_vs_league) OVER season_so_far as points_vs_league,
+                    AVG(schedule_vs_league) OVER season_so_far as schedule_vs_league
+                FROM weekly_field
+                WINDOW season_so_far AS (PARTITION BY league_key, team_key
+                                         ORDER BY matchup_week)
             ),
             opponent_records AS (
                 -- Calculate win percentages for strength of schedule
@@ -6372,7 +6362,7 @@ class EdwEtlProcessor:
                 ROUND(rp.biggest_win_margin, 2) as biggest_win_margin,
                 ROUND(rp.biggest_loss_margin, 2) as biggest_loss_margin,
                 ROUND(rp.pythagorean_wins, 2) as pythagorean_wins,
-                ROUND(rp.luck_factor, 2) as luck_factor,
+                ROUND(rp.luck_factor, 4) as luck_factor,
                 ROUND(rp.calculated_playoff_odds, 4) as playoff_odds,
                 ROUND(rp.all_play_wins, 2) as all_play_wins,
                 ROUND(rp.points_vs_league, 2) as points_vs_league,

@@ -25,11 +25,10 @@ COMMENT ON COLUMN meta_data.metric_definitions.limitations IS
 -- CORRECTIONS: stored text that contradicts the pipeline or the data
 -- ============================================================================
 
--- power_score, pythagorean_wins and luck_factor are owned by migration 019
--- (WP15, 2026-11): luck is now wins minus all-play wins, Pythagorean wins
--- serve head-to-head rivalries only, and the power score was rebuilt. Their
--- corrections and limitations used to live here; re-running this file must
--- not put the old definitions back, so they're gone from it.
+-- power_score, pythagorean_wins and luck_factor were rewritten by migration
+-- 019 (WP15, 2026-11); populate_metric_definitions.sql carries that copy, so
+-- their old corrections are gone from here. Their limitations, and those of
+-- the rows 019 added, are at the end of the LIMITATIONS section.
 
 -- strength_of_schedule is AVG(opponent win percentage), not an average of
 -- opponent power scores, and it is not recency weighted. Observed: 0.000-1.000,
@@ -155,6 +154,40 @@ WHERE metric_id = 'biggest_win_margin';
 UPDATE meta_data.metric_definitions SET limitations =
 'A single game extreme across the whole history, so it is driven by outliers and by how many times two managers happen to have played. It says nothing about the typical margin between them.'
 WHERE metric_id = 'most_lopsided_game';
+
+-- WP15 (migration 019): luck against all-play wins, the rebuilt power score,
+-- and the new field and rivalry rows.
+UPDATE meta_data.metric_definitions SET limitations =
+'It mixes two kinds of luck, who you drew and how close games broke; the Schedule column shows the first on its own. Until 2026-11 this was wins minus Pythagorean wins, which counted points against as earned and missed most schedule luck.'
+WHERE metric_id = 'luck_factor';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Rivalries are a handful of games, so it moves a lot on one result. The exponent is fitted to whole seasons, not to head-to-head series.'
+WHERE metric_id = 'pythagorean_wins';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'The weights are a choice, not fitted, and the scoring terms are relative to the week''s best team, so a score isn''t comparable across seasons. It follows the standings closely (rank match 0.95). Before 2026-11 its points term read only that week''s score and it added a schedule term that was really the team''s own record again.'
+WHERE metric_id = 'power_score';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. Regular season only.'
+WHERE metric_id = 'all_play_wins';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'One season''s number carries into the next at only r = 0.10, because rosters reset every year. It compares a team with the league it played in, so it can''t say whether one era''s league was stronger than another''s.'
+WHERE metric_id = 'points_vs_league';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'It says how many points you faced, not whether you lost: a big opponent week against your bigger week costs nothing. Luck shows the effect on wins.'
+WHERE metric_id = 'schedule_vs_league';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'A sum, so it grows with the number of seasons played: compare managers with similar careers. Until 2026-11 it was built on Pythagorean wins and missed most schedule luck.'
+WHERE metric_id = 'career_luck';
+
+UPDATE meta_data.metric_definitions SET limitations =
+'Rivalries are short, so a single close game moves it a lot.'
+WHERE metric_id = 'rivalry_luck';
 
 -- ============================================================================
 -- REBUILD THE VIEW WITH THE NEW COLUMN
