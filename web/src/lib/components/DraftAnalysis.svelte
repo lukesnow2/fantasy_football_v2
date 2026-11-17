@@ -2,15 +2,18 @@
 	/**
 	 * A season's best and worst picks as two mini cards beside the Selected pick
 	 * (WP8 S8.7): "Best value" on field tint and "Biggest busts" on pennant
-	 * tint, three rows each from the API's bestWorstPicks. Each row is a button
+	 * tint, up to three rows each from the API's bestWorstPicks (fewer when a
+	 * season has fewer picks the board tags as busts). Each row is a button
 	 * that hands its pick to `onpick`, so the page can show it up close.
 	 *
-	 * The picks are judged by $lib/draft-value on the server: points over what
-	 * that round and position usually score, busts only from picks the draft
-	 * counted on, and never a kicker or defense.
+	 * The picks are judged by $lib/draft-value on the server: ranked by how far
+	 * they stood out from players at their position taken around the same
+	 * round, busts only from picks the draft counted on, and never a kicker or
+	 * defense. Each row shows its points over the slot and its rank move
+	 * ("Drafted QB12, scored QB1").
 	 */
 	import { Card } from '$lib/components/ui';
-	import { pickMeta, signed } from '$lib/draft-display';
+	import { pickMeta, rankMove, signed } from '$lib/draft-display';
 
 	interface SeasonPick {
 		overallPick: number;
@@ -19,6 +22,8 @@
 		playerName: string;
 		primaryPosition: string | null;
 		valueOverExpected: number | null;
+		draftedRank?: number | null;
+		scoredRank?: number | null;
 		pickType: 'best' | 'worst';
 	}
 
@@ -50,12 +55,14 @@
 		<Card tone={list.tone} padding="12px 12px 8px" phonePadding="12px 12px 8px" class="mini {list.key}">
 			<h2 class="mini-title">{list.title}</h2>
 			{#each list.rows as p (p.overallPick)}
+				{@const move = rankMove(p)}
 				<button type="button" class="row" onclick={() => onpick(p.overallPick)}>
 					<span class="row-top">
 						<span>{p.playerName}</span>
 						<span class="value">{signed(Number(p.valueOverExpected ?? 0), 1)}</span>
 					</span>
 					<span class="row-meta">{pickMeta(p)}</span>
+					{#if move}<span class="row-meta">{move}</span>{/if}
 				</button>
 			{/each}
 		</Card>

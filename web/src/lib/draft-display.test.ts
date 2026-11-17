@@ -11,6 +11,7 @@ import {
 	hasLowestBustRate,
 	pickGradeColor,
 	pickTag,
+	rankMove,
 	signed,
 	positionKey,
 	tagCounts,
@@ -219,5 +220,21 @@ describe('boardCell', () => {
 			{ ...base, overallPick: 89, primaryPosition: 'TE', seasonPoints: 40, expectedPoints: 100, highExpectation: true }
 		];
 		expect(cellTagCounts(picks.map(boardCell))).toEqual(tagCounts(picks));
+	});
+});
+
+describe('rankMove', () => {
+	it('reads a pick against the other players taken at its position', () => {
+		expect(rankMove({ primaryPosition: 'QB', draftedRank: 12, scoredRank: 1 })).toBe(
+			'Drafted QB12, scored QB1'
+		);
+		expect(rankMove({ position: 'WR', draftedRank: 9, scoredRank: 48 })).toBe(
+			'Drafted WR9, scored WR48'
+		);
+	});
+
+	it('is null without a position or ranks', () => {
+		expect(rankMove({ primaryPosition: null, draftedRank: 1, scoredRank: 1 })).toBeNull();
+		expect(rankMove({ primaryPosition: 'RB' })).toBeNull();
 	});
 });

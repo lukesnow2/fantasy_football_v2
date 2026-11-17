@@ -18,7 +18,13 @@
 		type Column
 	} from '$lib/components/ui';
 	import { isHit, pickGrade, pickVerdict } from '$lib/draft-value';
-	import { consistencyDetail, hasLowestBustRate, pointsOf, signed } from '$lib/draft-display';
+	import {
+		consistencyDetail,
+		hasLowestBustRate,
+		pointsOf,
+		rankMove,
+		signed
+	} from '$lib/draft-display';
 	import { formatCount, profileHref } from '$lib/home';
 
 	let draftData = $state<any>(null);
@@ -528,13 +534,16 @@
 	<!-- S8.6 Best value picks, biggest busts, best drafters -->
 	{#if draftValue}
 		<div class="lists">
-			{#each [{ title: 'Best value picks', sub: 'Points over what that round and position usually score.', rows: draftValue.bestValue.slice(0, 8), tone: 'field' }, { title: 'Biggest busts', sub: 'Early picks, rounds 1 to 8, that came up furthest short.', rows: draftValue.biggestBusts.slice(0, 8), tone: 'pennant' }] as list (list.title)}
+			{#each [{ title: 'Best value picks', sub: 'Ranked against players at the same position taken in the same rounds, so a late QB has to beat other late QBs. Points are over what the slot usually scores.', rows: draftValue.bestValue.slice(0, 8), tone: 'field' }, { title: 'Biggest busts', sub: 'Early picks, rounds 1 to 8, that fell furthest short of players at the same position taken in the same rounds.', rows: draftValue.biggestBusts.slice(0, 8), tone: 'pennant' }] as list (list.title)}
 				<Card title={list.title} headGap={0}>
 					<p class="list-sub">{list.sub}</p>
 					{#each list.rows as p, i (i)}
+						{@const move = rankMove(p)}
 						<div class="value-row">
 							<span class="value-main">
-								<span class="value-player">{p.playerName}</span>
+								<span class="value-player"
+									>{p.playerName}{#if move}<span class="value-move">{move}</span>{/if}</span
+								>
 								<span class="value-meta">
 									<PositionChip position={p.position} tone="neutral" />
 									<span class="value-when">{p.seasonYear} · Rd {p.roundNumber}</span>
@@ -798,6 +807,13 @@
 
 	.value-player {
 		font-weight: 600;
+	}
+
+	.value-move {
+		display: block;
+		font-size: 12px;
+		font-weight: 400;
+		color: var(--color-muted);
 	}
 
 	.value-when {

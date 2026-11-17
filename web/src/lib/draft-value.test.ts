@@ -3,7 +3,9 @@ import {
 	isHit,
 	pickGrade,
 	careerGrade,
+	draftRecords,
 	pickVerdict,
+	positionRanks,
 	seasonDraftScores,
 	seasonGrade,
 	topBusts,
@@ -96,6 +98,35 @@ describe('valueDraftPicks', () => {
 		).toBe('2025-WR-13');
 	});
 
+	it('a longer draft does not shrink its season unit', () => {
+		// 2005-07 ran 25 rounds. Their extra deep picks score little; averaged
+		// in, they would make every pick in that season read bigger.
+		const deep: Pick[] = Array.from({ length: 40 }, (_, i) => ({
+			seasonYear: 2025,
+			roundNumber: 16 + (i % 10),
+			position: 'WR',
+			seasonPoints: 5,
+			name: `deep-${i}`
+		}));
+		const plain = valueDraftPicks([...history, ...season(2025)], done);
+		const long = valueDraftPicks([...history, ...season(2025), ...deep], done);
+		const at = (v: typeof plain, name: string) => v.find((p) => p.name === name)!;
+		for (const name of ['2025-QB-3', '2025-WR-13', '2025-RB-1']) {
+			expect(at(long, name).valueOverExpected).toBeCloseTo(at(plain, name).valueOverExpected, 9);
+		}
+	});
+
+	it('a draft loaded partway does not shrink every season unit', () => {
+		// A live draft three rounds in: finished seasons keep their 15-round unit.
+		const live = season(2026).filter((p) => p.roundNumber <= 3);
+		const plain = valueDraftPicks([...history, ...season(2025)], done);
+		const withLive = valueDraftPicks([...history, ...season(2025), ...live], done);
+		const at = (v: typeof plain, name: string) => v.find((p) => p.name === name)!;
+		for (const name of ['2024-QB-3', '2024-WR-13', '2025-RB-1']) {
+			expect(at(withLive, name).seasonAverage).toBeCloseTo(at(plain, name).seasonAverage, 9);
+		}
+	});
+
 	it('judges a partial season on its own scale', () => {
 		// The same draft three weeks in (a third of the points) must read exactly
 		// like the full season, relative to expectation: small totals are not busts.
@@ -109,6 +140,106 @@ describe('valueDraftPicks', () => {
 		for (const pick of full) {
 			expect(ratio(pick.name.replace('2025', '2026'))).toBeCloseTo(ratio(pick.name), 9);
 		}
+	});
+
+	it('ranks steals against the position, so a QB hit that is routine for late QBs trails a rarer WR hit', () => {
+		// Late QBs here either sit (50) or start (350); late WRs land 90 to 110.
+		const spread: Pick[] = [2022, 2023, 2024, 2025].flatMap((year) =>
+			[10, 11, 12].flatMap((round) =>
+				[0, 1, 2, 3].flatMap((i) => [
+					{
+						seasonYear: year,
+						roundNumber: round,
+						position: 'QB',
+						seasonPoints: i % 2 ? 350 : 50,
+						name: `${year}-qb-${round}-${i}`
+					},
+					{
+						seasonYear: year,
+						roundNumber: round,
+						position: 'WR',
+						seasonPoints: i % 2 ? 110 : 90,
+						name: `${year}-wr-${round}-${i}`
+					}
+				])
+			)
+		);
+		const qb: Pick = {
+			seasonYear: 2025,
+			roundNumber: 11,
+			position: 'QB',
+			seasonPoints: 400,
+			name: 'late-qb'
+		};
+		const wr: Pick = {
+			seasonYear: 2025,
+			roundNumber: 11,
+			position: 'WR',
+			seasonPoints: 200,
+			name: 'late-wr'
+		};
+		const v = valueDraftPicks([...spread, qb, wr], done);
+		const q = v.find((p) => p.name === 'late-qb')!;
+		const w = v.find((p) => p.name === 'late-wr')!;
+		expect(q.valueOverExpected).toBeGreaterThan(w.valueOverExpected);
+		expect(w.valueZ).toBeGreaterThan(q.valueZ);
+		expect(topSteals([q, w], 1)[0].name).toBe('late-wr');
+	});
+
+	it('measures a pick against its own position spread, not the gap between position averages', () => {
+		// QBs and WRs each land 10 either side of their own average (300 and
+		// 100). The round's raw spread is ~100 because of the gap between them;
+		// a WR at 160 is far out among WRs and must read that way.
+		const two: Pick[] = [2022, 2023, 2024, 2025].flatMap((year) =>
+			[1, 2, 3].flatMap((round) =>
+				[0, 1, 2, 3].flatMap((i) => [
+					{ seasonYear: year, roundNumber: round, position: 'QB', seasonPoints: i % 2 ? 310 : 290, name: `${year}-qb-${round}-${i}` },
+					{ seasonYear: year, roundNumber: round, position: 'WR', seasonPoints: i % 2 ? 110 : 90, name: `${year}-wr-${round}-${i}` }
+				])
+			)
+		);
+		const hit: Pick = { seasonYear: 2025, roundNumber: 2, position: 'WR', seasonPoints: 160, name: 'wr-hit' };
+		const v = valueDraftPicks([...two, hit], done);
+		expect(v.find((p) => p.name === 'wr-hit')!.valueZ).toBeGreaterThan(2);
+	});
+
+	it('steal and bust lists hold only picks that beat or missed their slot', () => {
+		const v = valueDraftPicks([...history, ...season(2025, { '2025-RB-1': 60 })], done).filter(
+			(p) => p.seasonYear === 2025
+		);
+		expect(topSteals(v, 200).every((p) => p.valueZ > 0)).toBe(true);
+		expect(topBusts(v, 200).every((p) => p.valueZ < 0)).toBe(true);
+	});
+
+	it('bust lists hold only picks the board tags as busts, even if that leaves fewer rows', () => {
+		// Counted-on picks at 40% (a bust) and 60% (a letdown) of their slot.
+		const v = valueDraftPicks(
+			[...history, ...season(2025, { '2025-RB-1': 286 * 0.4, '2025-WR-1': 286 * 0.6 })],
+			done
+		).filter((p) => p.seasonYear === 2025);
+		const ratio = (name: string) => {
+			const p = v.find((x) => x.name === name)!;
+			return p.seasonPoints / p.expectedPoints;
+		};
+		// The premise: one counted-on pick under half its slot, one just over.
+		expect(ratio('2025-RB-1')).toBeLessThan(0.5);
+		expect(ratio('2025-WR-1')).toBeGreaterThan(0.5);
+		expect(ratio('2025-WR-1')).toBeLessThan(0.85);
+		const busts = topBusts(v, 3);
+		expect(busts.map((p) => p.name)).toEqual(['2025-RB-1']);
+		for (const p of busts) {
+			expect(pickVerdict(p.seasonPoints, p.expectedPoints, p.highExpectation, p.position)).toBe(
+				'bust'
+			);
+		}
+	});
+
+	it('all-time records leave out the season still being played', () => {
+		const live = season(2026, { '2026-WR-13': 330, '2026-RB-1': 0 });
+		const v = valueDraftPicks([...history, ...season(2025), ...live], done);
+		const { steals, busts } = draftRecords(v, new Set([...done, 2025]), 50);
+		expect([...steals, ...busts].some((p) => p.seasonYear === 2026)).toBe(false);
+		expect(topSteals(v, 1)[0].name).toBe('2026-WR-13');
 	});
 
 	it('a late-round pick is never a bust, even a QB the league expects a lot from', () => {
@@ -211,7 +342,8 @@ describe('manager draft grades', () => {
 			seasonAverage: 100,
 			expectedPoints: 100,
 			highExpectation: true,
-			expectedRelative: 1
+			expectedRelative: 1,
+			valueZ: 0
 		});
 		const scores = seasonDraftScores([pick('a', 150), pick('a', 90), pick('b', -40)]);
 		expect(scores.find((x) => x.managerName === 'a')).toMatchObject({ score: 2.4, picks: 2 });
@@ -234,5 +366,36 @@ describe('manager draft grades', () => {
 		expect(careerGrade(Array(30).fill(1.2), 2.7).grade).toBe('A');
 		expect(careerGrade(Array(30).fill(-0.5), 2.7).grade).toBe('D');
 		expect(careerGrade(Array(30).fill(-1.2), 2.7).grade).toBe('F');
+	});
+});
+
+describe('positionRanks', () => {
+	it('ranks a pick among its season and position, taken and by points', () => {
+		const pick = (
+			overallPick: number,
+			position: string,
+			seasonPoints: number,
+			seasonYear = 2019
+		) => ({
+			seasonYear,
+			overallPick,
+			position,
+			seasonPoints
+		});
+		const ranks = positionRanks([
+			pick(5, 'QB', 300),
+			pick(20, 'QB', 250),
+			pick(127, 'QB', 470),
+			pick(130, 'QB', 250),
+			pick(1, 'RB', 456),
+			pick(127, 'QB', 0, 2020)
+		]);
+		expect(ranks.get('2019:127')).toEqual({ drafted: 3, scored: 1 });
+		expect(ranks.get('2019:5')).toEqual({ drafted: 1, scored: 2 });
+		// A tie in points goes to the earlier pick.
+		expect(ranks.get('2019:20')).toEqual({ drafted: 2, scored: 3 });
+		expect(ranks.get('2019:130')).toEqual({ drafted: 4, scored: 4 });
+		expect(ranks.get('2019:1')).toEqual({ drafted: 1, scored: 1 });
+		expect(ranks.get('2020:127')).toEqual({ drafted: 1, scored: 1 });
 	});
 });
