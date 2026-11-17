@@ -4,7 +4,7 @@
  * the URL state all live here as pure functions, so the page only renders
  * what these return and vitest holds the rules (S14.4, S14.5).
  */
-import { hofTier, type ColorToken } from '$lib/utils/hall-of-fame';
+import { hofTier, managerCount, toNumber, type ColorToken } from '$lib/utils/hall-of-fame';
 import { draftRange, formatPct3, formatWhole, type DraftSeasonScore } from '$lib/utils/managers';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,8 @@ export interface LeagueRow {
 	worstDraft: number | null;
 	hofIndex: number | null;
 	hofRank: number | null;
+	/** The Hall of Fame list loaded, so a missing index means under 3 seasons. */
+	hofKnown: boolean;
 	swing: number | null;
 	bestSeason: string | null;
 	worstSeason: string | null;
@@ -93,11 +95,7 @@ export interface HofRow {
 	hallOfFameRank: number | null;
 }
 
-function n(value: unknown): number | null {
-	if (value === null || value === undefined || value === '') return null;
-	const parsed = typeof value === 'number' ? value : Number(value);
-	return Number.isFinite(parsed) ? parsed : null;
-}
+const n = toNumber;
 
 /**
  * One row per manager in the performance API (D13.9: the same eleven as the
@@ -111,7 +109,8 @@ export function buildRows(
 		byManager: [],
 		bySeason: []
 	},
-	hallOfFame: HofRow[] = []
+	/** null when the Hall of Fame didn't load: its columns then read "None". */
+	hallOfFame: HofRow[] | null = []
 ): LeagueRow[] {
 	const named = performance.filter((p) => p.managerName);
 	const lasts = named.map((p) => n(p.lastSeason)).filter((v): v is number => v != null);
@@ -127,7 +126,7 @@ export function buildRows(
 		const pointsAgainst = n(p.pointsAgainst);
 		const grade = draft.byManager.find((d) => d.managerName === p.managerName);
 		const range = draftRange(draft.bySeason, draft.byManager, p.managerName);
-		const hof = hallOfFame.find((h) => h.managerName === p.managerName);
+		const hof = hallOfFame?.find((h) => h.managerName === p.managerName);
 		const lastSeason = n(p.lastSeason);
 		return {
 			name: p.managerName,
@@ -161,6 +160,7 @@ export function buildRows(
 			worstDraft: range.worstYear,
 			hofIndex: hof ? n(hof.hallOfFameIndex) : null,
 			hofRank: hof?.hallOfFameRank ?? null,
+			hofKnown: hallOfFame != null,
 			swing: n(p.seasonConsistencyScore),
 			bestSeason: p.bestSeasonRecord || null,
 			worstSeason: p.worstSeasonRecord || null,
@@ -276,6 +276,14 @@ export function tierLabel(rank: number): { text: string; color: ColorToken } {
 	return { text: short[tier.name] ?? tier.name, color: tier.color };
 }
 
+/**
+ * A missing HoF index: under three finished seasons when the Hall of Fame
+ * loaded, otherwise just missing.
+ */
+function hofBlank(row: LeagueRow): string | undefined {
+	return row.hofKnown ? 'Under 3 seasons' : undefined;
+}
+
 type NumField = {
 	[K in keyof LeagueRow]: LeagueRow[K] extends number | null ? K : never;
 }[keyof LeagueRow];
@@ -288,7 +296,14 @@ function numeric(
 	field: NumField,
 	places: number,
 	format: (value: number) => string,
-	opts: { better?: Better; leader?: boolean; metricId?: string; blank?: string; tone?: Tone } = {}
+	opts: {
+		better?: Better;
+		leader?: boolean;
+		metricId?: string;
+		/** The blank value's word, or a rule for it. */
+		blank?: string | ((row: LeagueRow) => string | undefined);
+		tone?: Tone;
+	} = {}
 ): LeagueColumn {
 	return {
 		key,
@@ -304,8 +319,9 @@ function numeric(
 		display: (row) => {
 			const v = row[field];
 			// Printed from the rounded value, so the text and the sort agree.
+			const word = typeof opts.blank === 'function' ? opts.blank(row) : opts.blank;
 			return v == null
-				? blank(opts.blank)
+				? blank(word)
 				: { text: format(round(v, places)), tone: opts.tone ?? 'plain' };
 		}
 	};
@@ -328,7 +344,7 @@ const COLUMN_LIST: LeagueColumn[] = [
 	}),
 	numeric('hof', 'HoF index', 92, 'hofIndex', 3, (v) => v.toFixed(3), {
 		metricId: 'hall_of_fame_index',
-		blank: 'Under 3 seasons'
+		blank: hofBlank
 	}),
 	{
 		key: 'record',
@@ -414,7 +430,7 @@ const COLUMN_LIST: LeagueColumn[] = [
 		leader: false,
 		sortKey: (row) => (row.hofIndex == null ? null : [round(row.hofIndex, 3)]),
 		display: (row) => {
-			if (row.hofIndex == null || row.hofRank == null) return blank('Under 3 seasons');
+			if (row.hofIndex == null || row.hofRank == null) return blank(hofBlank(row));
 			const tier = tierLabel(row.hofRank);
 			return { text: tier.text, tone: tier.color };
 		}
@@ -724,7 +740,7 @@ export function sortPhrase(column: LeagueColumn, direction: Direction): string {
 
 /** "11 managers · sorted by titles, highest first". */
 export function sortLine(count: number, column: LeagueColumn, direction: Direction): string {
-	return `${count} ${count === 1 ? 'manager' : 'managers'} · ${sortPhrase(column, direction)}`;
+	return `${managerCount(count)} · ${sortPhrase(column, direction)}`;
 }
 
 /** The table's hidden caption: "League table, Overview, sorted by Titles". */
@@ -742,9 +758,15 @@ export function phoneColumns(group: LeagueGroup, sort: string): LeagueColumn[] {
 	return sorted ? [sorted, ...cols.filter((c) => c.key !== sort)] : cols;
 }
 
+/** The two columns that never change: # and Manager, in px, and the gap before Manager. */
+export function leadColumns(phone: boolean): { rank: number; manager: number; gap: number } {
+	return phone ? { rank: 32, manager: 128, gap: 8 } : { rank: 44, manager: 250, gap: 8 };
+}
+
 /** The table's min-width in px: every column, its gap, and the board's 4px. */
 export function tableMinWidth(columns: LeagueColumn[], phone: boolean): number {
-	const lead = phone ? 32 + 8 + 128 : 44 + 8 + 250;
+	const l = leadColumns(phone);
+	const lead = l.rank + l.gap + l.manager;
 	return lead + columns.reduce((sum, c) => sum + 12 + c.width, 0) + 4;
 }
 

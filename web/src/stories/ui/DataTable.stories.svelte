@@ -294,6 +294,7 @@
 				mine={(row) => row.name === 'Luke S'}
 				stickyLead="phone"
 				leadWidth={32}
+				bleed={8}
 				columns={[
 					{ key: 'rank', label: '#', width: '44px' },
 					{ key: 'name', label: 'Manager', width: '200px', gap: 8 },

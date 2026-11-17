@@ -441,7 +441,8 @@
 		}
 
 		.head.inset-phone {
-			padding: 0 var(--card-head-inset-phone);
+			padding-left: var(--card-head-inset-phone);
+			padding-right: var(--card-head-inset-phone);
 		}
 
 		.title {

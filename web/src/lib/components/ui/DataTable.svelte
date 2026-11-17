@@ -125,6 +125,18 @@
 		stickyLead?: 'phone';
 		/** Px: the first column's width, where the second sticky column starts. */
 		leadWidth?: number;
+		/**
+		 * False when a parent scrolls the table (the League Table's phone region,
+		 * whose padding has to scroll with the rows); the table then doesn't
+		 * scroll itself.
+		 */
+		scroll?: boolean;
+		/**
+		 * Px of room on each side of the scroller for content that runs past a
+		 * cell, so it isn't clipped (a last-column leader chip: 8). The table
+		 * doesn't move.
+		 */
+		bleed?: number;
 	}
 
 	let {
@@ -155,11 +167,20 @@
 		ariaSort,
 		mine,
 		stickyLead,
-		leadWidth = 0
+		leadWidth = 0,
+		scroll = true,
+		bleed
 	}: Props = $props();
 </script>
 
-<div class="scroll" class:capped={maxHeight != null} style:max-height={maxHeight}>
+<div
+	class="scroll"
+	class:capped={maxHeight != null}
+	class:no-scroll={!scroll}
+	class:bleed={bleed != null}
+	style:--bleed={bleed != null ? `${bleed}px` : undefined}
+	style:max-height={maxHeight}
+>
 	<table
 		class:sticky-first={stickyFirst === true}
 		class:sticky-first-phone={stickyFirst === 'phone'}
@@ -255,6 +276,15 @@
 	.scroll {
 		position: relative;
 		overflow-x: auto;
+	}
+
+	.scroll.no-scroll {
+		overflow: visible;
+	}
+
+	.scroll.bleed {
+		margin: 0 calc(-1 * var(--bleed));
+		padding: 0 var(--bleed);
 	}
 
 	table {
@@ -403,8 +433,9 @@
 		background: var(--color-field-wash);
 	}
 
+	/* 6px in from the edge, and from any edgeInset. */
 	tr.mine td:first-child {
-		padding-left: 6px;
+		padding-left: calc(var(--edge-inset, 0px) + 6px);
 		box-shadow: inset 3px 0 0 var(--color-field);
 	}
 

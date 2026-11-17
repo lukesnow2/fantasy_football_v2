@@ -31,6 +31,7 @@
 		filterRows,
 		groupById,
 		groupColumns,
+		leadColumns,
 		leaders,
 		parseState,
 		phoneColumns,
@@ -42,6 +43,7 @@
 		stateQuery,
 		switchGroup,
 		tableMinWidth,
+		type Display,
 		type GroupId,
 		type LeagueColumn,
 		type LeagueRow,
@@ -80,7 +82,9 @@
 			rows = buildRows(
 				performance?.data?.performance ?? [],
 				{ byManager: grades?.byManager ?? [], bySeason: grades?.bySeason ?? [] },
-				hallOfFame?.hallOfFame ?? []
+				// null, not [], when it didn't load: its columns then read "None",
+				// not "Under 3 seasons".
+				Array.isArray(hallOfFame?.hallOfFame) ? hallOfFame.hallOfFame : null
 			);
 		} catch (error) {
 			console.error('Error loading the league table:', error);
@@ -111,9 +115,10 @@
 	const leaderSets = $derived(new Map(columns.map((c) => [c.key, leaders(shown, c)])));
 	const span = $derived(seasonSpan(rows));
 
+	const lead = $derived(leadColumns(phone.current));
 	const tableColumns = $derived<Column[]>([
-		{ key: 'rank', label: '#', width: phone.current ? '32px' : '44px' },
-		{ key: 'manager', label: 'Manager', width: phone.current ? '128px' : '250px', gap: 8 },
+		{ key: 'rank', label: '#', width: `${lead.rank}px` },
+		{ key: 'manager', label: 'Manager', width: `${lead.manager}px`, gap: lead.gap },
 		...columns.map((c) => ({
 			key: c.key,
 			label: c.label,
@@ -135,8 +140,7 @@
 
 	const isMine = (name: string) => data.userManagerName != null && name === data.userManagerName;
 
-	function valueClass(column: LeagueColumn, row: LeagueRow): string {
-		const display = column.display(row);
+	function valueClass(column: LeagueColumn, row: LeagueRow, display: Display): string {
 		const sorted = column.key === view.sort;
 		if (display.blank) return 'blank';
 		if (leaderSets.get(column.key)?.has(row.name)) return 'leader';
@@ -222,6 +226,7 @@
 					label={c.label}
 					iconOnly
 					phoneTap="inline-small"
+					headerIcon
 				/>{/if}{#if on}<span class="arrow" aria-hidden="true"
 					>{' '}{view.dir === 'desc' ? '▼' : '▲'}</span
 				>{/if}
@@ -256,12 +261,13 @@
 		</a>
 	{:else}
 		{@const c = COLUMNS[column.key]}
-		<span class="value {valueClass(c, entry.row)}">{c.display(entry.row).text}</span>
+		{@const display = c.display(entry.row)}
+		<span class="value {valueClass(c, entry.row, display)}">{display.text}</span>
 	{/if}
 {/snippet}
 
 {#if loading && rows.length === 0}
-	<div class="skeleton" aria-busy="true" aria-label="Loading the league table"></div>
+	<div class="skeleton" role="status" aria-busy="true" aria-label="Loading the league table"></div>
 {:else if failed}
 	<div class="state">
 		<Card title="The league table didn't load">
@@ -311,7 +317,9 @@
 						minWidth="{tableMinWidth(columns, phone.current)}px"
 						headerAlign="bottom"
 						stickyLead="phone"
-						leadWidth={32}
+						leadWidth={leadColumns(true).rank}
+						scroll={!phone.current}
+						bleed={phone.current ? undefined : 8}
 						mine={(r) => isMine(r.row.name)}
 						ariaSort={(column) => {
 							const c = COLUMNS[column.key];
@@ -372,13 +380,6 @@
 		margin-top: 12px;
 	}
 
-	/* Room for a last-column leader chip, which runs 7px past its text:
-	   without it the scroller clips the chip. The table doesn't move. */
-	.scroller :global(.scroll) {
-		margin: 0 -8px;
-		padding: 0 8px;
-	}
-
 	.note {
 		margin: 14px 0 0;
 		max-width: 820px;
@@ -413,12 +414,6 @@
 
 	.head.on {
 		color: var(--color-ink);
-	}
-
-	.head :global(.i) {
-		font-weight: 600;
-		text-transform: none;
-		color: var(--color-field);
 	}
 
 	.arrow {
@@ -581,14 +576,6 @@
 		.region {
 			overflow-x: auto;
 			padding: 0 16px;
-		}
-
-		/* DataTable scrolls itself; on phones the region does, so the 16px
-		   inset scrolls with the rows. */
-		.region :global(.scroll) {
-			overflow: visible;
-			margin: 0;
-			padding: 0;
 		}
 
 		/* Rows scrolled sideways pass under the sticky columns; this hides

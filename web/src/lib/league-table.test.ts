@@ -70,6 +70,7 @@ function row(over: Partial<LeagueRow>): LeagueRow {
 		worstDraft: null,
 		hofIndex: null,
 		hofRank: null,
+		hofKnown: true,
 		swing: null,
 		bestSeason: null,
 		worstSeason: null,
@@ -194,6 +195,11 @@ describe('columns', () => {
 		expect(COLUMNS.hof.display(newcomer).text).toBe('Under 3 seasons');
 		expect(COLUMNS.tier.display(newcomer).text).toBe('Under 3 seasons');
 		expect(COLUMNS.ppg.display(newcomer).text).toBe('None');
+		// The Hall of Fame didn't load: missing, not "under 3 seasons".
+		const [noHof] = buildRows([{ managerName: 'Trevor', totalSeasons: 22 }], undefined, null);
+		expect(noHof.hofKnown).toBe(false);
+		expect(COLUMNS.hof.display(noHof).text).toBe('None');
+		expect(COLUMNS.tier.display(noHof).text).toBe('None');
 	});
 
 	it('names Hall of Fame tiers short, in their tier colors', () => {

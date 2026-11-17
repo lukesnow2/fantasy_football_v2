@@ -305,25 +305,25 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY career_win_percentage DESC, championships_won DESC
 		`);
 		const managerStats = Array.from(statsResult);
-		// Optional like the sections below: a failure here blanks the luck
-		// figures, it does not take the whole profile down with it.
-		let luck = new Map<string, SeasonLuck[]>();
-		let latestSeason: number | null = null;
-		try {
-			({ byManager: luck, latestSeason } = await loadLuckBySeason(manager));
-		} catch (luckError) {
-			console.error('[managers/performance] luck query failed:', luckError);
-		}
-		// All-managers rows only (the League Table); optional like luck, so a
-		// failure leaves the three fields null rather than failing the page.
-		let extras = new Map<string, CareerExtras>();
-		if (!manager) {
-			try {
-				extras = await loadCareerExtras();
-			} catch (extrasError) {
-				console.error('[managers/performance] career extras query failed:', extrasError);
-			}
-		}
+		// Both optional like the sections below: a failure blanks those figures,
+		// it does not take the whole page down with it. The career extras are
+		// for the all-managers rows only (the League Table). Independent, so
+		// they run at the same time.
+		const [luckResult, extrasResult] = await Promise.all([
+			loadLuckBySeason(manager).catch((luckError) => {
+				console.error('[managers/performance] luck query failed:', luckError);
+				return null;
+			}),
+			manager
+				? Promise.resolve(null)
+				: loadCareerExtras().catch((extrasError) => {
+						console.error('[managers/performance] career extras query failed:', extrasError);
+						return null;
+					})
+		]);
+		const luck = luckResult?.byManager ?? new Map<string, SeasonLuck[]>();
+		const latestSeason: number | null = luckResult?.latestSeason ?? null;
+		const extras = extrasResult ?? new Map<string, CareerExtras>();
 
 		// Add computed rankings and tier classification with camelCase field names
 		const enrichedStats: any[] = managerStats.map((mgr: any, index: number) => ({
