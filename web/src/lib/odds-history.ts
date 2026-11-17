@@ -54,6 +54,33 @@ export function chartWeeks(h: Available, metric: OddsMetric): number[] {
 	return metric === 'titleOdds' ? h.weeks : h.weeks.filter((w) => w <= h.regularSeasonWeeks);
 }
 
+/* ---------- The playoff field ---------- */
+
+/**
+ * The playoff field and byes from the championship-bracket games played so
+ * far, as scripts/grade-playoff-odds.ts reads them: the field is every team
+ * in a bracket game, and the byes are the field's teams that sat out its
+ * first week. Only played weeks are stored, so after the first round the
+ * teams on a bye haven't played yet: the top of `seeded` (wins, then points
+ * for) not already in a game fills the field to `playoffTeams`.
+ */
+export function bracketField(
+	games: { week: number; teamA: number; teamB: number }[],
+	seeded: number[],
+	playoffTeams: number
+): { field: number[]; byes: number[] } {
+	const field = [...new Set(games.flatMap((g) => [g.teamA, g.teamB]))];
+	for (const t of seeded) {
+		if (field.length >= playoffTeams) break;
+		if (!field.includes(t)) field.push(t);
+	}
+	const first = Math.min(...games.map((g) => g.week));
+	const playedFirst = new Set(
+		games.filter((g) => g.week === first).flatMap((g) => [g.teamA, g.teamB])
+	);
+	return { field, byes: field.filter((t) => !playedFirst.has(t)) };
+}
+
 /* ---------- The grade ---------- */
 
 export interface SeasonGrade {

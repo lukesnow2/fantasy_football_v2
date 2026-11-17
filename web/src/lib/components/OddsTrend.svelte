@@ -42,7 +42,15 @@
 
 	let picked = $state<number | null | undefined>(undefined);
 	let hovered = $state<number | null>(null);
-	const focus = $derived(hovered ?? (picked !== undefined ? picked : highlight));
+	// A pick only counts while its team is on the chart: switching seasons on
+	// the page keeps this component, and a team from another season would
+	// fade every line.
+	const onChart = $derived(new Set(history.teams.map((t) => t.teamKey)));
+	const focus = $derived.by(() => {
+		if (hovered != null && onChart.has(hovered)) return hovered;
+		if (picked === null || (picked !== undefined && onChart.has(picked))) return picked;
+		return highlight;
+	});
 
 	// Room on the right for the column of pictures.
 	const W = 960;
@@ -124,9 +132,12 @@
 		}[] = [];
 		for (const [week, group] of groups) {
 			const rail = week === lastWeek;
+			// A group too big for the plot at that spacing squeezes in rather
+			// than running off the bottom (narrow screens, ten close lines).
+			const fit = group.length > 1 ? Math.min(gap, (hi - lo) / (group.length - 1)) : gap;
 			const spread = dodge(
 				group.map((s) => s.end.y),
-				gap,
+				fit,
 				lo,
 				hi
 			);

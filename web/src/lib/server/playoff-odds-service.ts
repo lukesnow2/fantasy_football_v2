@@ -87,6 +87,12 @@ export interface OddsOptions {
 	 * a snapshot is the forecast as the regular season left it.
 	 */
 	bracket?: boolean;
+	/**
+	 * Also simulate the week before, for each team's change since last week
+	 * (default true). The odds history only needs the week itself, so it
+	 * skips the second run.
+	 */
+	previous?: boolean;
 }
 
 /**
@@ -113,7 +119,7 @@ export async function getSeasonOdds(
 export async function getSeasonOddsWithFingerprint(
 	season: number,
 	throughWeek?: number,
-	{ bracket: useBracket = true }: OddsOptions = {}
+	{ bracket: useBracket = true, previous: wantPrevious = true }: OddsOptions = {}
 ): Promise<{ odds: SeasonOdds; gamesFingerprint: string | null }> {
 	const [matchupRows, teamRowsRaw, format] = await Promise.all([
 		db.execute(sql`
@@ -205,8 +211,15 @@ export async function getSeasonOddsWithFingerprint(
 		.sort()
 		.join(',');
 	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}:${bracketKey}`;
-	let sims = cache.get(key);
-	if (!sims) {
+	// A run with last week's comparison serves a request that doesn't need it.
+	const lightKey = `${key}:now`;
+	let sims = cache.get(key) ?? (wantPrevious ? undefined : cache.get(lightKey));
+	if (sims) {
+		// Least recently used goes first: keep the hit at the back.
+		const at = cache.has(key) ? key : lightKey;
+		cache.delete(at);
+		cache.set(at, sims);
+	} else {
 		// One seed for both runs: the engine draws each week's randomness from
 		// its own stream, so the two runs share draws for every week both
 		// simulate and the change mostly reflects last week's results.
@@ -222,10 +235,15 @@ export async function getSeasonOddsWithFingerprint(
 				params: PARAMS,
 				bracketResults
 			});
-		sims = { now: run(playedWeeks), prev: playedWeeks > 0 ? run(playedWeeks - 1) : null };
-		// Superseded fingerprints are never read again; keep the map small.
-		if (cache.size >= 32) cache.clear();
-		cache.set(key, sims);
+		sims = {
+			now: run(playedWeeks),
+			prev: wantPrevious && playedWeeks > 0 ? run(playedWeeks - 1) : null
+		};
+		// Keep the map small, dropping the least recently used: superseded
+		// fingerprints are never read again, and a past season's history (a run
+		// per week) mustn't push out the live season's odds.
+		if (cache.size >= 32) cache.delete(cache.keys().next().value!);
+		cache.set(wantPrevious ? key : lightKey, sims);
 	}
 	const { now, prev } = sims;
 	const prevOdds = new Map(prev?.teams.map((t) => [t.teamKey, t.playoffOdds]) ?? []);

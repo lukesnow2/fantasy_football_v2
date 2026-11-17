@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	bracketField,
 	chartWeeks,
 	gradeLines,
 	decidedWeek,
@@ -287,5 +288,46 @@ describe('oddsAxis', () => {
 			max: 0.5,
 			ticks: [0, 0.1, 0.2, 0.3, 0.4, 0.5]
 		});
+	});
+});
+
+describe('bracketField', () => {
+	// Seeds 1-6 are teams 11-16; 1 and 2 have byes. Round one: 3v6, 4v5.
+	const seeded = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+	const round1 = [
+		{ week: 15, teamA: 13, teamB: 16 },
+		{ week: 15, teamA: 14, teamB: 15 }
+	];
+
+	it('fills in the teams on a bye before they have played', () => {
+		expect(bracketField(round1, seeded, 6)).toEqual({
+			field: [13, 16, 14, 15, 11, 12],
+			byes: [11, 12]
+		});
+	});
+
+	it('reads the field from the bracket once everyone has played', () => {
+		const all = [
+			...round1,
+			{ week: 16, teamA: 11, teamB: 14 },
+			{ week: 16, teamA: 12, teamB: 16 },
+			{ week: 17, teamA: 14, teamB: 12 }
+		];
+		const { field, byes } = bracketField(all, seeded, 6);
+		expect([...field].sort()).toEqual([11, 12, 13, 14, 15, 16]);
+		expect([...byes].sort()).toEqual([11, 12]);
+	});
+
+	it('trusts the bracket over the seeding when they disagree', () => {
+		// Team 17 really made it, in 16's place; the bracket says so.
+		const games = [
+			{ week: 15, teamA: 13, teamB: 17 },
+			{ week: 15, teamA: 14, teamB: 15 },
+			{ week: 16, teamA: 11, teamB: 14 },
+			{ week: 16, teamA: 12, teamB: 17 }
+		];
+		const { field } = bracketField(games, seeded, 6);
+		expect(field).toContain(17);
+		expect(field).not.toContain(16);
 	});
 });

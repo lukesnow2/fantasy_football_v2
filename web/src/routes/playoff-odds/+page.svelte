@@ -43,6 +43,8 @@
 	let firstLoad = $state(true);
 	let odds = $state<OddsResponse | null>(null);
 	let history = $state<OddsHistory | null>(null);
+	/** The week-by-week odds failed on their own: the rest of the page still draws. */
+	let historyFailed = $state(false);
 	let latest = $state<number | null>(null);
 	/** The season the select shows while it loads, so Try again loads that one. */
 	let requestedSeason = $state<number | null>(null);
@@ -54,16 +56,24 @@
 		error = '';
 		try {
 			const q = season != null ? `?season=${season}` : '';
-			const [o, h] = await Promise.all([
-				fetch(`/api/playoff-odds${q}`),
-				fetch(`/api/playoff-odds/history${q}`)
-			]);
-			if (request !== latestRequest) return;
-			if (!o.ok || !h.ok) throw new Error(`${o.status} ${h.status}`);
-			const [ob, hb] = await Promise.all([o.json(), h.json()]);
+			// The history is the slow, optional half: if it fails, the odds
+			// table still shows, with a note where the chart and grade go.
+			const historyRequest = fetch(`/api/playoff-odds/history${q}`)
+				.then((h) => {
+					if (!h.ok) throw new Error(String(h.status));
+					return h.json() as Promise<OddsHistory>;
+				})
+				.catch((err) => {
+					console.error('Playoff odds history failed to load:', err);
+					return null;
+				});
+			const o = await fetch(`/api/playoff-odds${q}`);
+			if (!o.ok) throw new Error(String(o.status));
+			const [ob, hb] = await Promise.all([o.json(), historyRequest]);
 			if (request !== latestRequest) return;
 			odds = ob;
 			history = hb;
+			historyFailed = hb == null;
 			if (latest == null) latest = ob.season;
 			requestedSeason = null;
 		} catch (err) {
@@ -271,7 +281,9 @@
 						onchange={(v) => (pickedMetric = v)}
 					/>
 				{/snippet}
-				{#if trend && trend.weeks.length >= 2}
+				{#if historyFailed}
+					<p class="muted-line">The odds by week couldn't be loaded right now.</p>
+				{:else if trend && trend.weeks.length >= 2}
 					<OddsTrend history={trend} {metric} highlight={ready.champion ?? null} />
 					{#if rebuilt}<p class="foot">{rebuilt}</p>{/if}
 				{:else}
