@@ -42,7 +42,7 @@ async function loadValuedPicks() {
 		included: r.includeInAnalysis === true
 	}));
 	const done = new Set((Array.from(doneRows) as any[]).map((r) => Number(r.seasonYear)));
-	return { valued: valueDraftPicks(picks, done), completedSeasons: done, ranks: positionRanks(picks) };
+	return { valued: valueDraftPicks(picks, done), completedSeasons: done };
 }
 
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -91,7 +91,7 @@ export const GET: RequestHandler = async ({ url }) => {
 			ORDER BY fd.season_year DESC, fd.overall_pick ASC
 		`;
 
-		const [draftResult, { valued, completedSeasons, ranks }] = await Promise.all([
+		const [draftResult, { valued, completedSeasons }] = await Promise.all([
 			db.execute(sql.raw(draftQuery)),
 			loadValuedPicks()
 		]);
@@ -212,7 +212,8 @@ export const GET: RequestHandler = async ({ url }) => {
 			}));
 
 			// "Drafted QB12, scored QB1": where the pick sat among the season's
-			// drafted players at its position, taken and by points.
+			// drafted players at its position (every manager's), taken and by points.
+			const ranks = positionRanks(valued);
 			const rankFields = (p: (typeof shown)[number]) => {
 				const r = ranks.get(`${p.seasonYear}:${p.overallPick}`);
 				return { draftedRank: r?.drafted ?? null, scoredRank: r?.scored ?? null };
@@ -312,7 +313,7 @@ export const GET: RequestHandler = async ({ url }) => {
 					}))
 					.sort((a, b) => b.avgValue - a.avgValue),
 				methodology:
-					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Steals and busts are ranked by how far a pick stood out from players at its position taken around the same round, so QBs, whose results swing widest, don't fill the lists just for scoring more. Busts are only picks from rounds 1-8 expected to beat an average pick, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
+					"Points over expectation: a pick's points minus what players at the same position, taken around the same round, have scored in this league's finished seasons (scaled to each season's scoring). Steals and busts are ranked by how far a pick stood out from players at its position taken around the same round, so QBs, whose results swing widest, don't fill the lists just for scoring more. Busts are only picks from rounds 1-8 expected to beat an average pick that scored under half their expectation, the same rule as the board's bust tag, so a late flier that was cut doesn't count. Kickers and defenses are never steals or busts, wherever they were taken."
 			};
 
 			// Manager draft grades ($lib/draft-value): a draft's points over
