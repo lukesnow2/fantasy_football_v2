@@ -30,13 +30,13 @@ COMMENT ON COLUMN meta_data.metric_definitions.limitations IS
 -- their old corrections are gone from here. Their limitations, and those of
 -- the rows 019 added, are at the end of the LIMITATIONS section.
 
--- strength_of_schedule is AVG(opponent win percentage), not an average of
--- opponent power scores, and it is not recency weighted. Observed: 0.000-1.000,
--- mean 0.502. The published "40-90" range and "80+ is very tough" never occur.
+-- strength_of_schedule is the average record of the teams played, each
+-- opponent's record taken over its games against everyone else (migration
+-- 020). The fields here match 020, so re-running this file keeps that copy.
 UPDATE meta_data.metric_definitions SET
     detailed_description = 'For each game a team has played, the opponent''s record so far in its other games, with a tie as half a win and every game against this team left out. Those records are averaged over the team''s games, so an opponent met twice counts twice. Leaving out the games against the team keeps its own results from moving the number: a win doesn''t make the schedule look easier and a loss doesn''t make it look harder. It''s season to date, regular season only, and it''s stored with the weekly power rankings but isn''t shown on any page.',
     calculation_formula = 'Average over games of (opponent''s win % in its games against everyone else)',
-    example_calculation = 'Three weeks in, a team has played A, B and C. Leaving out their games against this team, A is 2-0 (1.000), B is 1-1 (.500) and C is 0-2 (.000): (1.000 + .500 + .000) ÷ 3 = .500.',
+    example_calculation = 'Three weeks in, a team has played A, B and C. Leaving out their games against this team, A is 2-0, a 1.000 record, and B and C are each 1-1, or .500. 1.000 + .500 + .500 = 2.000, and 2.000 ÷ 3 = .667, a tougher schedule than average.',
     interpretation_guide = '0.500 is an average schedule and higher is tougher. The team''s own games are left out of its opponents'' records, so beating them doesn''t make the schedule look easier. It measures opponents'' records, not how much they scored against you.',
     unit_of_measure = 'win_percentage',
     typical_range = '0.439 to 0.568 at season''s end',

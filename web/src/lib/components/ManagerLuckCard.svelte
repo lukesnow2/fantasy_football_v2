@@ -87,7 +87,8 @@
 {:else}
 	<Card title="Expected wins & luck" headGap={6} class="luck-card full">
 		<p class="intro">
-			Regular season. Expected wins are what the scores would have earned playing every team every week; luck is the gap.
+			Regular season. Expected wins are what the scores would have earned playing every team every
+			week; luck is the gap.
 		</p>
 		<div class="boxes">
 			<div class="box">
