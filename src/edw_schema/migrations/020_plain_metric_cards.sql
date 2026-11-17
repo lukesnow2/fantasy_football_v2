@@ -86,7 +86,7 @@ UPDATE meta_data.metric_definitions SET
     calculation_formula = 'Average over games of (opponent''s win % in its games against everyone else)',
     example_calculation = 'Three weeks in, a team has played A, B and C. Leaving out their games against this team, A is 2-0 (1.000), B is 1-1 (.500) and C is 0-2 (.000): (1.000 + .500 + .000) ÷ 3 = .500.',
     interpretation_guide = '0.500 is an average schedule and higher is tougher. The team''s own games are left out of its opponents'' records, so beating them doesn''t make the schedule look easier. It measures opponents'' records, not how much they scored against you.',
-    limitations = 'Early on it rests on a game or two per opponent, and in week 1 no opponent has another game yet, so it reads .500. It uses each opponent''s record as it stands through the latest week, not as it was the day you played them. It sees wins, not points: Schedule, which compares what your opponents scored against you with the league''s average that week, says more about who you drew.',
+    limitations = 'Early on it rests on a game or two per opponent, and in week 1 no opponent has another game yet, so it reads .500. Each week''s number uses opponents'' records through that week, not as they were the day you played them. It sees wins, not points: Schedule, which compares what your opponents scored against you with the league''s average that week, says more about who you drew.',
     typical_range = '0.439 to 0.568 at season''s end',
     good_value_threshold = NULL,
     excellent_value_threshold = NULL,

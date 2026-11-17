@@ -4544,7 +4544,8 @@ class EdwEtlProcessor:
                         SUM(championship_games) as championship_appearances,
                         CASE
                             WHEN SUM(wins + losses + ties) > 0
-                            THEN ROUND(SUM(wins)::decimal / SUM(wins + losses + ties), 4)
+                            -- A tie is half a win, as in the manager career mart.
+                            THEN ROUND((SUM(wins) + 0.5 * SUM(ties))::decimal / SUM(wins + losses + ties), 4)
                             ELSE 0
                         END as career_win_percentage
                     FROM career_team_seasons
@@ -5885,6 +5886,20 @@ class EdwEtlProcessor:
                 JOIN edw.dim_week dw ON ftp.week_key = dw.week_key
                 WHERE dw.week_type = 'regular'
             ),
+            team_weeks AS (
+                -- Every team in each ranked week of its season: the rows the
+                -- season-to-date columns below are worked out for.
+                SELECT DISTINCT
+                    ftp.team_key,
+                    aw.league_key,
+                    aw.week_key,
+                    aw.season_year,
+                    aw.week_number
+                FROM all_weeks aw
+                JOIN edw.fact_team_performance ftp
+                  ON ftp.league_key = aw.league_key
+                 AND ftp.season_year = aw.season_year
+            ),
             actual_matchups AS (
                 -- Get actual head-to-head matchups to calculate correct SOS and pythagorean wins
                 SELECT 
@@ -5981,18 +5996,7 @@ class EdwEtlProcessor:
                         tw.week_key,
                         am.week_key AS game_week_key,
                         AVG(og.team_won + 0.5 * og.team_tied) AS opponent_win_pct
-                    FROM (
-                        SELECT DISTINCT
-                            ftp.team_key,
-                            aw.league_key,
-                            aw.week_key,
-                            aw.season_year,
-                            aw.week_number
-                        FROM all_weeks aw
-                        JOIN edw.fact_team_performance ftp
-                          ON ftp.league_key = aw.league_key
-                         AND ftp.season_year = aw.season_year
-                    ) tw
+                    FROM team_weeks tw
                     JOIN actual_matchups am ON am.team_key = tw.team_key
                         AND am.league_key = tw.league_key
                         AND am.matchup_week <= tw.week_number
@@ -6026,18 +6030,7 @@ class EdwEtlProcessor:
                             (POWER(SUM(am.team_points), :pyth_exp) /
                              (POWER(SUM(am.team_points), :pyth_exp) + POWER(SUM(am.opponent_points), :pyth_exp))) * COUNT(*)
                     END as pythagorean_wins
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6051,18 +6044,7 @@ class EdwEtlProcessor:
                     aw.league_key,
                     aw.week_key,
                     AVG(am.team_points) as recent_form_score
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6147,18 +6129,7 @@ class EdwEtlProcessor:
                     -- There are ties (4 games through 2025); a tie was a loss here.
                     SUM(am.team_tied) as cumulative_ties,
                     COUNT(*) as games_played
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
@@ -6343,18 +6314,7 @@ class EdwEtlProcessor:
                     aw.week_key,
                     MAX(CASE WHEN am.team_won = 1 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_win_margin,
                     MAX(CASE WHEN am.team_won = 0 THEN ABS(am.team_points - am.opponent_points) ELSE 0 END) as biggest_loss_margin
-                FROM (
-                    SELECT DISTINCT 
-                        ftp.team_key,
-                        aw.league_key,
-                        aw.week_key,
-                        aw.season_year,
-                        aw.week_number
-                    FROM all_weeks aw
-                    CROSS JOIN edw.fact_team_performance ftp
-                    WHERE ftp.league_key = aw.league_key 
-                      AND ftp.season_year = aw.season_year
-                ) aw
+                FROM team_weeks aw
                 JOIN actual_matchups am ON aw.team_key = am.team_key 
                     AND aw.league_key = am.league_key 
                     AND aw.season_year = am.season_year
