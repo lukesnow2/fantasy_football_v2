@@ -232,8 +232,10 @@
 		trigger?.focus();
 	}
 
-	// A click, tap, Enter or Space opens or closes it.
+	// A click, tap, Enter or Space opens or closes it. Until the definition is
+	// in, it does nothing, so the card can't open later by itself.
 	function onclick() {
+		if (status !== 'ready') return;
 		open = !open;
 	}
 </script>

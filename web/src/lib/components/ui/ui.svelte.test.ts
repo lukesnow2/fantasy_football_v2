@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
 import Segmented from './Segmented.svelte';
 import StatTip from './StatTip.svelte';
+import StatTipCard from './StatTipCard.svelte';
 import Movement from './Movement.svelte';
 import ButtonHarness from './ButtonHarness.test.svelte';
 import Card from './Card.svelte';
@@ -240,6 +241,26 @@ describe('StatTip', () => {
 			expect(box.left).toBeGreaterThanOrEqual(16);
 			expect(box.right).toBeLessThanOrEqual(390 - 16);
 		});
+	});
+
+	it("ignores a click before the definition is in, so the card doesn't open later", async () => {
+		let answer: (response: Response) => void = () => {};
+		vi.spyOn(window, 'fetch').mockReturnValue(new Promise((resolve) => (answer = resolve)));
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		answer(new Response(JSON.stringify({ metric: LUCK })));
+		await vi.waitFor(() => expect(button.element().getAttribute('aria-controls')).toBeTruthy());
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+	});
+
+	it('draws no × on a card standing on its own', async () => {
+		const { container } = render(StatTipCard, { definition: LUCK as never });
+		await expect.element(page.getByRole('group', { name: 'Luck Factor' })).toBeVisible();
+		expect(container.querySelector('button')).toBeNull();
 	});
 
 	it('shows the label with no ⓘ and no button when the definition is missing', async () => {
