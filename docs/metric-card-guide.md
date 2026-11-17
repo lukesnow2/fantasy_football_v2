@@ -17,7 +17,9 @@ question, not the builder's, and keep the machinery one click away.
 of what's on a screen, so assume most readers stop after the description.
 
 **Name.** Use the label the page shows, so the card matches what was clicked.
-"Playoff odds", not "Playoff Probability". Sentence case.
+"Playoff odds", not "Playoff Probability". Sentence case. When several labels
+open the same card (Exp W, Reg W / exp and Expected all open Expected wins),
+use the fullest one.
 
 **Description** (`short_description`). One sentence, 20 words or fewer, that
 answers "what question does this number answer?" Don't lean on the metric's own

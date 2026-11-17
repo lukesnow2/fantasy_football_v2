@@ -59,7 +59,9 @@ def rivalry():
         proc = EdwEtlProcessor.__new__(EdwEtlProcessor)
         proc.engine = engine
         rows = proc.transform_mart_manager_h2h()
-        yield next(r for r in rows if {r['manager_a_name'], r['manager_b_name']} == {'Ann', 'Bob'})
+        pair = [r for r in rows if {r['manager_a_name'], r['manager_b_name']} == {'Ann', 'Bob'}]
+        assert len(pair) == 1, f'expected one Ann-Bob rivalry row, got {len(pair)}'
+        yield pair[0]
     finally:
         engine.dispose()
         subprocess.run(['psql', 'postgres', '-qc',
