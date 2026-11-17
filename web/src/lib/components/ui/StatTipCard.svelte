@@ -6,9 +6,14 @@
 	 * to read it when the definition has them, and the link to the Data
 	 * Dictionary entry.
 	 *
-	 * StatTip floats it next to a label. A page that draws the card standing
-	 * open, as the System board does, can render it directly and it fills its
-	 * column.
+	 * StatTip floats it next to a label as its disclosure panel, and passes
+	 * `onclose` for the × in the top right corner. A page that draws the card
+	 * standing open, as the System board does, can render it directly (no ×)
+	 * and it fills its column.
+	 *
+	 * It's a group named by the metric, never a tooltip: it holds a link, so it
+	 * has to be reachable with Tab and read in full, which a tooltip isn't. The
+	 * category pill is plain text.
 	 */
 	import { dictionaryHref, type StatTipDefinition } from './stat-tip-data';
 
@@ -23,6 +28,8 @@
 		width?: number | null;
 		hidden?: boolean;
 		element?: HTMLSpanElement;
+		/** Draws the × close control, and is called when it's pressed. */
+		onclose?: () => void;
 	}
 
 	let {
@@ -33,14 +40,19 @@
 		left = null,
 		width = null,
 		hidden = false,
-		element = $bindable()
+		element = $bindable(),
+		onclose
 	}: Props = $props();
+
+	const uid = $props.id();
+	const nameId = `stattip-name-${uid}`;
 </script>
 
 <span
 	bind:this={element}
 	{id}
-	role="tooltip"
+	role="group"
+	aria-labelledby={nameId}
 	class="card"
 	class:floating
 	{hidden}
@@ -50,9 +62,14 @@
 	style:visibility={floating && top === null ? 'hidden' : undefined}
 >
 	<span class="name-row">
-		<span class="name">{definition.metricName}</span>
+		<span class="name" id={nameId}>{definition.metricName}</span>
 		{#if definition.categoryName}
 			<span class="pill">{definition.categoryName}</span>
+		{/if}
+		{#if onclose}
+			<button type="button" class="close" aria-label="Close" onclick={onclose}
+				><span aria-hidden="true">×</span></button
+			>
 		{/if}
 	</span>
 	<span class="text first">{definition.shortDescription}</span>
@@ -111,7 +128,48 @@
 		font-size: 18px;
 	}
 
+	.close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+		width: 28px;
+		height: 28px;
+		margin: -6px -8px -6px auto;
+		padding: 0;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--color-on-clubhouse);
+		font: inherit;
+		font-size: 20px;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.close:hover {
+		background: var(--color-clubhouse-2);
+		color: var(--color-white);
+	}
+
+	.close:focus-visible {
+		outline: 2px solid var(--color-pennant-light);
+		outline-offset: 0;
+	}
+
+	/* A full touch target on phones, without growing the name row. */
+	@media (max-width: 639.98px) {
+		.close {
+			width: 44px;
+			height: 44px;
+			margin: -14px -14px -14px auto;
+		}
+	}
+
+	/* The pill holds its line; a long name wraps beside it instead. */
 	.pill {
+		flex: none;
+		white-space: nowrap;
 		padding: 2px 7px;
 		border-radius: 999px;
 		background: var(--color-clubhouse-2);

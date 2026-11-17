@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { metricDefinitionsStore } from '$lib/stores/metricDefinitions';
 import Segmented from './Segmented.svelte';
 import StatTip from './StatTip.svelte';
+import StatTipCard from './StatTipCard.svelte';
 import Movement from './Movement.svelte';
 import ButtonHarness from './ButtonHarness.test.svelte';
 import Card from './Card.svelte';
@@ -67,30 +68,136 @@ describe('Segmented', () => {
 });
 
 describe('StatTip', () => {
-	it('opens on click, describes the button, and closes with Escape', async () => {
-		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
-		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+	const card = () => page.getByRole('group', { name: 'Luck Factor' });
 
-		const button = page.getByRole('button', { name: /Luck/ });
+	it('is a disclosure button named for the label, not a tooltip', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const { container } = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+
+		const button = page.getByRole('button', { name: 'About Luck' });
 		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(button.element().hasAttribute('aria-describedby')).toBe(false);
 		await button.click();
 		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
 
-		const card = page.getByRole('tooltip');
-		await expect.element(card).toBeVisible();
-		await expect.element(card).toHaveTextContent('Luck Factor');
-		await expect.element(card).toHaveTextContent('Calculation');
-		await expect
-			.element(page.getByRole('link', { name: 'Full definition, worked example and limits →' }))
-			.toHaveAttribute('href', '/data-dictionary#luck_factor');
-		const describedBy = button.element().getAttribute('aria-describedby');
-		expect(describedBy).toBe(card.element().id);
+		await expect.element(card()).toBeVisible();
+		expect(button.element().getAttribute('aria-controls')).toBe(card().element().id);
+		await expect.element(card()).toHaveTextContent('Calculation');
+		// The category pill is plain text, not a control of its own.
+		const pill = container.querySelector('.pill') as HTMLElement;
+		expect(pill.textContent).toBe('Head to head');
+		expect(pill.closest('button, a')).toBeNull();
+		expect(container.querySelector('[role="tooltip"]')).toBeNull();
+	});
 
-		const cardElement = card.element() as HTMLElement;
+	it('closes with Escape and puts focus back on the button', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await expect.element(card()).toBeVisible();
+
+		const cardElement = card().element() as HTMLElement;
+		(page.getByRole('link').element() as HTMLElement).focus();
 		await userEvent.keyboard('{Escape}');
 		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
 		expect(cardElement.hidden).toBe(true);
 		expect(document.activeElement).toBe(button.element());
+	});
+
+	it('leaves focus alone when Escape is pressed with focus elsewhere', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const elsewhere = document.body.appendChild(document.createElement('input'));
+		onTestFinished(() => elsewhere.remove());
+		elsewhere.focus();
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck', open: true });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		await userEvent.keyboard('{Escape}');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(document.activeElement).toBe(elsewhere);
+	});
+
+	it('closes when focus lands outside it, even if the button never had focus', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const elsewhere = document.body.appendChild(document.createElement('button'));
+		onTestFinished(() => elsewhere.remove());
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck', open: true });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		elsewhere.focus();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it('keeps its Escape from closing a layer around it', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		const { container } = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const outer = vi.fn();
+		container.addEventListener('keydown', outer);
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await userEvent.keyboard('{Escape}');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(outer).not.toHaveBeenCalled();
+		// Closed, its Escape passes through again.
+		await userEvent.keyboard('{Escape}');
+		expect(outer).toHaveBeenCalledTimes(1);
+	});
+
+	it('opens from the keyboard and reaches the close control and link with Tab', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		(button.element() as HTMLElement).focus();
+		await userEvent.keyboard('{Enter}');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		// Opening leaves focus on the button.
+		expect(document.activeElement).toBe(button.element());
+
+		await userEvent.tab();
+		expect(document.activeElement).toBe(page.getByRole('button', { name: 'Close' }).element());
+		await userEvent.tab();
+		const link = page.getByRole('link', { name: 'Full definition, worked example and limits →' });
+		expect(document.activeElement).toBe(link.element());
+		await expect.element(link).toHaveAttribute('href', '/data-dictionary#luck_factor');
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+	});
+
+	it('closes with its × and puts focus back on the button', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		const cardElement = card().element() as HTMLElement;
+		await page.getByRole('button', { name: 'Close' }).click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		expect(cardElement.hidden).toBe(true);
+		expect(document.activeElement).toBe(button.element());
+	});
+
+	it('toggles closed with a second click', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it("doesn't open on hover", async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.hover();
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+	});
+
+	it('names an icon-only button for its hidden label', async () => {
+		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck', iconOnly: true });
+		await expect.element(page.getByRole('button', { name: 'About Luck' })).toBeInTheDocument();
 	});
 
 	it('shows the new metric when metricId changes', async () => {
@@ -101,8 +208,10 @@ describe('StatTip', () => {
 		const view = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
 		await view.rerender({ metricId: 'pythagorean_wins', label: 'Pyth W' });
 
-		await page.getByRole('button', { name: /Pyth W/ }).click();
-		await expect.element(page.getByRole('tooltip')).toHaveTextContent('Pythagorean Wins');
+		await page.getByRole('button', { name: 'About Pyth W' }).click();
+		await expect
+			.element(page.getByRole('group', { name: 'Pythagorean Wins' }))
+			.toHaveTextContent('Pythagorean Wins');
 		await expect
 			.element(page.getByRole('link', { name: 'Full definition, worked example and limits →' }))
 			.toHaveAttribute('href', '/data-dictionary#pythagorean_wins');
@@ -111,7 +220,7 @@ describe('StatTip', () => {
 	it('closes on a click outside', async () => {
 		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
 		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
-		const button = page.getByRole('button', { name: /Luck/ });
+		const button = page.getByRole('button', { name: 'About Luck' });
 		await button.click();
 		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
 		document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -125,14 +234,33 @@ describe('StatTip', () => {
 		metricDefinitionsStore.setMetric('luck_factor', { metric: LUCK as never });
 		const { container } = render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
 		(container as HTMLElement).style.cssText = 'display:block;text-align:right;padding:0 4px';
-		await page.getByRole('button', { name: /Luck/ }).click();
-		const card = page.getByRole('tooltip');
-		await expect.element(card).toBeVisible();
+		await page.getByRole('button', { name: 'About Luck' }).click();
+		await expect.element(card()).toBeVisible();
 		await vi.waitFor(() => {
-			const box = card.element().getBoundingClientRect();
+			const box = card().element().getBoundingClientRect();
 			expect(box.left).toBeGreaterThanOrEqual(16);
 			expect(box.right).toBeLessThanOrEqual(390 - 16);
 		});
+	});
+
+	it("ignores a click before the definition is in, so the card doesn't open later", async () => {
+		let answer: (response: Response) => void = () => {};
+		vi.spyOn(window, 'fetch').mockReturnValue(new Promise((resolve) => (answer = resolve)));
+		render(StatTip, { metricId: 'luck_factor', label: 'Luck' });
+		const button = page.getByRole('button', { name: 'About Luck' });
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		answer(new Response(JSON.stringify({ metric: LUCK })));
+		await vi.waitFor(() => expect(button.element().getAttribute('aria-controls')).toBeTruthy());
+		await expect.element(button).toHaveAttribute('aria-expanded', 'false');
+		await button.click();
+		await expect.element(button).toHaveAttribute('aria-expanded', 'true');
+	});
+
+	it('draws no × on a card standing on its own', async () => {
+		const { container } = render(StatTipCard, { definition: LUCK as never });
+		await expect.element(page.getByRole('group', { name: 'Luck Factor' })).toBeVisible();
+		expect(container.querySelector('button')).toBeNull();
 	});
 
 	it('shows the label with no ⓘ and no button when the definition is missing', async () => {
@@ -144,7 +272,7 @@ describe('StatTip', () => {
 		await vi.waitFor(() => expect(container.querySelector('button')).toBeNull());
 		expect(container.textContent).toContain('Mystery');
 		expect(container.textContent).not.toContain('ⓘ');
-		expect(container.querySelector('[role="tooltip"]')).toBeNull();
+		expect(container.querySelector('[role="group"]')).toBeNull();
 		expect(warn).toHaveBeenCalledTimes(1);
 	});
 });

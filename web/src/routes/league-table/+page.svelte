@@ -223,7 +223,7 @@
 				>{c.label}</button
 			>{#if c.metricId}<span class="i-gap">{' '}</span><StatTip
 					metricId={c.metricId}
-					label="About {c.label}"
+					label={c.label}
 					iconOnly
 					phoneTap="inline-small"
 					headerIcon
