@@ -695,9 +695,14 @@ CREATE TABLE mart_weekly_power_rankings (
     
     -- Advanced Stats
     pythagorean_wins DECIMAL(8,2),
-    luck_factor DECIMAL(8,4), -- Actual wins vs expected wins
+    luck_factor DECIMAL(8,4), -- Wins (ties half) minus all-play wins
     playoff_odds DECIMAL(8,4),
-    
+
+    -- Against the rest of each week's field, season to date (WP15)
+    all_play_wins DECIMAL(8,2), -- Sum of the share of other teams outscored
+    points_vs_league DECIMAL(8,2), -- Pts/g above the other teams' average
+    schedule_vs_league DECIMAL(8,2), -- Opponents' pts/g above that average
+
     PRIMARY KEY (league_key, week_key, team_key),
     FOREIGN KEY (league_key) REFERENCES dim_league(league_key),
     FOREIGN KEY (week_key) REFERENCES dim_week(week_key),

@@ -80,7 +80,7 @@
 			<b>{@render number(manager?.careerRegularSeasonWins)}</b>
 		</div>
 		<div class="row">
-			<span><StatTip metricId="pythagorean_wins" label="Expected wins" phoneTap="inline" /></span>
+			<span><StatTip metricId="all_play_wins" label="Expected wins" phoneTap="inline" /></span>
 			<b>{@render number(manager?.careerPythagoreanWins)}</b>
 		</div>
 	</Card>
@@ -96,7 +96,7 @@
 					<span>Wins</span><b>{@render number(manager?.careerRegularSeasonWins)}</b>
 				</div>
 				<div class="line">
-					<span><StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline" /></span><b
+					<span><StatTip metricId="all_play_wins" label="Expected" phoneTap="inline" /></span><b
 						>{@render number(manager?.careerPythagoreanWins)}</b
 					>
 				</div>

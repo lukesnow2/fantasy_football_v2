@@ -529,7 +529,7 @@
 							{#if column.key === 'expected'}
 								<StatTip metricId="pythagorean_wins" label="Expected" phoneTap="inline-small" />
 							{:else if column.key === 'luckier'}
-								<StatTip metricId="luck_factor" label="Luckier" phoneTap="inline-small" />
+								<StatTip metricId="rivalry_luck" label="Luckier" phoneTap="inline-small" />
 							{:else}{column.label}{/if}
 						{/snippet}
 						{#snippet cell(row, column)}

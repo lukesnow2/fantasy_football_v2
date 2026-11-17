@@ -106,7 +106,12 @@ async function loadLuckBySeason(
 					l.season_year  AS season_year,
 					p.team_key     AS team_key,
 					w.week_number  AS week_number,
-					p.wins, p.ties, p.pythagorean_wins, p.luck_factor, p.playoff_odds,
+					p.wins, p.ties, p.luck_factor, p.playoff_odds,
+					-- Expected wins are all-play wins (WP15), so wins minus them is
+					-- the luck. Before migration 019 the luck is Pythagorean, and so
+					-- are the expected wins that go with it.
+					COALESCE((to_jsonb(p) ->> 'all_play_wins')::numeric, p.pythagorean_wins)
+						AS pythagorean_wins,
 					p.record_rank, p.league_key, p.week_key, l.num_teams,
 					-- to_jsonb: still runs against a warehouse not yet migrated.
 					(to_jsonb(l) ->> 'num_playoff_teams')::int AS stored_spots,

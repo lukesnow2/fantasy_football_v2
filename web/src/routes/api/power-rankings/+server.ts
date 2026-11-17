@@ -119,7 +119,11 @@ export const GET: RequestHandler = async ({ url }) => {
 						p.power_score          AS "powerScore",
 						p.strength_of_schedule AS "strengthOfSchedule",
 						p.recent_form_score    AS "recentFormScore",
-						p.pythagorean_wins     AS "pythagoreanWins",
+						-- Expected wins are all-play wins (WP15), so wins minus this is
+						-- the luck beside it. A warehouse without migration 019 still
+						-- has Pythagorean luck, and the Pythagorean wins that go with it.
+						COALESCE((to_jsonb(p) ->> 'all_play_wins')::numeric, p.pythagorean_wins)
+						                       AS "pythagoreanWins",
 						p.luck_factor          AS "luckFactor",
 						p.playoff_odds         AS "playoffOdds",
 						LAG(p.power_rank) OVER (

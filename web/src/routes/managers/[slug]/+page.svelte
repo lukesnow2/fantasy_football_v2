@@ -568,7 +568,7 @@
 						>
 							{#snippet header(column)}
 								{#if column.key === 'xw'}
-									<StatTip metricId="pythagorean_wins" label="Reg W / exp" />
+									<StatTip metricId="all_play_wins" label="Reg W / exp" />
 								{:else if column.key === 'luck'}
 									<StatTip metricId="luck_factor" label="Luck" phoneTap="inline-small" />
 								{:else}{column.label}{/if}
