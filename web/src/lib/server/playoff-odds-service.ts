@@ -5,6 +5,7 @@ import {
 	DEFAULT_PARAMS,
 	gamesFingerprint,
 	simulatePlayoffOdds,
+	type BracketResult,
 	type ModelParams,
 	type OddsResult,
 	type PlayedGame,
@@ -52,6 +53,14 @@ export type SeasonOdds =
 			regularSeasonWeeks: number;
 			formatSource: 'league-settings' | 'inferred';
 			phase: 'regular' | 'postseason';
+			/**
+			 * The last playoff week whose bracket results the title odds use, or
+			 * null before the playoffs (or when asked to leave them out).
+			 */
+			bracketWeek: number | null;
+			/** The title game has been played. */
+			complete: boolean;
+			champion: number | null;
 			sims: number;
 			playoffTeams: number;
 			byes: number;
@@ -71,13 +80,33 @@ export async function latestSeason(): Promise<number> {
 	return Number((rows[0] as Row | undefined)?.season) || new Date().getFullYear();
 }
 
+export interface OddsOptions {
+	/**
+	 * Use the championship-bracket games played so far (default true), so the
+	 * title odds follow the real bracket. The saved snapshots leave them out:
+	 * a snapshot is the forecast as the regular season left it.
+	 */
+	bracket?: boolean;
+	/**
+	 * Also simulate the week before, for each team's change since last week
+	 * (default true). The odds history only needs the week itself, so it
+	 * skips the second run.
+	 */
+	previous?: boolean;
+}
+
 /**
  * `throughWeek` simulates the season as it stood after that week, for pages
  * that show a past week (power rankings): only games up to it count, and the
  * movement compares it with the week before. Omitted, it is the latest week.
+ * A playoff week counts the bracket games through that week.
  */
-export async function getSeasonOdds(season: number, throughWeek?: number): Promise<SeasonOdds> {
-	return (await getSeasonOddsWithFingerprint(season, throughWeek)).odds;
+export async function getSeasonOdds(
+	season: number,
+	throughWeek?: number,
+	options?: OddsOptions
+): Promise<SeasonOdds> {
+	return (await getSeasonOddsWithFingerprint(season, throughWeek, options)).odds;
 }
 
 /**
@@ -89,14 +118,16 @@ export async function getSeasonOdds(season: number, throughWeek?: number): Promi
  */
 export async function getSeasonOddsWithFingerprint(
 	season: number,
-	throughWeek?: number
+	throughWeek?: number,
+	{ bracket: useBracket = true, previous: wantPrevious = true }: OddsOptions = {}
 ): Promise<{ odds: SeasonOdds; gamesFingerprint: string | null }> {
 	const [matchupRows, teamRowsRaw, format] = await Promise.all([
 		db.execute(sql`
 			SELECT dw.week_number AS week,
 			       fm.team1_key AS a, fm.team2_key AS b,
 			       fm.team1_points AS sa, fm.team2_points AS sb,
-			       fm.is_playoffs AS po, fm.is_consolation AS cons
+			       fm.is_playoffs AS po, fm.is_consolation AS cons,
+			       fm.is_championship AS champ, fm.winner_team_key AS w
 			FROM edw.fact_matchup fm
 			JOIN edw.dim_week dw ON dw.week_key = fm.week_key
 			WHERE fm.season_year = ${season}
@@ -123,7 +154,25 @@ export async function getSeasonOddsWithFingerprint(
 			scoreA: Number(r.sa),
 			scoreB: Number(r.sb)
 		}));
-	const postseasonStarted = throughWeek == null && rows.some((r) => r.po || r.cons);
+	const postseasonStarted = rows.some((r) => (r.po || r.cons) && asOf(Number(r.week)));
+
+	// Decided championship-bracket games. The fingerprint above stays on the
+	// regular season, so a snapshot's identity doesn't change with them.
+	const bracketRows = useBracket
+		? rows.filter((r) => r.po && !r.cons && r.w != null && r.sa != null && asOf(Number(r.week)))
+		: [];
+	const bracketResults: BracketResult[] = bracketRows.map((r) => ({
+		week: Number(r.week),
+		teamA: Number(r.a),
+		teamB: Number(r.b),
+		winner: Number(r.w)
+	}));
+	const bracketWeek = bracketRows.reduce<number | null>(
+		(m, r) => Math.max(m ?? 0, Number(r.week)),
+		null
+	);
+	const final = bracketRows.find((r) => r.champ);
+	const champion = final ? Number(final.w) : null;
 
 	// Games define who is in the league once there are any; dim_team only
 	// supplies names. A team missing from dim_team keeps its games (and its
@@ -158,9 +207,20 @@ export async function getSeasonOddsWithFingerprint(
 
 	const keys = teams.map((t) => t.teamKey);
 	const fingerprint = gamesFingerprint(games);
-	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}`;
-	let sims = cache.get(key);
-	if (!sims) {
+	const bracketKey = bracketResults
+		.map((g) => `${g.week}-${g.teamA}-${g.teamB}-${g.winner}`)
+		.sort()
+		.join(',');
+	const key = `${season}:${regularSeasonWeeks}:${playoffTeams}:${keys.join(',')}:${fingerprint}:${bracketKey}`;
+	// A run with last week's comparison serves a request that doesn't need it.
+	const lightKey = `${key}:now`;
+	let sims = cache.get(key) ?? (wantPrevious ? undefined : cache.get(lightKey));
+	if (sims) {
+		// Least recently used goes first: keep the hit at the back.
+		const at = cache.has(key) ? key : lightKey;
+		cache.delete(at);
+		cache.set(at, sims);
+	} else {
 		// One seed for both runs: the engine draws each week's randomness from
 		// its own stream, so the two runs share draws for every week both
 		// simulate and the change mostly reflects last week's results.
@@ -173,12 +233,18 @@ export async function getSeasonOddsWithFingerprint(
 				playoffTeams,
 				sims: SIMS,
 				seed,
-				params: PARAMS
+				params: PARAMS,
+				bracketResults
 			});
-		sims = { now: run(playedWeeks), prev: playedWeeks > 0 ? run(playedWeeks - 1) : null };
-		// Superseded fingerprints are never read again; keep the map small.
-		if (cache.size >= 32) cache.clear();
-		cache.set(key, sims);
+		sims = {
+			now: run(playedWeeks),
+			prev: wantPrevious && playedWeeks > 0 ? run(playedWeeks - 1) : null
+		};
+		// Keep the map small, dropping the least recently used: superseded
+		// fingerprints are never read again, and a past season's history (a run
+		// per week) mustn't push out the live season's odds.
+		if (cache.size >= 32) cache.delete(cache.keys().next().value!);
+		cache.set(wantPrevious ? key : lightKey, sims);
 	}
 	const { now, prev } = sims;
 	const prevOdds = new Map(prev?.teams.map((t) => [t.teamKey, t.playoffOdds]) ?? []);
@@ -195,6 +261,9 @@ export async function getSeasonOddsWithFingerprint(
 		regularSeasonWeeks,
 		formatSource,
 		phase: postseasonStarted || playedWeeks >= regularSeasonWeeks ? 'postseason' : 'regular',
+		bracketWeek,
+		complete: champion != null,
+		champion,
 		sims: now.sims,
 		playoffTeams: now.playoffTeams,
 		byes: now.byes,

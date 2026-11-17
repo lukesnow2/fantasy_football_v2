@@ -27,6 +27,8 @@ describe('requiresAuth', () => {
 		expect(requiresAuth('/power-rankings', 'GET')).toBe(false);
 		expect(requiresAuth('/api/power-rankings', 'GET')).toBe(false);
 		expect(requiresAuth('/api/playoff-odds', 'GET')).toBe(false);
+		expect(requiresAuth('/playoff-odds', 'GET')).toBe(false);
+		expect(requiresAuth('/api/playoff-odds/history', 'GET')).toBe(false);
 	});
 
 	it('gates every write, including form actions on public pages', () => {
