@@ -15,6 +15,12 @@
 -- 4. "In Progress" went by calendar year, so a season's trades read Complete
 --    from January. A season is now Complete once its title game has a winner.
 --
+-- It also rewrites the parts of three metric cards these fixes change
+-- (trade_winner, season_consistency_score, playoff_win_percentage). Those
+-- rows' current copy comes from 020_plain_metric_cards.sql (PR #91), so #91
+-- has to merge before or with this file: run after 022, 020 would put back
+-- the old copy.
+--
 -- The ETL drops and recreates this view from edw_etl_processor.py on every
 -- transactions load; this file carries the same SQL so the fix lands without
 -- waiting for one (tests/test_trade_analysis_view.py holds them equal).
@@ -313,5 +319,31 @@ LEFT JOIN playoff_impact pi ON ts.synthetic_trade_group_id = pi.synthetic_trade_
 LEFT JOIN contextual_factors cf ON ts.synthetic_trade_group_id = cf.synthetic_trade_group_id
 LEFT JOIN scored sc ON ts.synthetic_trade_group_id = sc.synthetic_trade_group_id
 ORDER BY dl.league_name, ts.transaction_date DESC;
+
+-- The cards for what this migration and the mart change (migration 020,
+-- PR #91, wrote the current copy; only the sentences these fixes make wrong
+-- change here, so 020 has to run first).
+--
+-- trade_winner: the timing rule, the 0-100 hold on each part, when a season's
+-- trades settle, and a worked example the view gives exactly (55.4 to 44.6).
+UPDATE meta_data.metric_definitions SET
+    detailed_description = 'Each side gets a trade score out of 100 from four parts, each held between 0 and 100. Points: 50 plus 0.15 for every point its new players outscored the other side''s, from the trade''s week to season''s end. Playoffs: 85 if it won the title that season, 70 if it made the playoffs and the other side didn''t, 30 for the reverse, else 50. Recent form: 50 plus 2 for every point a week the players it got averaged over the ones it gave up, in the four weeks before the deal. Timing: 50 each before week 6. From week 6 the side ahead on the other three parts gets 60 and the other side 40, and from week 10 it''s 75 and 25. The side 8 or more ahead wins; anything closer is an Even Trade.',
+    example_calculation = 'Week 8. Side A''s new players outscore B''s by 60 and averaged 2 more a week before the deal; no playoff edge. A is ahead on the other three parts, so its timing score is 60 and B''s is 40. A: 0.40 × 59 + 0.30 × 50 + 0.20 × 54 + 0.10 × 60 = 55.4. B: 0.40 × 41 + 0.30 × 50 + 0.20 × 46 + 0.10 × 40 = 44.6. A leads by 10.8, so A''s manager is the winner',
+    limitations = 'The playoff and title parts judge the whole team''s season, of which the trade is one piece. Timing only widens the lead the other three parts give: it can turn a close late trade into a win, but it never changes which side is ahead. Draft picks and FAAB in a deal count for nothing, and points only run to the end of that season. The 8-point line is fixed, so trades near it can flip on small scoring changes. Trades in a season whose title game hasn''t been played are judged on points so far.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE metric_id = 'trade_winner';
+
+-- season_consistency_score: one finished season is no value, not ±.000.
+UPDATE meta_data.metric_definitions SET
+    limitations = 'It only counts finished seasons, so the season in progress doesn''t move it until its title game is played. Win rates include playoff and consolation games, which a playoff team plays more of. It needs several seasons to mean much: with one finished season there''s no spread to measure, so it shows None. A manager who ran two teams in one season gets two win rates for that year. It looks back over a career and says nothing about next season.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE metric_id = 'season_consistency_score';
+
+-- playoff_win_percentage: no bracket games is no rate, not 0.0%.
+UPDATE meta_data.metric_definitions SET
+    detailed_description = 'Every winners'' bracket game a manager''s teams have played, the title game included: wins divided by wins plus losses. Consolation games don''t count, and a first-round bye isn''t a game, so it counts as neither. Bracket games in the season in progress count as they''re played. The League Table works the rate out from the playoff record, so the two always agree; the profile reads the same count stored to four places. A manager with no bracket games has no rate and reads None.',
+    limitations = 'Small samples: a career holds roughly 10 to 45 bracket games, so at 20 games one loss turned into a win moves it from 50.0% to 55.0%. It only counts games a manager got to play: missing the playoffs doesn''t lower it, and a first-round bye isn''t a win. A manager with no bracket games reads None, not 0.0%. Counts the season in progress once its bracket starts.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE metric_id = 'playoff_win_percentage';
 
 COMMIT;

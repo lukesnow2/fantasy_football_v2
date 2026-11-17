@@ -38,6 +38,8 @@ TRADES = {
     'late': (FINISHED, 2024, 11, 5, 6, 105, 106),
     'capped': (FINISHED, 2024, 3, 7, 8, 107, 108),
     'unsettled': (UNSETTLED, 2025, 5, 21, 22, 121, 122),
+    # The trade_winner card's worked example.
+    'example': (FINISHED, 2024, 8, 9, 10, 109, 110),
 }
 
 # (player, league, season, week, points)
@@ -51,7 +53,17 @@ STATS = [
     (107, FINISHED, 2024, 1, 25.0),
     (107, FINISHED, 2024, 2, 25.0),
     (108, FINISHED, 2024, 4, 400.0),
+    # example: in week 8, A gets a player who'd averaged 2 a week for the four
+    # weeks before (recent form 54) and outscores B's new one by 60 (points 59).
+    (110, FINISHED, 2024, 4, 2.0),
+    (110, FINISHED, 2024, 5, 2.0),
+    (110, FINISHED, 2024, 6, 2.0),
+    (110, FINISHED, 2024, 7, 2.0),
+    (110, FINISHED, 2024, 9, 60.0),
 ]
+
+# The three cards migration 022 rewrites, as 020 (PR #91) left them.
+CARDS = ('trade_winner', 'season_consistency_score', 'playoff_win_percentage')
 
 
 def view_sql() -> str:
@@ -82,7 +94,7 @@ def engine():
         conn.execute(text("CREATE TABLE edw.dim_manager (manager_key int, manager_name text)"))
 
         conn.execute(text("INSERT INTO edw.dim_league VALUES (1, 'L'), (2, 'L')"))
-        for team in (1, 2, 3, 4, 5, 6, 7, 8, 21, 22):
+        for team in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 21, 22):
             conn.execute(text("INSERT INTO edw.dim_team VALUES (:t, :n)"), {'t': team, 'n': f'T{team}'})
             conn.execute(text("INSERT INTO edw.dim_manager VALUES (:t, :n)"), {'t': team, 'n': f'M{team}'})
         for (league, season, week, a, b, pa, pb) in TRADES.values():
@@ -108,6 +120,13 @@ def engine():
         # 2025: the title game is on the schedule but hasn't been played.
         conn.execute(text("INSERT INTO edw.fact_matchup VALUES (2, 2025, NULL, TRUE)"))
         conn.execute(text(view_sql()))
+        conn.execute(text("CREATE SCHEMA meta_data"))
+        conn.execute(text("""CREATE TABLE meta_data.metric_definitions (metric_id text,
+            detailed_description text, example_calculation text, limitations text,
+            updated_at timestamp)"""))
+        for metric in CARDS:
+            conn.execute(text("""INSERT INTO meta_data.metric_definitions
+                VALUES (:m, 'old', 'old', 'old', NULL)"""), {'m': metric})
     yield eng
     eng.dispose()
     subprocess.run(['psql', 'postgres', '-qc', f'DROP DATABASE IF EXISTS {TEST_DB}'], check=True)
@@ -176,7 +195,8 @@ def _squeeze(sql: str) -> str:
 def test_migration_carries_the_etl_definition():
     with open(MIGRATION) as f:
         body = f.read()
-    migrated = body.split('CREATE VIEW', 1)[1].rsplit('COMMIT;', 1)[0]
+    # The view has no semicolon in it, so its CREATE ends at the first one.
+    migrated = body.split('CREATE VIEW', 1)[1].split(';', 1)[0]
     etl = view_sql().split('CREATE VIEW', 1)[1]
     assert _squeeze(migrated) == _squeeze(etl)
 
@@ -194,3 +214,28 @@ def test_migration_applies_twice(engine):
                 cursor.close()
     with engine.connect() as conn:
         assert conn.execute(text("SELECT COUNT(*) FROM edw.vw_trade_analysis")).scalar() == len(TRADES)
+        cards = {r[0]: r[1:] for r in conn.execute(text("""SELECT metric_id, detailed_description,
+            example_calculation, limitations FROM meta_data.metric_definitions"""))}
+    detail, example, limits = cards['trade_winner']
+    assert 'the same for both sides' not in detail and 'from week 10' in detail
+    assert 'never decides a winner' not in limits
+    assert '= 55.4' in example and '= 44.6' in example
+    assert '±.000' not in cards['season_consistency_score'][2]
+    assert 'None' in cards['season_consistency_score'][2]
+    for text_ in cards['playoff_win_percentage']:
+        assert 'reads 0.0%' not in text_ and 'falls back to zero' not in text_
+
+
+def test_the_worked_example_is_what_the_view_gives(trades):
+    t = trades['example']
+    assert t['team_a_production_score'] == Decimal('59.0')
+    assert t['team_a_playoff_score'] == Decimal('50.0')
+    assert t['team_a_opportunity_score'] == Decimal('54.0')
+    assert t['team_a_context_score'] == Decimal('60.0')
+    assert (t['team_a_final_score'], t['team_b_final_score']) == (Decimal('55.4'), Decimal('44.6'))
+    assert t['trade_winner'] == 'M9'
+    with open(MIGRATION) as f:
+        body = f.read()
+    card = body.split("WHERE metric_id = 'trade_winner'")[0].rsplit('example_calculation = ', 1)[1]
+    for shown in ('59', '54', '0.10 × 60', '0.10 × 40', '= 55.4', '= 44.6', 'leads by 10.8'):
+        assert shown in card
