@@ -45,6 +45,8 @@ export interface H2HApiRow {
 	currentStreak?: number | null;
 	playoffWins?: number | null;
 	playoffLosses?: number | null;
+	titleWins?: number | null;
+	titleLosses?: number | null;
 	opponentLastSeason?: number | null;
 }
 
@@ -523,8 +525,10 @@ export type H2HRow = {
 	bar: { left: number; width: number; tone: 'up' | 'down' };
 	avgPoints: number | null;
 	opponentAvgPoints: number | null;
-	/** "2-1", or null with no bracket games (rendered "None"). */
+	/** "2-1" over bracket games before the title game, or null with none (rendered "None"). */
 	playoffs: string | null;
+	/** "1-0" in title games, or null with none (rendered "None"). */
+	title: string | null;
 	streak: { text: string; tone: Lean };
 	currentStreak: number;
 	opponentLastSeason: number | null;
@@ -550,6 +554,7 @@ export function h2hRows(rows: H2HApiRow[]): H2HRow[] {
 			const dev = Math.min(Math.abs(pct - 0.5) / 0.25, 1) * 50;
 			const up = shown >= 0.5;
 			const bracket = n(r.playoffWins) + n(r.playoffLosses);
+			const titleGames = n(r.titleWins) + n(r.titleLosses);
 			const streak = n(r.currentStreak);
 			return {
 				opponent: r.opponent,
@@ -565,6 +570,7 @@ export function h2hRows(rows: H2HApiRow[]): H2HRow[] {
 				avgPoints: r.avgPoints ?? null,
 				opponentAvgPoints: r.opponentAvgPoints ?? null,
 				playoffs: bracket > 0 ? `${n(r.playoffWins)}-${n(r.playoffLosses)}` : null,
+				title: titleGames > 0 ? `${n(r.titleWins)}-${n(r.titleLosses)}` : null,
 				streak:
 					streak > 0
 						? { text: `W${streak}`, tone: 'up' as Lean }
