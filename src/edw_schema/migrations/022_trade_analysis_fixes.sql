@@ -25,7 +25,7 @@ BEGIN;
 
 DROP VIEW IF EXISTS edw.vw_trade_analysis;
 
--- TRADE ANALYSIS VIEW (v3, migration 021)
+-- TRADE ANALYSIS VIEW (v3, migration 022)
 -- Each side gets four 0-100 component scores, weighted
 -- Production 40%, Playoffs 30%, Opportunity cost 20%, Timing 10%.
 -- The final scores are those weighted averages, and the winner

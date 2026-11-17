@@ -1,4 +1,4 @@
-"""edw.vw_trade_analysis: the trade score and its verdict (migration 021).
+"""edw.vw_trade_analysis: the trade score and its verdict (migration 022).
 
 The view scores each side of a trade on four 0-100 components (production
 40%, playoffs 30%, opportunity cost 20%, timing 10%) and names a winner when
@@ -26,7 +26,7 @@ from src.edw_schema.edw_etl_processor import EdwEtlProcessor
 
 TEST_DB = 'trade_analysis_view_test'
 TEST_URL = f'postgresql://localhost:5432/{TEST_DB}'
-MIGRATION = 'src/edw_schema/migrations/021_trade_analysis_fixes.sql'
+MIGRATION = 'src/edw_schema/migrations/022_trade_analysis_fixes.sql'
 
 FINISHED, UNSETTLED = 1, 2  # league keys: 2024 (title decided), 2025 (title game unplayed)
 
