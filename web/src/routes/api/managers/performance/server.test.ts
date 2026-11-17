@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { paramsOf, textOf } from '$lib/server/testing/sql-text';
 import { longestStreaks, streaksByManager, type GameResult } from './streaks';
 
 /**
@@ -12,30 +13,6 @@ const games: Record<string, GameResult[]> = {
 	Ann: ['W', 'W', 'L', 'W', 'W', 'W', 'T', 'L', 'L'],
 	Bo: ['L', 'L', 'L', 'W', 'L', 'W', 'W']
 };
-
-/** The SQL text of a drizzle `sql` object, parameters as `?`. */
-function textOf(query: unknown): string {
-	const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-	if (!chunks) return '?';
-	return chunks
-		.map((chunk) => {
-			if (chunk && typeof chunk === 'object' && 'value' in chunk) {
-				return ([] as string[]).concat((chunk as { value: string | string[] }).value).join('');
-			}
-			if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) return textOf(chunk);
-			return '?';
-		})
-		.join('');
-}
-
-function paramsOf(query: unknown): unknown[] {
-	const chunks = (query as { queryChunks?: unknown[] })?.queryChunks ?? [];
-	return chunks.flatMap((chunk) => {
-		if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) return paramsOf(chunk);
-		if (chunk && typeof chunk === 'object' && 'value' in chunk) return [];
-		return [chunk];
-	});
-}
 
 const execute = vi.fn(async (query: unknown) => {
 	const text = textOf(query);
@@ -51,7 +28,9 @@ const execute = vi.fn(async (query: unknown) => {
 			win_percentage: 0.6 - i / 10,
 			total_points_scored: 3000,
 			avg_points_per_game: 125,
-			total_championships: 1 - i
+			total_championships: 1 - i,
+			// The mart stores no rate for a manager with no bracket games.
+			playoff_win_percentage: i === 0 ? 0.7143 : null
 		}));
 	}
 	if (
@@ -144,6 +123,15 @@ describe('GET /api/managers/performance', () => {
 		expect(bo.playoffWins).toBe(0);
 		expect(bo.playoffLosses).toBe(0);
 		expect(bo.streaks).toMatchObject({ longestWinStreak: 2, longestLossStreak: 3 });
+	});
+
+	it('gives no playoff rank to a manager with no playoff win rate', async () => {
+		const data = await get('');
+		const by = (name: string) =>
+			data.performance.find((r: { managerName: string }) => r.managerName === name);
+		expect(by('Ann').playoffRank).toBe(1);
+		expect(by('Bo').playoffWinPercentage).toBeNull();
+		expect(by('Bo').playoffRank).toBeNull();
 	});
 
 	it('matches the single-manager streaks for every manager', async () => {

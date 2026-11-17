@@ -129,12 +129,16 @@
 
 	const ranks = $derived(
 		current
-			? rankMedals([
-					{ label: 'Championships', rank: current.championshipRank },
-					{ label: 'Win rate', rank: current.winPctRank },
-					{ label: 'Scoring', rank: current.scoringRank },
-					{ label: 'Playoff win rate', rank: current.playoffRank }
-				])
+			? rankMedals(
+					[
+						{ label: 'Championships', rank: current.championshipRank },
+						{ label: 'Win rate', rank: current.winPctRank },
+						{ label: 'Scoring', rank: current.scoringRank },
+						{ label: 'Playoff win rate', rank: current.playoffRank }
+						// A manager with no bracket games has no playoff rank, and a
+						// medal with no number on it says nothing.
+					].filter((r) => r.rank != null)
+				)
 			: []
 	);
 

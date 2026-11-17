@@ -6,9 +6,13 @@ import { CHAMPION_GAIN, SWUNG_A_TITLE } from '$lib/server/trade-sql';
 
 export const GET: RequestHandler = async ({ url }) => {
 	try {
-		const season = url.searchParams.get('season') || 'all';
+		// The season goes into the SQL text below, so anything but a year is
+		// read as all seasons ("abc" used to become "season_year = NaN").
+		const seasonParam = url.searchParams.get('season') || 'all';
+		const season = /^\d{4}$/.test(seasonParam) ? seasonParam : 'all';
 		const manager = url.searchParams.get('manager');
-		const limit = parseInt(url.searchParams.get('limit') || '1000');
+		const limitParam = Number(url.searchParams.get('limit') || '1000');
+		const limit = Number.isInteger(limitParam) && limitParam > 0 ? limitParam : 1000;
 		const analysis = url.searchParams.get('analysis') || 'overview';
 
 		// Seasons that actually have trade data, for the season filter dropdown.
@@ -66,13 +70,16 @@ export const GET: RequestHandler = async ({ url }) => {
 			query += ` AND season_year = ${parseInt(season)}`;
 		}
 
-		if (manager) {
-			query += ` AND (team_a_manager ILIKE '%${manager}%' OR team_b_manager ILIKE '%${manager}%')`;
-		}
+		// The manager is a bound parameter, never SQL text: this endpoint is
+		// public, and pasting it into the string let anyone run their own SQL.
+		const pattern = `%${manager ?? ''}%`;
+		const managerFilter = manager
+			? sql` AND (team_a_manager ILIKE ${pattern} OR team_b_manager ILIKE ${pattern})`
+			: sql``;
 
-		query += ` ORDER BY transaction_date DESC LIMIT ${limit}`;
-
-		const trades = await db.execute(sql.raw(query));
+		const trades = await db.execute(
+			sql`${sql.raw(query)}${managerFilter} ORDER BY transaction_date DESC LIMIT ${limit}`
+		);
 
 		// Generate analytics based on request type
 		let analytics: any = {};

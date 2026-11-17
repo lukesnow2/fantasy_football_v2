@@ -307,7 +307,9 @@ describe('sorting and ranks', () => {
 		expect(COLUMNS.ppct.display(swept).text).toBe('0.0%');
 	});
 
-	it('has no swing with one finished season', () => {
+	// The mart stores no swing with one finished season (its own test is
+	// tests/test_manager_performance_mart.py); the table prints that as None.
+	it('prints a missing swing as None, not ±.000', () => {
 		const [one] = buildRows([{ managerName: 'O', seasonConsistencyScore: null }], undefined, []);
 		expect(COLUMNS.swing.display(one)).toMatchObject({ text: 'None', blank: true });
 	});

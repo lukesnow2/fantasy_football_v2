@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CHAMPION_GAIN, SWUNG_A_TITLE } from '$lib/server/trade-sql';
+import { paramsOf, textOf } from '$lib/server/testing/sql-text';
 
 /**
  * "Swung a title" counts trades where that season's champion gained 50 or
@@ -9,29 +11,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  * warehouse.
  */
 
+/** What each query sent: its SQL text and its bound parameters. */
 const sent: string[] = [];
-
-/** The SQL text of a drizzle `sql` object (sql.raw puts it in one chunk). */
-function textOf(query: unknown): string {
-	const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-	if (!chunks) return '';
-	return chunks
-		.map((chunk) => {
-			if (chunk && typeof chunk === 'object' && 'value' in chunk) {
-				return ([] as string[]).concat((chunk as { value: string | string[] }).value).join('');
-			}
-			if (chunk && typeof chunk === 'object' && 'queryChunks' in chunk) return textOf(chunk);
-			return '?';
-		})
-		.join('');
-}
-
-import { CHAMPION_GAIN, SWUNG_A_TITLE } from '$lib/server/trade-sql';
+const params: unknown[][] = [];
 
 vi.mock('$lib/server/db', () => ({
 	db: {
 		execute: vi.fn(async (query: unknown) => {
 			sent.push(textOf(query));
+			params.push(paramsOf(query));
 			return [];
 		})
 	}
@@ -46,13 +34,15 @@ function titleTests(): { shared: number; strays: string[] } {
 	for (const q of sent.map(squeeze)) {
 		const parts = q.split(SWUNG_A_TITLE);
 		shared += parts.length - 1;
-		for (const part of parts) strays.push(...(part.match(/production_differential\)? ?[<>]=? ?-?50/g) ?? []));
+		for (const part of parts)
+			strays.push(...(part.match(/production_differential\)? ?[<>]=? ?-?50/g) ?? []));
 	}
 	return { shared, strays };
 }
 
 beforeEach(() => {
 	sent.length = 0;
+	params.length = 0;
 });
 
 describe('Swung a title', () => {
@@ -80,5 +70,26 @@ describe('Swung a title', () => {
 		const { GET } = await import('../overview/+server');
 		await GET({ url: new URL('http://x/api/overview?metric=trades') } as never);
 		expect(titleTests()).toEqual({ shared: 1, strays: [] });
+	});
+});
+
+describe('Trades API filters', () => {
+	it('binds the manager filter as a parameter, never as SQL text', async () => {
+		const { GET } = await import('./+server');
+		const evil = "x') OR 1=1 --";
+		await GET({
+			url: new URL(`http://x/api/trades?analysis=none&manager=${encodeURIComponent(evil)}`)
+		} as never);
+		const list = sent.findIndex((q) => q.includes('ILIKE'));
+		expect(list).toBeGreaterThanOrEqual(0);
+		expect(sent[list]).not.toContain(evil);
+		expect(squeeze(sent[list])).toContain('team_a_manager ILIKE ? OR team_b_manager ILIKE ?');
+		expect(params[list]).toEqual([`%${evil}%`, `%${evil}%`, 1000]);
+	});
+
+	it('reads a season that is not a year as all seasons', async () => {
+		const { GET } = await import('./+server');
+		await GET({ url: new URL('http://x/api/trades?analysis=all&season=abc') } as never);
+		for (const q of sent) expect(q).not.toMatch(/season_year = (NaN|abc)/);
 	});
 });

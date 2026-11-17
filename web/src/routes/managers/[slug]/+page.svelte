@@ -248,13 +248,17 @@
 	const summary = $derived(titleGamesSummary(titleGames, manager?.championshipRank, sharesTopRank));
 	const ranks = $derived(
 		manager
-			? rankMedals([
-					{ label: 'Overall', rank: manager.overallRank },
-					{ label: 'Championships', rank: manager.championshipRank },
-					{ label: 'Win rate', rank: manager.winPctRank },
-					{ label: 'Scoring', rank: manager.scoringRank },
-					{ label: 'Playoffs', rank: manager.playoffRank }
-				])
+			? rankMedals(
+					[
+						{ label: 'Overall', rank: manager.overallRank },
+						{ label: 'Championships', rank: manager.championshipRank },
+						{ label: 'Win rate', rank: manager.winPctRank },
+						{ label: 'Scoring', rank: manager.scoringRank },
+						{ label: 'Playoffs', rank: manager.playoffRank }
+						// A manager with no bracket games has no playoff rank, and a
+						// medal with no number on it says nothing.
+					].filter((r) => r.rank != null)
+				)
 			: []
 	);
 	const badgeRows = $derived<

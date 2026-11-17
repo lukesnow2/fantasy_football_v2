@@ -218,7 +218,7 @@ components AS (
 timed AS (
     -- Timing widens the gap: the side ahead on the other three
     -- components gets 50 + (multiplier - 1) x 50 (75 at week 10+,
-    -- 60 at weeks 6-9), the side behind the mirror image, and an
+    -- 60 at weeks 6-9), the side behind 100 minus that, and an
     -- even trade 50 each. Adding the same amount to both sides,
     -- as before, could never move the verdict.
     SELECT 
@@ -232,7 +232,6 @@ timed AS (
 scored AS (
     SELECT 
         t.*,
-        100 - t.a_context as b_context,
         ROUND(t.a_production * 0.40 + t.a_playoff * 0.30 + t.a_opportunity * 0.20 + t.a_context * 0.10, 1) as a_final,
         ROUND(t.b_production * 0.40 + t.b_playoff * 0.30 + t.b_opportunity * 0.20 + (100 - t.a_context) * 0.10, 1) as b_final
     FROM timed t
