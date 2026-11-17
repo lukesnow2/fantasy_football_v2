@@ -422,6 +422,8 @@ const h2h = (
 	currentStreak: 1,
 	playoffWins: 0,
 	playoffLosses: 0,
+	titleWins: 0,
+	titleLosses: 0,
 	opponentLastSeason: 2026,
 	...extra
 });
@@ -479,6 +481,17 @@ describe('h2hRows', () => {
 		]);
 		expect(a.playoffs).toBe('2-1');
 		expect(b.playoffs).toBeNull();
+	});
+
+	it('shows title games as their own record, apart from playoffs', () => {
+		const [a, b, c] = h2hRows([
+			h2h('A', 10, 6, 4, { playoffWins: 3, playoffLosses: 4, titleWins: 2, titleLosses: 0 }),
+			h2h('B', 10, 5, 5, { playoffWins: 0, playoffLosses: 0, titleWins: 0, titleLosses: 1 }),
+			h2h('C', 10, 4, 6, { playoffWins: 1, playoffLosses: 0 })
+		]);
+		expect([a.playoffs, a.title]).toEqual(['3-4', '2-0']);
+		expect([b.playoffs, b.title]).toEqual([null, '0-1']);
+		expect([c.playoffs, c.title]).toEqual(['1-0', null]);
 	});
 
 	it('sorts by win rate, then games', () => {

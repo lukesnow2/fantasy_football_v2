@@ -336,6 +336,7 @@
 					{ key: 'pct', label: 'Win %', width: '140px' },
 					{ key: 'avg', label: 'Avg score', numeric: true, width: '104px' },
 					{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '64px' },
+					{ key: 'title', label: 'Title games', numeric: true, width: '84px' },
 					{ key: 'streak', label: 'Streak', numeric: true, width: '52px' },
 					{ key: 'rivalry', label: '', numeric: true, width: '76px', ariaLabel: 'Rivalry' }
 				]
@@ -346,6 +347,7 @@
 					{ key: 'pct', label: 'Win %', width: '180px' },
 					{ key: 'avg', label: 'Avg score', numeric: true, width: '130px' },
 					{ key: 'playoffs', label: 'Playoffs', numeric: true, width: '80px' },
+					{ key: 'title', label: 'Title games', numeric: true, width: '100px' },
 					{ key: 'streak', label: 'Streak', numeric: true, width: '70px' },
 					{ key: 'rivalry', label: '', numeric: true, width: '90px', ariaLabel: 'Rivalry' }
 				]
@@ -643,7 +645,7 @@
 							columns={h2hColumns}
 							rows={h2h}
 							rowKey={(r) => r.opponent}
-							minWidth={phone ? '788px' : '900px'}
+							minWidth={phone ? '884px' : '1014px'}
 							columnGap={phone ? 12 : 14}
 							rowPadding={phone ? 0 : 10}
 							fontSize={phone ? 14 : 15}
@@ -704,6 +706,8 @@
 										>{/if}
 								{:else if column.key === 'playoffs'}
 									<span class="soft">{@render value(row.playoffs)}</span>
+								{:else if column.key === 'title'}
+									<span class="soft">{@render value(row.title)}</span>
 								{:else if column.key === 'streak'}
 									<span class="bold" style:color="var(--color-{LEAN_COLOR[row.streak.tone]})"
 										>{row.streak.text}</span
@@ -717,8 +721,9 @@
 						</DataTable>
 						<p class="footnote">
 							Avg score is {manager.managerName}'s points, then the opponent's, per meeting.
-							Playoffs counts bracket games only. Each Rivalry link opens the full series on the
-							League History head to head page.
+							Playoffs counts bracket games before the title game. Title games counts
+							championship games alone. Each Rivalry link opens the full series on the League
+							History head to head page.
 						</p>
 					{/if}
 				</Card>

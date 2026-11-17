@@ -715,14 +715,20 @@ export const GET: RequestHandler = async ({ url }) => {
 				// Bracket games between the requested manager and each opponent,
 				// from fact_matchup so the bracket rule (playoffs, not consolation)
 				// is the one the rest of this API uses. Matched on manager keys,
-				// as the streak query is.
-				const playoffs = new Map<string, { wins: number; losses: number }>();
+				// as the streak query is. Title games are split out of the
+				// playoff record and counted on their own.
+				const playoffs = new Map<
+					string,
+					{ wins: number; losses: number; titleWins: number; titleLosses: number }
+				>();
 				if (manager) {
 					const playoffResult = await db.execute(sql`
 						SELECT
 							opp.manager_name AS opponent,
-							COUNT(*) FILTER (WHERE fm.winner_manager_key = dm.manager_key)  AS wins,
-							COUNT(*) FILTER (WHERE fm.winner_manager_key = opp.manager_key) AS losses
+							COUNT(*) FILTER (WHERE NOT fm.is_championship AND fm.winner_manager_key = dm.manager_key)  AS wins,
+							COUNT(*) FILTER (WHERE NOT fm.is_championship AND fm.winner_manager_key = opp.manager_key) AS losses,
+							COUNT(*) FILTER (WHERE fm.is_championship AND fm.winner_manager_key = dm.manager_key)      AS title_wins,
+							COUNT(*) FILTER (WHERE fm.is_championship AND fm.winner_manager_key = opp.manager_key)     AS title_losses
 						FROM edw.fact_matchup fm
 						JOIN edw.dim_manager dm ON dm.manager_name = ${manager}
 						JOIN edw.dim_manager opp ON opp.manager_key = CASE
@@ -735,7 +741,9 @@ export const GET: RequestHandler = async ({ url }) => {
 					for (const r of Array.from(playoffResult) as any[]) {
 						playoffs.set(String(r.opponent), {
 							wins: Number(r.wins ?? 0),
-							losses: Number(r.losses ?? 0)
+							losses: Number(r.losses ?? 0),
+							titleWins: Number(r.titleWins ?? r.title_wins ?? 0),
+							titleLosses: Number(r.titleLosses ?? r.title_losses ?? 0)
 						});
 					}
 				}
@@ -749,7 +757,12 @@ export const GET: RequestHandler = async ({ url }) => {
 				data.head_to_head = Array.from(h2hResult).map((row: any) => {
 					const opponent = row.opponent;
 					const bracket = manager
-						? (playoffs.get(String(opponent)) ?? { wins: 0, losses: 0 })
+						? (playoffs.get(String(opponent)) ?? {
+								wins: 0,
+								losses: 0,
+								titleWins: 0,
+								titleLosses: 0
+							})
 						: null;
 					return {
 						manager: row.manager,
@@ -764,6 +777,8 @@ export const GET: RequestHandler = async ({ url }) => {
 						currentStreak: num(row.currentStreak) ?? 0,
 						playoffWins: bracket?.wins ?? null,
 						playoffLosses: bracket?.losses ?? null,
+						titleWins: bracket?.titleWins ?? null,
+						titleLosses: bracket?.titleLosses ?? null,
 						opponentLastSeason: lastSeasonOf.get(opponent) ?? null
 					};
 				});
