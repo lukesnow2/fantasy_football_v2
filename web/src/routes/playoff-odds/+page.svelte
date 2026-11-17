@@ -164,11 +164,15 @@
 			}));
 	});
 	const columns = $derived<Column[]>(
+		// Phones keep two numbers: the playoffs, and whichever of the bye or the
+		// title the rows are sorted by (the title when they're sorted by playoffs).
 		phone
 			? [
 					{ key: 'manager', label: 'Manager' },
 					{ key: 'playoffOdds', label: 'Playoffs', numeric: true, width: '64px' },
-					{ key: 'titleOdds', label: 'Title', numeric: true, width: '52px' }
+					metric === 'byeOdds'
+						? { key: 'byeOdds', label: 'Bye', numeric: true, width: '52px' }
+						: { key: 'titleOdds', label: 'Title', numeric: true, width: '52px' }
 				]
 			: [
 					{ key: 'rank', label: '#', width: '28px' },
