@@ -196,6 +196,14 @@ INSERT INTO metric_definitions (
 'Read it next to actual wins. The gap between the two is luck, and across the league the two add up to the same total every season.',
 'decimal', 'games', '0-14', null, null, 'decimal_1', 32),
 
+('best_all_play_record', 'Best all-play record', 'team_performance',
+'This season''s best record if every team had played all the others every week.',
+'Each week, a team''s score plays every other team''s score that week, a tie counting half. Added up over the regular season, it''s the record the scoring earned no matter who the team drew. The tile shows the team with the highest share of those games won, so a team a game behind on the schedule isn''t ranked lower for it. Teams on the same record share the tile.',
+'Wins: teams outscored + half of ties. Losses: teams that outscored it + half of ties. Added up over the weeks.',
+'In a 10-team league, a team''s week 1 score beats 7 of the other 9: 7-2. In week 2 it beats 3, ties 1 and loses to 5: 3.5-5.5. After two weeks: 7 + 3.5 = 10.5 wins and 2 + 5.5 = 7.5 losses, so 10.5-7.5.',
+'Each week counts as a game against every other team, 9 in a 10-team league. A season''s best here wins 58% to 81% of them, 73 to 102 over 14 weeks. It isn''t the standings: Luck is real wins minus this share times games played.',
+'text', 'record', '58% to 81% of games for a season''s best', null, null, 'text', 35),
+
 ('points_vs_league', 'Pts vs league', 'team_performance',
 'Points per game above the other teams'' average that same week.',
 'Each game, your score minus the average of every other team''s score that week, then averaged over your games. Comparing within the week takes out bye weeks, rule changes and high- or low-scoring years, so managers from different eras compare fairly.',
@@ -415,6 +423,7 @@ FROM (VALUES
 
 -- Luck and Pythagorean relationship
 ('luck_factor', 'all_play_wins', 'derived_from', 'Luck is wins minus all-play (expected) wins', 10),
+('best_all_play_record', 'all_play_wins', 'related_to', 'The same all-play games, as a record instead of expected wins', 9),
 ('rivalry_luck', 'pythagorean_wins', 'derived_from', 'Rivalry luck is rivalry wins minus rivalry expected wins', 10),
 
 -- Performance consistency relationships

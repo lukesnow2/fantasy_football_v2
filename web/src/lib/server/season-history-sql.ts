@@ -1,9 +1,8 @@
 import { sql } from 'drizzle-orm';
 
 /**
- * SQL pieces shared by This Season's history queries (start-history.ts and
- * points-leaders.ts), so the two agree on what counts as a finished season, a
- * regular-season week and a playoff team.
+ * SQL pieces for This Season's history query (start-history.ts): what counts
+ * as a finished season, a regular-season week and a playoff team.
  */
 
 /**

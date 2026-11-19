@@ -23,7 +23,12 @@ const OTHERS = [
 	['pythagorean_wins', 'Pyth W', 'Wins a team would expect from its points for and against.'],
 	['power_score', 'Power score', 'One number for how strong a team is right now.'],
 	['hall_of_fame_index', 'HoF index', 'A career score built from titles, wins and playoff runs.'],
-	['draft_grade', 'Grade', 'How a draft turned out, from A to F.']
+	['draft_grade', 'Grade', 'How a draft turned out, from A to F.'],
+	[
+		'best_all_play_record',
+		'Best all-play record',
+		"This season's best record if every team had played all the others every week."
+	]
 ] as const;
 
 export function seedDefinitions() {
@@ -61,9 +66,5 @@ export const SEASON_STATS = [
 	{ label: 'Current week', value: '3 of 14', sub: 'Playoffs start week 15' },
 	{ label: 'Most points for', value: '465.5', sub: 'Craig' },
 	{ label: 'Only unbeaten', value: '3-0', sub: 'Israel' },
-	{
-		label: 'Points leaders who won the title',
-		value: '8 of 21',
-		sub: 'Since 2005. All 21 made the playoffs.'
-	}
+	{ label: 'Best all-play record', value: '24-3', sub: 'Craig', metricId: 'best_all_play_record' }
 ];
