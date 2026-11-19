@@ -182,7 +182,7 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'schedule_vs_league';
 
 UPDATE meta_data.metric_definitions SET limitations =
-'It looks back over the regular season to date and leaves out playoff weeks. Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. It comes from the same scores as the playoff odds, so it only shows once the season''s first week is in.'
+'It looks back over the regular season to date and leaves out playoff weeks. Teams are ranked by the share of their all-play games won, so a team a game behind on the schedule isn''t ranked lower for it, and teams on the same record share the tile. Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. It comes from the same scores as the playoff odds, so it only shows once the season''s first week is in.'
 WHERE metric_id = 'best_all_play_record';
 
 UPDATE meta_data.metric_definitions SET limitations =

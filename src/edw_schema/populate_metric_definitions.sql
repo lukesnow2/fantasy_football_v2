@@ -199,9 +199,9 @@ INSERT INTO metric_definitions (
 ('best_all_play_record', 'Best all-play record', 'team_performance',
 'This season''s best record if every team had played all the others every week.',
 'Each week, a team''s score plays every other team''s score that week, a tie counting half. Added up over the regular season, it''s the record the scoring earned no matter who the team drew. The tile shows the team with the highest share of those games won, so a team a game behind on the schedule isn''t ranked lower for it. Teams on the same record share the tile.',
-'Wins: sum over weeks of (teams outscored + half of teams tied). Losses: the same for teams that outscored it.',
+'Wins: teams outscored + half of ties. Losses: teams that outscored it + half of ties. Added up over the weeks.',
 'In a 10-team league, a team''s week 1 score beats 7 of the other 9: 7-2. In week 2 it beats 3, ties 1 and loses to 5: 3.5-5.5. After two weeks: 7 + 3.5 = 10.5 wins and 2 + 5.5 = 7.5 losses, so 10.5-7.5.',
-'Each week counts as a game against every other team, so 9 games a week in a 10-team league. A season''s best here has won 58% to 81% of them, about 73 to 102 wins over 14 weeks. It''s what the scoring earned, not the standings, and the gap between the two is Luck.',
+'Each week counts as a game against every other team, 9 in a 10-team league. A season''s best here wins 58% to 81% of them, 73 to 102 over 14 weeks. It isn''t the standings: Luck is real wins minus this share times games played.',
 'text', 'record', '58% to 81% of games for a season''s best', null, null, 'text', 35),
 
 ('points_vs_league', 'Pts vs league', 'team_performance',
