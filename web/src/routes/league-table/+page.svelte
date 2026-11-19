@@ -4,6 +4,8 @@
 	 * tracks, one sortable table, eight column groups. All the rules (columns,
 	 * sorting, ranks, leaders, formats, the URL) are in $lib/league-table; this
 	 * page loads the three APIs, keeps the state in the URL and draws the rows.
+	 * A span of seasons (`?from=2010&to=2020`) loads every manager's seasons
+	 * once, from /api/managers/seasons, and adds the span up in the browser.
 	 */
 	import { onMount } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -21,10 +23,11 @@
 		Tag,
 		type Column
 	} from '$lib/components/ui';
-	import { profileHref } from '$lib/utils/managers';
+	import { profileHref, type DraftSeasonScore } from '$lib/utils/managers';
 	import {
 		COLUMNS,
 		GROUPS,
+		buildRangeRows,
 		buildRows,
 		caption,
 		clickSort,
@@ -35,7 +38,10 @@
 		leaders,
 		parseState,
 		phoneColumns,
+		pickSeason,
+		rangeLabel,
 		rankRows,
+		seasonRange,
 		seasonSpan,
 		signTone,
 		sortLine,
@@ -47,6 +53,7 @@
 		type GroupId,
 		type LeagueColumn,
 		type LeagueRow,
+		type SeasonsPayload,
 		type TableState,
 		type Who
 	} from '$lib/league-table';
@@ -59,6 +66,15 @@
 	let loading = $state(true);
 	let failed = $state(false);
 	let view = $state<TableState>(parseState(page.url.searchParams));
+	/** The draft's season scores and spread, for grading a span of seasons. */
+	let draftSeasons = $state<{ bySeason: DraftSeasonScore[]; spread: number | null }>({
+		bySeason: [],
+		spread: null
+	});
+	/** Every manager's seasons, loaded the first time a span is picked. */
+	let seasons = $state<SeasonsPayload | null>(null);
+	let seasonsLoading = $state(false);
+	let seasonsFailed = $state(false);
 
 	async function loadTable() {
 		loading = true;
@@ -79,6 +95,10 @@
 					.catch(() => null)
 			]);
 			const grades = draft?.data?.draftGrades ?? draft?.draftGrades;
+			draftSeasons = {
+				bySeason: grades?.bySeason ?? [],
+				spread: typeof grades?.spread === 'number' ? grades.spread : null
+			};
 			rows = buildRows(
 				performance?.data?.performance ?? [],
 				{ byManager: grades?.byManager ?? [], bySeason: grades?.bySeason ?? [] },
@@ -91,6 +111,21 @@
 			failed = true;
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadSeasons() {
+		seasonsLoading = true;
+		seasonsFailed = false;
+		try {
+			const response = await fetch('/api/managers/seasons');
+			if (!response.ok) throw new Error(`seasons ${response.status}`);
+			seasons = (await response.json()).data as SeasonsPayload;
+		} catch (error) {
+			console.error('Error loading the seasons:', error);
+			seasonsFailed = true;
+		} finally {
+			seasonsLoading = false;
 		}
 	}
 
@@ -107,13 +142,43 @@
 		replaceState(`${page.url.pathname}${stateQuery(next)}`, page.state);
 	}
 
+	const span = $derived(seasonSpan(rows));
+	const range = $derived(span ? seasonRange(view, span) : null);
+	/** A span narrower than all time is picked. */
+	const spanned = $derived(range != null && !range.all);
+
+	// A span needs every manager's seasons: load them once, the first time.
+	$effect(() => {
+		if (spanned && !seasons && !seasonsLoading && !seasonsFailed) loadSeasons();
+	});
+
+	/** The career rows, or the picked span's. */
+	const viewRows = $derived(
+		spanned && range ? (seasons ? buildRangeRows(rows, seasons, draftSeasons, range) : []) : rows
+	);
+
 	const group = $derived(groupById(view.group));
 	const sortColumn = $derived(COLUMNS[view.sort]);
-	const shown = $derived(filterRows(rows, view.who));
+	const shown = $derived(filterRows(viewRows, view.who));
 	const ranked = $derived(rankRows(sortRows(shown, sortColumn, view.dir), sortColumn));
 	const columns = $derived(phone.current ? phoneColumns(group, view.sort) : groupColumns(group));
 	const leaderSets = $derived(new Map(columns.map((c) => [c.key, leaders(shown, c)])));
-	const span = $derived(seasonSpan(rows));
+
+	/** Every season the league has played, newest first, for the two pickers. */
+	const seasonOptions = $derived(
+		span
+			? Array.from({ length: span.latest - span.first + 1 }, (_, i) => {
+					const year = String(span.latest - i);
+					return { value: year, label: year };
+				})
+			: []
+	);
+
+	function onSeason(end: 'from' | 'to', event: Event) {
+		if (!span) return;
+		const year = Number((event.currentTarget as HTMLSelectElement).value);
+		show(pickSeason(view, end, year, span));
+	}
 
 	const lead = $derived(leadColumns(phone.current));
 	const tableColumns = $derived<Column[]>([
@@ -157,6 +222,8 @@
 
 	const footnote =
 		'Career totals count every game, the season in progress too. Points per season, title games, playoff trips, swing, best and worst season and the Hall of Fame index count finished seasons only. Ties share a rank, and a blank value sorts last.';
+	const spanNote =
+		'With a span of seasons picked, every number counts only those seasons, and a manager who played none of them drops off the table. The Hall of Fame index is a whole-career number, so it reads All time only.';
 </script>
 
 <svelte:head>
@@ -164,8 +231,12 @@
 </svelte:head>
 
 <PageHeader
-	kicker={span ? `Rankings · all time · ${span.first} to ${span.latest}` : undefined}
-	phoneKicker="Rankings · all time"
+	kicker={span && range
+		? range.all
+			? `Rankings · all time · ${span.first} to ${span.latest}`
+			: `Rankings · ${rangeLabel(range)}`
+		: undefined}
+	phoneKicker={range ? `Rankings · ${rangeLabel(range)}` : 'Rankings · all time'}
 	title="League Table"
 	introWidth={640}
 	pending={loading && rows.length === 0}
@@ -193,6 +264,24 @@
 				onchange={(who) => show({ ...view, who })}
 			/>
 		</div>
+		{#if range}
+			<div class="seasons" role="group" aria-label="Seasons">
+				<Select
+					label="From"
+					stacked
+					options={seasonOptions}
+					value={String(range.from)}
+					onchange={(event) => onSeason('from', event)}
+				/>
+				<Select
+					label="To"
+					stacked
+					options={seasonOptions}
+					value={String(range.to)}
+					onchange={(event) => onSeason('to', event)}
+				/>
+			</div>
+		{/if}
 	{:else}
 		<Segmented
 			label="Columns"
@@ -201,12 +290,32 @@
 			wrap
 			onchange={(id) => show(switchGroup(view, id))}
 		/>
-		<Segmented
-			label="Managers"
-			options={whoOptions}
-			value={view.who}
-			onchange={(who) => show({ ...view, who })}
-		/>
+		<div class="filters">
+			<Segmented
+				label="Managers"
+				options={whoOptions}
+				value={view.who}
+				onchange={(who) => show({ ...view, who })}
+			/>
+			{#if range}
+				<div class="seasons" role="group" aria-label="Seasons">
+					<Select
+						label="Seasons"
+						aria-label="First season"
+						options={seasonOptions}
+						value={String(range.from)}
+						onchange={(event) => onSeason('from', event)}
+					/>
+					<Select
+						label="to"
+						aria-label="Last season"
+						options={seasonOptions}
+						value={String(range.to)}
+						onchange={(event) => onSeason('to', event)}
+					/>
+				</div>
+			{/if}
+		</div>
 	{/if}
 </div>
 
@@ -255,7 +364,11 @@
 						>{/if}</span
 				>
 				{#if !phone.current && entry.row.firstSeason != null && entry.row.lastSeason != null}
-					<span class="years">{entry.row.firstSeason} to {entry.row.lastSeason}</span>
+					<span class="years"
+						>{entry.row.firstSeason === entry.row.lastSeason
+							? entry.row.firstSeason
+							: `${entry.row.firstSeason} to ${entry.row.lastSeason}`}</span
+					>
 				{/if}
 			</span>
 		</a>
@@ -275,6 +388,15 @@
 			<Button variant="secondary" onclick={loadTable}>Try again</Button>
 		</Card>
 	</div>
+{:else if spanned && seasonsFailed}
+	<div class="state">
+		<Card title="Those seasons didn't load">
+			<p class="muted-line">Check your connection, then try again.</p>
+			<Button variant="secondary" onclick={loadSeasons}>Try again</Button>
+		</Card>
+	</div>
+{:else if spanned && !seasons}
+	<div class="skeleton" role="status" aria-busy="true" aria-label="Loading those seasons"></div>
 {:else if rows.length === 0}
 	<div class="state">
 		<Card title="No managers yet">
@@ -344,8 +466,10 @@
 			flip the order.
 		</p>
 		<p class="note">{footnote}</p>
+		{#if spanned}<p class="note">{spanNote}</p>{/if}
 	{:else}
 		<p class="note">{footnote}</p>
+		{#if spanned}<p class="note">{spanNote}</p>{/if}
 	{/if}
 {/if}
 
@@ -361,6 +485,19 @@
 
 	.table-card {
 		margin-top: 16px;
+	}
+
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px 20px;
+		align-items: center;
+	}
+
+	.seasons {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 
 	.sort-line {
@@ -559,6 +696,13 @@
 
 		.who {
 			margin-top: 10px;
+		}
+
+		.seasons {
+			margin-top: 10px;
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 10px;
 		}
 
 		.table-card {

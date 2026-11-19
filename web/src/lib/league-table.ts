@@ -6,6 +6,8 @@
  */
 import { hofTier, managerCount, toNumber, type ColorToken } from '$lib/utils/hall-of-fame';
 import { draftRange, formatPct3, formatWhole, type DraftSeasonScore } from '$lib/utils/managers';
+import { careerGrade } from '$lib/draft-value';
+import { longestStreaks, type GameResult } from '$lib/streaks';
 
 // ---------------------------------------------------------------------------
 // Rows: one per manager, joined from the performance, draft and HoF APIs
@@ -50,6 +52,11 @@ export interface LeagueRow {
 	hofRank: number | null;
 	/** The Hall of Fame list loaded, so a missing index means under 3 seasons. */
 	hofKnown: boolean;
+	/**
+	 * Added up over a span of seasons, not the whole career: the Hall of Fame
+	 * index, a whole-career number, then reads "All time only".
+	 */
+	careerOnly?: boolean;
 	swing: number | null;
 	bestSeason: string | null;
 	worstSeason: string | null;
@@ -199,6 +206,203 @@ export function seasonSpan(rows: LeagueRow[]): { first: number; latest: number }
 }
 
 // ---------------------------------------------------------------------------
+// A span of seasons: the same rows, added up from /api/managers/seasons
+// ---------------------------------------------------------------------------
+
+/** One team-season (a manager running two teams in a year has two). */
+export interface TeamSeasonRow {
+	managerName: string;
+	seasonYear: number;
+	teamKey: number;
+	/** Its championship game is in. */
+	finished: boolean;
+	wins: number;
+	losses: number;
+	ties: number;
+	games: number;
+	/** From the matchups, as the career points total counts them. */
+	points: number;
+	/** From the weekly team rows, as points per season and points against count them. */
+	pointsFor: number | null;
+	pointsAgainst: number | null;
+	titles: number;
+	titleGames: number;
+	playoffWins: number;
+	playoffLosses: number;
+	madePlayoffs: boolean;
+	/** Every game's result in week order ("WWLT..."), for the streaks. */
+	results: string;
+}
+
+/** A team-season's regular-season wins against its expected wins (the power rankings'). */
+export interface SeasonLuckRow {
+	managerName: string;
+	seasonYear: number;
+	wins: number;
+	ties: number;
+	pythagoreanWins: number | null;
+	luckFactor: number | null;
+}
+
+/** A manager-season's transactions and paid claims. */
+export interface SeasonMovesRow {
+	managerName: string;
+	seasonYear: number;
+	moves: number;
+	faabSpent: number;
+	faabPoints: number;
+}
+
+export interface SeasonsPayload {
+	teamSeasons: TeamSeasonRow[];
+	luck: SeasonLuckRow[];
+	moves: SeasonMovesRow[];
+}
+
+export interface SeasonRange {
+	from: number;
+	to: number;
+}
+
+const inRange = (year: number, range: SeasonRange) => year >= range.from && year <= range.to;
+
+/** Sample standard deviation, as Postgres STDDEV takes it; null under two values. */
+function sampleSd(values: number[]): number | null {
+	if (values.length < 2) return null;
+	const mean = values.reduce((a, b) => a + b, 0) / values.length;
+	return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1));
+}
+
+/**
+ * Stored the way mart_manager_performance stores its career numbers (points
+ * per game and moves per season to 2 places, FAAB efficiency and swing to 4),
+ * so a value on the edge of the table's rounding prints the same either way.
+ */
+const stored = (value: number, places: number) => round(value, places);
+
+const seasonPct = (t: TeamSeasonRow) => (t.games > 0 ? (t.wins + 0.5 * t.ties) / t.games : 0);
+
+/**
+ * The table's rows for a span of seasons: every number the career rows carry,
+ * added up from that span's seasons by the career rules (each matches its
+ * mart or API counterpart when the span is every season). A manager who
+ * played no game in the span has no row. League alum still means they have
+ * left the league, whatever the span. The Hall of Fame index is a
+ * whole-career number, so it reads "All time only".
+ */
+export function buildRangeRows(
+	career: LeagueRow[],
+	seasons: SeasonsPayload,
+	draft: { bySeason: (DraftSeasonScore & { exactScore?: number })[]; spread: number | null },
+	range: SeasonRange
+): LeagueRow[] {
+	const out: LeagueRow[] = [];
+	for (const base of career) {
+		const teams = seasons.teamSeasons
+			.filter((t) => t.managerName === base.name && inRange(t.seasonYear, range))
+			.sort((a, b) => a.seasonYear - b.seasonYear || a.teamKey - b.teamKey);
+		if (!teams.length) continue;
+		const sum = (f: (t: TeamSeasonRow) => number) => teams.reduce((acc, t) => acc + f(t), 0);
+		const years = new Set(teams.map((t) => t.seasonYear));
+		const finished = teams.filter((t) => t.finished);
+		const finishedYears = new Set(finished.map((t) => t.seasonYear));
+
+		const wins = sum((t) => t.wins);
+		const losses = sum((t) => t.losses);
+		const ties = sum((t) => t.ties);
+		const games = sum((t) => t.games);
+		const titles = sum((t) => t.titles);
+		const playoffWins = sum((t) => t.playoffWins);
+		const playoffLosses = sum((t) => t.playoffLosses);
+		const points = sum((t) => t.points);
+		const pointsAgainst = sum((t) => t.pointsAgainst ?? 0);
+
+		const luck = seasons.luck.filter(
+			(l) =>
+				l.managerName === base.name &&
+				inRange(l.seasonYear, range) &&
+				l.pythagoreanWins != null &&
+				l.luckFactor != null
+		);
+		const luckSum = (f: (l: SeasonLuckRow) => number) =>
+			luck.length ? luck.reduce((acc, l) => acc + f(l), 0) : null;
+
+		const moveRows = seasons.moves.filter(
+			(m) => m.managerName === base.name && inRange(m.seasonYear, range)
+		);
+		const moves = moveRows.reduce((acc, m) => acc + m.moves, 0);
+		const faabSpent = moveRows.reduce((acc, m) => acc + m.faabSpent, 0);
+		const faabPoints = moveRows.reduce((acc, m) => acc + m.faabPoints, 0);
+
+		const drafts = draft.bySeason.filter(
+			(d) => d.managerName === base.name && !d.inProgress && inRange(d.seasonYear, range)
+		);
+		const grade =
+			drafts.length && draft.spread != null
+				? careerGrade(
+						drafts.map((d) => d.exactScore ?? d.score),
+						draft.spread
+					)
+				: null;
+		const draftYears = draftRange(drafts, [], base.name);
+
+		// Best and worst finished team-season by win rate; the earlier one on a tie.
+		const ranked = [...finished].sort((a, b) => seasonPct(b) - seasonPct(a));
+		const record = (t: TeamSeasonRow | undefined) => (t ? `${t.wins}-${t.losses}-${t.ties}` : null);
+		const streaks = longestStreaks(
+			teams.flatMap((t) => [...t.results] as GameResult[]).filter((r) => 'WLT'.includes(r))
+		);
+		const playoffGames = playoffWins + playoffLosses;
+		const swing = sampleSd(finished.map(seasonPct));
+
+		out.push({
+			...base,
+			firstSeason: Math.min(...years),
+			lastSeason: Math.max(...years),
+			seasons: years.size,
+			wins,
+			losses,
+			ties,
+			winPct: games > 0 ? (wins + 0.5 * ties) / games : null,
+			titles,
+			titleGameWins: titles,
+			titleGameLosses: sum((t) => t.titleGames) - titles,
+			trips: new Set(teams.filter((t) => t.madePlayoffs).map((t) => t.seasonYear)).size,
+			playoffWins,
+			playoffLosses,
+			playoffWinPct: playoffGames > 0 ? playoffWins / playoffGames : null,
+			ppg: games > 0 ? stored(points / games, 2) : null,
+			ppSeason: finishedYears.size
+				? finished.reduce((acc, t) => acc + (t.pointsFor ?? 0), 0) / finishedYears.size
+				: null,
+			points,
+			pointsAgainst,
+			pointDiff: points - pointsAgainst,
+			regWins: luckSum((l) => l.wins + 0.5 * l.ties),
+			expectedWins: luckSum((l) => l.pythagoreanWins as number),
+			luck: luckSum((l) => l.luckFactor as number),
+			faab: faabSpent > 0 ? stored(faabPoints / faabSpent, 4) : null,
+			moves,
+			movesPerSeason: stored(moves / years.size, 2),
+			draftGrade: grade?.grade ?? null,
+			// To 2 places, as the career grades store it.
+			draftValue: grade ? stored(grade.average, 2) : null,
+			bestDraft: draftYears.bestYear,
+			worstDraft: draftYears.worstYear,
+			hofIndex: null,
+			hofRank: null,
+			careerOnly: true,
+			swing: swing == null ? null : stored(swing, 4),
+			bestSeason: record(ranked[0]),
+			worstSeason: record(ranked[ranked.length - 1]),
+			winStreak: streaks.longestWinStreak,
+			lossStreak: streaks.longestLossStreak
+		});
+	}
+	return out;
+}
+
+// ---------------------------------------------------------------------------
 // Columns
 // ---------------------------------------------------------------------------
 
@@ -297,15 +501,17 @@ export function tierLabel(rank: number): { text: string; color: ColorToken } {
 }
 
 /**
- * A missing HoF index: under three finished seasons when the Hall of Fame
- * loaded, otherwise just missing.
+ * A missing HoF index: a whole-career number, so "All time only" on a span of
+ * seasons; under three finished seasons when the Hall of Fame loaded;
+ * otherwise just missing.
  */
 function hofBlank(row: LeagueRow): string | undefined {
+	if (row.careerOnly) return 'All time only';
 	return row.hofKnown ? 'Under 3 seasons' : undefined;
 }
 
 type NumField = {
-	[K in keyof LeagueRow]: LeagueRow[K] extends number | null ? K : never;
+	[K in keyof LeagueRow]-?: LeagueRow[K] extends number | null ? K : never;
 }[keyof LeagueRow];
 
 /** A numeric column: sorts on the value rounded to the places shown. */
@@ -608,14 +814,25 @@ export interface TableState {
 	sort: string;
 	dir: Direction;
 	who: Who;
+	/** The first season counted; null for the league's first. */
+	from: number | null;
+	/** The last season counted; null for the latest. */
+	to: number | null;
 }
 
 export const DEFAULT_STATE: TableState = {
 	group: 'overview',
 	sort: 'titles',
 	dir: 'desc',
-	who: 'all'
+	who: 'all',
+	from: null,
+	to: null
 };
+
+/** A season in the URL: a four-digit year, or nothing. */
+function yearParam(value: string | null): number | null {
+	return value != null && /^\d{4}$/.test(value) ? Number(value) : null;
+}
 
 /**
  * The table's state from the URL (`?group=scoring&sort=pa&dir=asc&who=active`).
@@ -635,7 +852,10 @@ export function parseState(params: URLSearchParams): TableState {
 			? dirParam
 			: firstDirection(COLUMNS[sort]);
 	const who: Who = params.get('who') === 'active' ? 'active' : 'all';
-	return { group: group.id, sort, dir, who };
+	let from = yearParam(params.get('from'));
+	let to = yearParam(params.get('to'));
+	if (from != null && to != null && from > to) [from, to] = [to, from];
+	return { group: group.id, sort, dir, who, from, to };
 }
 
 /** The query string for a state, with every default left out ("" for the defaults). */
@@ -648,8 +868,58 @@ export function stateQuery(state: TableState): string {
 	if (!defaultSort || !defaultDir) params.set('sort', state.sort);
 	if (!defaultDir) params.set('dir', state.dir);
 	if (state.who === 'active') params.set('who', 'active');
+	if (state.from != null) params.set('from', String(state.from));
+	if (state.to != null) params.set('to', String(state.to));
 	const query = params.toString();
 	return query ? `?${query}` : '';
+}
+
+/**
+ * The seasons the table counts, inside the league's span: the whole span
+ * (`all`) when the state picks no narrower one. A season outside the span
+ * is pulled in to its edge.
+ */
+export function seasonRange(
+	state: Pick<TableState, 'from' | 'to'>,
+	span: { first: number; latest: number }
+): SeasonRange & { all: boolean } {
+	const clamp = (y: number) => Math.min(span.latest, Math.max(span.first, y));
+	let from = state.from == null ? span.first : clamp(state.from);
+	let to = state.to == null ? span.latest : clamp(state.to);
+	if (from > to) [from, to] = [to, from];
+	return { from, to, all: from === span.first && to === span.latest };
+}
+
+/**
+ * A new first or last season. The league's own first or latest season is
+ * left out of the state (and the URL), and a first season after the last
+ * (or a last before the first) moves the other end with it, so the span
+ * is never empty.
+ */
+export function pickSeason(
+	state: TableState,
+	end: 'from' | 'to',
+	year: number,
+	span: { first: number; latest: number }
+): TableState {
+	const current = seasonRange(state, span);
+	let from = end === 'from' ? year : current.from;
+	let to = end === 'to' ? year : current.to;
+	if (from > to) {
+		if (end === 'from') to = from;
+		else from = to;
+	}
+	return {
+		...state,
+		from: from <= span.first ? null : from,
+		to: to >= span.latest ? null : to
+	};
+}
+
+/** "all time", or the span: "2010 to 2020", "2020" for one season. */
+export function rangeLabel(range: SeasonRange & { all: boolean }): string {
+	if (range.all) return 'all time';
+	return range.from === range.to ? String(range.from) : `${range.from} to ${range.to}`;
 }
 
 /**

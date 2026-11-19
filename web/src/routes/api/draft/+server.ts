@@ -327,6 +327,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			const history = finished.map((x) => x.score);
 			const spread = spreadOf(history);
 			data.draftGrades = {
+				// The career grade's spread, so the League Table can grade a span
+				// of seasons the same way (careerGrade over that span's scores).
+				spread,
 				bySeason: scores
 					.filter(
 						(x) =>
@@ -337,6 +340,9 @@ export const GET: RequestHandler = async ({ url }) => {
 						managerName: x.managerName,
 						seasonYear: x.seasonYear,
 						score: Math.round(x.score * 100) / 100,
+						// Unrounded, so a span of seasons on the League Table averages
+						// to the same career value the byManager rows round.
+						exactScore: x.score,
 						picks: x.picks,
 						inProgress: !completedSeasons.has(x.seasonYear),
 						...seasonGrade(x.score, history)

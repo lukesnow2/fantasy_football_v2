@@ -110,3 +110,68 @@ test('the Rankings menu links to it', async ({ page }) => {
 	await expect(page).toHaveURL(/\/league-table$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'League Table' })).toBeVisible();
 });
+
+test.describe('a span of seasons', () => {
+	/** Dev-database data from 2026-11-19, the seasons API with the three it adds up from. */
+	const s = JSON.parse(
+		readFileSync(new URL('./fixtures/league-table-seasons.json', import.meta.url), 'utf8')
+	);
+	const seasonsRequests: string[] = [];
+
+	test.beforeEach(async ({ page }) => {
+		seasonsRequests.length = 0;
+		const json = (body: unknown) => ({
+			contentType: 'application/json',
+			body: JSON.stringify(body)
+		});
+		// Registered after the file's stubs, so these answer first.
+		await page.route(/\/api\/managers\/performance/, (r) => r.fulfill(json(s.all)));
+		await page.route(/\/api\/hall-of-fame/, (r) => r.fulfill(json(s.hallOfFame)));
+		await page.route(/\/api\/draft/, (r) => r.fulfill(json(s.draft)));
+		await page.route(/\/api\/managers\/seasons/, (r) => {
+			seasonsRequests.push(r.request().url());
+			return r.fulfill(json(s.seasons));
+		});
+	});
+
+	test('picking seasons counts only those seasons', async ({ page }) => {
+		await page.goto('/league-table');
+		await expect(firstName(page)).toBeVisible();
+		// All time needs no seasons.
+		expect(seasonsRequests).toHaveLength(0);
+
+		await page.getByRole('combobox', { name: 'First season' }).selectOption('2010');
+		await page.getByRole('combobox', { name: 'Last season' }).selectOption('2020');
+		await expect(page).toHaveURL(/\/league-table\?from=2010&to=2020$/);
+		await expect(page.locator('main')).toContainText('Rankings · 2010 to 2020');
+
+		const titles = (name: string) =>
+			s.seasons.data.teamSeasons
+				.filter(
+					(t: { managerName: string; seasonYear: number }) =>
+						t.managerName === name && t.seasonYear >= 2010 && t.seasonYear <= 2020
+				)
+				.reduce((a: number, t: { titles: number }) => a + t.titles, 0);
+		const trevor = table(page).locator('tbody tr', { hasText: 'Trevor' });
+		await expect(trevor.locator('td').nth(3)).toHaveText(String(titles('Trevor')));
+		await expect(trevor).toContainText('2010 to 2020');
+		await expect(trevor.getByText('All time only')).toBeVisible();
+		expect(seasonsRequests).toHaveLength(1);
+	});
+
+	test('a last season before the first moves both ends, and a link opens the span', async ({
+		page
+	}) => {
+		await page.goto('/league-table?from=2010&to=2020');
+		await expect(page.getByRole('combobox', { name: 'First season' })).toHaveValue('2010');
+		await page.getByRole('combobox', { name: 'Last season' }).selectOption('2008');
+		await expect(page).toHaveURL(/\/league-table\?from=2008&to=2008$/);
+		await expect(page.getByRole('combobox', { name: 'First season' })).toHaveValue('2008');
+
+		// Back to the league's first and latest seasons is all time again.
+		await page.getByRole('combobox', { name: 'First season' }).selectOption('2005');
+		await page.getByRole('combobox', { name: 'Last season' }).selectOption('2026');
+		await expect(page).toHaveURL(/\/league-table$/);
+		await expect(table(page).getByText('All time only')).toHaveCount(0);
+	});
+});

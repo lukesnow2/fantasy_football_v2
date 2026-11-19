@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { paramsOf, textOf } from '$lib/server/testing/sql-text';
-import { longestStreaks, streaksByManager, type GameResult } from './streaks';
+import { longestStreaks, streaksByManager, type GameResult } from '$lib/streaks';
 
 /**
  * WP14 S14.6: the all-managers rows gain pointsAgainst,

@@ -4,6 +4,7 @@ import {
 	COLUMNS,
 	DEFAULT_STATE,
 	GROUPS,
+	buildRangeRows,
 	buildRows,
 	caption,
 	clickSort,
@@ -15,8 +16,11 @@ import {
 	leaders,
 	parseState,
 	phoneColumns,
+	pickSeason,
+	rangeLabel,
 	rankRows,
 	recordPct,
+	seasonRange,
 	seasonSpan,
 	signTone,
 	signed,
@@ -26,7 +30,9 @@ import {
 	switchGroup,
 	tableMinWidth,
 	tierLabel,
-	type LeagueRow
+	type LeagueRow,
+	type SeasonsPayload,
+	type TeamSeasonRow
 } from './league-table';
 
 const f = JSON.parse(
@@ -352,7 +358,9 @@ describe('state', () => {
 			group: 'scoring',
 			sort: 'pa',
 			dir: 'asc',
-			who: 'active'
+			who: 'active',
+			from: null,
+			to: null
 		});
 		expect(parseState(new URLSearchParams('group=nope'))).toEqual(DEFAULT_STATE);
 		// A sort the group doesn't have falls back to its default.
@@ -370,7 +378,14 @@ describe('state', () => {
 
 	it('leaves defaults out of the URL and round-trips the rest', () => {
 		expect(stateQuery(DEFAULT_STATE)).toBe('');
-		const pa = { group: 'scoring', sort: 'pa', dir: 'asc', who: 'active' } as const;
+		const pa = {
+			group: 'scoring',
+			sort: 'pa',
+			dir: 'asc',
+			who: 'active',
+			from: null,
+			to: null
+		} as const;
 		expect(stateQuery(pa)).toBe('?group=scoring&sort=pa&who=active');
 		expect(parseState(new URLSearchParams(stateQuery(pa)))).toEqual(pa);
 		const flipped = { ...DEFAULT_STATE, dir: 'asc' } as const;
@@ -432,5 +447,204 @@ describe('copy and layout', () => {
 		const draft = groupById('draft');
 		expect(draft.columns).toEqual(['grade', 'dval', 'bestdraft', 'worstdraft']);
 		expect(COLUMNS.adg).toBeUndefined();
+	});
+});
+
+describe('season range state', () => {
+	const span = { first: 2005, latest: 2026 };
+
+	it('reads from and to from the URL, swapping them if they are backwards', () => {
+		expect(parseState(new URLSearchParams('from=2010&to=2020'))).toMatchObject({
+			from: 2010,
+			to: 2020
+		});
+		expect(parseState(new URLSearchParams('from=2020&to=2010'))).toMatchObject({
+			from: 2010,
+			to: 2020
+		});
+		expect(parseState(new URLSearchParams('from=soon&to=20201'))).toMatchObject({
+			from: null,
+			to: null
+		});
+	});
+
+	it('writes only the ends that are set', () => {
+		expect(stateQuery({ ...DEFAULT_STATE, from: 2010, to: 2020 })).toBe('?from=2010&to=2020');
+		expect(stateQuery({ ...DEFAULT_STATE, from: 2020 })).toBe('?from=2020');
+		const state = { ...DEFAULT_STATE, group: 'luck' as const, sort: 'luck', from: 2015 };
+		expect(parseState(new URLSearchParams(stateQuery(state)))).toEqual(state);
+	});
+
+	it('fills an open end with the league span and pulls a year outside it in', () => {
+		expect(seasonRange(DEFAULT_STATE, span)).toEqual({ from: 2005, to: 2026, all: true });
+		expect(seasonRange({ from: 2010, to: null }, span)).toEqual({
+			from: 2010,
+			to: 2026,
+			all: false
+		});
+		expect(seasonRange({ from: 1999, to: 2031 }, span)).toEqual({
+			from: 2005,
+			to: 2026,
+			all: true
+		});
+	});
+
+	it('leaves the league edges out of the state and never makes the span empty', () => {
+		const picked = pickSeason(DEFAULT_STATE, 'from', 2010, span);
+		expect(picked).toMatchObject({ from: 2010, to: null });
+		// A first season after the last moves the last with it, and back.
+		expect(pickSeason({ ...DEFAULT_STATE, to: 2012 }, 'from', 2018, span)).toMatchObject({
+			from: 2018,
+			to: 2018
+		});
+		expect(pickSeason({ ...DEFAULT_STATE, from: 2018 }, 'to', 2012, span)).toMatchObject({
+			from: 2012,
+			to: 2012
+		});
+		// Picking the league's own first season clears the end.
+		expect(pickSeason(picked, 'from', 2005, span)).toMatchObject({ from: null, to: null });
+	});
+
+	it('labels the span', () => {
+		expect(rangeLabel({ from: 2005, to: 2026, all: true })).toBe('all time');
+		expect(rangeLabel({ from: 2010, to: 2020, all: false })).toBe('2010 to 2020');
+		expect(rangeLabel({ from: 2020, to: 2020, all: false })).toBe('2020');
+	});
+});
+
+describe('buildRangeRows', () => {
+	/**
+	 * Dev-database data from 2026-11-19: /api/managers/performance,
+	 * /api/draft, /api/hall-of-fame and /api/managers/seasons, captured
+	 * together so the career rows and the seasons agree.
+	 */
+	const s = JSON.parse(
+		readFileSync(new URL('../../e2e/fixtures/league-table-seasons.json', import.meta.url), 'utf8')
+	);
+	const g = s.draft.data.draftGrades;
+	const career = buildRows(s.all.data.performance, g, s.hallOfFame.hallOfFame);
+	const seasons = s.seasons.data as SeasonsPayload;
+	const span = seasonSpan(career)!;
+	const draft = { bySeason: g.bySeason, spread: g.spread };
+
+	it('gives back every career number when the span is every season', () => {
+		const full = buildRangeRows(career, seasons, draft, { from: span.first, to: span.latest });
+		expect(full.map((r) => r.name)).toEqual(career.map((r) => r.name));
+		for (const row of career) {
+			const ranged = full.find((r) => r.name === row.name)!;
+			for (const column of Object.values(COLUMNS)) {
+				// The Hall of Fame index is whole-career only.
+				if (column.key === 'hof' || column.key === 'tier') continue;
+				expect
+					.soft([row.name, column.key, column.display(ranged).text], `${row.name} ${column.label}`)
+					.toEqual([row.name, column.key, column.display(row).text]);
+			}
+		}
+	});
+
+	it('counts only the span, and reads the Hall of Fame index as All time only', () => {
+		const range = { from: 2015, to: 2016 };
+		const rows = buildRangeRows(career, seasons, draft, range);
+		for (const row of rows) {
+			const mine = seasons.teamSeasons.filter(
+				(t) => t.managerName === row.name && t.seasonYear >= 2015 && t.seasonYear <= 2016
+			);
+			expect(row.wins).toBe(mine.reduce((a, t) => a + t.wins, 0));
+			expect(row.seasons).toBe(new Set(mine.map((t) => t.seasonYear)).size);
+			expect(row.firstSeason! >= 2015 && row.lastSeason! <= 2016).toBe(true);
+			expect(COLUMNS.hof.display(row)).toMatchObject({ text: 'All time only', blank: true });
+			expect(COLUMNS.tier.display(row).text).toBe('All time only');
+		}
+		// Nobody who sat out both seasons gets a row.
+		const played = new Set(
+			seasons.teamSeasons
+				.filter((t) => t.seasonYear >= 2015 && t.seasonYear <= 2016)
+				.map((t) => t.managerName)
+		);
+		expect(new Set(rows.map((r) => r.name))).toEqual(
+			new Set(career.map((r) => r.name).filter((n) => played.has(n)))
+		);
+	});
+
+	it('keeps league alum from the career, whatever the span', () => {
+		const rows = buildRangeRows(career, seasons, draft, { from: 2005, to: 2008 });
+		for (const row of rows) expect(row.alum).toBe(career.find((c) => c.name === row.name)!.alum);
+	});
+
+	it('runs streaks across seasons in the span and finished-season fields skip the live one', () => {
+		const team = (over: Partial<TeamSeasonRow>): TeamSeasonRow => ({
+			managerName: 'X',
+			seasonYear: 2020,
+			teamKey: 1,
+			finished: true,
+			wins: 0,
+			losses: 0,
+			ties: 0,
+			games: 0,
+			points: 0,
+			pointsFor: 0,
+			pointsAgainst: 0,
+			titles: 0,
+			titleGames: 0,
+			playoffWins: 0,
+			playoffLosses: 0,
+			madePlayoffs: false,
+			results: '',
+			...over
+		});
+		const payload: SeasonsPayload = {
+			teamSeasons: [
+				team({
+					seasonYear: 2020,
+					teamKey: 1,
+					wins: 2,
+					losses: 1,
+					games: 3,
+					results: 'LWW',
+					pointsFor: 300
+				}),
+				team({
+					seasonYear: 2021,
+					teamKey: 2,
+					wins: 3,
+					losses: 0,
+					games: 3,
+					results: 'WWW',
+					pointsFor: 360
+				}),
+				team({
+					seasonYear: 2022,
+					teamKey: 3,
+					finished: false,
+					wins: 0,
+					losses: 2,
+					games: 2,
+					results: 'LL',
+					pointsFor: 100
+				})
+			],
+			luck: [],
+			moves: []
+		};
+		const [r] = buildRangeRows(
+			[row({ name: 'X' })],
+			payload,
+			{ bySeason: [], spread: null },
+			{
+				from: 2020,
+				to: 2022
+			}
+		);
+		expect(r.winStreak).toBe(5);
+		expect(r.lossStreak).toBe(2);
+		expect(r.seasons).toBe(3);
+		// Points per season: the two finished seasons only.
+		expect(r.ppSeason).toBe(330);
+		expect(r.bestSeason).toBe('3-0-0');
+		expect(r.worstSeason).toBe('2-1-0');
+		// No luck rows, no paid claims, no drafts: blank, not zero.
+		expect(r.luck).toBeNull();
+		expect(r.faab).toBeNull();
+		expect(r.draftGrade).toBeNull();
 	});
 });
