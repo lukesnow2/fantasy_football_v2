@@ -158,6 +158,16 @@ describe('statTiles', () => {
 		});
 	});
 
+	it('picks the same team on a tie in share, whatever the order, by most wins', () => {
+		const even = [
+			team({ managerName: 'Israel', allPlayWins: 16, allPlayLosses: 2 }),
+			team({ managerName: 'Craig', allPlayWins: 24, allPlayLosses: 3 })
+		];
+		for (const odds of [even, [...even].reverse()]) {
+			expect(statTiles({ ...base, odds })[3]).toMatchObject({ value: '24-3', sub: 'Craig' });
+		}
+	});
+
 	it('names two unbeaten teams under "Unbeaten"', () => {
 		const two = standings.map((r) =>
 			r.managerName === 'Craig' ? { ...r, wins: 3, losses: 0 } : r

@@ -209,25 +209,29 @@ function recordTile(rows: StandingRow[]): StatTileData | null {
 /** All-play records can carry a half from a tied week; print it rather than round. */
 const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 
+/** A team's all-play record, "57-33" or "23.5-3.5", as the tile and the odds row print it. */
+const allPlayRecord = (t: OddsTeam) => `${halves(t.allPlayWins)}-${halves(t.allPlayLosses)}`;
+
 /**
  * The best all-play record: the most wins against every other team's score,
  * every week. Teams are ranked by all-play win share, so a team short a game
- * isn't ranked on totals; teams with the same record as printed share it.
+ * isn't ranked on totals, then by wins, so a tie on share always picks the
+ * same team. Teams with the same record as printed share the tile.
  */
 function allPlayTile(teams: OddsTeam[] | null): StatTileData | null {
 	const played = (teams ?? []).filter((t) => t.allPlayWins + t.allPlayLosses > 0);
 	if (played.length === 0) return null;
 	const share = (t: OddsTeam) => t.allPlayWins / (t.allPlayWins + t.allPlayLosses);
-	const best = played.reduce((a, b) => (share(b) > share(a) ? b : a));
-	const record = (t: OddsTeam) => `${halves(t.allPlayWins)}-${halves(t.allPlayLosses)}`;
+	const best = played.reduce((a, b) =>
+		share(b) > share(a) || (share(b) === share(a) && b.allPlayWins > a.allPlayWins) ? b : a
+	);
+	const record = allPlayRecord(best);
 	const names = nameList(
-		played
-			.filter((t) => record(t) === record(best))
-			.map((t) => t.managerName ?? t.teamName)
+		played.filter((t) => allPlayRecord(t) === record).map((t) => t.managerName ?? t.teamName)
 	);
 	return {
 		label: 'Best all-play record',
-		value: record(best),
+		value: record,
 		sub: names,
 		phone: `Best all-play · ${names}`,
 		metricId: 'all_play_wins'
@@ -384,7 +388,7 @@ export function oddsDetail(team: OddsTeam, settled = false): { term: string; val
 			term: 'Projected score',
 			value: `${team.projectedPoints.toFixed(1)} a week${team.projectedPointsRank ? `, #${team.projectedPointsRank}` : ''}`
 		},
-		{ term: 'All-play record', value: `${halves(team.allPlayWins)}-${halves(team.allPlayLosses)}` },
+		{ term: 'All-play record', value: allPlayRecord(team) },
 		{ term: 'Luck', value: `${signed(team.luck)} wins` }
 	];
 	if (team.remainingOpponentPoints != null) {
