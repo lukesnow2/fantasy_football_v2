@@ -2,7 +2,7 @@
 	/**
 	 * A labeled native select (Trade Center and Draft Central, "Season"). The
 	 * label is 14px weight 600 ink-2, 8px from the select; the select is 44px
-	 * tall with 0 12px of padding, the control radius, a 1px line-strong border
+	 * tall with 12px of padding (40px on the right, clear of the chevron), the control radius, a 1px line-strong border
 	 * on card fill and 15px weight 600 ink text.
 	 *
 	 * Below 640px it runs full width: the label on the left and the select
@@ -58,15 +58,14 @@
 		color: var(--color-ink-2);
 	}
 
-	/* The native control and its chevron, as the boards draw it (the base
-	   styles turn appearance off for every select). */
+	/* The chevron comes from the base styles; 40px on the right keeps the
+	   text clear of it. */
 	select {
-		appearance: auto;
 		min-height: 44px;
-		padding: 0 12px;
+		padding: 0 40px 0 12px;
 		border-radius: var(--radius-control);
 		border: 1px solid var(--color-line-strong);
-		background: var(--color-card);
+		background-color: var(--color-card);
 		font-family: var(--font-sans);
 		font-size: 15px;
 		font-weight: 600;

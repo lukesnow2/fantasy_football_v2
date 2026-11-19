@@ -874,12 +874,11 @@
 		}
 
 		.picker select {
-			appearance: auto;
 			min-height: 48px;
-			padding: 0 12px;
+			padding: 0 40px 0 12px;
 			border: 1px solid var(--color-line-strong);
 			border-radius: 10px;
-			background: var(--color-card);
+			background-color: var(--color-card);
 			color: var(--color-ink);
 			font-family: var(--font-sans);
 			font-size: 16px;

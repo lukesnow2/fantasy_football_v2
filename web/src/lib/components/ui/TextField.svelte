@@ -156,7 +156,7 @@
 		padding: 0 14px;
 		border: 1px solid var(--color-line-strong);
 		border-radius: var(--radius-control);
-		background: var(--color-card);
+		background-color: var(--color-card);
 		font-family: var(--font-sans);
 		font-size: 16px;
 		font-weight: 400;
@@ -183,18 +183,21 @@
 		resize: vertical;
 	}
 
-	/* The native control and its chevron, as the boards draw it (the base
-	   styles turn appearance off for every select). */
+	/* The chevron comes from the base styles; 40px on the right keeps the
+	   text clear of it. */
 	.select {
 		box-sizing: border-box;
-		appearance: auto;
-		padding: 0 12px;
+		padding: 0 40px 0 12px;
 	}
 
 	.size-sm .control {
 		min-height: 40px;
 		padding: 0 12px;
 		font-size: 14px;
+	}
+
+	.size-sm .select {
+		padding-right: 40px;
 	}
 
 	.bare .control {
