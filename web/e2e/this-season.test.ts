@@ -80,6 +80,6 @@ test('the live stat strip ends with the best all-play record', async ({ page }) 
 	await stub(page, 'live');
 	await page.goto('/this-season');
 	const strip = page.getByRole('group', { name: 'This season at a glance' });
-	await expect(strip.getByText('Best all-play record')).toBeVisible();
+	await expect(strip.getByRole('button', { name: 'About Best all-play record' })).toBeVisible();
 	await expect(strip.getByText('20-7', { exact: true })).toBeVisible();
 });
