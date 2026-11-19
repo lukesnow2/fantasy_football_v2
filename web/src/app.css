@@ -74,6 +74,11 @@
   --radius-card: 12px;
   --radius-control: 8px;
   --radius-tag: 6px;
+
+  /* The select chevron: a 16px ink-2 stroke, drawn as a background so every
+     browser puts it the same distance from the right border (the native
+     arrow sits about 5px from it in Chrome). */
+  --image-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2345524A' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 @theme {
@@ -258,5 +263,33 @@
 
   a.field-link:hover {
     color: var(--color-clubhouse);
+  }
+
+  /*
+   * Every dropdown select gets the same chevron: 16px, its right edge 12px
+   * in from the border, with 40px of right padding so the text stops 12px
+   * short of it; text too long for the box ends in an ellipsis there rather
+   * than a sliced letter. This replaces the forms plugin's chevron; list
+   * boxes (multiple, or a size above 1) keep the plugin's reset. A select
+   * that sets its own padding shorthand keeps 40px on the right (32px for a
+   * compact one, with a 14px chevron at 8px).
+   */
+  select:not([multiple], [size]:not([size='1'])) {
+    appearance: none;
+    background-image: var(--image-select-chevron);
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px 16px;
+    padding-right: 40px;
+    text-overflow: ellipsis;
+  }
+
+  /* The chevron's color is fixed, so under forced colors the native arrow,
+     which follows the system colors, comes back in its place. */
+  @media (forced-colors: active) {
+    select:not([multiple], [size]:not([size='1'])) {
+      appearance: auto;
+      background-image: none;
+    }
   }
 }

@@ -528,14 +528,14 @@
 		color: var(--color-ink-2);
 	}
 
-	/* The board draws the native select, arrow and all; preflight strips it. */
+	/* The chevron and its 40px of right padding come from the base styles. */
 	.season select {
-		appearance: auto;
 		min-height: 44px;
-		padding: 0 12px;
+		padding-block: 0;
+		padding-left: 12px;
 		border-radius: var(--radius-control);
 		border: 1px solid var(--color-line-strong);
-		background: var(--color-card);
+		background-color: var(--color-card);
 		font-family: var(--font-sans);
 		font-size: 15px;
 		font-weight: 600;

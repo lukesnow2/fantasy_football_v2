@@ -409,7 +409,7 @@
 	}
 
 	.field select {
-		padding-right: 36px;
+		padding-right: 40px;
 	}
 
 	.field input::placeholder {
@@ -538,11 +538,13 @@
 	.role-select {
 		box-sizing: border-box;
 		min-height: 32px;
-		padding: 0 28px 0 6px;
+		padding: 0 32px 0 8px;
 		border: 1px solid var(--color-line);
 		border-radius: var(--radius-tag);
 		background-color: var(--color-card);
-		background-position: right 4px center;
+		/* The compact chevron: 14px, 8px in from the border. */
+		background-position: right 8px center;
+		background-size: 14px 14px;
 		font-family: var(--font-sans);
 		font-size: 13px;
 		color: var(--color-ink);

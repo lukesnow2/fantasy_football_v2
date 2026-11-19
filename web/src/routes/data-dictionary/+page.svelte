@@ -327,8 +327,9 @@
 		flex: 999 1 360px;
 	}
 
+	/* 240px, so "League competitiveness" still clears the select's chevron. */
 	.filters :global(.category) {
-		flex: 1 1 220px;
+		flex: 1 1 240px;
 	}
 
 	.chips {
