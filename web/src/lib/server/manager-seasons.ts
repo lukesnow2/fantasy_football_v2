@@ -66,7 +66,12 @@ export const leagueState = sql`
  * off and the flag is used instead.
  */
 export async function loadLuckBySeason(
-	manager: string | null
+	manager: string | null,
+	/**
+	 * false: skip the live season's simulated odds (no simulation run) for a
+	 * caller that doesn't show them; playoffOdds is then the stored value.
+	 */
+	{ odds: withOdds = true }: { odds?: boolean } = {}
 ): Promise<{ byManager: Map<string, SeasonLuck[]>; latestSeason: number | null }> {
 	const [latestResult, luckResult] = await Promise.all([
 		db.execute(sql`
@@ -176,6 +181,8 @@ export async function loadLuckBySeason(
 		});
 		byManager.set(name, list);
 	}
+
+	if (!withOdds) return { byManager, latestSeason: num(latest?.seasonYear) };
 
 	// Live odds from the simulation, one run per season still being played
 	// (normally just the current one; cached across requests).

@@ -274,11 +274,24 @@ function sampleSd(values: number[]): number | null {
 }
 
 /**
- * Stored the way mart_manager_performance stores its career numbers (points
- * per game and moves per season to 2 places, FAAB efficiency and swing to 4),
- * so a value on the edge of the table's rounding prints the same either way.
+ * A sum that is null when every value is, as SQL SUM is: the career points
+ * against and points per season are SUMs over the weekly team rows.
  */
-const stored = (value: number, places: number) => round(value, places);
+function sqlSum<T>(rows: T[], f: (row: T) => number | null): number | null {
+	const values = rows.map(f).filter((v): v is number => v != null);
+	return values.length ? values.reduce((a, b) => a + b, 0) : null;
+}
+
+/** Rows grouped by manager, in their original order. */
+function byManager<T extends { managerName: string }>(rows: T[]): Map<string, T[]> {
+	const out = new Map<string, T[]>();
+	for (const row of rows) {
+		const list = out.get(row.managerName);
+		if (list) list.push(row);
+		else out.set(row.managerName, [row]);
+	}
+	return out;
+}
 
 const seasonPct = (t: TeamSeasonRow) => (t.games > 0 ? (t.wins + 0.5 * t.ties) / t.games : 0);
 
@@ -296,11 +309,18 @@ export function buildRangeRows(
 	draft: { bySeason: (DraftSeasonScore & { exactScore?: number })[]; spread: number | null },
 	range: SeasonRange
 ): LeagueRow[] {
+	const span = <T extends { seasonYear: number }>(rows: T[] | undefined) =>
+		(rows ?? []).filter((r) => inRange(r.seasonYear, range));
+	const teamsOf = byManager(seasons.teamSeasons);
+	const luckOf = byManager(seasons.luck);
+	const movesOf = byManager(seasons.moves);
+	const draftsOf = byManager(draft.bySeason);
+
 	const out: LeagueRow[] = [];
 	for (const base of career) {
-		const teams = seasons.teamSeasons
-			.filter((t) => t.managerName === base.name && inRange(t.seasonYear, range))
-			.sort((a, b) => a.seasonYear - b.seasonYear || a.teamKey - b.teamKey);
+		const teams = span(teamsOf.get(base.name)).sort(
+			(a, b) => a.seasonYear - b.seasonYear || a.teamKey - b.teamKey
+		);
 		if (!teams.length) continue;
 		const sum = (f: (t: TeamSeasonRow) => number) => teams.reduce((acc, t) => acc + f(t), 0);
 		const years = new Set(teams.map((t) => t.seasonYear));
@@ -315,28 +335,21 @@ export function buildRangeRows(
 		const playoffWins = sum((t) => t.playoffWins);
 		const playoffLosses = sum((t) => t.playoffLosses);
 		const points = sum((t) => t.points);
-		const pointsAgainst = sum((t) => t.pointsAgainst ?? 0);
+		const pointsAgainst = sqlSum(teams, (t) => t.pointsAgainst);
+		const finishedPoints = sqlSum(finished, (t) => t.pointsFor);
 
-		const luck = seasons.luck.filter(
-			(l) =>
-				l.managerName === base.name &&
-				inRange(l.seasonYear, range) &&
-				l.pythagoreanWins != null &&
-				l.luckFactor != null
+		const luck = span(luckOf.get(base.name)).filter(
+			(l) => l.pythagoreanWins != null && l.luckFactor != null
 		);
 		const luckSum = (f: (l: SeasonLuckRow) => number) =>
 			luck.length ? luck.reduce((acc, l) => acc + f(l), 0) : null;
 
-		const moveRows = seasons.moves.filter(
-			(m) => m.managerName === base.name && inRange(m.seasonYear, range)
-		);
+		const moveRows = span(movesOf.get(base.name));
 		const moves = moveRows.reduce((acc, m) => acc + m.moves, 0);
 		const faabSpent = moveRows.reduce((acc, m) => acc + m.faabSpent, 0);
 		const faabPoints = moveRows.reduce((acc, m) => acc + m.faabPoints, 0);
 
-		const drafts = draft.bySeason.filter(
-			(d) => d.managerName === base.name && !d.inProgress && inRange(d.seasonYear, range)
-		);
+		const drafts = span(draftsOf.get(base.name)).filter((d) => !d.inProgress);
 		const grade =
 			drafts.length && draft.spread != null
 				? careerGrade(
@@ -346,15 +359,18 @@ export function buildRangeRows(
 				: null;
 		const draftYears = draftRange(drafts, [], base.name);
 
-		// Best and worst finished team-season by win rate; the earlier one on a tie.
-		const ranked = [...finished].sort((a, b) => seasonPct(b) - seasonPct(a));
+		// Best and worst finished team-season by win rate, the earlier season
+		// on a tie (the rows are in season order and the sort is stable).
+		const best = [...finished].sort((a, b) => seasonPct(b) - seasonPct(a))[0];
+		const worst = [...finished].sort((a, b) => seasonPct(a) - seasonPct(b))[0];
 		const record = (t: TeamSeasonRow | undefined) => (t ? `${t.wins}-${t.losses}-${t.ties}` : null);
-		const streaks = longestStreaks(
-			teams.flatMap((t) => [...t.results] as GameResult[]).filter((r) => 'WLT'.includes(r))
-		);
+		const streaks = longestStreaks(teams.flatMap((t) => [...t.results] as GameResult[]));
 		const playoffGames = playoffWins + playoffLosses;
 		const swing = sampleSd(finished.map(seasonPct));
 
+		// Points per game and moves per season to 2 places, FAAB efficiency and
+		// swing to 4, as mart_manager_performance stores them, so a value on the
+		// edge of the table's rounding prints the same as on the career rows.
 		out.push({
 			...base,
 			firstSeason: Math.min(...years),
@@ -371,30 +387,29 @@ export function buildRangeRows(
 			playoffWins,
 			playoffLosses,
 			playoffWinPct: playoffGames > 0 ? playoffWins / playoffGames : null,
-			ppg: games > 0 ? stored(points / games, 2) : null,
-			ppSeason: finishedYears.size
-				? finished.reduce((acc, t) => acc + (t.pointsFor ?? 0), 0) / finishedYears.size
-				: null,
+			ppg: games > 0 ? round(points / games, 2) : null,
+			ppSeason:
+				finishedYears.size && finishedPoints != null ? finishedPoints / finishedYears.size : null,
 			points,
 			pointsAgainst,
-			pointDiff: points - pointsAgainst,
+			pointDiff: pointsAgainst != null ? points - pointsAgainst : null,
 			regWins: luckSum((l) => l.wins + 0.5 * l.ties),
 			expectedWins: luckSum((l) => l.pythagoreanWins as number),
 			luck: luckSum((l) => l.luckFactor as number),
-			faab: faabSpent > 0 ? stored(faabPoints / faabSpent, 4) : null,
+			faab: faabSpent > 0 ? round(faabPoints / faabSpent, 4) : null,
 			moves,
-			movesPerSeason: stored(moves / years.size, 2),
+			movesPerSeason: round(moves / years.size, 2),
 			draftGrade: grade?.grade ?? null,
 			// To 2 places, as the career grades store it.
-			draftValue: grade ? stored(grade.average, 2) : null,
+			draftValue: grade ? round(grade.average, 2) : null,
 			bestDraft: draftYears.bestYear,
 			worstDraft: draftYears.worstYear,
 			hofIndex: null,
 			hofRank: null,
 			careerOnly: true,
-			swing: swing == null ? null : stored(swing, 4),
-			bestSeason: record(ranked[0]),
-			worstSeason: record(ranked[ranked.length - 1]),
+			swing: swing == null ? null : round(swing, 4),
+			bestSeason: record(best),
+			worstSeason: record(worst),
 			winStreak: streaks.longestWinStreak,
 			lossStreak: streaks.longestLossStreak
 		});

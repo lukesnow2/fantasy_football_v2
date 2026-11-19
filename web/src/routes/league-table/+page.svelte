@@ -152,9 +152,17 @@
 		if (spanned && !seasons && !seasonsLoading && !seasonsFailed) loadSeasons();
 	});
 
+	// The span's two ends as numbers: a derived number that comes out the same
+	// stops there, so a sort click or a group switch doesn't rebuild the rows.
+	const spanFrom = $derived(spanned && range ? range.from : null);
+	const spanTo = $derived(spanned && range ? range.to : null);
 	/** The career rows, or the picked span's. */
 	const viewRows = $derived(
-		spanned && range ? (seasons ? buildRangeRows(rows, seasons, draftSeasons, range) : []) : rows
+		spanFrom != null && spanTo != null
+			? seasons
+				? buildRangeRows(rows, seasons, draftSeasons, { from: spanFrom, to: spanTo })
+				: []
+			: rows
 	);
 
 	const group = $derived(groupById(view.group));

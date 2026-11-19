@@ -647,4 +647,44 @@ describe('buildRangeRows', () => {
 		expect(r.faab).toBeNull();
 		expect(r.draftGrade).toBeNull();
 	});
+
+	it('takes the earlier season on a tie and leaves missing points against blank', () => {
+		const team = (seasonYear: number, wins: number, losses: number): TeamSeasonRow => ({
+			managerName: 'X',
+			seasonYear,
+			teamKey: seasonYear,
+			finished: true,
+			wins,
+			losses,
+			ties: 0,
+			games: wins + losses,
+			points: 100,
+			pointsFor: null,
+			pointsAgainst: null,
+			titles: 0,
+			titleGames: 0,
+			playoffWins: 0,
+			playoffLosses: 0,
+			madePlayoffs: false,
+			results: ''
+		});
+		const payload: SeasonsPayload = {
+			// Same rates, different records, so the pick shows which season won the tie.
+			teamSeasons: [team(2018, 2, 4), team(2019, 3, 0), team(2020, 1, 2), team(2021, 6, 0)],
+			luck: [],
+			moves: []
+		};
+		const [r] = buildRangeRows(
+			[row({ name: 'X' })],
+			payload,
+			{ bySeason: [], spread: null },
+			{ from: 2018, to: 2021 }
+		);
+		expect([r.bestSeason, r.worstSeason]).toEqual(['3-0-0', '2-4-0']);
+		// No weekly rows: blank, as the career SUM would be, not 0.
+		expect(r.pointsAgainst).toBeNull();
+		expect(r.pointDiff).toBeNull();
+		expect(r.ppSeason).toBeNull();
+		expect(COLUMNS.pa.display(r)).toMatchObject({ blank: true });
+	});
 });

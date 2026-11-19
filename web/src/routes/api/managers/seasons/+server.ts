@@ -145,7 +145,8 @@ export const GET: RequestHandler = async () => {
 				FULL JOIN faab f ON f.manager_name = m.manager_name AND f.season_year = m.season_year
 				ORDER BY 1, 2
 			`),
-			loadLuckBySeason(null)
+			// The table reads no playoff odds, so no simulation run.
+			loadLuckBySeason(null, { odds: false })
 		]);
 
 		const results = new Map(
