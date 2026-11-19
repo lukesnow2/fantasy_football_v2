@@ -182,6 +182,10 @@ UPDATE meta_data.metric_definitions SET limitations =
 WHERE metric_id = 'schedule_vs_league';
 
 UPDATE meta_data.metric_definitions SET limitations =
+'It looks back over the regular season to date and leaves out playoff weeks. Every week counts the same, so a week when the whole league scored close together moves it as much as a week with big gaps. It comes from the same scores as the playoff odds, so it only shows once the season''s first week is in.'
+WHERE metric_id = 'best_all_play_record';
+
+UPDATE meta_data.metric_definitions SET limitations =
 'A sum, so it grows with the number of seasons played: compare managers with similar careers. It includes the season in progress, so it moves every week during the season. Chance alone spreads one season''s luck by about 1.4 wins, so a 16-season career by about 6. Before November 2026 it was built on a formula from points for and against (Pythagorean wins) and missed most schedule luck.'
 WHERE metric_id = 'career_luck';
 

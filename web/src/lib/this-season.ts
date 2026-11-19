@@ -234,7 +234,7 @@ function allPlayTile(teams: OddsTeam[] | null): StatTileData | null {
 		value: record,
 		sub: names,
 		phone: `Best all-play · ${names}`,
-		metricId: 'all_play_wins'
+		metricId: 'best_all_play_record'
 	};
 }
 

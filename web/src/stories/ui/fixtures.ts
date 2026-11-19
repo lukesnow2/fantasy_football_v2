@@ -25,9 +25,9 @@ const OTHERS = [
 	['hall_of_fame_index', 'HoF index', 'A career score built from titles, wins and playoff runs.'],
 	['draft_grade', 'Grade', 'How a draft turned out, from A to F.'],
 	[
-		'all_play_wins',
-		'Expected wins',
-		"The wins a team's scores would have earned against every other team every week."
+		'best_all_play_record',
+		'Best all-play record',
+		"This season's best record if every team had played all the others every week."
 	]
 ] as const;
 
@@ -66,5 +66,5 @@ export const SEASON_STATS = [
 	{ label: 'Current week', value: '3 of 14', sub: 'Playoffs start week 15' },
 	{ label: 'Most points for', value: '465.5', sub: 'Craig' },
 	{ label: 'Only unbeaten', value: '3-0', sub: 'Israel' },
-	{ label: 'Best all-play record', value: '24-3', sub: 'Craig', metricId: 'all_play_wins' }
+	{ label: 'Best all-play record', value: '24-3', sub: 'Craig', metricId: 'best_all_play_record' }
 ];

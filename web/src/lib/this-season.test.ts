@@ -140,7 +140,7 @@ describe('statTiles', () => {
 				value: '24-3',
 				sub: 'Craig',
 				phone: 'Best all-play · Craig',
-				metricId: 'all_play_wins'
+				metricId: 'best_all_play_record'
 			}
 		]);
 	});
