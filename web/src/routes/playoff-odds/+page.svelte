@@ -357,9 +357,11 @@
 		color: var(--color-ink-2);
 	}
 
+	/* The chevron and its 40px of right padding come from the base styles. */
 	.season select {
 		min-height: 44px;
-		padding: 0 40px 0 12px;
+		padding-block: 0;
+		padding-left: 12px;
 		border-radius: var(--radius-control);
 		border: 1px solid var(--color-line-strong);
 		background-color: var(--color-card);

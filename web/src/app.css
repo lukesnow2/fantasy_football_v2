@@ -266,18 +266,30 @@
   }
 
   /*
-   * Every single-choice select gets the same chevron: 16px, its right edge
-   * 12px in from the border, with 40px of right padding so the longest
-   * option stops 12px short of it. This replaces the forms plugin's chevron;
-   * a select that sets its own padding keeps 40px on the right (32px for a
+   * Every dropdown select gets the same chevron: 16px, its right edge 12px
+   * in from the border, with 40px of right padding so the text stops 12px
+   * short of it; text too long for the box ends in an ellipsis there rather
+   * than a sliced letter. This replaces the forms plugin's chevron; list
+   * boxes (multiple, or a size above 1) keep the plugin's reset. A select
+   * that sets its own padding shorthand keeps 40px on the right (32px for a
    * compact one, with a 14px chevron at 8px).
    */
-  select:not([multiple]) {
+  select:not([multiple], [size]:not([size='1'])) {
     appearance: none;
     background-image: var(--image-select-chevron);
     background-repeat: no-repeat;
     background-position: right 12px center;
     background-size: 16px 16px;
     padding-right: 40px;
+    text-overflow: ellipsis;
+  }
+
+  /* The chevron's color is fixed, so under forced colors the native arrow,
+     which follows the system colors, comes back in its place. */
+  @media (forced-colors: active) {
+    select:not([multiple], [size]:not([size='1'])) {
+      appearance: auto;
+      background-image: none;
+    }
   }
 }

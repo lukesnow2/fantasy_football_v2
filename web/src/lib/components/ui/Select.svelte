@@ -2,8 +2,9 @@
 	/**
 	 * A labeled native select (Trade Center and Draft Central, "Season"). The
 	 * label is 14px weight 600 ink-2, 8px from the select; the select is 44px
-	 * tall with 12px of padding (40px on the right, clear of the chevron), the control radius, a 1px line-strong border
-	 * on card fill and 15px weight 600 ink text.
+	 * tall with 12px of padding (40px on the right, clear of the chevron), the
+	 * control radius, a 1px line-strong border on card fill and 15px weight
+	 * 600 ink text.
 	 *
 	 * Below 640px it runs full width: the label on the left and the select
 	 * filling the rest, in 16px so iOS Safari doesn't zoom when it opens.
@@ -58,11 +59,12 @@
 		color: var(--color-ink-2);
 	}
 
-	/* The chevron comes from the base styles; 40px on the right keeps the
-	   text clear of it. */
+	/* The chevron and the 40px of right padding that clears it come from
+	   the base styles. */
 	select {
 		min-height: 44px;
-		padding: 0 40px 0 12px;
+		padding-block: 0;
+		padding-left: 12px;
 		border-radius: var(--radius-control);
 		border: 1px solid var(--color-line-strong);
 		background-color: var(--color-card);

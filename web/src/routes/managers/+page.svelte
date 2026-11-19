@@ -875,7 +875,9 @@
 
 		.picker select {
 			min-height: 48px;
-			padding: 0 40px 0 12px;
+			/* The chevron and its 40px of right padding come from the base styles. */
+			padding-block: 0;
+			padding-left: 12px;
 			border: 1px solid var(--color-line-strong);
 			border-radius: 10px;
 			background-color: var(--color-card);
