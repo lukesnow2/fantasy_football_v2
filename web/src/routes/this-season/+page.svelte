@@ -23,7 +23,6 @@
 	import { YAHOO_LEAGUE_URL } from '$lib/config/league';
 	import { profileHref } from '$lib/home';
 	import type { StartHistoryRow } from '$lib/start-history';
-	import { pointsLeaderHistory, pointsLeaderTile, type PointsLeaderRow } from '$lib/points-leaders';
 	import {
 		championLine,
 		finishGroups,
@@ -60,7 +59,7 @@
 	}
 
 	// Everything loads client-side, as before: overview, standings, odds,
-	// power rankings, transactions and the points leaders' history together,
+	// power rankings and transactions together,
 	// then the start history for the notes after the leader's games played.
 	// The body draws once it all settles, so the live layout never draws and
 	// then swaps for the final one.
@@ -71,7 +70,6 @@
 	let power = $state<{ week: number | null; rankings: PowerRow[] } | null>(null);
 	let moves = $state<Transaction[]>([]);
 	let history = $state<StartHistoryRow[] | null>(null);
-	let leaders = $state<PointsLeaderRow[] | null>(null);
 	let now = $state(new Date());
 
 	// The body's phone layout (below 640px) differs in markup, not just in
@@ -87,15 +85,14 @@
 
 	async function load() {
 		status = 'loading';
-		const [ov, st, od, pw, tx, pl] = await Promise.allSettled([
+		const [ov, st, od, pw, tx] = await Promise.allSettled([
 			getJson<{ overview: Overview }>('/api/leagues/overview'),
 			getJson<StandingsResponse>('/api/standings'),
 			getJson<OddsResponse>('/api/playoff-odds'),
 			getJson<{ week: number | null; rankings: PowerRow[] }>('/api/power-rankings'),
-			getJson<{ transactions: Transaction[] }>('/api/transactions?limit=8'),
-			getJson<{ rows: PointsLeaderRow[] }>('/api/standings/points-leaders')
+			getJson<{ transactions: Transaction[] }>('/api/transactions?limit=8')
 		]);
-		for (const r of [ov, st, od, pw, tx, pl]) {
+		for (const r of [ov, st, od, pw, tx]) {
 			if (r.status === 'rejected') console.error('This Season:', r.reason);
 		}
 		if (st.status === 'rejected') {
@@ -107,7 +104,6 @@
 		odds = od.status === 'fulfilled' ? od.value : null;
 		power = pw.status === 'fulfilled' ? pw.value : null;
 		moves = tx.status === 'fulfilled' ? (tx.value.transactions ?? []) : [];
-		leaders = pl.status === 'fulfilled' ? pl.value.rows : null;
 		history = null;
 
 		// Past records are matched after the same number of games the leader
@@ -160,7 +156,7 @@
 			playoffStartWeek: overview?.format?.playoffStartWeek ?? regularSeasonWeeks + 1,
 			phase,
 			standings: rows,
-			history: leaders ? pointsLeaderTile(pointsLeaderHistory(leaders)) : null
+			odds: oddsReady?.teams ?? null
 		})
 	);
 
@@ -464,9 +460,9 @@
 		<StatStrip label="This season at a glance" twoUpOnPhones>
 			{#each tiles as tile (tile.label)}
 				{#if phone}
-					<StatTile label={tile.phone} value={tile.value} compact />
+					<StatTile label={tile.phone} value={tile.value} metricId={tile.metricId} compact />
 				{:else}
-					<StatTile label={tile.label} value={tile.value} sub={tile.sub} />
+					<StatTile label={tile.label} value={tile.value} sub={tile.sub} metricId={tile.metricId} />
 				{/if}
 			{/each}
 		</StatStrip>

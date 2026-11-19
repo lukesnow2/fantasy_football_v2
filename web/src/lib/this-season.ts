@@ -7,7 +7,6 @@
 
 import { compareSeeding, type TeamOdds as EngineTeamOdds } from '$lib/playoff-odds';
 import { finishTag, formatOdds, formatRecord } from '$lib/home';
-import type { HistoryTile } from '$lib/points-leaders';
 import type { TagVariant } from '$lib/components/ui/Tag.svelte';
 
 export { finishTag, formatOdds, formatRecord };
@@ -121,6 +120,8 @@ export interface StatTileData {
 	sub: string;
 	/** The phone strip's one line under the value: the label with the sub folded in. */
 	phone: string;
+	/** The label's StatTip, for a stat that needs one. */
+	metricId?: string;
 }
 
 /**
@@ -148,8 +149,8 @@ export interface StatTilesInput {
 	playoffStartWeek: number;
 	phase: 'regular' | 'postseason';
 	standings: StandingRow[];
-	/** The history tile (how points leaders have done), or null when there's none. */
-	history: HistoryTile | null;
+	/** The playoff odds' teams, which carry the all-play records; null when there are none. */
+	odds: OddsTeam[] | null;
 }
 
 function currentWeekTile(input: StatTilesInput): StatTileData {
@@ -205,19 +206,46 @@ function recordTile(rows: StandingRow[]): StatTileData | null {
 	};
 }
 
+/** All-play records can carry a half from a tied week; print it rather than round. */
+const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
+
+/**
+ * The best all-play record: the most wins against every other team's score,
+ * every week. Teams are ranked by all-play win share, so a team short a game
+ * isn't ranked on totals; teams with the same record as printed share it.
+ */
+function allPlayTile(teams: OddsTeam[] | null): StatTileData | null {
+	const played = (teams ?? []).filter((t) => t.allPlayWins + t.allPlayLosses > 0);
+	if (played.length === 0) return null;
+	const share = (t: OddsTeam) => t.allPlayWins / (t.allPlayWins + t.allPlayLosses);
+	const best = played.reduce((a, b) => (share(b) > share(a) ? b : a));
+	const record = (t: OddsTeam) => `${halves(t.allPlayWins)}-${halves(t.allPlayLosses)}`;
+	const names = nameList(
+		played
+			.filter((t) => record(t) === record(best))
+			.map((t) => t.managerName ?? t.teamName)
+	);
+	return {
+		label: 'Best all-play record',
+		value: record(best),
+		sub: names,
+		phone: `Best all-play · ${names}`,
+		metricId: 'all_play_wins'
+	};
+}
+
 /**
  * The four tiles in the board's order: current week, most points for, the
- * unbeaten (or best record) tile, and the history tile. The history tile is
- * about finished seasons, so it shows in every phase of the live season; a
- * season with no games yet has the current week and the history tile.
+ * unbeaten (or best record) tile, and the best all-play record. A season with
+ * no games yet has only the current week.
  */
 export function statTiles(input: StatTilesInput): StatTileData[] {
 	const tiles: (StatTileData | null)[] = [
 		currentWeekTile(input),
 		mostPointsTile(input.standings),
-		recordTile(input.standings)
+		recordTile(input.standings),
+		allPlayTile(input.odds)
 	];
-	if (input.history) tiles.push({ ...input.history, phone: input.history.label });
 	return tiles.filter((t): t is StatTileData => t !== null);
 }
 
@@ -339,9 +367,6 @@ export function oddsTone(percent: number): string {
 	if (percent >= 15) return 'var(--color-sage-tint)';
 	return 'var(--color-line-strong)';
 }
-
-/** All-play records can carry a half from a tied week; print it rather than round. */
-const halves = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(1));
 
 /** "+1.1" or "-0.2", one decimal. */
 const signed = (x: number) => `${x >= 0 ? '+' : '-'}${Math.abs(x).toFixed(1)}`;

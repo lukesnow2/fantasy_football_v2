@@ -14,8 +14,8 @@ type Row = Record<string, unknown>;
  * weeks the way /api/standings does. A finished season is one with a
  * championship game; the newest season is left out whether it's finished or
  * not, since it's the one the page is showing. `madePlayoffs` means the team
- * played in an is_playoffs game that season. The SQL pieces are shared with
- * points-leaders.ts in season-history-sql.ts.
+ * played in an is_playoffs game that season. The SQL pieces live in
+ * season-history-sql.ts.
  */
 export async function getStartHistoryRows(week: number): Promise<StartHistoryRow[]> {
 	const rows = await db.execute(sql`

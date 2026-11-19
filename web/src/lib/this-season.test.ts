@@ -118,11 +118,11 @@ describe('statTiles', () => {
 		playoffStartWeek: 15,
 		phase: 'regular',
 		standings,
-		history: {
-			label: 'Points leaders who won the title',
-			value: '8 of 21',
-			sub: 'Since 2005. All 21 made the playoffs.'
-		}
+		odds: [
+			team({ managerName: 'Israel', allPlayWins: 20, allPlayLosses: 7 }),
+			team({ managerName: 'Craig', allPlayWins: 24, allPlayLosses: 3 }),
+			team({ managerName: 'Nick', allPlayWins: 14, allPlayLosses: 13 })
+		]
 	};
 
 	it("draws the board's four tiles for one unbeaten team", () => {
@@ -136,12 +136,26 @@ describe('statTiles', () => {
 			{ label: 'Most points for', value: '465.5', sub: 'Craig', phone: 'Most points · Craig' },
 			{ label: 'Only unbeaten', value: '3-0', sub: 'Israel', phone: 'Unbeaten · Israel' },
 			{
-				label: 'Points leaders who won the title',
-				value: '8 of 21',
-				sub: 'Since 2005. All 21 made the playoffs.',
-				phone: 'Points leaders who won the title'
+				label: 'Best all-play record',
+				value: '24-3',
+				sub: 'Craig',
+				phone: 'Best all-play · Craig',
+				metricId: 'all_play_wins'
 			}
 		]);
+	});
+
+	it('shares the best all-play record, halves and all, and ranks by share of games', () => {
+		const tied = [
+			team({ managerName: 'Israel', allPlayWins: 23.5, allPlayLosses: 3.5 }),
+			team({ managerName: 'Craig', allPlayWins: 23.5, allPlayLosses: 3.5 }),
+			// More wins, but a game short of the others' share.
+			team({ managerName: 'Nick', allPlayWins: 24, allPlayLosses: 12 })
+		];
+		expect(statTiles({ ...base, odds: tied })[3]).toMatchObject({
+			value: '23.5-3.5',
+			sub: 'Israel and Craig'
+		});
 	});
 
 	it('names two unbeaten teams under "Unbeaten"', () => {
@@ -190,19 +204,16 @@ describe('statTiles', () => {
 		expect(statTiles({ ...base, standings: tied })[1].sub).toBe('Craig and Nick');
 	});
 
-	it('reads "Playoffs" and keeps the history tile in the postseason', () => {
+	it('reads "Playoffs" and keeps the all-play tile in the postseason', () => {
 		const tiles = statTiles({ ...base, phase: 'postseason', currentWeek: 16 });
 		expect(tiles).toHaveLength(4);
 		expect(tiles[0]).toMatchObject({ value: 'Playoffs', sub: 'Week 16' });
-		expect(tiles[3].label).toBe('Points leaders who won the title');
+		expect(tiles[3].label).toBe('Best all-play record');
 	});
 
-	it('keeps the history tile with no games, and drops it when it did not load', () => {
-		expect(statTiles({ ...base, standings: [] }).map((t) => t.label)).toEqual([
-			'Current week',
-			'Points leaders who won the title'
-		]);
-		expect(statTiles({ ...base, history: null })).toHaveLength(3);
+	it('drops the all-play tile with no odds or no all-play games', () => {
+		expect(statTiles({ ...base, odds: null })).toHaveLength(3);
+		expect(statTiles({ ...base, odds: [team({ managerName: 'Israel' })] })).toHaveLength(3);
 	});
 });
 
